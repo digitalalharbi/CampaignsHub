@@ -4,7 +4,9 @@ import { Building2, ChevronsUpDown, FolderKanban, Search } from 'lucide-react'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
+import { useClientProjectAutoSelect } from './clientProject'
 import { useUi } from '@/stores/ui'
+import { RailPopover } from '@/layouts/SidebarNav'
 
 /**
  * Client first, then project — the agency portal's own scope control (AGENCY-006).
@@ -48,9 +50,9 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
    *      never leave the previous client's data on screen;
    *   3. a project id that is not in the authorised list at all — dropped.
    *
-   * Nothing is auto-selected. An agency operator who has not chosen sees the choice, not a guess:
+   * No CLIENT is auto-selected. An agency operator who has not chosen sees the choice, not a guess:
    * defaulting to "whichever client came first" is how someone ends up editing the wrong client's
-   * campaign believing it is theirs.
+   * campaign believing it is theirs. Only the project inside a chosen client follows (CONS-CLIENT-PROJECT).
    */
   useEffect(() => {
     if (clients.isLoading || projects.isLoading) return
@@ -63,6 +65,11 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
       setCurrentProjectId(null)
       return
     }
+
+    /*
+     * CLIENT-UNIT-001 / CONS-CLIENT-PROJECT — the chosen client's project is selected by `useClientProjectAutoSelect`
+     * below (one project: that one; several: the most recently active, picker kept). The client itself is never guessed.
+     */
 
     if (currentProjectId === null) return
 
@@ -83,9 +90,21 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
     currentClientId, currentProjectId, setCurrentClientId, setCurrentProjectId,
   ])
 
-  // Collapsed rail: the control needs its labels to be usable, so it steps aside rather than
-  // rendering two unlabelled dropdowns.
-  if (collapsed) return null
+  // After the reconcile above, so a project it drops for belonging to another client is replaced in the same pass.
+  useClientProjectAutoSelect()
+
+  /*
+   * Collapsed rail (NOV-SIDEBAR-001): the control needs its labels to be usable, so it is not squeezed into 64px as two
+   * unlabelled dropdowns. It opens in a popover beside one icon instead — it used to «step aside» altogether, which was
+   * harmless while the rail opened wide by default and would now hide the scope everything is read through.
+   */
+  if (collapsed) {
+    return (
+      <RailPopover icon={Building2} label={ar ? 'العميل والمشروع' : 'Client and project'} testid="agency-scope-collapsed">
+        <AgencyScopeSwitcher />
+      </RailPopover>
+    )
+  }
 
   if (clients.isLoading) {
     return <div className="h-[76px] w-full animate-pulse rounded-xl bg-surface-secondary" />
@@ -137,13 +156,15 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
           setCurrentProjectId(null)
         }}
         options={authorisedClients.map((c) => ({ id: c.id, name: c.name }))}
+        alwaysFilter
       />
       )}
 
-      <Field
+      {/* CLIENT-UNIT-001 — the «المشاريع» switch exists only for a client that has a second project. */}
+      {(scopedToProjectsOnly || projectsForClient.length > 1) && <Field
         testId="agency-scope-project"
         icon={<FolderKanban size={14} />}
-        label={ar ? 'المشروع' : 'Project'}
+        label={ar ? 'المشاريع' : 'Project'}
         value={currentProjectId ?? ''}
         placeholder={
           !scopedToProjectsOnly && currentClientId === null
@@ -155,7 +176,7 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
         disabled={(!scopedToProjectsOnly && currentClientId === null) || projectsForClient.length === 0}
         onChange={(id) => setCurrentProjectId(id === '' ? null : id)}
         options={projectsForClient.map((p) => ({ id: p.id, name: p.name }))}
-      />
+      />}
     </div>
   )
 }
@@ -182,7 +203,7 @@ const FILTER_ABOVE = 12
  * Dropping it would make the select fall back to the placeholder and read as "nothing is selected"
  * while the rest of the portal is still showing that client's data.
  */
-function Field({ testId, icon, label, value, placeholder, options, onChange, disabled }: {
+function Field({ testId, icon, label, value, placeholder, options, onChange, disabled, alwaysFilter }: {
   testId: string
   icon: React.ReactNode
   label: string
@@ -191,10 +212,12 @@ function Field({ testId, icon, label, value, placeholder, options, onChange, dis
   options: { id: string; name: string }[]
   onChange: (id: string) => void
   disabled?: boolean
+  /** The client list is always searchable: it is the one entry point, and an agency's list only grows. */
+  alwaysFilter?: boolean
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const [term, setTerm] = useState('')
-  const filterable = options.length > FILTER_ABOVE && !disabled
+  const filterable = (alwaysFilter ? options.length > 1 : options.length > FILTER_ABOVE) && !disabled
 
   const needle = term.trim().toLowerCase()
   const shown = !filterable || needle === ''

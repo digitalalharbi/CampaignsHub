@@ -13,7 +13,8 @@ import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 test.describe('the agency portal', () => {
   test.use({ storageState: AUTH.owner })
 
-  const arabicWords = (text: string) => (text.match(/[؀-ۿ]+/g) ?? []).length
+  // The SAR currency mark «ر.س» is the same in both languages by the Owner's money rule (MONEY-MARKS-001); it is not untranslated copy.
+  const arabicWords = (text: string) => (text.replace(/ر\.س/g, '').match(/[؀-ۿ]+/g) ?? []).length
 
   async function toggleLanguage(page: Page) {
     await page.getByRole('button', { name: 'Toggle language' }).first().click()
@@ -30,7 +31,7 @@ test.describe('the agency portal', () => {
    * regression in the drill-down, and a test that cannot tell the two apart reports the wrong one.
    */
   test('a client budget names the projects the money is in', async ({ page }) => {
-    await page.goto('/agency')
+    await page.goto('/agency/dashboard?tab=budgets')
 
     const table = page.getByTestId('client-budgets')
     if (await table.count() === 0) test.skip(true, 'no client carries a budget in this dataset')

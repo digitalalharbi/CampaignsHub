@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/Input'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { ChannelChip, type ChipState } from '../ChannelChip'
 import { ChannelsPanel } from '../ChannelsPanel'
+import { ExternalRecipientsPanel } from '../ExternalRecipientsPanel'
 import { SendNowChip } from '../SendNowChip'
 import { sendNowFailure, sendNowWord } from '../sendNowWords'
 import { Button } from '@/components/ui/Button'
@@ -396,6 +397,25 @@ export function NotificationsTab() {
           ))}
         </div>
       </div>
+
+      {/* SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق» weekly, and the recipients outside the platform. */}
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]" data-testid="spend-summary">
+        <h3 className="text-base font-bold text-text-primary">{ar ? 'ملخص الإنفاق' : 'Spend summary'}</h3>
+        <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">
+          {ar
+            ? 'أسبوعي، في يوم ملخصك الأسبوعي: إنفاق آخر 7 أيام لكل المشاريع، والمتبقي من حد الإنفاق لكل مشروع.'
+            : 'Weekly, on your weekly digest day: the last 7 days of spend across your projects, and what is left of each project’s spend limit.'}
+        </p>
+        <div className="mt-4">
+          <Switch
+            testId="digest-spend_summary"
+            checked={p.digests.spend_summary === true}
+            onCheckedChange={(v) => setP({ ...p, digests: { ...p.digests, spend_summary: v } })}
+            label={ar ? 'أسبوعي' : 'Weekly'}
+          />
+        </div>
+      </div>
+      <ExternalRecipientsPanel ar={ar} />
 
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <h3 className="text-base font-bold text-text-primary">{ar ? 'المواعيد واللغة' : 'Timing and language'}</h3>

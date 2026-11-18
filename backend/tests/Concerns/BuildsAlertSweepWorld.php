@@ -173,6 +173,8 @@ trait BuildsAlertSweepWorld
         $this->alertCampaign('no-results', $a, $this->alertDays(1, 12, ['spend' => 100.0, 'conversions' => 0.0]));
         $this->alertCampaign('roas-drop', $a, $this->alertDays(8, 14, ['spend' => 100.0, 'revenue' => 1000.0, 'conversions' => 5.0]) + $this->alertDays(1, 7, ['spend' => 100.0, 'revenue' => 100.0, 'conversions' => 5.0]));
         $this->alertCampaign('cost-rise', $b, $this->alertDays(8, 14, ['spend' => 100.0, 'conversions' => 10.0, 'leads' => 10.0, 'clicks' => 20.0]) + $this->alertDays(1, 7, ['spend' => 100.0, 'conversions' => 2.0, 'leads' => 2.0, 'clicks' => 20.0]));
+        // ALERT-CRITERIA-001 — cost per lead is judged on a leads campaign only, so the world holds one.
+        $this->alertCampaign('lead-cost-rise', $b, $this->alertDays(8, 14, ['spend' => 100.0, 'leads' => 10.0, 'clicks' => 20.0]) + $this->alertDays(1, 7, ['spend' => 100.0, 'leads' => 2.0, 'clicks' => 20.0]), ['objective' => 'leads']);
         $this->alertCampaign('budget-risk', $a, $this->alertDays(1, 10, ['spend' => 95.0, 'conversions' => 3.0]), ['total_budget' => 1000, 'budget_currency' => 'SAR']);
         $this->alertCampaign('budget-under', $a, $this->alertDays(1, 10, ['spend' => 5.0, 'conversions' => 3.0]), ['total_budget' => 1000, 'budget_currency' => 'SAR']);
         $this->alertCampaign('budget-other-unit', $a, $this->alertDays(1, 10, ['spend' => 95.0, 'conversions' => 3.0]), ['total_budget' => 1000, 'budget_currency' => 'USD']);
@@ -241,17 +243,18 @@ trait BuildsAlertSweepWorld
             'error' => 'token expired', 'started_at' => $now->copy()->subMinutes(5), 'created_at' => $now, 'updated_at' => $now,
         ]);
 
-        // `sync_outage`: the other project's account, whose only run failed.
+        // `sync_outage`: the other project's account, whose only recent run failed. LIFECYCLE-6 — the runs carry the account's own
+        // platform (meta): the outage is judged per bound account, and a run filed under another platform proves nothing about it.
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->otherProject->id, 'connection_id' => (string) Str::uuid(),
-            'external_account_id' => $this->elsewhereAccount->id, 'provider' => 'google', 'status' => 'failed', 'window_start' => $now->copy()->subDay()->toDateString(),
+            'external_account_id' => $this->elsewhereAccount->id, 'provider' => 'meta', 'status' => 'failed', 'window_start' => $now->copy()->subDay()->toDateString(),
             'window_end' => $now->toDateString(), 'error' => 'quota', 'started_at' => $now->copy()->subMinutes(9), 'finished_at' => $now->copy()->subMinutes(8),
             'created_at' => $now->copy()->subMinutes(9), 'updated_at' => $now->copy()->subMinutes(8),
         ]);
 
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->otherProject->id, 'connection_id' => (string) Str::uuid(),
-            'external_account_id' => $this->elsewhereAccount->id, 'provider' => 'google', 'status' => 'success', 'window_start' => $now->copy()->subDays(9)->toDateString(),
+            'external_account_id' => $this->elsewhereAccount->id, 'provider' => 'meta', 'status' => 'success', 'window_start' => $now->copy()->subDays(9)->toDateString(),
             'window_end' => $now->copy()->subDays(8)->toDateString(), 'started_at' => $now->copy()->subDays(8), 'finished_at' => $now->copy()->subDays(8),
             'created_at' => $now->copy()->subDays(8), 'updated_at' => $now->copy()->subDays(8),
         ]);

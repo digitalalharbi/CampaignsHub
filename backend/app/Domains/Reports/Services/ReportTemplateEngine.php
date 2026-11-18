@@ -36,7 +36,8 @@ final class ReportTemplateEngine
         // REPORT-KPI-CONTRACT-001 — the Owner's defaults per report objective. They are a PRESENTATION template only: they never filter data,
         // and a manually chosen metric list always overrides them. Optional metrics (cpl, ctr…) are switched on by hand.
         'awareness' => ['spend', 'impressions', 'reach', 'frequency', 'cpm'],
-        'traffic' => ['spend', 'impressions', 'clicks', 'ctr', 'cpc'],
+        // KPI-SET-PER-OBJECTIVE-001 (Owner 2026-11-13, permanent) — visits: spend, impressions, clicks, CTR, CPM, frequency (CPC kept).
+        'traffic' => ['spend', 'impressions', 'clicks', 'ctr', 'cpm', 'frequency', 'cpc'],
         // Leads on a website (the default destination): form fills on the advertiser's own page.
         'leads' => ['spend', 'impressions', 'clicks', 'leads'],
         'app_installs' => ['spend', 'impressions', 'clicks', 'installs', 'cpi'],
@@ -381,6 +382,8 @@ final class ReportTemplateEngine
         ['installs', 'cpi', 'registrations', 'spend', 'ctr'],
         ['video_views', 'impressions', 'cpm', 'ctr', 'clicks'],
         ['spend', 'impressions', 'leads', 'cpl'],
+        // KPI-SET-PER-OBJECTIVE-001 — the traffic preset before the Owner's 2026-11-13 set: a stored copy of it upgrades.
+        ['spend', 'impressions', 'clicks', 'ctr', 'cpc'],
     ];
 
     /** The two objectives that bought no click → arrival → result path. See the note where the deck's funnel slide is added. */
@@ -397,6 +400,32 @@ final class ReportTemplateEngine
         }
 
         return false;
+    }
+
+    /**
+     * REPORT-MULTI-OBJECTIVE-001 — the KPIs of a report measured against SEVERAL objectives (master task 10: «الهدف يقبل أكثر من هدف»).
+     *
+     * Each objective keeps its own preset; the report shows their ordered union, so «زيارات + مبيعات» states the traffic figures and the sales
+     * figures side by side and never folds two objectives' results into one number. One objective is exactly `metricSet()`.
+     *
+     * @param  list<string>  $objectives  report objectives (template keys), in the operator's order
+     * @return list<string>
+     */
+    public function metricSetForMany(array $objectives, ?string $destination = null): array
+    {
+        $objectives = array_values(array_unique(array_filter($objectives, static fn ($o): bool => is_string($o) && $o !== '')));
+        if (count($objectives) <= 1) {
+            return $this->metricSet($objectives[0] ?? 'custom', $destination);
+        }
+
+        $union = [];
+        foreach ($objectives as $objective) {
+            foreach ($this->metricSet($objective, $destination) as $metric) {
+                $union[$metric] = true;
+            }
+        }
+
+        return array_keys($union);
     }
 
     public function metricSet(string $objective, ?string $destination = null): array

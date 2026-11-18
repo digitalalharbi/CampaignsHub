@@ -17,6 +17,7 @@ use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Access\ReachableProjects;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
@@ -102,6 +103,8 @@ final class CreativeRows
          * `campaigns.manage`, exactly as the project route does.
          */
         app(ReachableProjects::class)->constrain($query, $user, 'project_id', $capability);
+        // PROJECT-LIFECYCLE-001 — the cross-project library reads LIVE projects only (archived/deleted never aggregated).
+        LiveProjects::whereProjectLive($query, 'project_id');
 
         $reach = app(ClientScopeResolver::class)->reachableClientIds($user);
 
@@ -540,6 +543,17 @@ final class CreativeRows
 
         /* `orders` is `conversions` one grain down — the same resolution `CreativeMetrics` makes. */
         $leading = $leading === 'orders' ? 'conversions' : $leading;
+
+        /*
+         * OBJECTIVE-RESULT-001 — a traffic campaign now LEADS with landing page views, and its result
+         * is visits where they were measured, else clicks. A library ORDER is one key for every ad,
+         * and at the ad grain landing page views are reported for some platforms only — ordering by
+         * them would sink every ad of a platform that never sends them as if it had none. Clicks are
+         * the unit every traffic ad shares, so the library keeps ordering by them.
+         */
+        if ($leading === 'landing_page_views') {
+            $leading = 'clicks';
+        }
 
         return in_array($leading, self::SORTABLE, true) ? $leading : 'spend';
     }

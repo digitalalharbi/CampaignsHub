@@ -43,10 +43,14 @@ final class AgencyDashboardController extends Controller
         $this->access->restrictQuery($clientQuery, $user);
         $clientIds = $clientQuery->pluck('id')->map(fn ($id) => (string) $id)->all();
 
-        $projectIds = $clientIds === []
-            ? []
-            : Project::query()->whereIn('client_workspace_id', $clientIds)
-                ->pluck('id')->map(fn ($id) => (string) $id)->all();
+        /*
+         * PROJECT-LIFECYCLE-001 — aggregation follows PROJECT state only (rules 4 + 5): the live projects of every
+         * client the operator reaches, whatever the client's own state. The roster counts above stay per client.
+         */
+        $reachQuery = ClientWorkspace::query();
+        $this->access->restrictQuery($reachQuery, $user);
+        $projectIds = Project::query()->live()->whereIn('client_workspace_id', $reachQuery->select('id'))
+            ->pluck('id')->map(fn ($id) => (string) $id)->all();
 
         return ApiResponse::success([
             'scope' => [
@@ -63,23 +67,23 @@ final class AgencyDashboardController extends Controller
             'projects' => [
                 'total' => count($projectIds),
                 'active' => $projectIds === [] ? 0
-                    : Project::query()->whereIn('id', $projectIds)->where('status', 'active')->count(),
+                    : Project::query()->whereIn('id', $projectIds)->running()->count(),
             ],
-            'campaigns' => $this->campaignSummary($clientIds),
+            'campaigns' => $this->campaignSummary($projectIds),
             'requests' => $this->requestSummary($clientIds),
         ], 'Agency overview.');
     }
 
-    /** @param  list<string>  $clientIds @return array<string,mixed> */
-    private function campaignSummary(array $clientIds): array
+    /** @param  list<string>  $projectIds  live projects @return array<string,mixed> */
+    private function campaignSummary(array $projectIds): array
     {
-        if ($clientIds === []) {
+        if ($projectIds === []) {
             return ['total' => 0, 'active' => 0, 'paused' => 0, 'by_objective' => [], 'paused_by_project' => []];
         }
 
-        // Campaigns carry the client directly, so the scoped set applies without going via projects.
+        // PROJECT-LIFECYCLE-001 — campaigns of LIVE projects only (an archived project's campaigns are not counted).
         // Qualified: the per-project rung below joins `projects`, which carries the same column.
-        $base = UnifiedCampaign::query()->whereIn('unified_campaigns.client_workspace_id', $clientIds);
+        $base = UnifiedCampaign::query()->whereIn('unified_campaigns.project_id', $projectIds);
 
         return [
             'total' => (clone $base)->count(),

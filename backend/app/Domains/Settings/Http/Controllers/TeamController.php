@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace App\Domains\Settings\Http\Controllers;
 
 use App\Domains\Access\Models\Role;
+use App\Domains\Access\Services\AccessCenter;
+use App\Domains\Access\Support\AccessSections;
+use App\Domains\Access\Support\MemberOverrideMemo;
+use App\Domains\Access\Support\WorkspaceRolePresets;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Identity\Services\InvitationService;
 use App\Domains\Notifications\Services\EnrolMemberNotifications;
@@ -32,7 +36,7 @@ final class TeamController extends Controller
         abort_unless($request->user()->hasPermission('settings.manage'), 403);
         $tenantId = $this->tenantId();
 
-        $roles = Role::where('tenant_id', $tenantId)->get(['id', 'name', 'slug']);
+        $roles = Role::where('tenant_id', $tenantId)->get(['id', 'name', 'slug', 'is_system']);
         $users = self::inTenant($tenantId)->with(['roles' => fn ($q) => $q->where('roles.tenant_id', $tenantId)->select('roles.id', 'roles.name', 'roles.slug', 'roles.is_system')])->get();
 
         return ApiResponse::success([
@@ -58,10 +62,17 @@ final class TeamController extends Controller
                 'last_login_at' => optional($u->last_login_at)->toIso8601String(),
                 'two_factor_enabled' => (bool) $u->two_factor_enabled,
             ])->values(),
-            'roles' => $roles->map(fn ($r) => [
-                'slug' => (string) $r->slug,
-                'name' => (string) $r->name,
-                /*
+            /*
+             * TEAM-ROLE-PRESETS-001 — the ready-made roles are offered even before this workspace has
+             * used one; the row is created when somebody is invited into it or moved into it.
+             */
+            'roles' => $roles->concat(collect(WorkspaceRolePresets::all())
+                ->reject(fn ($p, $slug) => $roles->contains('slug', $slug))
+                ->map(fn ($p, $slug) => new Role(['slug' => $slug, 'name' => $p['en'], 'is_system' => true]))
+                ->values())->map(fn ($r) => [
+                    'slug' => (string) $r->slug,
+                    'name' => (string) $r->name,
+                    /*
                      * ROLE-LABEL-001 — whether this name is the product's or the customer's.
                      *
                      * A system role is seeded in English («Tenant Owner», «Team Member») and belongs
@@ -69,8 +80,8 @@ final class TeamController extends Controller
                      * created carries the name THEY typed, and translating that would rename their
                      * work. The frontend cannot tell them apart from the name alone.
                      */
-                'is_system' => (bool) $r->is_system,
-            ])->values(),
+                    'is_system' => (bool) $r->is_system,
+                ])->values(),
             /*
              * People who have been invited and are not here yet — TEAM-INVITE-001.
              *
@@ -127,8 +138,9 @@ final class TeamController extends Controller
             // Accepted and ignored for older clients: the person names themselves at acceptance.
             'name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'email' => ['required', 'email', 'max:180'],
-            'role' => ['required', 'string', 'exists:roles,slug'],
+            'role' => ['required', 'string', 'max:80'],
         ]);
+        $this->assignableRole($request, $tenantId, $data['role']);
 
         $result = $invitations->invite(
             tenant: Tenant::query()->findOrFail($tenantId),
@@ -189,7 +201,8 @@ final class TeamController extends Controller
     {
         abort_unless($request->user()->hasPermission('settings.manage'), 403);
         $target = $this->member($user);
-        $data = $request->validate(['role' => ['required', 'string', 'exists:roles,slug']]);
+        $data = $request->validate(['role' => ['required', 'string', 'max:80']]);
+        $this->assignableRole($request, $this->tenantId(), $data['role']);
 
         // Guard: never strip the last Owner of the Owner role.
         if ($target->rolesInCurrentTenant()->contains('slug', 'tenant-owner') && $data['role'] !== 'tenant-owner') {
@@ -201,7 +214,16 @@ final class TeamController extends Controller
         $target->roles()->detach(Role::where('tenant_id', $this->tenantId())->pluck('id')->all());
         $target->roles()->syncWithoutDetaching([$role->id]);
 
-        $audit->log(action: 'settings.team.role_changed', entityType: 'user', entityId: $target->uuid, before: ['roles' => $before], after: ['roles' => [$role->slug]]);
+        // ACCESS-CENTER-001 — a new category starts clean: overrides were decided against the old one.
+        // ACCESS-SECTIONS-001 — except the sections switched off for this person: they belong to the person, not the
+        // category, and a role change must never quietly reopen a section the owner closed.
+        $overrides = app(AccessCenter::class)->memberOverrides($this->tenantId(), (int) $target->id);
+        if ($overrides['allow'] !== [] || $overrides['deny'] !== []) {
+            $keepOff = array_map(fn (string $s) => AccessSections::PREFIX.$s, AccessSections::offIn($overrides['deny']));
+            app(AccessCenter::class)->writeOverrides($this->tenantId(), (int) $target->id, [], $keepOff, $request->user()->id);
+        }
+
+        $audit->log(action: 'settings.team.role_changed', entityType: 'user', entityId: $target->uuid, before: ['roles' => $before, 'overrides' => $overrides], after: ['roles' => [$role->slug]], reason: $request->input('reason'));
 
         // EMAIL-TRANSACTIONAL-SET-001 — the person is told, in their language, unless they changed their own role.
         if ($target->id !== $request->user()->id) {
@@ -250,6 +272,8 @@ final class TeamController extends Controller
         }
 
         $audit->log(action: 'settings.team.removed', entityType: 'user', entityId: $target->uuid, before: ['email' => $target->email]);
+        DB::table('member_access_overrides')->where('tenant_id', $this->tenantId())->where('user_id', $target->id)->delete();
+        app(MemberOverrideMemo::class)->forget();
         if ($this->belongsElsewhere($target)) {
             // Shared with another agency: leave THIS team, keep the account (and their access there).
             $target->roles()->detach(Role::where('tenant_id', $this->tenantId())->pluck('id')->all());
@@ -318,6 +342,23 @@ final class TeamController extends Controller
             // A user may hold several memberships in one tenant (different portals), which would
             // otherwise count one owner more than once and let the last owner be removed.
             ->distinct('users.id');
+    }
+
+    /**
+     * TEAM-ROLE-PRESETS-001 — the role somebody is being invited into or moved into.
+     *
+     * A ready-made role is created in this workspace the first time it is used; any other slug must
+     * already be one of THIS workspace's roles (another tenant's role of the same slug is a 422, as
+     * it always was through `exists` plus the tenant lookup).
+     *
+     * And nobody hands out more than they hold: every key of the role must be among the actor's own.
+     * Before, any holder of `settings.manage` could make a colleague — or a second account of their
+     * own — the workspace manager. Owners hold every key, so nothing changes for them.
+     */
+    private function assignableRole(Request $request, string $tenantId, string $slug): Role
+    {
+        // ACCESS-CENTER-001 — one rule for every path: grant only what you hold; only the owner hands out the team.
+        return app(AccessCenter::class)->assignableRole($request->user(), $tenantId, $slug);
     }
 
     private function tenantId(): string

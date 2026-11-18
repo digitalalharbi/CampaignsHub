@@ -11,6 +11,8 @@ import { createLiveLink, liveBuilderAds, liveBuilderOptions, reportSectionRegist
 import { groupByLifecycle } from './reportScopeLifecycle'
 import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
+import { DateRangeField } from '@/components/ui/DateRangeField'
+import { usePeriod } from '@/lib/period/usePeriod'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
 import { ErrorState, Skeleton } from '@/components/ui/States'
@@ -19,7 +21,7 @@ import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
 import { pickSelected, ResultEventsPanel } from './ResultEventsPanel'
 import { fetchResultEvents, type GenericNameKind, type ResultEventsMap } from './api'
 import { GenericNameChoices } from './ReportComposeControls'
-import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
+import { ShareCreativeControls, creativeSharingBody, defaultCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -44,12 +46,6 @@ import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type 
  * Only the token's hash is stored, so it genuinely cannot be shown again — the copy button is the only
  * chance. That is said on screen rather than left for the operator to discover.
  */
-
-const isoDaysAgo = (days: number) => {
-  const d = new Date()
-  d.setDate(d.getDate() - days + 1)
-  return d.toISOString().slice(0, 10)
-}
 
 /**
  * The sections an EXECUTIVE SUMMARY does not contain — the mirror of `ReportComposition`.
@@ -115,8 +111,11 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
   const [periodKind, setPeriodKind] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('custom')
   /* REPORT-PERIOD-MODE-001 — fixed: exactly these dates, always. Rolling: the window follows the reader's day. */
   const [periodMode, setPeriodMode] = useState<'fixed' | 'rolling'>('fixed')
-  const [from, setFrom] = useState(isoDaysAgo(30))
-  const [to, setTo] = useState(new Date().toISOString().slice(0, 10))
+  // DATE-RANGE-001 — a new link starts on the system's period (ending yesterday).
+  // URL-WRITE-RACE-001 — a dialog seeds its own dates from the period and leaves the page address alone.
+  const sharedPeriod = usePeriod({ writeUrl: false }).range
+  const [from, setFrom] = useState(sharedPeriod.from)
+  const [to, setTo] = useState(sharedPeriod.to)
 
   /*
    * REPORT-SCOPE-SELECTION-001 — the options are asked for THIS report's window.
@@ -172,12 +171,20 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    * Destination still narrows the list like the platform and account do (REPORT-SETUP-001).
    */
   const [campaignObjective, setCampaignObjective] = useState<string | null>(null)
+  /*
+   * REPORT-MULTI-OBJECTIVE-001 (master task 10) — «الهدف يقبل أكثر من هدف». Extra objectives beside the first; with any of them the link's
+   * KPIs are the server's union of each objective's preset, the same list the saved report and the PDF read, so nothing is pre-ticked here.
+   */
+  const [extraObjectives, setExtraObjectives] = useState<string[]>([])
+  const objectives = campaignObjective === null ? [] : [campaignObjective, ...extraObjectives.filter((o) => o !== campaignObjective)]
   const [filterByObjective, setFilterByObjective] = useState(false)
   const [campaignDestination, setCampaignDestination] = useState<string | null>(null)
 
   const visibleCampaigns = useMemo(() => {
     const needle = campaignQuery.trim().toLocaleLowerCase()
-    const members = filterByObjective ? (CANONICAL_OBJECTIVES.find((o) => o.id === campaignObjective)?.members ?? null) : null
+    const members = filterByObjective && campaignObjective !== null
+      ? CANONICAL_OBJECTIVES.filter((o) => o.id === campaignObjective || extraObjectives.includes(o.id)).flatMap((o) => o.members)
+      : null
 
     return (options.data?.campaigns ?? []).filter((c) => {
       if (campaignPlatform !== null && !(c.platforms ?? []).includes(campaignPlatform)) return false
@@ -190,7 +197,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
 
       return haystack.includes(needle)
     })
-  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, filterByObjective, campaignDestination, campaignQuery])
+  }, [options.data, campaignPlatform, selectedAccounts, campaignObjective, extraObjectives, filterByObjective, campaignDestination, campaignQuery])
 
   const lifecycle = useMemo(
     () => groupByLifecycle(visibleCampaigns, { periodKnown: Boolean(from && to) }),
@@ -267,7 +274,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    * on the saved-report dialog did nothing on a link made from here. The defaults are the Owner's: the section shown, the ads listed by
    * period activity, refreshed automatically, zero-activity ads left out.
    */
-  const [creatives, setCreatives] = useState<CreativeSharing>(() => ({ ...emptyCreativeSharing(), permissions: { creatives: true } }))
+  /* REPORT-ADS-ALL-ON-001 — a new link opens with the ad section and all fifteen switches on (supersedes REPORT-ADS-ON-001). */
+  const [creatives, setCreatives] = useState<CreativeSharing>(defaultCreativeSharing)
 
   /* RESULT-EVENTS-001 — this link's definition of «Results»; empty = none, and then no Results are drawn. */
   const [resultEvents, setResultEvents] = useState<ResultEventsMap>({})
@@ -291,6 +299,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
         accounts: accountSelection(selectedAccounts, campaigns, chosenAds, options.data?.campaigns ?? [], adsQuery.data?.ads ?? []),
         providers,
         metrics,
+        ...(objectives.length > 0 ? { objectives: objectives.map((o) => (o === 'app' ? 'app_installs' : o)) } : {}),
         ...(Object.values(kpiLabels).some((v) => v.trim() !== '') ? { kpi_labels: kpiLabels } : {}),
         from,
         to,
@@ -521,6 +530,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                 onChange={(e) => {
                   const id = e.target.value === '' ? null : e.target.value
                   setCampaignObjective(id)
+                  if (id === null) setExtraObjectives([])
                   const template = id === null ? undefined : OBJECTIVE_KPI_TEMPLATES[id]
                   if (template !== undefined) {
                     setMetricsTouched(true)
@@ -536,6 +546,37 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   <option key={o.id} value={o.id}>{ar ? o.ar : o.en}</option>
                 ))}
               </select>
+              {campaignObjective !== null && (
+                <div className="flex w-full flex-wrap items-center gap-1.5" data-testid="live-builder-extra-objectives">
+                  <span className="text-xs font-semibold text-text-muted">{ar ? 'أضف هدفًا' : 'Add an objective'}</span>
+                  {CANONICAL_OBJECTIVES.filter((o) => o.id !== campaignObjective).map((o) => {
+                    const on = extraObjectives.includes(o.id)
+
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        aria-pressed={on}
+                        data-testid={`live-builder-objective-${o.id}`}
+                        onClick={() => {
+                          const next = on ? extraObjectives.filter((x) => x !== o.id) : [...extraObjectives, o.id]
+                          setExtraObjectives(next)
+                          // Several objectives: the server states the union of their KPIs on the link, the saved report and the PDF alike.
+                          if (next.length > 0) {
+                            setMetricsTouched(true)
+                            setMetrics([])
+                          } else if (campaignObjective !== null && OBJECTIVE_KPI_TEMPLATES[campaignObjective] !== undefined) {
+                            setMetrics(OBJECTIVE_KPI_TEMPLATES[campaignObjective])
+                          }
+                        }}
+                        className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${on ? 'border-brand-600 bg-brand-500/10 text-brand-700' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
+                      >
+                        {ar ? o.ar : o.en}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
               {campaignObjective !== null && (
                 <label className="flex items-center gap-1.5 text-xs text-text-muted">
                   <input type="checkbox" data-testid="live-builder-filter-by-objective" checked={filterByObjective} onChange={(e) => setFilterByObjective(e.target.checked)} className="h-3.5 w-3.5 accent-brand-600" />
@@ -599,6 +640,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
                   onClick={() => {
                     setCampaignPlatform(null)
                     setCampaignObjective(null)
+                    setExtraObjectives([])
                     setCampaignDestination(null)
                     setCampaignQuery('')
                   }}
@@ -736,10 +778,7 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
             </p>
           </div>
           {periodKind === 'custom' && (
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Field label={ar ? 'من' : 'From'}><DateField value={from} onChange={setFrom} /></Field>
-              <Field label={ar ? 'إلى' : 'To'}><DateField value={to} onChange={setTo} /></Field>
-            </div>
+            <Field label={ar ? 'الفترة' : 'Period'}><DateRangeField testId="live-link-range" from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t) }} /></Field>
           )}
 
           <div className="grid gap-2">

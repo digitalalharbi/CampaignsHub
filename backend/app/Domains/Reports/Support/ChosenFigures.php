@@ -6,7 +6,9 @@ namespace App\Domains\Reports\Support;
 
 use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Reports\Analytics\ObjectiveReportAnalytics;
+use App\Domains\Reports\Measurement\AudienceReportSections;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
+use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportAutoComposer;
@@ -48,7 +50,7 @@ final class ChosenFigures
     private const SPEND = [
         'spend', 'spend_original', 'spend_withheld_rows', 'spend_withheld', 'spend_share', 'spend_coverage', 'spend_not_reported', 'funnel_spend', 'cost_per',
         'spent', 'remaining', 'consumed_pct', 'pace', 'projected_spend', 'daily_average', 'over_under', 'excluded_spend', 'includes_non_sales_spend',
-        'spend_by_kind', 'spend_mix',
+        'spend_by_kind', 'spend_mix', 'total_spend',
     ];
 
     /** The amount earned and everything that states it. */
@@ -86,6 +88,8 @@ final class ChosenFigures
         'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons',
         // CONTENT-FORMAT-COMPARISON-001 — its own block, cut for its audience when built; only its money follows the KPI list, below.
         'content_format_comparison',
+        // AUDIENCE-001 — audience parts keep their own vocabulary (impressions as the share's denominator); only spend follows the KPI list, below.
+        'audience_targeting', 'audience_regions', 'audience_cities', 'audience_gender', 'audience_age', 'audience_devices', 'audience_placements', 'audience_interests', 'audience_professional', 'audience_site',
     ];
 
     /** Which row lists each table's columns sit on. A stated table reaches these and no other block. */
@@ -117,10 +121,34 @@ final class ChosenFigures
         return new self(self::listedMetrics($report, $share), $columns !== [] ? $columns : ReportColumns::forReport($report)->toArray());
     }
 
-    /** The live payload and its drawers state the link's own lists (`metrics`, `columns`) and no other, so those are what they are cut to. */
+    /**
+     * The live payload and its drawers, cut by the SAME list its PDF is — master task 10, «schema واحد».
+     *
+     * This read the link's own `metrics` only, while `for()` (the PDF and the files of the same link) also read the report's scope and its
+     * customised set: a report whose own KPI list was chosen on the report showed every figure on its link and only the chosen ones in its PDF.
+     */
     public static function forLive(ReportShare $share): self
     {
-        return new self(self::strings(($share->scope ?? [])['metrics'] ?? []), ReportColumns::forShare($share)->toArray());
+        return new self(self::listed($share->report, $share), ReportColumns::forShare($share)->toArray());
+    }
+
+    /**
+     * The KPI list somebody CHOSE for this report through this link — the link's, an automatic composition, the report's scope, its customised
+     * set — or empty when nobody chose one (an objective's preset is not a choice and is not cut to).
+     *
+     * @return list<string>
+     */
+    public static function listed(?Report $report, ?ReportShare $share): array
+    {
+        if ($report === null) {
+            return $share !== null ? self::strings(($share->scope ?? [])['metrics'] ?? []) : [];
+        }
+        // As `for()`: an internal report states every figure.
+        if (($report->audience ?? 'client') === 'internal') {
+            return [];
+        }
+
+        return self::listedMetrics($report, $share);
     }
 
     /** @return list<string> */
@@ -221,10 +249,31 @@ final class ChosenFigures
         }
 
         $payload = $this->cutPermissions($payload);
-        $payload = $this->walk($payload, $this->unchosen());
+        $payload = $this->walk($payload, array_diff_key($this->unchosen(), self::CONTENT_FUNNEL));
 
-        return isset($this->columns['content']) ? $this->walk($payload, $this->unchosenBy('content')) : $payload;
+        return isset($this->columns['content'])
+            ? $this->walk($payload, array_diff_key($this->unchosenBy('content'), self::CONTENT_FUNNEL))
+            : $payload;
     }
+
+    /**
+     * CONTENT-ANALYSIS-BY-OBJECTIVE-001 — Owner 2026-11-18: «تحليل كل محتوى افتراضي دائماً لكن وفق الأهداف وقمع التحويل».
+     *
+     * A content item is judged on its own objective's path: a lead ad on its leads, a sales ad on its carts and orders, a video
+     * on how much of it was watched. A link whose KPI list names only clicks and impressions cut all of that, so a lead ad was
+     * graded on click-through alone. These counts and rates therefore stay in the content section whatever the list says. Money
+     * does not: spend, revenue and every cost or return built on them still follow the link's choice and its hide switches.
+     */
+    private const CONTENT_FUNNEL = [
+        'impressions' => true, 'clicks' => true, 'ctr' => true, 'reach' => true, 'frequency' => true,
+        'engagements' => true, 'engagement_rate' => true,
+        'video_views' => true, 'video_views_2s' => true, 'video_views_3s' => true, 'video_views_6s' => true,
+        'video_p25' => true, 'video_p50' => true, 'video_p75' => true, 'video_p100' => true, 'video_completions' => true,
+        'video_completion_rate' => true, 'video_avg_watch_seconds' => true, 'hook_rate' => true, 'view_rate' => true, 'completion_rate' => true,
+        'landing_page_views' => true, 'page_views' => true, 'add_to_cart' => true, 'checkout' => true, 'purchases' => true, 'orders' => true,
+        'conversions' => true, 'conversion_rate' => true, 'leads' => true, 'form_leads' => true, 'qualified_leads' => true, 'sign_ups' => true,
+        'installs' => true, 'registrations' => true, 'app_opens' => true, 'in_app_events' => true, 'results' => true, 'outcome' => true, 'decay' => true,
+    ];
 
     /**
      * A section with its own address and its own vocabulary (widgets, attribution): only the KPI list reaches it.
@@ -449,6 +498,13 @@ final class ChosenFigures
         }
         if ($hideRevenue) {
             $payload = Ga4ReportSections::withoutMoney($payload);
+            // REPORT-SETTINGS-AUDIT-001 — the store block's money leaves with the revenue KPI too, as it does for a link hiding revenue.
+            if (is_array($payload['store_analytics'] ?? null)) {
+                $payload['store_analytics'] = StoreAnalyticsSection::withoutMoney($payload['store_analytics']);
+            }
+        }
+        if ($hideSpend) {
+            $payload = AudienceReportSections::withoutMoney($payload);
         }
         if (is_array($payload[ContentFormatComparison::KEY] ?? null)) {
             $payload[ContentFormatComparison::KEY] = ContentFormatComparison::withoutMetrics($payload[ContentFormatComparison::KEY], array_keys($cut));

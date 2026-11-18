@@ -1,3 +1,5 @@
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { InfoTip } from '@/components/fit/InfoTip'
 import { ConsumptionBar } from './ConsumptionBar'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
@@ -27,12 +29,12 @@ import {
   useEntities,
   useFreshness,
   useFunnel,
-  useLastNDaysRange,
   useAttribution,
   useNormalization,
   useObjectiveExplanations,
   useObjectiveLeaders,
   useObjectiveTrend,
+  useObjectivePaths,
   usePlatformObjectives,
   usePlatforms,
   useDrivers,
@@ -61,12 +63,16 @@ import {
   entityColumnPlan,
 } from './entityObjectiveColumns'
 import { PathAnalysis } from './PathAnalysis'
+import { ObjectivePathCards } from './ObjectivePathCards'
 import { PathTrends } from './PathTrends'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
-import { useUrlList, useUrlNumber, useUrlState, useUrlWriter } from './filterUrlState'
+import { DailyMeasurePanel } from './DailyMeasurePanel'
+import { useUrlList, useUrlState, useUrlWriter } from './filterUrlState'
+import { usePeriod } from '@/lib/period/usePeriod'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
 import { familyMoney, familyTotal, type FamilyRow, familySpend } from './familyTotals'
 import { moneyState, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 
@@ -78,13 +84,12 @@ import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { DistributionBars } from './DistributionBars'
 import { SPECS, layoutFor, valueReading } from './metricCatalog'
-import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { FilterBar, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
 import { DashboardContextStrip } from './DashboardContextStrip'
 import { AdvertiserProjectsStrip, AdvertiserSourcesStrip } from '@/features/dashboard/AdvertiserContext'
 import { usePortalBase } from '@/app/portalPath'
-import { PeriodLabel } from '@/components/patterns/Status'
 import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { projectOptionLabels } from '@/features/projects/projectOptionLabels'
 import { canonicalPlatform, PLATFORM_ORDER } from '@/lib/platforms'
@@ -98,6 +103,7 @@ import { CampaignLink } from '@/features/campaigns/CampaignLink'
 import { CampaignQuickPreview } from './CampaignQuickPreview'
 import { bestByRoas, worstByRoas } from './campaignRoasPanels'
 import { providerLabel } from '@/features/campaigns/labels'
+import { campaignResult, missingText, resultCostText, resultLabel, returnsRevenue } from '@/features/campaigns/campaignResult'
 import { accountContribution } from './accountContribution'
 import { comparableWindows, windowsUnlikeNote } from '@/lib/coverage/contract'
 
@@ -141,6 +147,7 @@ import { readMetricValue } from '@/lib/metricValue'
 import { useUi } from '@/stores/ui'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { useProject } from '@/stores/project'
+import { useClientProjectAutoSelect } from '@/features/agency/clientProject'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { PortfolioPage } from '@/features/projects/PortfolioPage'
 import { LiveOperatingTab } from './LiveOperatingTab'
@@ -148,6 +155,7 @@ import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { useQuery } from '@tanstack/react-query'
 import { StoreFunnelTab } from './StoreFunnelTab'
 import { SiteAnalyticsTab } from './SiteAnalyticsTab'
+import { AudiencePanel } from '@/features/audience/AudiencePanel'
 import { AttributionPanel } from './AttributionPanel'
 import { WidgetSurface } from '@/features/widgets/WidgetSurface'
 import { useWidgetLayout } from '@/features/widgets/api'
@@ -163,11 +171,12 @@ import { creativeScope, decodePath, drillInto, drillUpTo, encodePath, namesVersi
   stepLabel, withNames,
   type DrillLevel, type DrillStep,
 } from './drilldown'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 /*
  * UX-ANALYTICS-TABS-001 — twelve tabs on one line, and six of them began with the same word.
  *
- * «تحليل المنصات · تحليل الحسابات · تحليل الحملات · تحليل المجموعات الإعلانية · تحليل الإعلانات ·
+ * «تحليل المنصات · تحليل الحسابات · تحليل الحملات · تحليل المجموعات · تحليل الإعلانات ·
  * تحليل الأهداف · تحليل المحتوى». The repeated «تحليل» is on a page already titled «التحليلات», so
  * it carried no information and cost roughly a third of the bar's width — which is why the row
  * wrapped and every label competed with every other.
@@ -193,9 +202,11 @@ const TAB_GROUPS = [
     ar: 'التفصيل', en: 'Breakdown',
     tabs: [
       { id: 'platforms', ar: 'المنصات', en: 'Platforms' },
+      // AUDIENCE-001 — targeting, paid delivery, site visitors and unpaid, kept apart, per platform.
+      { id: 'audience', ar: 'الجمهور', en: 'Audience' },
       { id: 'accounts', ar: 'الحسابات', en: 'Accounts' },
       { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
-      { id: 'ad_sets', ar: 'المجموعات', en: 'Ad sets' },
+      { id: 'ad_sets', ar: 'المجموعات', en: 'Ad groups' },
       /*
        * ADS-TERMINOLOGY-001 — the DUPLICATION was in the name, not in the surface.
        *
@@ -295,15 +306,24 @@ export type Surface = 'analytics' | 'dashboard'
 /** Which part of the hierarchy an incomplete sync did not deliver, in the reader's words. */
 const GRAIN_MISSING: Record<'campaign' | 'ad_set' | 'ad', { ar: string; en: string }> = {
   campaign: { ar: 'صفوف حملات لم تُطابَق', en: 'campaign rows not matched' },
-  ad_set: { ar: 'لم تصل بيانات المجموعات الإعلانية', en: 'ad-set figures missing' },
+  ad_set: { ar: 'لم تصل بيانات المجموعات', en: 'ad-group figures missing' },
   ad: { ar: 'لم تصل بيانات الإعلانات', en: 'ad figures missing' },
 }
 
+
+/** OBJECTIVE-RESULT-001 — one campaign's result in its own unit, or why it has none. */
+function ResultCell({ row, ar }: { row: Record<string, unknown> & { objective?: string | null }; ar: boolean }) {
+  const r = campaignResult(row.objective, row, (row.reported as Record<string, boolean> | undefined) ?? null)
+  if (r.value === null) return <span className="text-xs text-text-muted">{missingText(r, ar) ?? '\u2014'}</span>
+  return <span><span className="tnum">{num(r.value)}</span> <span className="text-xs text-text-muted">{resultLabel(r, ar)}</span></span>
+}
 export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } = {}) {
   const ar = useAr()
   /* EMAIL-DIGESTS-OPERATIONAL-001 — a button in an email carries `?project=`; it is chosen on arrival. */
   useProjectFromUrl()
   const { currentProjectId, setCurrentProjectId } = useProject()
+  // CONS-CLIENT-PROJECT — a client chosen in the sidebar brings its project with it.
+  useClientProjectAutoSelect()
   const portalBase = usePortalBase()
   /*
    * ANALYTICS-FILTER-TRUTH-001 — the filters live in the URL, so a refresh, Back and a shared link
@@ -311,7 +331,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    * and then reloading gave the unfiltered page back, and the link a reader sent a colleague showed
    * that colleague a different answer to the question they were discussing.
    */
-  const [days, setDays] = useUrlNumber('days', 30)
+  // DATE-RANGE-001 — the system's one period (from/to/compare in the address); rolling presets end yesterday.
+  const { days, setDays, range } = usePeriod()
   const [urlTab, setTab] = useUrlState('tab', 'performance') as [(typeof TABS)[number]['id'], (v: string) => void]
 
   /*
@@ -379,9 +400,9 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
     if (v.filters?.objective) next.objective = { value: String(v.filters.objective), fallback: 'all' }
     // A list is comma-joined, and empty means «every» by saying nothing — `useUrlList`'s own rule.
     if (v.filters?.provider) next.provider = { value: v.filters.provider.join(','), fallback: '' }
-    if (v.date_range?.days) next.days = { value: String(v.date_range.days), fallback: '30' }
 
     if (Object.keys(next).length > 0) writeFilters(next)
+    if (v.date_range?.days) setDays(v.date_range.days)
   }
   const appliedDefault = useRef(false)
   useEffect(() => {
@@ -393,7 +414,6 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedViews.data])
-  const range = useLastNDaysRange(days)
 
   const projectsQuery = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), retry: false })
   const projects = projectsQuery.data ?? []
@@ -538,7 +558,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       */}
       <PageIntro
         testid={`${surface}-intro`}
-        title={surface === 'dashboard' ? (ar ? 'لوحة التحكم' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
+        title={surface === 'dashboard' ? (ar ? 'الرئيسية' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
         /*
           SURFACE-SEPARATION-001 — each surface says what it is FOR, and they are different things.
 
@@ -560,11 +580,11 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           The analysis surface keeps its sentence. It is opened deliberately, to ask why, and what
           it offers is genuinely not obvious from its title.
         */
-        purpose={surface === 'dashboard'
-          ? undefined
-          : ar
-            ? 'استكشاف تفصيلي للأداء: المنصات، الحملات، القمع، المتجر، الميزانيات، وأساس كل رقم.'
-            : 'A detailed look at performance — platforms, campaigns, the funnel, the store, budgets, and the basis of every figure.'}
+        /*
+          ANALYTICS-VISUAL-FIRST-001 (owner: «عدم ترك مساحة فارغة بالاعلى … تظهر البيانات بمجرد الدخول كرسوم») — the
+          analysis drops its sentence too: the title, the filters, then the drawings. Was: «استكشاف تفصيلي للأداء…».
+        */
+        purpose={undefined}
         /*
           «Open Analytics for the reason» was a band of its own under the header. It is an action
           this page offers, so it sits where this header puts actions — on the title's line.
@@ -583,7 +603,6 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         eyebrow={projectName ?? ''}
         meta={
           <>
-            <PeriodLabel from={range.from} to={range.to} testId={`${surface}-head-period`} />
             <DataFreshness
               lastSyncAt={freshestAt}
               ar={ar}
@@ -595,8 +614,6 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           </>
         }
       />
-
-
       {/* Declared once and placed by surface: in line on the analysis bar, folded on the dashboard. */}
       <FilterBar
         id={surface}
@@ -659,17 +676,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           onChange={setCurrentProjectId}
         />
 
-        <FilterChips
-          label={ar ? 'الفترة' : 'Period'}
-          value={String(days)}
-          testid={`${surface}-period`}
-          options={[
-            { value: '7', label: ar ? '7 أيام' : '7 days' },
-            { value: '30', label: ar ? '30 يوم' : '30 days' },
-            { value: '90', label: ar ? '90 يوم' : '90 days' },
-          ]}
-          onChange={(v) => setDays(Number(v))}
-        />
+        <DateRangePicker projectId={currentProjectId} budgetHint testId={`${surface}-period`} />
 
         {/* UX-FILTERS-001 — the same visible chips the dashboard uses, and the same colours the
             charts below key off. One filter bar, one vocabulary, across both pages. */}
@@ -789,6 +796,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         )}
         {tab === 'performance' && <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />}
         {tab === 'platforms' && <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />}
+        {tab === 'audience' && <AudiencePanel projectId={currentProjectId} range={range} />}
         {tab === 'accounts' && <AccountsTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'campaigns' && <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />}
         {tab === 'ad_sets' && <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />}
@@ -805,6 +813,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         </>
       )}
 
+      {/* ANALYTICS-VISUAL-FIRST-001 — the accounting note closes the page, beside the performance note, instead of opening it. */}
+      <FinancialDisclaimer />
       <LivePerformanceNotice variant="compact" />
     </div>
   )
@@ -838,6 +848,9 @@ type OverviewTabProps = TabProps & { objective: string; surface: Surface }
  */
 function PerformanceTab({ projectId, range, filters, objective, surface }: OverviewTabProps) {
   const data = useOverviewData({ projectId, range, filters, objective })
+  const ar = useUi((s) => s.locale) === 'ar'
+  // ANALYTICS-DAILY-MEASURE-001 — both surfaces open on the report's daily chart: one analysis, one picture.
+  const daily = <DailyMeasurePanel projectId={projectId} range={range} filters={filters} ar={ar} />
 
   /*
    * WIDGET-REGISTRY-001 — the Dashboard's configurable widgets sit BELOW the overview it always had. A project where no
@@ -846,11 +859,17 @@ function PerformanceTab({ projectId, range, filters, objective, surface }: Overv
   return surface === 'dashboard'
     ? (
       <>
+        {daily}
         <DashboardOverview {...data} />
         <WidgetSurface projectId={projectId} surface="dashboard" range={range} />
       </>
     )
-    : <AnalyticsOverview {...data} />
+    : (
+      <>
+        {daily}
+        <AnalyticsOverview {...data} />
+      </>
+    )
 }
 
 
@@ -1239,7 +1258,11 @@ function PlatformsTab({ projectId, range, filters }: TabProps) {
       </Panel>
       <Panel title={ar ? 'جدول المنصات' : 'Platforms table'} loading={p.isLoading} error={p.isError} empty={!p.isLoading && rows.length === 0}>
         <MetricTable
-          head={ar ? ['المنصة', 'الإنفاق', 'النتائج', 'CPA', 'ROAS', 'CTR', 'CPM', 'المساهمة'] : ['Platform', 'Spend', 'Results', 'CPA', 'ROAS', 'CTR', 'CPM', 'Contribution']}
+          /*
+            OBJECTIVE-RESULT-001 — a platform carries campaigns of every objective, so its count is not
+            «النتائج»: it is the platform's conversions, named as such, and their cost.
+          */
+          head={ar ? ['المنصة', 'الإنفاق', 'تحويلات المنصة', 'تكلفة التحويل', 'ROAS', 'CTR', 'CPM', 'المساهمة'] : ['Platform', 'Spend', 'Platform conversions', 'Cost per conversion', 'ROAS', 'CTR', 'CPM', 'Contribution']}
           rows={rows.map((r) => [
             <PlatformCell key="p" provider={r.provider} />,
             /*
@@ -1328,8 +1351,14 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
    * whose platform never reported a return to the bottom — «needs a look» naming a campaign nobody
    * has a figure for, over one that genuinely returned little. See `campaignRoasPanels`.
    */
-  const best = bestByRoas(rows)
-  const worst = worstByRoas(rows)
+  /*
+   * OBJECTIVE-RESULT-001 — return on ad spend ranks SALES campaigns only. A traffic or awareness
+   * campaign was never bought to return revenue, and ranking it «lowest ROAS» named it a problem for
+   * money it never sought.
+   */
+  const salesRows = rows.filter((r) => returnsRevenue(r.objective))
+  const best = bestByRoas(salesRows)
+  const worst = worstByRoas(salesRows)
   return (
     <div className="space-y-4">
       {/*
@@ -1392,6 +1421,10 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
                 ROAS <span className="tnum font-semibold text-danger">{rowRoas(worst)}</span> · {ar ? 'إنفاق' : 'spend'} {rowMoney(worst, 'spend')}
               </div>
             </div>
+          ) : rows.length > 0 && salesRows.length === 0 ? (
+            <p className="text-sm text-text-muted" data-testid="analytics-worst-no-sales">
+              {ar ? 'لا توجد حملة مبيعات في هذه الفترة. العائد على الإنفاق (ROAS) لحملات المبيعات فقط.' : 'No sales campaign in this period. Return on ad spend (ROAS) applies to sales campaigns only.'}
+            </p>
           ) : rows.length > 0 ? (
             /*
               AGGREGATION-TRUTH-001 — the panel says why it can name nobody.
@@ -1419,7 +1452,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
       </div>
       <Panel title={ar ? 'ترتيب الحملات' : 'Campaign ranking'} description={ar ? 'مرتّبة حسب الإنفاق' : 'Ordered by spend'} loading={c.isLoading} error={c.isError} empty={!c.isLoading && rows.length === 0}>
         <MetricTable
-          head={ar ? ['الحملة', 'المنصة', 'الإنفاق', 'الإيرادات', 'النتائج', 'CPA', 'ROAS'] : ['Campaign', 'Platform', 'Spend', 'Revenue', 'Results', 'CPA', 'ROAS']}
+          head={ar ? ['الحملة', 'المنصة', 'الإنفاق', 'الإيرادات', 'النتيجة', 'تكلفة النتيجة', 'ROAS'] : ['Campaign', 'Platform', 'Spend', 'Revenue', 'Result', 'Cost per result', 'ROAS']}
           rows={rows.map((r) => [
             /*
              * CAMPAIGN-DRILL-001 — the name is the way in.
@@ -1449,20 +1482,28 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
              * provenance fields, same readers.
              */
             rowMoney(r, 'spend'),
-            rowMoney(r, 'revenue'),
-            num(r.conversions),
-            rowCostPer(r, 'cpa', 'conversions'),
-            <span key="ro" className="tnum font-semibold">{rowRoas(r)}</span>,
+            /*
+             * OBJECTIVE-RESULT-001 — each campaign's OWN result, named, and its cost; revenue and
+             * ROAS only where the campaign sells. «النتائج» was `conversions` for every row, so a
+             * traffic campaign with thousands of visits ranked as «0».
+             */
+            returnsRevenue(r.objective) ? rowMoney(r, 'revenue') : '\u2014',
+            <ResultCell key="res" row={r as unknown as Record<string, unknown> & { objective?: string | null }} ar={ar} />,
+            resultCostText(campaignResult(r.objective, r), r, null),
+            <span key="ro" className="tnum font-semibold">{returnsRevenue(r.objective) ? rowRoas(r) : '\u2014'}</span>,
           ])}
-          values={rows.map((r) => [
-            r.campaign_name ?? '',
-            providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
-            readMoney(r, 'spend', null, ar).amount,
-            readMoney(r, 'revenue', null, ar).amount,
-            r.conversions ?? null,
-            readCostPer(r, 'cpa', 'conversions', null, ar).amount,
-            readRoas(r, ar).value,
-          ])}
+          values={rows.map((r) => {
+            const result = campaignResult(r.objective, r)
+            return [
+              r.campaign_name ?? '',
+              providerLabel(canonicalPlatform(r.provider), ar ? 'ar' : 'en'),
+              readMoney(r, 'spend', null, ar).amount,
+              returnsRevenue(r.objective) ? readMoney(r, 'revenue', null, ar).amount : null,
+              result.value,
+              result.value ? readMoney(r, 'spend', null, ar).amount === null ? null : Number(readMoney(r, 'spend', null, ar).amount) / result.value * result.per : null,
+              returnsRevenue(r.objective) ? readRoas(r, ar).value : null,
+            ]
+          })}
           initialSort={{ column: 2, dir: 'desc' }}
         />
         {/*
@@ -1709,7 +1750,7 @@ function AccountBudgets({ projectId, range, filters, provider, picked, onPick }:
 
       <MetricTable
         head={ar
-          ? ['الحساب', 'المنصة', 'المصروف', 'حدّ المنصة', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت', 'الحملات']
+          ? ['الحساب', 'المنصة', 'الإنفاق', 'حدّ المنصة', 'المتبقي', 'نسبة الإنفاق', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت', 'الحملات']
           : ['Account', 'Platform', 'Spent', 'Platform cap', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under', 'Campaigns']}
         rows={rows.map((r) => {
           const unit = r.spent_currency ?? undefined
@@ -1849,7 +1890,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
     {!reading.isLoading && !reading.isError && (
       <BudgetReading reading={reading.data} locale={ar ? 'ar' : 'en'} />
     )}
-    <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل المصروف وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
+    <Panel title={ar ? 'تحليل الميزانية' : 'Budget analysis'} description={ar ? 'المخطط مقابل الإنفاق وسرعة الصرف (Pacing)' : 'Planned against spent, and how fast it is going (pacing)'} loading={b.isLoading} error={b.isError} empty={!b.isLoading && rows.length === 0}>
       {hiddenUnplaced > 0 && (
         /* A campaign linked to no provider campaign has no place on any rung; it is not hidden silently. */
         <p data-testid="budget-unplaced-note" className="mb-2 text-xs text-text-muted">
@@ -1872,19 +1913,19 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
       */}
       <MetricTable
         head={ar
-          ? ['الحملة', 'الميزانية', 'حدّ المنصة', 'المصروف', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
+          ? ['الحملة', 'الميزانية', 'حدّ المنصة', 'الإنفاق', 'المتبقي', 'نسبة الإنفاق', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
           : ['Campaign', 'Budget', 'Platform limit', 'Spent', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under']}
         rows={rows.map((r) => {
           const basisNote = r.pacing_basis === 'currency_mismatch'
             ? (ar
-                ? `المصروف بعملة ${r.spent_currency ?? '—'} والميزانية بعملة ${r.budget_currency ?? '—'} — لا تُقارَنان`
+                ? `الإنفاق بعملة ${r.spent_currency ?? '—'} والميزانية بعملة ${r.budget_currency ?? '—'} — لا تُقارَنان`
                 : `Spent in ${r.spent_currency ?? '—'}, budgeted in ${r.budget_currency ?? '—'} — not comparable`)
             : r.pacing_basis === 'no_budget'
               ? (ar ? 'لا توجد ميزانية محددة لهذه الحملة' : 'No budget was set for this campaign')
               : r.pacing_basis === 'partial'
-                ? (ar ? 'جزء من المصروف محوَّل وجزء بانتظار سعر صرف — لا يوجد إجمالي واحد' : 'Part of the spend is converted and part awaits an FX rate — no single total')
+                ? (ar ? 'جزء من الإنفاق محوَّل وجزء بانتظار سعر صرف — لا يوجد إجمالي واحد' : 'Part of the spend is converted and part awaits an FX rate — no single total')
                 : r.pacing_basis === 'mixed_currency'
-                  ? (ar ? 'المصروف بعملات متعددة لا يمكن جمعها' : 'Spend is in several currencies that cannot be summed')
+                  ? (ar ? 'الإنفاق بعملات متعددة لا يمكن جمعها' : 'Spend is in several currencies that cannot be summed')
                   : r.pacing_basis === 'nothing_measured_in_window'
                     ? (ar ? 'لا أرقام مقاسة لهذا المشروع في هذه الفترة — غياب، لا صفر' : 'Nothing was measured for this project in this period — an absence, not a zero')
                     : undefined
@@ -2271,7 +2312,7 @@ function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]
           answer, and saying which sources were checked is what makes it believable.
         */}
         {ar
-          ? 'كل مصدر في هذه الفترة محدَّث ومكتمل — لا شيء يحتاج انتباهك هنا.'
+          ? 'كل مصدر في هذه الفترة محدَّث ومكتمل — ما فيه تنبيهات هنا.'
           : 'Every source in this window is current and complete — nothing here needs your attention.'}
       </p>
     )
@@ -2839,7 +2880,7 @@ function DrillCrumbs({ path, level, ar, onUpTo }: { path: DrillStep[]; level: Dr
 
   const LEVEL_LABEL: Record<DrillLevel, { ar: string; en: string }> = {
     campaign: { ar: 'حملة', en: 'Campaign' },
-    ad_set: { ar: 'مجموعة', en: 'Ad set' },
+    ad_set: { ar: 'مجموعة', en: 'Ad group' },
     ad: { ar: 'إعلان', en: 'Ad' },
     creative: { ar: 'إعلان', en: 'Ad' },
   }
@@ -3098,7 +3139,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
                     creativeId={openCreative.id}
                     window={{ from: range.from, to: range.to }}
                     locale={ar ? 'ar' : 'en'}
-                    currency={currency ?? 'SAR'}
+                    currency={currency ?? ''}
                     height={180}
                   />
                 </>
@@ -3183,7 +3224,8 @@ function EntityState({ row, windowEnd, ar }: { row: EntityRow; windowEnd: string
   )
 }
 
-export function EntityTab({ projectId, range, filters, level, workspace }: TabProps & { level: 'ad_set' | 'ad'; workspace?: EntityWorkspaceControls }) {
+export function EntityTab({ projectId, range, filters, level, workspace, part = 'all' }: TabProps & { level: 'ad_set' | 'ad'; workspace?: EntityWorkspaceControls; /** AF2 — a fitted page draws the table and the diagnosis on separate tabs. */ part?: 'all' | 'table' | 'diagnosis' }) {
+  const fitCompact = useFitCompact()
   /* AD-PREVIEW-DEFAULT-001 — the popup's link resolves in the portal the reader is standing in. */
   const portalTo = usePortalPath()
   const ar = useAr()
@@ -3312,7 +3354,7 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
   })
 
   const heading = level === 'ad_set'
-    ? (ar ? 'المجموعات الإعلانية' : 'Ad sets')
+    ? (ar ? 'المجموعات' : 'Ad groups')
     : (ar ? 'الإعلانات' : 'Ads')
 
   /*
@@ -3363,7 +3405,14 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
    * a figure under the wrong heading the first time a family changed the count — a worse defect than
    * the generic column set this replaces.
    */
-  const fullPlan = entityColumnPlan(allRows)
+  // OBJECTIVE-FILTERS-INCLUSIVE-001 — one objective chosen picks the columns; the rows stay every campaign's.
+  // The control sends the canonical bucket as its raw objectives; read the bucket back to choose its layout.
+  const chosenObjective = (() => {
+    const raw = [...(filters?.objective ?? [])].sort().join(',')
+    if (raw === '') return 'all'
+    return CANONICAL_OBJECTIVE_KEYS.find((key) => [...rawObjectivesFor(key)].sort().join(',') === raw) ?? 'all'
+  })()
+  const fullPlan = entityColumnPlan(allRows, chosenObjective)
   const plan = { ...fullPlan, keys: fullPlan.keys.filter((key) => !(workspace?.hidden ?? []).includes(key)) }
   const manage = workspace?.onManage
 
@@ -3558,10 +3607,11 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
         />
       )}
 
-      <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />
-      <Panel
+      {part !== 'diagnosis' && <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />}
+      {part !== 'diagnosis' && <Panel
         title={heading}
         description={ar ? 'الأعلى إنفاقًا أولًا — ويمكن الترتيب بأي عمود' : 'Highest spend first — sortable by any column'}
+        action={fitCompact && plan.mixed ? <InfoTip text={ar ? 'تضم هذه القائمة أهدافًا مختلفة، فتُعرض الأرقام المشتركة فقط. ضيّق فلتر الهدف لترى أرقام هدف واحد.' : 'These rows span different objectives, so only the figures they share are shown. Narrow the objective filter to see one objective’s own figures.'} /> : undefined}
         loading={q.isLoading}
         error={q.isError}
         /*
@@ -3596,7 +3646,7 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
               Only when the rows really hold several. One family — even beside rows with no campaign link
               at all — gets its own figures and needs no explanation.
             */}
-            {plan.mixed && (
+            {plan.mixed && !fitCompact && (
               <p data-testid={`entity-mixed-objectives-${level}`} className="mb-2 rounded-xl border border-border bg-surface-secondary p-3 text-xs text-text-secondary">
                 {ar
                   ? 'تضم هذه القائمة أهدافًا مختلفة، فتُعرض الأرقام المشتركة فقط: العائد وتكلفة النتيجة لا يصحّان عبر أهداف اشترت أشياء مختلفة. ضيِّق الهدف من الفلتر لترى أرقام هدف واحد.'
@@ -3631,9 +3681,9 @@ export function EntityTab({ projectId, range, filters, level, workspace }: TabPr
             )}
           </div>
         )}
-      </Panel>
+      </Panel>}
 
-      {level === 'ad_set' && workspace && (
+      {level === 'ad_set' && workspace && part !== 'table' && (
         <ChangeDiagnosis
           data={adSetDrivers.data}
           currency={currency}
@@ -3682,6 +3732,8 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
   const leaders = useObjectiveLeaders(projectId, range, filters)
   const explanations = useObjectiveExplanations(projectId, range, filters)
   const trend = useObjectiveTrend(projectId, range, filters)
+  // OBJECTIVE-PATHS-001 — one total, the split by objective, one card per objective (ad-set paths).
+  const objectivePaths = useObjectivePaths(projectId, range, filters)
 
   /*
    * READY-3 — the catalogue owns which KPIs an objective is judged by, and this kept its own copy.
@@ -3722,6 +3774,8 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
 
   return (
     <div className="space-y-4">
+      {/* OBJECTIVE-PATHS-001 — feature first: the one total and what each objective did with its share. */}
+      <ObjectivePathCards block={objectivePaths.data?.value} locale={ar ? 'ar' : 'en'} currency={currency} />
       {/*
         ANALYTICS-DIFFERENTIATION-001 — the objective decomposition, ABOVE the per-family breakdown.
 
@@ -4145,7 +4199,7 @@ function PlatformBudgets({ projectId, range, filters, picked, onPick }: TabProps
   return (
     <Panel
       title={ar ? 'الميزانية حسب المنصة' : 'Budget by platform'}
-      description={ar ? 'المخطط مقابل المصروف لكل منصة' : 'Planned against spent, per platform'}
+      description={ar ? 'المخطط مقابل الإنفاق لكل منصة' : 'Planned against spent, per platform'}
       loading={q.isLoading}
       error={q.isError}
       empty={!q.isLoading && rows.length === 0}
@@ -4161,7 +4215,7 @@ function PlatformBudgets({ projectId, range, filters, picked, onPick }: TabProps
           difference is the decision.
         */
         head={ar
-          ? ['المنصة', 'الميزانية', 'المصروف', 'المتبقي', 'الاستهلاك', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
+          ? ['المنصة', 'الميزانية', 'الإنفاق', 'المتبقي', 'نسبة الإنفاق', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
           : ['Platform', 'Budget', 'Spent', 'Remaining', 'Consumed', 'Expected to date', 'Daily average', 'Pace', 'Projected', 'Over / under']}
         rows={rows.map((r) => [
           /* BUDGET-HIERARCHY-001 — a platform row is the first rung of the drill: one click narrows the accounts and campaigns below to it. */

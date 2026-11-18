@@ -22,6 +22,7 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportScopeTemplate;
 use App\Domains\Reports\Services\ReportObjectiveLens;
+use App\Domains\Reports\Support\ReportObjectives;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Http\Controllers\Controller;
@@ -101,7 +102,6 @@ final class ReportScopeController extends Controller
         $fProviders = array_values(array_map('strtolower', array_filter((array) $request->input('providers', []), 'is_string')));
         $fAccounts = array_values(array_filter((array) $request->input('account_ids', []), 'is_string'));
         ReportScopeHierarchy::refuseForeignAccounts($project, $fAccounts);
-        $fObjectives = array_values(array_filter((array) $request->input('objectives', []), 'is_string'));
         $fDestinations = array_values(array_filter((array) $request->input('destinations', []), 'is_string'));
 
         $axis = $request->string('axis')->toString();
@@ -143,7 +143,7 @@ final class ReportScopeController extends Controller
                 ->where('project_id', $project)
                 // SECURITY CLUSTER 5 — a campaign of a deselected account is not the project's to name.
                 ->tap(fn ($q) => BoundAccountVisibility::unifiedCampaigns($q))
-                ->when($fObjectives !== [], fn ($q) => $q->whereIn('objective', $fObjectives))
+                // OBJECTIVE-FILTERS-INCLUSIVE-001 — the chosen objective picks KPIs; every campaign stays pickable.
                 ->when($fProviders !== [] || $fAccounts !== [], fn ($q) => $q->where(fn ($w) => $w->whereIn(
                     'id',
                     ExternalCampaign::query()
@@ -517,7 +517,7 @@ final class ReportScopeController extends Controller
         ['key' => 'cpm', 'ar' => 'تكلفة الألف ظهور', 'en' => 'CPM'],
         ['key' => 'conversions', 'ar' => 'النتائج', 'en' => 'Results'],
         ['key' => 'add_to_cart', 'ar' => 'الإضافات للسلة', 'en' => 'Add to cart'],
-        ['key' => 'purchases', 'ar' => 'المشتريات', 'en' => 'Purchases'],
+        ['key' => 'purchases', 'ar' => 'الطلبات', 'en' => 'Purchases'],
         ['key' => 'revenue', 'ar' => 'الإيرادات', 'en' => 'Revenue'],
         ['key' => 'roas', 'ar' => 'العائد على الإنفاق', 'en' => 'ROAS'],
         ['key' => 'cpa', 'ar' => 'تكلفة النتيجة', 'en' => 'Cost per result'],
@@ -543,11 +543,20 @@ final class ReportScopeController extends Controller
 
         // REPORT-KPI-CONTRACT-001 — the objective the editor sent is the report's measurement TEMPLATE: it moves to the report and the
         // stored scope keeps no objective unless «filter campaigns by objective» was explicitly switched on.
-        $template = $scope->objectiveTemplate();
+        // REPORT-MULTI-OBJECTIVE-001 — and every objective it names: one is the report's objective, several are the mixed lens plus the list.
+        $objectives = ReportObjectives::toStore($scope->objectiveTemplates());
+        $config = (array) ($model->config ?? []);
+        if ($objectives['campaign_objective'] !== null || $scope->objectiveFilter) {
+            unset($config[ReportObjectives::CONFIG_KEY]);
+            if ($objectives['objectives'] !== []) {
+                $config[ReportObjectives::CONFIG_KEY] = $objectives['objectives'];
+            }
+        }
 
         $model->forceFill([
             'scope' => $scope->isUnbounded() ? null : $scope->toArray(),
-            'campaign_objective' => $template ?? $model->campaign_objective,
+            'campaign_objective' => $objectives['campaign_objective'] ?? $model->campaign_objective,
+            'config' => $config === [] ? $model->config : $config,
             'status' => 'processing',
             'error' => null,
         ])->save();

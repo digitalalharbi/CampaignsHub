@@ -365,6 +365,7 @@ export function RankingBarChart({
   horizontal = false,
   colorByPlatform = false,
   currency = '',
+  rowColor,
 }: {
   data: Array<Record<string, unknown>>
   bars: Array<{ key: string; name: string; color?: string; kind?: FmtKind }>
@@ -372,6 +373,8 @@ export function RankingBarChart({
   horizontal?: boolean
   colorByPlatform?: boolean
   currency?: string
+  /** A fill for one bar of one row — the status colour of a budget bar. Returning undefined keeps the bar's own colour. */
+  rowColor?: (row: Record<string, unknown>, barKey: string) => string | undefined
 }) {
   const cat = horizontal ? { type: 'category' as const } : {}
   return (
@@ -402,6 +405,7 @@ export function RankingBarChart({
         {bars.map((b, i) => (
           <Bar key={b.key} name={b.name} dataKey={b.key} radius={horizontal ? [0, 6, 6, 0] : [6, 6, 0, 0]} fill={b.color ?? CHART_SERIES[i % CHART_SERIES.length]}>
             {colorByPlatform && data.map((d) => <Cell key={String(d.label)} fill={platformColor(String(d.platform ?? d.label))} />)}
+            {rowColor && !colorByPlatform && data.map((d, j) => <Cell key={`${j}-${String(d.label)}`} fill={rowColor(d, b.key) ?? b.color ?? CHART_SERIES[i % CHART_SERIES.length]} />)}
           </Bar>
         ))}
       </BarChart>
@@ -446,12 +450,20 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false, diffe
         const reported = s.count !== null && s.count !== undefined
         const w = reported ? Math.max(8, ((s.count as number) / (top || 1)) * 100) : 0
         return (
-          <div key={s.label} className="flex items-center gap-3">
+          /*
+           * FUNNEL-MOBILE-001 — Owner 2026-11-18: «الأرقام ما تظهر في تصفح الجوال، أول رقم يظهر والباقي مختفي».
+           *
+           * On a phone the fixed label (8rem) and rate column (9rem) left the bar a few dozen pixels, and each count sat INSIDE its
+           * filled bar with the overflow hidden: the first stage (100%) had room, every later one was clipped to nothing. Below `sm`
+           * the row now stacks — the label and the rate on one line, the bar the whole width under them — and a count whose bar is
+           * too short to hold it is written just after the bar, in the text colour, so every stage states its number at any width.
+           */
+          <div key={s.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:flex sm:gap-3" data-testid="funnel-row">
             {/* UX-COPY-001 — the payload labels its stages in English only. */}
-            <span className="w-32 shrink-0 text-sm font-medium text-text-secondary">{funnelStageLabel(s.stage ?? '', s.label, ar)}</span>
+            <span className="min-w-0 truncate text-sm font-medium text-text-secondary sm:w-32 sm:shrink-0">{funnelStageLabel(s.stage ?? '', s.label, ar)}</span>
             {reported ? (
-              <div className="h-9 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
-                <div className="flex h-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>
+              <div className="order-last col-span-2 flex h-9 min-w-0 items-center overflow-hidden rounded-xl bg-surface-secondary sm:order-none sm:flex-1">
+                <div className="flex h-full shrink-0 items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>
                   {/*
                     NUMBER-PRESENTATION-001 — the funnel wrote its counts at full width.
                     *
@@ -468,15 +480,16 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false, diffe
                     * legitimate: «6.6M» a reader cannot get back to 6,596,500 is a figure they
                     * cannot audit.
                   */}
-                  <span className="tnum" title={countRead(s.count).exact ?? undefined}>{countRead(s.count).text}</span>
+                  {w >= 40 && <span className="tnum" data-testid="funnel-count" title={countRead(s.count).exact ?? undefined}>{countRead(s.count).text}</span>}
                 </div>
+                {w < 40 && <span className="tnum ms-2 shrink-0 text-sm font-semibold text-text-primary" data-testid="funnel-count" data-outside="true" title={countRead(s.count).exact ?? undefined}>{countRead(s.count).text}</span>}
               </div>
             ) : (
-              <div className="flex h-9 flex-1 items-center rounded-xl border border-dashed border-border px-3 text-xs text-text-muted">
+              <div className="order-last col-span-2 flex h-9 items-center rounded-xl border border-dashed border-border px-3 text-xs text-text-muted sm:order-none sm:flex-1">
                 {ar ? 'لم ترسل المنصة هذه المرحلة' : 'This stage was never reported'}
               </div>
             )}
-            <div className="w-36 shrink-0 text-end text-xs text-text-muted">
+            <div className="text-end text-xs text-text-muted sm:w-36 sm:shrink-0">
               {/*
                 FUNNEL-NOT-NESTED-001 — «165%» is not a conversion rate, and this said it was.
                 *

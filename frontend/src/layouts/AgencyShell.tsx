@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useLayoutEffect, type CSSProperties } from 'react'
 import { Link, Outlet } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { agencyAccentFor } from '@/features/requests/portal/useClientBranding'
@@ -16,15 +16,21 @@ import {
   X,
 } from 'lucide-react'
 import { AccountMenu } from '@/features/account/UserMenu'
+import { UsageMeterChip } from '@/features/subscriptions/UsageMeterChip'
 import { CampaignsHubMark } from '@/components/brand/CampaignsHubMark'
 import { NotificationCenter } from '@/features/notifications/NotificationCenter'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
+import { useRail } from './railPreference'
 import { AgencyScopeSwitcher } from '@/features/agency/AgencyScopeSwitcher'
+import { ClientScopeChip } from '@/features/agency/ClientScopeChip'
+import { useSectionAllowed } from '@/lib/accessSections'
 import { SidebarNav } from './SidebarNav'
-import { agencyNavGroups } from './agencyNav'
+import { agencyAllGroups, agencyNavGroups, agencySettingsGroup } from './agencyNav'
 import { useProjectCapabilities } from '@/features/projects/capabilities'
 import { PortalFrame } from './PortalFrame'
+import { AiConnectPromo } from '@/features/account/AiConnectPromo'
 import { useSectionTitle } from './sectionTitle'
 import type { MobileTab } from './MobileTabBar'
 import { moreGroupsFrom } from './mobileTabs'
@@ -38,7 +44,7 @@ import { moreGroupsFrom } from './mobileTabs'
  * in More: eighteen sections is a rail, not a tab bar, and none of them is dropped.
  */
 const AGENCY_TABS: MobileTab[] = [
-  { to: '/agency/dashboard', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard },
+  { to: '/agency/home', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard },
   { to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 },
   { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
   { to: '/agency/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },
@@ -77,6 +83,8 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
    * would empty somebody's rail on a slow network and look like an outage.
    */
   const { can } = useProjectCapabilities()
+  // ACCESS-SECTIONS-001 — a section the member lacks is hidden, not drawn disabled.
+  const sectionAllowed = useSectionAllowed()
 
   return (
     <SidebarNav
@@ -84,7 +92,7 @@ function NavItems({ ar, collapsed, onNavigate }: { ar: boolean; collapsed?: bool
       ar={ar}
       collapsed={collapsed}
       onNavigate={onNavigate}
-      allow={(leaf) => can(leaf.cap)}
+      allow={(leaf) => can(leaf.cap) && sectionAllowed(leaf.to)}
       label={ar ? 'أقسام الوكالة' : 'Agency sections'}
       storageKey="nav.collapsed.agency"
     />
@@ -159,53 +167,58 @@ function useAgencyAccent(): CSSProperties | undefined {
 
 export function AgencyShell() {
   const agencyAccent = useAgencyAccent()
-  const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } =
-    useUi()
+  const { can } = useProjectCapabilities()
+  const sectionAllowed = useSectionAllowed()
+  const workspace = { group: agencySettingsGroup, allow: (leaf: { cap?: string; to: string }) => can(leaf.cap) && sectionAllowed(leaf.to) }
+  const { theme, locale, toggleTheme, toggleLocale, sidebarOpen, setSidebarOpen } = useUi()
   const ar = locale === 'ar'
+  /*
+   * NOV-SIDEBAR-001 — the rail is the 64px strip until THIS person opens it, and that choice is kept per user.
+   * Adopted before paint, so a person who left it open does not see it collapse and reopen.
+   */
+  const userId = useAuth((s) => s.user?.id)
+  const sidebarCollapsed = useRail((s) => s.collapsed)
+  const toggleSidebarCollapsed = useRail((s) => s.toggle)
+  const hydrateRail = useRail((s) => s.hydrate)
+  useLayoutEffect(() => hydrateRail(userId), [userId, hydrateRail])
 
   /* The tab says which screen it holds — it carried the marketing line on every one of them. */
-  useSectionTitle(agencyNavGroups)
+  useSectionTitle(agencyAllGroups)
 
   return (
     <PortalFrame
       style={agencyAccent}
       testId="agency-shell"
-      railWidth={sidebarCollapsed ? 'w-[76px]' : 'w-[264px]'}
-      tabs={AGENCY_TABS}
-      moreGroups={moreGroupsFrom(agencyNavGroups, AGENCY_TABS)}
+      railWidth={sidebarCollapsed ? 'w-16' : 'w-[264px]'}
+      railCompact={sidebarCollapsed}
+      drawerLabel={ar ? 'القائمة' : 'Menu'}
+      tabs={AGENCY_TABS.filter((tab) => sectionAllowed(tab.to))}
+      moreGroups={moreGroupsFrom([...agencyNavGroups, agencySettingsGroup], AGENCY_TABS, (leaf) => can(leaf.cap) && sectionAllowed(leaf.to))}
       // The agency's client → project scope, for the same reason (MOBILE-APP-001): every section
       // below it is read through that choice, and the drawer is no longer the phone's way in.
-      moreHeader={<div className="grid gap-3"><AgencyScopeSwitcher /><AccountMenu variant="sidebar" /></div>}
+      moreHeader={<div className="grid gap-3"><AgencyScopeSwitcher /><AccountMenu variant="sidebar" workspace={workspace} /></div>}
       drawerOpen={sidebarOpen}
       onDrawerClose={() => setSidebarOpen(false)}
       rail={
         <>
-          <div className="flex items-center justify-between gap-2">
+          <div className={`flex items-center justify-between gap-2 ${sidebarCollapsed ? 'flex-col' : ''}`}>
             <AgencyIdentity collapsed={sidebarCollapsed} />
-            {!sidebarCollapsed && (
-              <button
-                onClick={toggleSidebarCollapsed}
-                aria-label={ar ? 'طي القائمة' : 'Collapse sidebar'}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
-              >
-                <PanelLeft size={17} />
-              </button>
-            )}
-          </div>
-          {sidebarCollapsed && (
+            {/* One button, both ways — the same control opens and closes the rail (NOV-SIDEBAR-001). */}
             <button
               onClick={toggleSidebarCollapsed}
-              aria-label={ar ? 'توسيع القائمة' : 'Expand sidebar'}
-              className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+              data-testid="rail-toggle"
+              aria-expanded={!sidebarCollapsed}
+              aria-label={sidebarCollapsed ? (ar ? 'فتح القائمة الجانبية' : 'Open sidebar') : (ar ? 'طي القائمة' : 'Collapse sidebar')}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
             >
-              <PanelLeft size={17} className="rotate-180" />
+              <PanelLeft size={18} style={sidebarCollapsed !== ar ? { transform: 'scaleX(-1)' } : undefined} aria-hidden />
             </button>
-          )}
+          </div>
           {/* Client → project, the agency's own scope control (AGENCY-006). Above the rail because
               every section below it is read through that choice. */}
           <AgencyScopeSwitcher collapsed={sidebarCollapsed} />
           <NavItems ar={ar} collapsed={sidebarCollapsed} />
-          <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} />
+          <AccountMenu variant="sidebar" collapsed={sidebarCollapsed} workspace={workspace} />
         </>
       }
       drawer={
@@ -222,15 +235,17 @@ export function AgencyShell() {
           </div>
           <AgencyScopeSwitcher />
           <NavItems ar={ar} onNavigate={() => setSidebarOpen(false)} />
-          <AccountMenu variant="sidebar" />
+          <AccountMenu variant="sidebar" workspace={workspace} />
         </>
       }
       header={
-        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-border bg-surface/85 px-4 py-2.5 backdrop-blur-md sm:px-6">
+        <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-border bg-surface/85 px-4 pb-2.5 pt-[max(0.625rem,env(safe-area-inset-top))] backdrop-blur-md sm:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             aria-label={ar ? 'فتح القائمة' : 'Open menu'}
-            className="hidden h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover sm:flex sm:h-9 sm:w-9 md:hidden"
+            aria-expanded={sidebarOpen}
+            data-testid="drawer-open"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-text-secondary hover:bg-surface-hover md:hidden"
           >
             <Menu size={19} />
           </button>
@@ -251,7 +266,13 @@ export function AgencyShell() {
             <CampaignsHubMark size={18} />
           </Link>
 
-          <div className="ms-auto flex items-center gap-1.5">
+          {/* CLIENT-SCOPE-TOP-001 — «كل العملاء» or one client's space; every section below reads the same choice. */}
+          <ClientScopeChip />
+
+          <div className="ms-auto flex min-w-0 items-center gap-1.5">
+            <UsageMeterChip />
+            {/* AI-CONNECT-EASY-001 — folded into the top bar beside the bell; it unfolds on a press. */}
+            <AiConnectPromo />
             <NotificationCenter />
             <button
               onClick={toggleLocale}
@@ -267,7 +288,7 @@ export function AgencyShell() {
             >
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
-            <div className="ms-1"><AccountMenu variant="topbar" /></div>
+            <div className="ms-1"><AccountMenu variant="topbar" workspace={workspace} /></div>
           </div>
         </header>
       }

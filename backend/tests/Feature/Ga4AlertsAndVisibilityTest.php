@@ -216,7 +216,7 @@ final class Ga4AlertsAndVisibilityTest extends TestCase
             $this->assertStringNotContainsString('dir="auto"', $m[1].$m[2]);
             // Every Latin fragment (counts, dollars, signs) is its own left-to-right island inside the line.
             $this->assertGreaterThanOrEqual(4, substr_count($m[2], 'dir="ltr"'), "$lang: Latin fragments are not isolated");
-            foreach (['12,480', '214', '$31,800', '48'] as $figure) {
+            foreach (['12,480', '214', '31,800 $', '48'] as $figure) {
                 $this->assertMatchesRegularExpression('#<span dir="ltr"[^>]*>[^<]*'.preg_quote($figure, '#').'[^<]*</span>#u', $m[2], "$lang: $figure sits outside an island");
             }
         }

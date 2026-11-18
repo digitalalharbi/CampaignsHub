@@ -32,6 +32,7 @@ export function useLivePayload({
   token,
   secret,
   days,
+  range = null,
   providers,
   enabled = true,
   failedMessage,
@@ -41,6 +42,8 @@ export function useLivePayload({
   secret?: string
   /** Null on a FIXED report: no rolling window is asked for, and the server answers with the saved dates. */
   days: number | null
+  /** REPORT-DATE-PICKER-001 — a range chosen in the system's period picker; it wins over `days`. */
+  range?: { from: string; to: string } | null
   providers: string[]
   enabled?: boolean
   failedMessage: string
@@ -53,7 +56,11 @@ export function useLivePayload({
 }): { load: LiveLoad; reload: () => void } {
   const [load, setLoad] = useState<LiveLoad>({ state: 'pending' })
   const latest = useRef(0)
+  /** LIVE-LOAD-RETRY-001 — whether figures were ever shown; only a first load retries. */
+  const shown = useRef(false)
   const key = providers.join(',')
+  const rangeFrom = range?.from ?? null
+  const rangeTo = range?.to ?? null
 
   const run = useCallback(async () => {
     const ticket = ++latest.current
@@ -61,21 +68,37 @@ export function useLivePayload({
 
     let status = 0
     let body: { data?: unknown; message?: string } = {}
-    try {
-      const res = await fetchLiveShared(token, {
-        ...(days === null ? {} : { from: isoDaysAgo(days), to: new Date().toISOString().slice(0, 10) }),
-        providers: key === '' ? [] : key.split(','),
-        campaigns: [],
-        password: secret,
-      })
-      status = res.status
-      body = (res.envelope ?? {}) as typeof body
-    } catch {
-      status = 0
+    /*
+     * LIVE-LOAD-RETRY-001 — Owner 2026-11-17: «عند فتح الرابط كرم النخيل لا يفتح». A client's FIRST open met a transient
+     * failure (a deploy restarting the server, a gateway timing out on a cold computation) and was shown «تعذّر تحميل التقرير»
+     * at once. A first load now tries three times, waiting 2s then 4s, before it says so — only on no answer or a server
+     * error; a refusal (403/404/429) is said at once, and a refresh over figures already shown is never retried.
+     */
+    const attempts = shown.current ? 1 : 3
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      if (attempt > 0) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 2000))
+        if (ticket !== latest.current) return
+      }
+      try {
+        const res = await fetchLiveShared(token, {
+          ...(rangeFrom !== null && rangeTo !== null ? { from: rangeFrom, to: rangeTo } : days === null ? {} : { from: isoDaysAgo(days), to: new Date().toISOString().slice(0, 10) }),
+          providers: key === '' ? [] : key.split(','),
+          campaigns: [],
+          password: secret,
+        })
+        status = res.status
+        body = (res.envelope ?? {}) as typeof body
+      } catch {
+        status = 0
+        body = {}
+      }
+      if (status !== 0 && status < 500) break
     }
     if (ticket !== latest.current) return
 
     if (status === 200 && body.data) {
+      shown.current = true
       setLoad({ state: 'ready', payload: body.data as LivePayload, refreshing: false, refreshError: null, computedAt: new Date() })
       return
     }
@@ -84,7 +107,7 @@ export function useLivePayload({
     setLoad((prev) => (prev.state === 'ready'
       ? { ...prev, refreshing: false, refreshError: message }
       : { state: 'failed', message, status }))
-  }, [token, secret, days, key, failedMessage])
+  }, [token, secret, days, rangeFrom, rangeTo, key, failedMessage])
 
   useEffect(() => {
     if (enabled) void run()

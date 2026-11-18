@@ -136,7 +136,7 @@ export function DiagnosticPanel({
   onRetry?: () => void
   ar: boolean
 }) {
-  const title = ar ? 'أين الضعف' : 'Where the weakness is'
+  const title = ar ? 'مراحل الرحلة' : 'Where the weakness is'
 
   /*
    * Failure outranks every other arm. A panel that cannot read the totals knows nothing about this
@@ -181,7 +181,8 @@ export function DiagnosticPanel({
   const actions = recommendedActions(d)
 
   return (
-    <Panel title={title} description={ar ? 'يُقرأ على مراحل الرحلة، ولا يُدّعى سبب بلا دليله' : 'Read along the journey, and no cause is claimed without its evidence'}>
+    // ANALYTICS-VISUAL-FIRST-001 — the title is the question; the line of method under it was text the reader skipped.
+    <Panel title={title}>
       {d.state === 'not_diagnosable' ? (
         <Note
           testId="diagnostic-not-diagnosable"

@@ -152,7 +152,7 @@ export const CLIENT_SPACE_PREFIX = '/portal/clients/'
 
 /** The first path segments under `/portal` that are the portal's own pages, never a client space. */
 export const PORTAL_RESERVED_SEGMENTS: ReadonlySet<string> = new Set([
-  'clients', 'spaces', 'login', 'requests', 'quotes', 'invoices', 'messages', 'profile', 'files', 'campaigns', 'reports',
+  'clients', 'spaces', 'login', 'requests', 'quotes', 'invoices', 'messages', 'profile', 'files', 'campaigns', 'reports', 'approvals',
 ])
 
 /**

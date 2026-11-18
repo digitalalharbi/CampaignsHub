@@ -389,7 +389,7 @@ test.describe('UX-DASH-001 — the advertiser dashboard', () => {
       filter changes the page and can be taken back — is unchanged, and the panel below the KPI row
       is scoped by the same filters.
     */
-    await expect(page.getByTestId('dashboard-overview')).toContainText(/الإنفاق والنتائج والإيرادات|Spend, results and revenue/i, { timeout: 20000 })
+    await expect(page.getByTestId('dashboard-overview')).toContainText(/الإنفاق وتحويلات المنصة والإيرادات|Spend, platform conversions and revenue/i, { timeout: 20000 })
 
     await page.getByTestId('dashboard-reset').click()
     await expect(page.getByTestId('dashboard-applied')).toHaveCount(0)

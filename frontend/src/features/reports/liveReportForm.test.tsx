@@ -282,9 +282,9 @@ describe('a live link and the form it was shared as', () => {
    * A spend in another currency is printed in THAT currency, and does not order the table.
    *
    * The money contract's rule, at a new surface: a withheld amount is shown as the original the
-   * platform reported — «500.00 USD» — and never converted into the report's SAR, because no rate
+   * platform reported — «500.00 $» — and never converted into the report's SAR, because no rate
    * was on file to convert it with. It is then sorted as an ABSENCE, since ranking a client's
-   * platforms by comparing 500 USD against 900 SAR is an order nobody can check.
+   * platforms by comparing 500 $ against 900 ر.س is an order nobody can check.
    */
   it('prints an unconvertible spend in its own currency and does not sort by it', async () => {
     vi.mocked(fetchLiveShared).mockResolvedValue({
@@ -312,9 +312,9 @@ describe('a live link and the form it was shared as', () => {
     // Descending by spend: the comparable figure first, the incomparable one last — never the reverse.
     expect(rows[0]).toHaveTextContent('Snapchat')
     expect(rows[1]).toHaveTextContent('Meta')
-    expect(rows[1]).toHaveTextContent('500.00 USD')
+    expect(rows[1]).toHaveTextContent('500.00 $')
     // And never that figure wearing this report's currency.
-    expect(rows[1]).not.toHaveTextContent('500.00 SAR')
+    expect(rows[1]).not.toHaveTextContent('500.00 ر.س')
   })
 
   /**
@@ -425,7 +425,7 @@ describe('the period of a live report', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" periodMode="fixed" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
-    expect(screen.getByTestId('live-period-fixed')).toHaveTextContent('2026-08-01 → 2026-08-26')
+    expect(screen.getByTestId('live-period-fixed')).toHaveTextContent('1 Aug – 26 Aug 2026')
     for (const days of [7, 30, 90]) expect(screen.queryByTestId(`live-range-${days}`)).not.toBeInTheDocument()
 
     const asked = vi.mocked(fetchLiveShared).mock.calls[0][1]
@@ -438,7 +438,8 @@ describe('the period of a live report', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" periodMode="rolling" />, { locale: 'en' })
     await screen.findByTestId('live-report')
 
-    for (const days of [7, 30, 90]) expect(screen.getByTestId(`live-range-${days}`)).toBeInTheDocument()
+    expect(screen.getByTestId('live-range-picker-button')).toBeInTheDocument()
+    expect(screen.queryByTestId('live-range-7')).not.toBeInTheDocument()
     expect(screen.queryByTestId('live-period-fixed')).not.toBeInTheDocument()
     expect(vi.mocked(fetchLiveShared).mock.calls[0][1].from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })

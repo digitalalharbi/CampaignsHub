@@ -9,14 +9,18 @@ use App\Domains\Campaigns\Enums\CampaignOutcome;
 use App\Domains\Campaigns\Enums\CampaignStatus;
 use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignOutcomeResolver;
 use App\Domains\Campaigns\Services\CoverCache;
 use App\Domains\Campaigns\Services\CreativeFunnel;
+use App\Domains\Campaigns\Support\ObjectiveResult;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Coverage\AggregateCoverage;
 use App\Domains\Metrics\Coverage\ContributorCoverage;
 use App\Domains\Metrics\Enums\MoneyState;
+use App\Domains\Metrics\Fx\FxConversion;
+use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Support\FinancialRatios;
 use App\Domains\Metrics\Support\SiblingRounding;
@@ -609,6 +613,58 @@ final class MetricsAggregator
         return $query;
     }
 
+    /**
+     * FX-APPLY-001 (builder G) — what the money in this scope was converted FROM, so a total that adds several currencies says
+     * so («يشمل عملات محوّلة») and a rate older than 7 days for its row carries ⚠.
+     *
+     * Read-only, one grouped query over the same scope as every figure. Per original currency: rows converted, rows withheld
+     * (no rate for their date — the money is not in the total), the newest and oldest rate dates used, and how many rows were
+     * converted with a rate older than `fx.rates.stale_after_days` for their own date.
+     *
+     * @return array{reporting_currency: string, includes_converted: bool, currencies: list<string>, stale: bool, withheld_rows: int,
+     *   withheld_currencies: list<string>, by_currency: list<array{currency: ?string, converted_rows: int, withheld_rows: int, stale_rows: int, first_rate_date: ?string, last_rate_date: ?string}>,
+     *   rates_page: string}
+     */
+    public function fxCoverage(Carbon $from, Carbon $to): array
+    {
+        $staleDays = CurrencyConverter::staleAfterDays();
+        $rows = $this->base($from, $to)
+            ->whereIn('metric_key', ['spend', 'revenue'])
+            ->whereNotNull('original_amount')
+            ->selectRaw('UPPER(original_currency) AS currency')
+            ->selectRaw('COUNT(*) FILTER (WHERE value IS NOT NULL) AS converted_rows')
+            ->selectRaw('COUNT(*) FILTER (WHERE value IS NULL) AS withheld_rows')
+            ->selectRaw("COUNT(*) FILTER (WHERE value IS NOT NULL AND rate_date IS NOT NULL AND rate_source NOT LIKE 'official-peg%' AND rate_source <> 'identity' AND metric_date - rate_date > {$staleDays}) AS stale_rows")
+            ->selectRaw('MIN(rate_date) FILTER (WHERE value IS NOT NULL) AS first_rate_date')
+            ->selectRaw('MAX(rate_date) FILTER (WHERE value IS NOT NULL) AS last_rate_date')
+            ->groupByRaw('UPPER(original_currency)')
+            ->get();
+
+        $reporting = ReportingCurrency::DEFAULT;
+        $by = $rows->map(static fn ($r): array => [
+            'currency' => $r->currency !== null ? (string) $r->currency : null,
+            'converted_rows' => (int) $r->converted_rows,
+            'withheld_rows' => (int) $r->withheld_rows,
+            'stale_rows' => (int) $r->stale_rows,
+            'first_rate_date' => $r->first_rate_date !== null ? Carbon::parse((string) $r->first_rate_date)->toDateString() : null,
+            'last_rate_date' => $r->last_rate_date !== null ? Carbon::parse((string) $r->last_rate_date)->toDateString() : null,
+        ])->sortBy(static fn (array $r): string => (string) $r['currency'])->values()->all();
+
+        $converted = array_values(array_filter(array_map(static fn (array $r): ?string => $r['converted_rows'] > 0 ? $r['currency'] : null, $by)));
+        $withheld = array_values(array_filter(array_map(static fn (array $r): ?string => $r['withheld_rows'] > 0 ? ($r['currency'] ?? '?') : null, $by)));
+
+        return [
+            'reporting_currency' => $reporting,
+            'includes_converted' => array_diff($converted, [$reporting]) !== [],
+            'currencies' => $converted,
+            'stale' => array_sum(array_column($by, 'stale_rows')) > 0,
+            'withheld_rows' => (int) array_sum(array_column($by, 'withheld_rows')),
+            'withheld_currencies' => $withheld,
+            'by_currency' => $by,
+            'rates_page' => FxConversion::RATES_PAGE,
+        ];
+    }
+
     private function base(Carbon $from, Carbon $to): Builder
     {
         $query = $this->baseIncludingDemo($from, $to);
@@ -735,14 +791,138 @@ final class MetricsAggregator
         $rows = $this->campaignSetBase($from, $to)
             ->select('daily_metrics.unified_campaign_id')
             ->selectRaw(implode(', ', array_map(static fn ($e, $a) => "{$e} AS {$a}", $select, array_keys($select))))
+            // ALERT-OBJECTIVE-RESULT-001 — which figures were SENT for each campaign, and by which platforms, in the same
+            // statement: the sums above coalesce an absent metric to 0, and an unsent figure is «not reported», never «none».
+            ->selectRaw("STRING_AGG(DISTINCT daily_metrics.metric_key, ',') AS _sent_keys")
+            ->selectRaw("STRING_AGG(DISTINCT daily_metrics.provider, ',') AS _sent_providers")
             ->groupBy('daily_metrics.unified_campaign_id')
             ->get()
             ->keyBy(static fn ($r): string => (string) $r->unified_campaign_id);
 
+        // OBJECTIVE-RESULT-001 — the objective each figure is judged by, read once for the whole set.
+        // The tenant scope stays (the same one the figures were read under); a set may span projects.
+        $objectives = UnifiedCampaign::query()->withoutGlobalScope(ProjectScope::class)->withTrashed()
+            ->whereIn('id', (array) $this->campaignIds ?: ['00000000-0000-0000-0000-000000000000'])
+            ->pluck('objective', 'id');
+
+        $lpv = $this->landingPageViewState($from, $to);
+        $platformSends = $this->metricsEachPlatformSends($rows->pluck('_sent_providers')->all(), $to);
+
         $out = [];
         foreach ((array) $this->campaignIds as $id) {
-            $row = $rows->get($id);
-            $out[$id] = $this->withDerived($row === null ? [] : (array) $row);
+            $found = $rows->get($id);
+            $row = $found === null ? [] : (array) $found;
+            $sent = array_filter(explode(',', (string) ($row['_sent_keys'] ?? '')));
+            foreach (array_filter(explode(',', (string) ($row['_sent_providers'] ?? ''))) as $provider) {
+                $sent = [...$sent, ...($platformSends[$provider] ?? [])];
+            }
+            unset($row['_sent_keys'], $row['_sent_providers']);
+            $figures = $this->withDerived($row);
+            $objective = $objectives->get($id);
+            $state = $lpv[$id] ?? null;
+            $reported = [];
+            foreach (array_keys(self::PIVOT) as $key) {
+                $reported[$key] = in_array($key, $sent, true);
+            }
+            // Reach is null on this read (see above), so it is never the figure a result is judged on here.
+            $reported['reach'] = false;
+            $family = ObjectiveResult::familyOf($objective === null ? null : (string) $objective);
+            $out[$id] = self::roasForSalesOnly($figures + ObjectiveResult::resolve(
+                $family,
+                $figures,
+                // Every family is judged on what was SENT; landing page views only where they were measured.
+                self::resultReported($reported, $state),
+                ($state['partial'] ?? false) === true,
+            ), $family->value);
+        }
+
+        return $out;
+    }
+
+    /** Set by `AlertEvaluator` for the length of one sweep; null everywhere else (no memo outside a sweep). */
+    private static ?string $sweep = null;
+
+    /** @var array<string, array<string, list<string>>> */
+    private static array $sendsMemo = [];
+
+    /** LINK-HEALTH-YESTERDAY-001 — one alert sweep reads the platforms' sent figures once; `$token` null ends it and clears the memo. */
+    public static function sweep(?string $token): void
+    {
+        self::$sweep = $token;
+        self::$sendsMemo = [];
+    }
+
+    /**
+     * OBJECTIVE-GAPS-001 — a campaign's return on spend exists for the SALES family only.
+     *
+     * `withDerived()` computes ROAS for any row with revenue, so a traffic campaign that caught a few
+     * sales — four Snapchat traffic campaigns on Production in one week — printed a ROAS in the campaign
+     * table, the saved report and the ROAS-drop alert. ROAS belongs to the sales family only
+     * ({@see ObjectiveResult}); every other family gets null, never 0 («does not apply» is not
+     * «returned nothing»). Revenue stays: it is the platform's figure, only the ratio is withheld.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    public static function roasForSalesOnly(array $row, string $family): array
+    {
+        if ($family !== ObjectiveFamily::Sales->value && array_key_exists('roas', $row)) {
+            $row['roas'] = null;
+        }
+
+        return $row;
+    }
+
+    /**
+     * ALERT-OBJECTIVE-RESULT-001 — the figures each platform SENDS at all, learned from what it wrote for this tenant over the last
+     * 90 days rather than from a hand-kept list that drifts from the connectors.
+     *
+     * Two different silences need telling apart. Meta drops a figure that is zero (`MetaConnector::mapInsightRow`), so a sales
+     * campaign with no purchase has no `conversions` row — that absence IS a zero, because Meta does send conversions. Snapchat and
+     * TikTok publish no engagement total and TikTok no installs at all; there the absence is «not reported», and a campaign judged
+     * on that figure has no result to be zero. A figure counts as sent for a campaign when the campaign has a row of it, or when a
+     * platform it ran on has written that figure for any campaign of this tenant in the lookback.
+     *
+     * @param  list<mixed>  $providerLists  comma lists of the platforms each campaign ran on
+     * @return array<string, list<string>> provider → metric keys it sends
+     */
+    private function metricsEachPlatformSends(array $providerLists, Carbon $to): array
+    {
+        $providers = [];
+        foreach ($providerLists as $list) {
+            foreach (array_filter(explode(',', (string) $list)) as $provider) {
+                $providers[$provider] = true;
+            }
+        }
+        if ($providers === []) {
+            return [];
+        }
+        // Inside one alert sweep the answer cannot change between rules: read it once per tenant, platform set and day.
+        $memoKey = null;
+        if (self::$sweep !== null) {
+            ksort($providers);
+            $memoKey = self::$sweep.'|'.app(TenantContext::class)->tenantId().'|'.implode(',', array_keys($providers)).'|'.$to->toDateString();
+            if (isset(self::$sendsMemo[$memoKey])) {
+                return self::$sendsMemo[$memoKey];
+            }
+        }
+
+        $rows = DailyMetric::query()
+            ->withoutGlobalScope(ProjectScope::class)
+            ->whereIn('daily_metrics.provider', array_keys($providers))
+            ->whereBetween('daily_metrics.metric_date', [$to->copy()->subDays(90)->toDateString(), $to->toDateString()])
+            ->select('daily_metrics.provider', 'daily_metrics.metric_key')
+            ->distinct()
+            ->toBase()
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(string) $row->provider][] = (string) $row->metric_key;
+        }
+
+        if ($memoKey !== null) {
+            self::$sendsMemo[$memoKey] = $out;
         }
 
         return $out;
@@ -1787,6 +1967,118 @@ final class MetricsAggregator
         return $out;
     }
 
+    /**
+     * OBJECTIVE-RESULT-001 — whether each campaign's landing page views are MEASURED, and on all of it.
+     *
+     * Per (campaign, platform): measured when the platform sent the metric, except that a platform in
+     * {@see ObjectiveResult::LPV_ZERO_MEANS_UNTRACKED} counts only once it sent a positive figure (its
+     * 0 is «not tracked»). A campaign is partly measured when a platform that brought it clicks has
+     * no measured landing page views — then its result is clicks, one unit, and the reason is said.
+     * Keyed by campaign id; a campaign with no clicks and no views has no entry. Pass `$campaign` to
+     * read one campaign's own state (the campaign page's totals).
+     *
+     * @return array<string, array{measured: bool, partial: bool}>
+     */
+    public function landingPageViewState(Carbon $from, Carbon $to): array
+    {
+        $zeroMeansUntracked = "('".implode("','", ObjectiveResult::LPV_ZERO_MEANS_UNTRACKED)."')";
+
+        $rows = $this->base($from, $to)
+            ->whereIn('daily_metrics.metric_key', ['clicks', 'landing_page_views'])
+            ->select('daily_metrics.unified_campaign_id', 'daily_metrics.provider')
+            ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE daily_metrics.metric_key = 'clicks'), 0) AS clicks")
+            ->selectRaw("COUNT(*) FILTER (WHERE daily_metrics.metric_key = 'landing_page_views') AS lpv_rows")
+            ->selectRaw("COALESCE(SUM(daily_metrics.value) FILTER (WHERE daily_metrics.metric_key = 'landing_page_views'), 0) AS lpv")
+            ->selectRaw("BOOL_OR(daily_metrics.provider IN {$zeroMeansUntracked}) AS zero_untracked")
+            ->groupBy('daily_metrics.unified_campaign_id', 'daily_metrics.provider')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            if ($row->unified_campaign_id === null) {
+                continue;
+            }
+            $id = (string) $row->unified_campaign_id;
+            $measured = (bool) $row->zero_untracked ? (float) $row->lpv > 0 : (int) $row->lpv_rows > 0;
+            $out[$id] ??= ['measured' => false, 'partial' => false];
+            $out[$id]['measured'] = $out[$id]['measured'] || $measured;
+            $out[$id]['partial'] = $out[$id]['partial'] || (! $measured && (float) $row->clicks > 0);
+        }
+
+        foreach ($out as $id => $state) {
+            // Partial only means something beside a measurement; with none, it is simply clicks.
+            $out[$id]['partial'] = $state['measured'] && $state['partial'];
+        }
+
+        return $out;
+    }
+
+    /**
+     * OBJECTIVE-RESULT-001 — the result of this scope's TOTALS for one objective (the campaign page).
+     *
+     * The same table and the same landing-page-view rule as {@see byCampaign()}, so the campaign's
+     * own page and its row in the list cannot disagree about what its result is.
+     *
+     * @param  array<string, mixed>  $totals  {@see totals()} for the same window
+     * @return array<string, mixed>
+     */
+    public function resultOfTotals(?string $objective, array $totals, Carbon $from, Carbon $to): array
+    {
+        $states = $this->landingPageViewState($from, $to);
+        $state = $states === [] ? null : [
+            'measured' => in_array(true, array_column($states, 'measured'), true),
+            'partial' => in_array(true, array_column($states, 'partial'), true),
+        ];
+
+        return ObjectiveResult::resolve(
+            ObjectiveResult::familyOf($objective),
+            $totals,
+            self::resultReported($this->reportedKeys($from, $to), $state),
+            ($state['partial'] ?? false) === true,
+        );
+    }
+
+    /** The providers whose 0 means «not tracked», as a SQL list. */
+    private static function lpvUntrackedList(): string
+    {
+        return "('".implode("','", ObjectiveResult::LPV_ZERO_MEANS_UNTRACKED)."')";
+    }
+
+    /**
+     * {@see landingPageViewState()} for one campaign, from the two provider lists `byCampaign()` reads.
+     *
+     * @return array{measured: bool, partial: bool}
+     */
+    private static function lpvStateFrom(string $clicked, string $measured): array
+    {
+        $clickedSet = array_filter(explode(',', $clicked));
+        $measuredSet = array_filter(explode(',', $measured));
+
+        return [
+            'measured' => $measuredSet !== [],
+            'partial' => $measuredSet !== [] && array_diff($clickedSet, $measuredSet) !== [],
+        ];
+    }
+
+    /**
+     * OBJECTIVE-RESULT-001 — the reported map the result is resolved with: landing page views count
+     * as reported only where {@see landingPageViewState()} says they were measured.
+     *
+     * @param  array<string, bool>  $reported
+     * @param  array{measured: bool, partial: bool}|null  $lpv
+     * @return array<string, bool>|null
+     */
+    public static function resultReported(array $reported, ?array $lpv): ?array
+    {
+        if ($reported === []) {
+            return null;
+        }
+
+        $reported['landing_page_views'] = ($lpv['measured'] ?? false) === true;
+
+        return $reported;
+    }
+
     public function byCampaign(Carbon $from, Carbon $to, ?Carbon $prevFrom = null, ?Carbon $prevTo = null): array
     {
         $outcomes = $this->outcomesByCampaign();
@@ -1827,6 +2119,14 @@ final class MetricsAggregator
              * activity would rank it alongside one serving right now — the same confusion between
              * «no data» and «zero» the money contract exists to prevent, one grain up.
              */
+            /*
+             * OBJECTIVE-RESULT-001 — which platforms brought clicks and which MEASURED landing page
+             * views, read in the same statement (a separate read would cost every live build a query).
+             * The rule is {@see landingPageViewState()}'s: a platform whose 0 means «not tracked»
+             * counts only from a positive figure.
+             */
+            ->selectRaw("ARRAY_TO_STRING(ARRAY_AGG(DISTINCT daily_metrics.provider) FILTER (WHERE daily_metrics.metric_key = 'clicks' AND daily_metrics.value > 0), ',') AS clicked_providers")
+            ->selectRaw("ARRAY_TO_STRING(ARRAY_AGG(DISTINCT daily_metrics.provider) FILTER (WHERE daily_metrics.metric_key = 'landing_page_views' AND (daily_metrics.provider NOT IN ".self::lpvUntrackedList()." OR daily_metrics.value > 0)), ',') AS lpv_providers")
             ->selectRaw(self::LAST_ACTIVE_EXPRESSION.' AS last_active_on')
             /*
              * MONEY-TRUTH-002 — the same provenance, qualified for the join.
@@ -1941,6 +2241,7 @@ final class MetricsAggregator
                 ),
                 'status' => $r->status === null ? null : CampaignStatus::tryFrom((string) $r->status)?->value,
                 'last_active_on' => $r->last_active_on === null ? null : Carbon::parse((string) $r->last_active_on)->toDateString(),
+                '_lpv_state' => self::lpvStateFrom((string) ($r->clicked_providers ?? ''), (string) ($r->lpv_providers ?? '')),
                 'provider' => $r->provider,
             ] + $this->withPeriodReachFor(
                 $this->withDerived((array) $r),
@@ -1952,6 +2253,26 @@ final class MetricsAggregator
 
         // MONEY-RECON-RUNGS-001 — the campaigns add up to the project's total to the cent; see SiblingRounding.
         $rows = SiblingRounding::apportion($rows);
+
+        /*
+         * OBJECTIVE-RESULT-001 — the result this campaign's OBJECTIVE is judged on, from the one table.
+         *
+         * Every reader of this row used `conversions` as «النتائج», so a traffic campaign with 2,881
+         * landing page views and no orders was shown «0 نتائج». The row now says which figure is its
+         * result, the words for it, its cost, and — when there is none — why. Applied after the
+         * apportioning so the cost divides the spend the row actually shows.
+         */
+        $rows = array_map(static fn (array $row): array => $row + ObjectiveResult::resolve(
+            ObjectiveResult::familyOf($row['objective'] === null ? null : (string) $row['objective']),
+            $row,
+            self::resultReported((array) ($row['reported'] ?? []), $row['_lpv_state']),
+            $row['_lpv_state']['partial'],
+        ), $rows);
+        $rows = array_map(static function (array $row): array {
+            unset($row['_lpv_state']);
+
+            return self::roasForSalesOnly($row, (string) $row['result_family']);
+        }, $rows);
 
         return self::orderCampaignRows($rows);
     }
@@ -2577,6 +2898,17 @@ final class MetricsAggregator
                 'budget_currency' => $budgetCurrency,
                 'spent' => $hasSpend ? round($spent, 2) : null,
                 'spent_currency' => $spentCurrency,
+                /*
+                 * FX-APPLY-001 — the plan in the reporting currency and, where the units differ, the spend in the plan's own
+                 * currency, both through FxEngine (window's last day). The figures above stay as they were; the ratios below
+                 * still refuse a cross-currency division (`currency_mismatch`) — see docs/currency-engine/G-notes.md.
+                 */
+                'budget_fx' => $budget > 0 && is_string($budgetCurrency)
+                    ? FxDisplay::forRequest()->one($budget, $budgetCurrency, $to, $reportingCurrency ?? ReportingCurrency::DEFAULT, 'metrics.budget_pacing')
+                    : null,
+                'spent_fx' => $hasSpend && is_string($spentCurrency) && is_string($budgetCurrency) && strtoupper($spentCurrency) !== strtoupper($budgetCurrency)
+                    ? FxDisplay::forRequest()->one($spent, $spentCurrency, $to, $budgetCurrency, 'metrics.budget_pacing')
+                    : null,
                 'spend_withheld' => $scope->state === MoneyState::CompleteWithheld,
                 'spend_state' => $nothingMeasured ? 'nothing_measured_in_window' : $scope->state->value,
                 /* False only where the whole project's window holds no measured row — not a zero, an absence. */

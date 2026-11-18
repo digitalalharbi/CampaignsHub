@@ -33,10 +33,11 @@
  */
 
 /** The figure a surface leads with — a dashboard hero, a single headline number. */
-export const METRIC_VALUE = 'tnum text-[28px] font-extrabold leading-none tracking-tight sm:text-[32px]'
+// MOBILE-DENSITY-001 — a phone is a smaller screen, not a narrower desktop: every step is one smaller below `sm`.
+export const METRIC_VALUE = 'tnum text-xl font-extrabold leading-none tracking-tight sm:text-2xl lg:text-[32px]'
 
 /** The figure inside a grid of cards, where eight of them share a row. */
-export const METRIC_VALUE_DENSE = 'tnum text-2xl font-extrabold leading-none tracking-tight sm:text-[26px]'
+export const METRIC_VALUE_DENSE = 'tnum text-lg font-extrabold leading-none tracking-tight sm:text-xl lg:text-[26px]'
 
 /** The name of the figure. One step above caption text, because it names rather than annotates. */
 export const METRIC_LABEL = 'text-xs font-semibold leading-tight'
@@ -45,13 +46,58 @@ export const METRIC_LABEL = 'text-xs font-semibold leading-tight'
 export const METRIC_HINT = 'text-xs leading-snug'
 
 /** A card's padding, phone first. */
-export const CARD_PAD = 'p-4 sm:p-5'
+export const CARD_PAD = 'p-3 sm:p-4 lg:p-5'
 
 /** A card inside a dense grid, where the row's rhythm matters more than each card's air. */
-export const CARD_PAD_DENSE = 'p-3.5 sm:p-4'
+export const CARD_PAD_DENSE = 'p-2.5 sm:p-3.5 lg:p-4'
 
 /** The gap between cards in a KPI row — the same on every surface, which is the point. */
-export const CARD_GAP = 'gap-3 sm:gap-4'
+export const CARD_GAP = 'gap-2 sm:gap-3 lg:gap-4'
 
 /** A page's own title. */
-export const PAGE_TITLE = 'text-2xl font-extrabold tracking-tight sm:text-[28px]'
+export const PAGE_TITLE = 'text-xl font-extrabold tracking-tight sm:text-2xl lg:text-[28px]'
+
+/*
+ * NOV-FIT-001 — the rhythm of a page that has to fit the screen.
+ *
+ * A page that never scrolls is a budget: every row of it is paid for in pixels. The budget only balances if the
+ * pages spend the same coin, so the spacing and the type of a fitted page are decided here, once, from steps that
+ * already exist (no new arbitrary size, which the type-scale ratchet forbids).
+ *
+ *   gap between blocks        10px   (`gap-2.5`)       inside a card           12px × 8px
+ *   page title                20px → 24px from `sm`     a KPI figure            24px → 30px from `sm`
+ *   table row                 44px — also the touch floor, so a row is one tap target
+ */
+/** The gap between the blocks of a fitted page. */
+export const FIT_GAP = 'gap-2.5'
+
+/** A fitted page's title — one line, never the 28px hero. */
+export const FIT_TITLE = 'text-xl font-extrabold tracking-tight sm:text-2xl'
+
+/** The big number of a compact KPI card. */
+export const FIT_KPI_VALUE = 'tnum text-2xl font-extrabold leading-none tracking-tight sm:text-3xl'
+
+/** A compact card's surface and padding. */
+export const FIT_CARD = 'rounded-xl border border-border bg-surface'
+export const FIT_CARD_PAD = 'px-3 py-2'
+
+/** Pixel budget a table spends, read by `useFitRows` so the row count and the CSS cannot disagree. */
+export const FIT_ROW_HEIGHT = 44
+export const FIT_HEAD_HEIGHT = 40
+export const FIT_PAGER_HEIGHT = 44
+
+/**
+ * The viewport a page is locked to its height in. Below it — a phone, a tablet, a short desktop window — the page
+ * flows and scrolls vertically like any other, because a locked page on a small screen would cut content off.
+ * `index.css` carries the same query; `fitMedia.test.ts` fails if the two drift apart.
+ */
+/*
+ * SCROLL-RESTORE-001 (owner: «النظام لا ينزل للأسفل، جزء من البيانات مفقود بسبب قاعدة عدم النزول») — the lock is OFF.
+ * A page pinned to one screen paged its tables to what fitted and clipped what it could not page, so on a laptop a
+ * table showed a few rows and the rest read as missing. Every page now flows and scrolls vertically (never sideways);
+ * tables draw their full page with the pager below. The machinery stays (a query no screen matches) so a single page
+ * can be locked again deliberately, but nothing is pinned by default.
+ *
+ * Was: '(min-width: 1280px) and (min-height: 640px)'.
+ */
+export const FIT_LOCK_QUERY = '(min-width: 100000px)'

@@ -1,14 +1,17 @@
+import { ObjectivePathCards, type ObjectivePathsBlock } from '@/features/analytics/ObjectivePathCards'
 import type { FormatComparisonPayload, FormatIntelligencePayload } from '@/features/content/api'
 import { kpiRowClass } from './kpiRow'
 import { DataMetricTable, type Column, type Row as TableRow } from '@/components/ui/MetricTable'
-import { frozenBeforeWebsiteTab, sectionShown, withDailyRecordsSlides, withFormatComparisonSlides, withGa4Slides, withStoreAnalyticsSlide, withStreamsSlide, type PrintEvidence } from './reportSections'
+import { frozenBeforeWebsiteTab, sectionShown, withDailyRecordsSlides, withAudienceSlides, withFormatComparisonSlides, withGa4Slides, withStoreAnalyticsSlide, withStreamsSlide, type PrintEvidence } from './reportSections'
 import { Ga4Slide, type WithGa4Sections } from './Ga4ReportBlocks'
 import { FormatComparisonSlide } from './FormatComparisonBlocks'
+import { AudienceSlideBody } from '@/features/audience/AudienceBlocks'
+import type { AudienceParts } from '@/features/audience/types'
 import { StoreAnalyticsBlock, type StoreAnalyticsPayload } from './StoreAnalyticsBlock'
 import { BusinessStreamsSection, type BusinessStreamRow } from './BusinessStreamsSection'
 import { productName } from '@/lib/brand'
 import { portfolioBudget } from '@/lib/money/portfolioBudget'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { attributionWindow } from './attributionWindow'
 import { ReportAdDetail } from './ReportAdDetail'
 import { ReportCreativeRoster, type RosterRow } from './ReportCreativeRoster'
@@ -306,12 +309,26 @@ export interface ObjectivePath {
   result_composition?: ResultPart[]
   /** True when `cpa` averages across more than one kind of result — it must not be shown bare. */
   cpa_mixes_result_types?: boolean
+  /**
+   * OBJECTIVE-RESULT-001 — the path's OWN result: impressions for awareness, landing page views (else
+   * clicks) for traffic, orders for conversion. Optional only because a stored document predates it.
+   */
+  result_key?: string | null
+  result?: number | null
+  result_label?: { ar: string; en: string } | null
+  cost_per_result?: number | null
+  cost_per_result_label?: { ar: string; en: string } | null
+  /** Why there is no single result — e.g. 'mixed' for a conversion path holding sales and leads. */
+  result_missing_reason?: string | null
+  result_missing_label?: { ar: string; en: string } | null
   /** Emptied for a client — CLIENT-REPORT-ENTITY-BOUNDARY-001. `campaigns_count` survives it. */
   campaigns: Array<{ id: string; name: string; objective: string; objective_label_ar: string; spend: number }>
   campaigns_count?: number
 }
 export interface ObjectivePerformance {
   paths: ObjectivePath[]
+  /** OBJECTIVE-PATHS-001 — one total spend split by ad-set objective path; absent on reports saved before it. */
+  objective_paths?: ObjectivePathsBlock
   direct: {
     label_ar: string; label_en: string
     spend: number; orders: number; revenue: number
@@ -396,9 +413,11 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     case '__ga4_overview': case '__ga4_acquisition': case '__ga4_gap': case '__ga4_tables': case '__ga4_table':
     case '__ga4_pulse': case '__ga4_attribution': case '__ga4_reasons': case '__ga4_classification': case '__ga4_products':
       return <Ga4Slide slide={slide} data={data} paged={paged} />
-    // CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: an objective's page, and on paper its table in fixed pages.
-    case '__formats': case '__formats_table':
-      return <FormatComparisonSlide slide={slide} data={data} paged={paged} />
+    case '__audience_delivery': case '__audience_targeting': case '__audience_site':
+      return <AudienceSlideBody type={slide.type} range={slide.range} payload={data as unknown as AudienceParts} named={Array.isArray(data.report_sections) ? (data.report_sections as string[]) : []} />
+    // CONTENT-FORMAT-COMPARISON-001 / REPORT-FORMAT-COMPARE-COMPACT-001 — «مقارنة أنواع المحتوى»: one compact page per report.
+    case '__formats':
+      return <FormatComparisonSlide data={data} />
     case '__store_analytics': return <div><Title sub="من سجل المتجر والموقع، دون جمعهما">تحليلات المتجر والزيارات</Title><StoreAnalyticsBlock data={data.store_analytics as StoreAnalyticsPayload} ar /></div>
     case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} coverTotal={data.business_streams_cover_total === true} currency={data.currency} ar /></div>
     case 'cover': return <CoverSlide data={data} meta={meta} />
@@ -480,9 +499,32 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       withFormatComparisonSlides(visible, data)
       withDailyRecordsSlides(visible, data)
     }
+    // AUDIENCE-001 — the audience pages the server left in, after the report proper.
+    withAudienceSlides(visible, data as never)
     return visible
   }, [data])
   const cur = slides[i]
+  const next = () => setI((v) => Math.min(slides.length - 1, v + 1))
+  const prev = () => setI((v) => Math.max(0, v - 1))
+  const touchX = useRef<number | null>(null)
+
+  /*
+   * REPORT-DECK-NAV-001 — Owner 2026-11-17: a client opened the saved report and never noticed it had more pages. The deck now
+   * says so without a word: a progress strip with one segment per page, a filled «next» button under the page and beside it,
+   * the keyboard's arrows, and a swipe on a phone. In this RTL deck the next page is to the LEFT.
+   */
+  useEffect(() => {
+    if (mode !== 'deck') return
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return
+      if (e.key === 'ArrowLeft') setI((v) => Math.min(slides.length - 1, v + 1))
+      if (e.key === 'ArrowRight') setI((v) => Math.max(0, v - 1))
+    }
+    document.addEventListener('keydown', onKey)
+
+    return () => document.removeEventListener('keydown', onKey)
+  }, [mode, slides.length])
 
   const render = (s: Slide) => <SlideBody slide={s} data={data} meta={meta} />
   // Short performance note repeated quietly under each slide (footer), except the cover.
@@ -514,7 +556,54 @@ export function InteractiveReport({ data, meta }: { data: ReportData; meta: Meta
       </div>
       <SnapshotAge data={data} />
       {mode === 'deck' ? (
-        <div className="min-h-[440px] rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{cur && render(cur)}{cur && footer(cur)}</div>
+        <div className="relative" data-testid="deck">
+          <div className="mb-3 flex gap-1" role="tablist" aria-label={ar ? 'الصفحات' : 'Pages'} data-testid="deck-progress">
+            {slides.map((s, k) => (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                aria-selected={k === i}
+                aria-label={`${k + 1}`}
+                onClick={() => setI(k)}
+                className={`h-1.5 flex-1 rounded-full transition-colors ${k === i ? 'bg-brand-500' : k < i ? 'bg-brand-300' : 'bg-surface-secondary hover:bg-border'}`}
+              />
+            ))}
+          </div>
+          <div
+            className="min-h-[440px] rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6"
+            onTouchStart={(e) => { touchX.current = e.touches[0]?.clientX ?? null }}
+            onTouchEnd={(e) => {
+              const x = e.changedTouches[0]?.clientX
+              const from = touchX.current
+              touchX.current = null
+              if (from === null || x === undefined || Math.abs(x - from) < 60) return
+              if (x > from) next()
+              else prev()
+            }}
+          >
+            {cur && render(cur)}{cur && footer(cur)}
+          </div>
+          {i > 0 && (
+            <button type="button" data-testid="deck-side-prev" aria-label={ar ? 'السابق' : 'Previous'} onClick={prev} className="absolute -right-5 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-surface text-text-primary shadow-[var(--shadow-small)] hover:bg-surface-hover sm:flex">
+              <ChevronRight size={22} />
+            </button>
+          )}
+          {i < slides.length - 1 && (
+            <button type="button" data-testid="deck-side-next" aria-label={ar ? 'التالي' : 'Next'} onClick={next} className="absolute -left-5 top-1/2 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-brand-600 text-white shadow-[var(--shadow-small)] hover:bg-brand-700 sm:flex">
+              <ChevronLeft size={22} />
+            </button>
+          )}
+          <div className="mt-3 flex items-center justify-between gap-2" data-testid="deck-nav">
+            <button type="button" data-testid="deck-prev" aria-label={ar ? 'السابق' : 'Previous'} onClick={prev} disabled={i === 0} className="flex h-11 w-14 items-center justify-center rounded-xl border border-border text-text-primary hover:bg-surface-hover disabled:opacity-30">
+              <ChevronRight size={20} />
+            </button>
+            <span className="tnum text-sm font-bold text-text-secondary">{i + 1} / {slides.length}</span>
+            <button type="button" data-testid="deck-next" aria-label={ar ? 'التالي' : 'Next'} onClick={next} disabled={i === slides.length - 1} className="flex h-11 w-20 items-center justify-center rounded-xl bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-30">
+              <ChevronLeft size={22} />
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="space-y-4">{slides.map((s) => <div key={s.id} className="rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">{render(s)}{footer(s)}</div>)}</div>
       )}
@@ -1531,6 +1620,13 @@ function GeneralPerformanceSlide({ data }: { data: ReportData }) {
         </p>
       </div>
 
+      {/* OBJECTIVE-PATHS-001 — where ad sets bought different things: the one total split by objective. */}
+      {op.objective_paths?.mixed && (
+        <div className="mt-4">
+          <ObjectivePathCards block={op.objective_paths} locale={ar ? 'ar' : 'en'} currency={c ?? null} />
+        </div>
+      )}
+
       {/* Each family, judged by its own metric — where a cost per order does not apply, it is absent. */}
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {op.paths.map((p) => (
@@ -1708,9 +1804,9 @@ function BudgetSlide({ data }: { data: ReportData }) {
   const bars = drawable.map((r) => ({ label: providerLabel(canonicalPlatform(String(r.provider ?? '')), 'ar'), budget: Number(r.budget), spent: Number(r.spent) }))
   return (
     <div>
-      <Title sub="المخطط مقابل المصروف وسرعة الصرف">تحليل الميزانية</Title>
+      <Title sub="المخطط مقابل الإنفاق وسرعة الصرف">تحليل الميزانية</Title>
       <div className="grid gap-3 lg:grid-cols-3">
-        <ChartCard title="استهلاك الميزانية" className="flex flex-col items-center justify-center gap-2">
+        <ChartCard title="الإنفاق من الميزانية" className="flex flex-col items-center justify-center gap-2">
           {consumed === null ? (
             /* A total that cannot be stated says so — a ring at 0% would be read as «nothing spent». */
             <p className="px-3 text-center text-xs text-text-muted" data-testid="report-budget-unavailable">
@@ -1730,11 +1826,11 @@ function BudgetSlide({ data }: { data: ReportData }) {
             </>
           )}
         </ChartCard>
-        <ChartCard title="المخطط مقابل المصروف" className="lg:col-span-2">
-          <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'المصروف', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={170} currency={data.currency} />
+        <ChartCard title="المخطط مقابل الإنفاق" className="lg:col-span-2">
+          <RankingBarChart data={bars} bars={[{ key: 'budget', name: 'الميزانية', color: 'var(--border-strong)', kind: 'money' }, { key: 'spent', name: 'الإنفاق', color: 'var(--brand-600)', kind: 'money' }]} horizontal height={170} currency={data.currency} />
           {undrawable > 0 && (
             <p className="mt-1 text-[11px] text-text-muted" data-testid="report-bars-excluded">
-              {`${undrawable} منصة بلا مصروف معلن — غير مرسومة`}
+              {`${undrawable} منصة بلا إنفاق معلن — غير مرسومة`}
             </p>
           )}
         </ChartCard>
@@ -1752,9 +1848,9 @@ function BudgetSlide({ data }: { data: ReportData }) {
             columns={[
               { key: 'platform', label: 'المنصة', kind: 'text' },
               { key: 'budget', label: 'الميزانية', kind: 'money', currency: data.currency },
-              { key: 'spent', label: 'المصروف', kind: 'money', currency: data.currency },
+              { key: 'spent', label: 'الإنفاق', kind: 'money', currency: data.currency },
               { key: 'remaining', label: 'المتبقي', kind: 'money', currency: data.currency },
-              { key: 'consumed', label: 'الاستهلاك', kind: 'percent', digits: 0 },
+              { key: 'consumed', label: 'نسبة الإنفاق', kind: 'percent', digits: 0 },
               { key: 'pace', label: 'Pace', kind: 'text' },
               { key: 'projected', label: 'الصرف المتوقع', kind: 'money', currency: data.currency },
             ]}
@@ -2048,7 +2144,7 @@ const FRESHNESS_LABEL: Record<string, { ar: string; tone: string }> = {
   stale: { ar: 'لم تتحدث مؤخرًا', tone: 'text-warning' },
   failed: { ar: 'تعذّرت المزامنة', tone: 'text-danger' },
   no_data: { ar: 'لا يوجد مصدر مرتبط', tone: 'text-text-muted' },
-  unknown: { ar: 'غير معروفة', tone: 'text-text-muted' },
+  unknown: { ar: 'بدون بيانات', tone: 'text-text-muted' },
 }
 
 /**

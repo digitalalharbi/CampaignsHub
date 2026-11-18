@@ -58,6 +58,12 @@ test.describe('the agency rail', () => {
     const nav = page.getByRole('navigation').first()
     await expect(nav).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 
+    /*
+     * NOV-SIDEBAR-001 — the rail is a 64px strip of icons until it is opened, so the group names are text only in
+     * the open rail. Open it with its own button, exactly as a reader does; the strip's names are asserted in shell.spec.ts.
+     */
+    await page.getByTestId('rail-toggle').click()
+    await expect(page.getByTestId('rail-toggle')).toHaveAttribute('aria-expanded', 'true')
     const text = await nav.innerText()
     /*
      * NAV-IA-001 split «العملاء والمشاريع» and renamed «الحملات».
@@ -72,7 +78,8 @@ test.describe('the agency rail', () => {
      */
     // NAV-FIVE-AREAS-001 — the five areas, each named for a job.
     // NAV-TAXONOMY-001 — the areas the Owner approved on 2026-10-21, short and named for a job.
-    for (const group of ['إدارة الحملات', 'الأداء', 'العمليات', 'خدمة العملاء', 'الحساب']) {
+    // NAV-HOME-PLANS-001 — the structure the Owner approved on 2026-11-13; «الإعدادات» is in the account menu.
+    for (const group of ['الرئيسية', 'العملاء', 'الحملات', 'النتائج', 'المالية', 'العمليات']) {
       expect(text, `the rail is missing the «${group}» area`).toContain(group)
     }
     // And the sibling pair it replaced must not return.

@@ -158,7 +158,7 @@ final class NotificationPreferenceController extends Controller
     {
         // One key order whatever order the row was written in, so reading the document back and saving it is an exact echo.
         return array_replace(['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'recommendations' => false,
-            'per_project' => false, 'per_project_weekly' => false, 'per_project_monthly' => false], $stored);
+            'per_project' => false, 'per_project_weekly' => false, 'per_project_monthly' => false, 'spend_summary' => false], $stored);
     }
 
     /**
@@ -249,6 +249,8 @@ final class NotificationPreferenceController extends Controller
             // DIGESTS-CADENCE-BUDGETS-001 — the weekly and monthly report per project, each switched on its own.
             'digests.per_project_weekly' => ['boolean'],
             'digests.per_project_monthly' => ['boolean'],
+            // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — the weekly «ملخص الإنفاق». Off unless chosen.
+            'digests.spend_summary' => ['boolean'],
             /*
              * The timezone is validated against PHP's OWN list rather than a regex.
              *
@@ -356,6 +358,10 @@ final class NotificationPreferenceController extends Controller
 
         if (($data['digests']['alerts'] ?? false) === true) {
             $this->unsubscribes->restore($userId, $tenantId, MailUnsubscribes::ALERTS);
+        }
+
+        if (($data['digests']['spend_summary'] ?? false) === true) {
+            $this->unsubscribes->restore($userId, $tenantId, MailUnsubscribes::SPEND);
         }
 
         // DIGESTS-CADENCE-BUDGETS-001 — the report per project has its own unsubscribe per rhythm, and switching it back on lifts it.

@@ -36,6 +36,20 @@ const shown = (page: Page, name: string) => page.getByText(name).locator('visibl
 
 const memberships = async (page: Page) => (await api<Memberships>(page, '/auth/memberships')).data
 
+/**
+ * FLAKE-NAV-ABORT-002 — leave a landing page only once it has finished loading.
+ *
+ * Every step here lands on a portal's front door (`/app` redirects to the dashboard, `/agency` likewise) and
+ * then `goto`s the page under test straight away. `toHaveURL` is satisfied the moment the address matches, which
+ * is while the dashboard's lazy chunks are still downloading, and WebKit aborts those requests when the next
+ * navigation starts. NAV-ABORT-001 (#1041) found that mechanism in `first-viewport-detail` and the page under
+ * test never rendered (the projects list here: «Two Portals Brand Project» not found for 20 s on webkit, #1045).
+ * Waiting for the network to go quiet costs nothing on a page that has settled and removes the abort.
+ */
+async function settleBeforeNavigating(page: Page): Promise<void> {
+  await page.waitForLoadState('networkidle')
+}
+
 /** Signed in and chosen the advertiser: tab A, on its projects page. */
 async function tabInBrand(context: BrowserContext): Promise<Page> {
   const page = await context.newPage()
@@ -43,6 +57,7 @@ async function tabInBrand(context: BrowserContext): Promise<Page> {
   await signIn(page, EMAIL)
   await page.getByTestId('switch-to-app').first().click({ timeout: 30_000 })
   await expect(page).toHaveURL(/\/app(\/|$)/)
+  await settleBeforeNavigating(page)
   await page.goto('/app/projects')
   await expect(shown(page, BRAND_PROJECT)).toBeVisible({ timeout: 20_000 })
 
@@ -67,7 +82,7 @@ test.describe('one session, two portals', () => {
 
     const tabB = await context.newPage()
     const calls = apiCallsOf(tabB)
-    await tabB.goto('/agency/projects?from=link')
+    await tabB.goto('/agency/portfolio?from=link')
 
     await expect(tabB.getByTestId('portal-entry-choice')).toBeVisible({ timeout: 20_000 })
     await expect(tabB.getByTestId('portal-entry-current')).toContainText('Two Portals Brand')
@@ -88,16 +103,17 @@ test.describe('one session, two portals', () => {
     await tabA.evaluate(() => window.localStorage.setItem('campaign-hub-project-storage', JSON.stringify({ state: { currentProjectId: 'of-the-brand' } })))
 
     const tabB = await context.newPage()
-    await tabB.goto('/agency/projects?from=link')
+    await tabB.goto('/agency/portfolio?from=link')
     await tabB.locator('[data-testid^="portal-entry-switch-"]').first().click()
 
-    await expect(tabB).toHaveURL(/\/agency\/projects\?from=link/)
+    await expect(tabB).toHaveURL(/\/agency\/portfolio\?from=link/)
     await expect(shown(tabB, AGENCY_PROJECT)).toBeVisible({ timeout: 20_000 })
     await expect(tabB.getByText(BRAND_PROJECT)).toHaveCount(0)
 
     // Propagation: the tab left behind is moved, on a full load, to the portal's front door.
     await expect(tabA).toHaveURL(/\/agency(\/|$)/, { timeout: 20_000 })
-    await tabA.goto('/agency/projects')
+    await settleBeforeNavigating(tabA)
+    await tabA.goto('/agency/portfolio')
     await expect(shown(tabA, AGENCY_PROJECT)).toBeVisible({ timeout: 20_000 })
     await expect(tabA.getByText(BRAND_PROJECT)).toHaveCount(0)
 
@@ -119,6 +135,7 @@ test.describe('one session, two portals', () => {
     // Not `waitForURL`: the sign-in redirect replaces its own navigation, and WebKit rejects the wait with
     // «Navigation canceled by policy check» while the page lands exactly where it should. The URL is the claim.
     await expect(tabA).toHaveURL(/\/app(\/|$)/, { timeout: 30_000 })
+    await settleBeforeNavigating(tabA)
 
     const claims: (string | undefined)[] = []
     tabA.on('request', (r) => { if (new URL(r.url()).pathname === '/api/v1/projects') claims.push(r.headers()['x-workspace-membership']) })
@@ -135,7 +152,7 @@ test.describe('one session, two portals', () => {
 
     // The other tab chooses, explicitly, through the switch.
     const tabB = await context.newPage()
-    await tabB.goto('/agency/projects')
+    await tabB.goto('/agency/portfolio')
     await tabB.getByTestId(`portal-entry-switch-${agency.id}`).click()
     await expect(shown(tabB, AGENCY_PROJECT)).toBeVisible({ timeout: 20_000 })
     expect(tabA.url()).toContain('/app/projects')

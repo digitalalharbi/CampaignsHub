@@ -88,7 +88,7 @@ final class RankingMetric
             'conversion_rate' => [$up, false, 'معدل التحويل', 'Conversion rate'],
 
             // Sales
-            'purchases' => [$up, false, 'المشتريات', 'Purchases'],
+            'purchases' => [$up, false, 'الطلبات', 'Purchases'],
             'conversions' => [$up, false, 'التحويلات', 'Conversions'],
             'revenue' => [$up, true, 'الإيراد', 'Revenue'],
             'roas' => [$up, false, 'العائد على الإنفاق', 'ROAS'],

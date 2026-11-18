@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { DateField } from '@/components/ui/DateField'
 import { Num } from '@/components/ui/Num'
 import { toApiError } from '@/lib/api/client'
+import { uuid } from '@/lib/uuid'
 
 /**
  * The one decision form (SIGNUP-DECISION-001).
@@ -150,10 +151,10 @@ export function RegistrationDecisionForm({ registration, ar, onDecided }: {
   }), [outcome, reason, current?.id, discount, trialEnds, evidence, joining, tenantId, role, projectIds, clientIds, portal, modules])
 
   // One key per decision as shaped: a double click replays, and changing anything is a new decision.
-  const key = useRef<string>(crypto.randomUUID())
+  const key = useRef<string>(uuid())
   const shape = JSON.stringify({ ...input, reason: undefined })
   useEffect(() => {
-    key.current = crypto.randomUUID()
+    key.current = uuid()
     setPreview(null)
     setConfirmed(false)
     setError(null)
@@ -168,7 +169,7 @@ export function RegistrationDecisionForm({ registration, ar, onDecided }: {
     onDecided()
   }
 
-  const previewing = useMutation({
+  const previewing = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => previewRegistrationDecision(registration.id, { ...input, reason: reason || 'Preview only' }),
     onSuccess: (p) => { setPreview(p); setError(null) },
     onError: failed,
@@ -386,7 +387,7 @@ function AwaitingSettlement({ registrationId, decision, copy: c, onDone }: {
 }) {
   const [why, setWhy] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const verify = useMutation({
+  const verify = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => verifyRegistrationSettlement(registrationId, decision.id, why),
     onSuccess: onDone,
     onError: (e: unknown) => setError(toApiError(e).message),

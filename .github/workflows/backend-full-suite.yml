@@ -1,0 +1,71 @@
+name: Backend full suite (one process)
+
+# CI-SPEED-001 — what the sharded PR check no longer exercises, kept exercised on main.
+#
+# A pull request's `backend` check runs the suite in four shards, each its own process and its own database
+# (`ci.yml`, `.github/scripts/backend-shard.py`). The verdict proves every test ran once and passed; what it cannot
+# show is the suite as ONE process: a test that only fails after another file's leftovers (static state, the container,
+# a row a test forgot to clean), and the memory the whole suite grows to (the reason `phpunit.xml` raised the limit to
+# 1G when the suite crossed 5,500 tests). Every night, and on demand, this runs exactly the job `backend` used to be:
+# `php artisan test` over the repository's `phpunit.xml`, unsplit, against `main`.
+#
+# It does not block pull requests. A red run here is a finding about `main`, to be read from the Actions tab.
+
+on:
+  schedule:
+    # 01:17 UTC daily (04:17 Riyadh) — off the hour, when the shared runners are least contended.
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-full-suite
+  cancel-in-progress: false
+
+jobs:
+  full-suite:
+    name: backend full suite (one process)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mediabuying_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.example .env && php artisan key:generate
+      - name: Python dependency for the PDF text-layer contract
+        run: python3 -m pip install --quiet pikepdf
+      - name: Tests — the whole suite, one process
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: mediabuying_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+          REDIS_HOST: 127.0.0.1
+          REDIS_CLIENT: phpredis
+        run: php artisan test

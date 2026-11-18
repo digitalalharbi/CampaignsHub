@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 use App\Domains\Agency\Http\Controllers\ClientBudgetController;
 use App\Domains\Agents\Http\Controllers\AgentChatRetentionController;
+use App\Domains\Agents\Http\Controllers\AssistantController;
 use App\Domains\AI\Http\Controllers\AICredentialController;
 use App\Domains\Alerts\Http\Controllers\AlertController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\ClientWorkspaces\Http\Controllers\ClientWorkspaceController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\FilesLibraryController;
+use App\Domains\Notifications\Http\Controllers\AlertSettingsController;
 use App\Domains\Notifications\Http\Controllers\NotificationController;
+use App\Domains\Notifications\Http\Controllers\PushController;
 use App\Domains\ShortLinks\Http\Controllers\ShortLinkController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
@@ -44,6 +47,15 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency'])->group(function (
  */
 Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers,portal'])->group(function (): void {
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('notifications/alert-settings', [AlertSettingsController::class, 'show'])->name('notifications.alert-settings.show');
+    Route::match(['put', 'patch'], 'notifications/alert-settings', [AlertSettingsController::class, 'update'])->name('notifications.alert-settings.update');
+    // NOTIF-PUSH-001 — a person's own mobile devices. The browser's permission prompt is never triggered by these; only by a button.
+    Route::get('push', [PushController::class, 'show'])->name('push.show');
+    Route::post('push/subscriptions', [PushController::class, 'store'])->name('push.store');
+    Route::post('push/forget', [PushController::class, 'forget'])->name('push.forget');
+    Route::delete('push/subscriptions/{id}', [PushController::class, 'destroy'])->name('push.destroy');
+    Route::post('push/subscriptions/{id}/test', [PushController::class, 'test'])->middleware('throttle:6,1')->name('push.test');
+    Route::get('notifications/summary', [NotificationController::class, 'summary'])->name('notifications.summary');
     Route::get('notifications/deliveries', [NotificationController::class, 'deliveries'])->name('notifications.deliveries');
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
@@ -56,11 +68,25 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->group(functi
     // AGENT-CHAT-RETENTION-001 — how long this workspace keeps agent conversations.
     Route::get('ai/chat-retention', [AgentChatRetentionController::class, 'show'])->name('ai.chat-retention.show');
     Route::put('ai/chat-retention', [AgentChatRetentionController::class, 'update'])->name('ai.chat-retention.update');
+    // AGENTS-ASSISTANT-001 — the assistant's settings (model, daily cap), my usage today, a key's connection test, my memory.
+    Route::get('ai/assistant', [AssistantController::class, 'show'])->name('ai.assistant.show');
+    Route::put('ai/assistant', [AssistantController::class, 'update'])->name('ai.assistant.update');
+    Route::post('ai/credentials/{credential}/test', [AssistantController::class, 'testConnection'])->name('ai.credentials.test');
+    Route::get('ai/memories', [AssistantController::class, 'memories'])->name('ai.memories.index');
+    Route::get('ai/memories/export', [AssistantController::class, 'exportMemories'])->name('ai.memories.export');
+    Route::post('ai/memories', [AssistantController::class, 'storeMemory'])->name('ai.memories.store');
+    Route::put('ai/memories/{memory}', [AssistantController::class, 'updateMemory'])->name('ai.memories.update');
+    Route::delete('ai/memories/{memory}', [AssistantController::class, 'destroyMemory'])->name('ai.memories.destroy');
+    Route::delete('ai/memories', [AssistantController::class, 'forgetAll'])->name('ai.memories.forget');
     Route::get('ai/credentials/{credential}/health', [AICredentialController::class, 'health'])->name('ai.credentials.health');
 
     // Alerting: rules + firing ledger (resolve / snooze).
     Route::get('alerts/rules', [AlertController::class, 'rules'])->name('alerts.rules.index');
     Route::post('alerts/rules', [AlertController::class, 'storeRule'])->name('alerts.rules.store');
+    // ALERT-RULES-MANAGE-001 — edit, pause (active: false) and remove a rule; the people a rule may name.
+    Route::get('alerts/rules/recipients', [AlertController::class, 'recipientOptions'])->name('alerts.rules.recipients');
+    Route::patch('alerts/rules/{alertRule}', [AlertController::class, 'updateRule'])->name('alerts.rules.update');
+    Route::delete('alerts/rules/{alertRule}', [AlertController::class, 'destroyRule'])->name('alerts.rules.destroy');
     Route::get('alerts/events', [AlertController::class, 'events'])->name('alerts.events.index');
     Route::get('alerts/attention', [AlertController::class, 'attention'])->name('alerts.attention');
     Route::get('alerts/events/{alertEvent}', [AlertController::class, 'show'])->name('alerts.events.show');

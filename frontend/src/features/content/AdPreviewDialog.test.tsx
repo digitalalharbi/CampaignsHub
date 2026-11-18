@@ -276,7 +276,7 @@ describe('the in-place ad preview', () => {
     )
 
     expect(screen.getByText('Objective')).toBeInTheDocument()
-    expect(screen.getByText('Ad set')).toBeInTheDocument()
+    expect(screen.getByText('Ad group')).toBeInTheDocument()
     expect(screen.getByText('as-9')).toBeInTheDocument()
   })
 

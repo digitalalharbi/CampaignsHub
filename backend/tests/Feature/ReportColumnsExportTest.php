@@ -143,8 +143,9 @@ final class ReportColumnsExportTest extends TestCase
         $csv = app(ReportExporter::class)->render($share->report()->withoutGlobalScopes()->first(), 'csv', $share);
 
         $platforms = $this->csvBlock($csv, 'Platforms');
-        $this->assertSame(['Platforms', 'spend', 'conversions'], $platforms[0], 'name column first, then only what was chosen, in table order');
-        $this->assertSame(['meta', '700', '20'], $platforms[1]);
+        // FX-APPLY-001 — the platform's original currency always closes the row (codes only), whatever columns were chosen.
+        $this->assertSame(['Platforms', 'spend', 'conversions', 'Original currency / العملة الأصلية'], $platforms[0], 'name column first, then only what was chosen, in table order');
+        $this->assertSame(['meta', '700', '20', ''], $platforms[1]);
 
         $days = $this->csvBlock($csv, 'Daily Records');
         $this->assertSame(['Daily Records', 'Spend'], $days[0]);
@@ -162,7 +163,7 @@ final class ReportColumnsExportTest extends TestCase
         $book = IOFactory::load($tmp);
         @unlink($tmp);
 
-        $this->assertSame(['Platform', 'CPA', 'CTR'], array_values(array_filter($book->getSheetByName('Platforms')->toArray()[0])));
+        $this->assertSame(['Platform', 'CPA', 'CTR', 'Original currency / العملة الأصلية'], array_values(array_filter($book->getSheetByName('Platforms')->toArray()[0])));
         // RESULT-EVENTS-001 — the ledger has no «Results» column: the resolver has no daily figure and generic conversions are not one.
         $this->assertSame(['Date'], array_values(array_filter($book->getSheetByName('Daily Records')->toArray()[0])));
     }
@@ -173,7 +174,7 @@ final class ReportColumnsExportTest extends TestCase
         app(TenantContext::class)->setTenantId((string) $this->tenant->getKey());
         $csv = app(ReportExporter::class)->render($share->report()->withoutGlobalScopes()->first(), 'csv', $share);
 
-        $this->assertSame(['Platforms', 'spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr', 'share'], $this->csvBlock($csv, 'Platforms')[0]);
+        $this->assertSame(['Platforms', 'spend', 'revenue', 'conversions', 'roas', 'cpa', 'ctr', 'share', 'Original currency / العملة الأصلية'], $this->csvBlock($csv, 'Platforms')[0]);
         $this->assertSame(['Daily Records', 'Impressions', 'Clicks', 'Spend'], $this->csvBlock($csv, 'Daily Records')[0]);
     }
 

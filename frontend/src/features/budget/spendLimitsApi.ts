@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { deleteData, getEnvelope, postData } from '@/lib/api/client'
+import type { ApprovedBudget } from '@/features/funding/fundingApi'
+import { deleteData, getEnvelope, patchData, postData } from '@/lib/api/client'
 
 /**
  * BUDGET-GOVERNANCE-001 — the workspace's OWN limits, read from the endpoint that computes them.
@@ -37,9 +38,23 @@ export interface SpendLimitReading {
   state: SpendLimitState
   /** Why the figures are what they are: `comparable`, `partial`, `currency_mismatch`, … */
   basis: string
+  /** BUDGET-FX-DEFAULT-001 — set when the spend was converted into the limit's currency (the rate, and where it came from). */
+  converted?: { from: string; to: string; rate: number; source: string } | null
+  /** BUDGET-RUNOUT-001 — the day the limit runs out at the last 3 full days' rate; `date` null with the reason. */
+  run_out?: { date: string | null; reason: string; per_day: number | null }
+  /** BUDGET-FRESHNESS-001 — a platform this limit rests on failed to sync, or its data is older than 2 hours. */
+  freshness?: Freshness
   /** BUDGET-LIMITS-ACTIONS-001 — a campaign limit's platform campaigns and whether a pause may be ASKED for. */
   actions?: LimitAction[]
+  /** ONE-BUDGET-001 — the approved budget this limit is a threshold of (null = the project has no budget yet). */
+  project_funding_id?: string | null
+  /** When the conversion linked it, and the row as it was before — read-only. */
+  converted_at?: string | null
+  legacy?: Record<string, unknown> | null
 }
+
+export interface FreshnessItem { provider: string; account: string | null; reason: 'failed' | 'access_lost' | 'old' | 'never'; error_category: string | null; last_synced_at: string | null }
+export interface Freshness { stale: boolean; items: FreshnessItem[] }
 
 export interface LimitAction {
   provider: string
@@ -57,6 +72,10 @@ export interface SpendLimitsPage {
   enforcement_note_ar: string
   enforcement_note_en: string
   today: string
+  /** The currency a new limit starts in: the project's own. */
+  project_currency: string
+  /** ONE-BUDGET-001 — the project's approved budget, the same reading as /agency/budgets, with its alert steps. */
+  budget: ApprovedBudget | null
 }
 
 export function useSpendLimits(projectId: string | null) {
@@ -78,6 +97,8 @@ export function useSpendLimits(projectId: string | null) {
         enforcement_note_ar: meta?.enforcement_note_ar ?? '',
         enforcement_note_en: meta?.enforcement_note_en ?? '',
         today: meta?.today ?? '',
+        project_currency: meta?.project_currency ?? 'SAR',
+        budget: meta?.budget ?? null,
       }
     },
     enabled: Boolean(projectId),
@@ -99,6 +120,18 @@ export function useCreateSpendLimit(projectId: string | null) {
 
   return useMutation({
     mutationFn: (body: NewSpendLimit) => postData<SpendLimitReading>(`/projects/${projectId}/spend-limits`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['spend-limits', projectId] }),
+  })
+}
+
+/** The part of a limit that may be changed in place: how much, for how long, and when to warn. */
+export interface SpendLimitEdit { amount: number; starts_on: string; ends_on: string; thresholds: number[] }
+
+export function useUpdateSpendLimit(projectId: string | null) {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, ...body }: SpendLimitEdit & { id: string }) => patchData<SpendLimitReading>(`/projects/${projectId}/spend-limits/${id}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['spend-limits', projectId] }),
   })
 }

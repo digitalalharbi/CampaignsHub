@@ -78,6 +78,26 @@ describe('the automated rules page', () => {
     expect(row).toHaveTextContent('Would ask: pause')
   })
 
+  /** CONS-I-DRYRUN — the dry run names the indicator in Arabic, writes the value with its mark, and gives the exact reason. */
+  it('shows a dry run by the indicators Arabic names with the exact reason for «بيانات غير كافية», never cpa@7d', async () => {
+    vi.mocked(dryRunRule).mockResolvedValue({ run: {} as never, results: [
+      { provider: 'meta', name: 'Winter', external_id: '1', level: 'campaign', matched: false, status: 'skipped_no_figure', metrics: { 'cpa@7d': null, 'budget_utilization@1d': null }, before: null, after: null,
+        readings: [
+          { metric: 'cpa', window_days: 7, name_ar: 'تكلفة النتيجة (آخر 7 أيام)', name_en: 'Cost per result (last 7 d)', kind: 'money', value: 0.27, currency: 'USD', text_ar: '0.27 $', reason_code: null, reason_ar: null },
+          { metric: 'budget_utilization', window_days: 1, name_ar: 'استهلاك الميزانية اليومية %', name_en: 'Daily budget used %', kind: 'percent', value: null, currency: null, text_ar: 'غير متوفرة', reason_code: 'no_daily_budget', reason_ar: 'المنصة ما زوّدتنا بميزانية يومية لهذي الحملة' },
+        ],
+        reason: { code: 'no_daily_budget', ar: 'بيانات غير كافية: استهلاك الميزانية اليومية % — المنصة ما زوّدتنا بميزانية يومية لهذي الحملة' } },
+    ] })
+    renderWithProviders(<AutomationPage />, { locale: 'ar' })
+
+    fireEvent.click(await screen.findByTestId('automation-dry-r1'))
+    const row = await screen.findByTestId('automation-dry-row')
+    expect(row).toHaveTextContent('تكلفة النتيجة (آخر 7 أيام): 0.27 $')
+    expect(row).toHaveTextContent('غير متوفرة')
+    expect(row).not.toHaveTextContent('cpa@7d')
+    expect(screen.getByTestId('automation-dry-reason')).toHaveTextContent('بيانات غير كافية: استهلاك الميزانية اليومية % — المنصة ما زوّدتنا بميزانية يومية')
+  })
+
   /* AUTO-RULES-CONDITIONS-004 — «only metrics each provider actually supports»: said before the rule is saved. */
   it('names the platforms in scope that never report what a condition needs, and accuses none it has not heard from', async () => {
     renderWithProviders(<AutomationPage />, { locale: 'en' })
@@ -108,6 +128,24 @@ describe('the automated rules page', () => {
     const builder = await screen.findByTestId('rule-builder')
     await within(builder).findByTestId('rule-condition-1')
     expect(within(builder).queryByTestId('rule-condition-support-1')).toBeNull()
+  })
+
+  it('opens a ready agent as a filled-in rule in «recommend» mode, and offers only what the catalogue can run (OPS-READY-AGENTS-001)', async () => {
+    vi.mocked(saveRule).mockResolvedValue({ ...rule, id: 'r3' })
+    renderWithProviders(<AutomationPage />, { locale: 'en' })
+
+    const agent = await screen.findByTestId('automation-agent-high_cpa')
+    // «Stop the waste» needs `conversions`, which this catalogue does not offer: it is not shown.
+    expect(screen.queryByTestId('automation-agent-waste_stop')).toBeNull()
+    fireEvent.click(agent)
+    const builder = await screen.findByTestId('rule-builder')
+    expect(within(builder).getByTestId('rule-name')).toHaveValue('High cost per result')
+    fireEvent.click(within(builder).getByTestId('rule-save'))
+
+    await waitFor(() => expect(saveRule).toHaveBeenCalledWith('proj', expect.objectContaining({
+      name: 'High cost per result', mode: 'recommend', action: { type: 'budget_decrease', percent: 20 },
+      conditions: [{ metric: 'cpa', operator: 'gt', value: 100, window_days: 7 }, { metric: 'spend', operator: 'gt', value: 200, window_days: 7 }],
+    }), undefined))
   })
 
   it('builds a rule with scope, AND/OR conditions, a budget action and a mode', async () => {

@@ -6,22 +6,25 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { features } from '@/lib/features'
-import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
+import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectsIndexRedirect } from './legacyRedirects'
 import { lazyPage } from './lazyPage'
 
 // PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
 const LoginPage = lazyPage(() => import('@/features/auth/LoginPage'), 'LoginPage')
+const McpConsentPage = lazyPage(() => import('@/features/auth/McpConsentPage'), 'McpConsentPage')
 const RegisterPage = lazyPage(() => import('@/features/auth/RegisterPage'), 'RegisterPage')
 const AccountStatusPage = lazyPage(() => import('@/features/signup/AccountStatusPage'), 'AccountStatusPage')
 const ForgotPasswordPage = lazyPage(() => import('@/features/auth/ForgotPasswordPage'), 'ForgotPasswordPage')
 const ResetPasswordPage = lazyPage(() => import('@/features/auth/ResetPasswordPage'), 'ResetPasswordPage')
 const RequireAuth = lazyPage(() => import('@/features/auth/RequireAuth'), 'RequireAuth')
 const CampaignDetailPage = lazyPage(() => import('@/features/campaigns/CampaignDetailPage'), 'CampaignDetailPage')
+const RoleDashboardPage = lazyPage(() => import('@/features/roleDashboard/RoleDashboardPage'), 'RoleDashboardPage')
 const CampaignsPage = lazyPage(() => import('@/features/campaigns/CampaignsPage'), 'CampaignsPage')
 const AnalyticsPage = lazyPage(() => import('@/features/analytics/AnalyticsPage'), 'AnalyticsPage')
 const RecommendationsPage = lazyPage(() => import('@/features/recommendations/RecommendationsPage'), 'RecommendationsPage')
 const AgentCenterPage = lazyPage(() => import('@/features/agents/AgentCenterPage'), 'AgentCenterPage')
 const AutomationPage = lazyPage(() => import('@/features/automation/AutomationPage'), 'AutomationPage')
+const AccountsWorkspacePage = lazyPage(() => import('@/features/campaigns/AccountsWorkspacePage'), 'AccountsWorkspacePage')
 const EntityWorkspacePage = lazyPage(() => import('@/features/campaigns/EntityWorkspacePage'), 'EntityWorkspacePage')
 const LaunchPage = lazyPage(() => import('@/features/launch/LaunchPage'), 'LaunchPage')
 const ApprovalsPage = lazyPage(() => import('@/features/agents/ApprovalsPage'), 'ApprovalsPage')
@@ -40,8 +43,11 @@ const PersonalNotificationsPage = lazyPage(() => import('@/features/account/Pers
 const ProfilePage = lazyPage(() => import('@/features/account/ProfilePage'), 'ProfilePage')
 const PasswordPage = lazyPage(() => import('@/features/account/PasswordPage'), 'PasswordPage')
 const SecurityPage = lazyPage(() => import('@/features/account/SecurityPage'), 'SecurityPage')
+const AiConnectPage = lazyPage(() => import('@/features/account/AiConnectPage'), 'AiConnectPage')
 const ProjectIntegrationsPage = lazyPage(() => import('@/features/projects/ProjectIntegrationsPage'), 'ProjectIntegrationsPage')
 const ProjectsPage = lazyPage(() => import('@/features/projects/ProjectsPage'), 'ProjectsPage')
+// PROJECT-LIFECYCLE-001 §8 — «فتح»: an archived project opens view-only; a live one keeps its usual destination.
+const ProjectOpenPage = lazyPage(() => import('@/features/projects/lifecycle/ProjectOpenPage'), 'ProjectOpenPage')
 const ProjectTeamPage = lazyPage(() => import('@/features/projects/ProjectTeamPage'), 'ProjectTeamPage')
 const SystemStatusPage = lazyPage(() => import('@/features/system/SystemStatusPage'), 'SystemStatusPage')
 const PublicHomePage = lazyPage(() => import('@/features/marketing/PublicHomePage'), 'PublicHomePage')
@@ -55,6 +61,7 @@ const ClientNewRequestPage = lazyPage(() => import('@/features/requests/portal/C
 const ClientRequestDetailPage = lazyPage(() => import('@/features/requests/portal/ClientRequestDetailPage'), 'ClientRequestDetailPage')
 const ClientDashboardPage = lazyPage(() => import('@/features/requests/portal/ClientDashboardPage'), 'ClientDashboardPage')
 const ClientQuotesPage = lazyPage(() => import('@/features/requests/portal/ClientQuotesPage'), 'ClientQuotesPage')
+const ClientApprovalsPage = lazyPage(() => import('@/features/requests/portal/ClientApprovalsPage'), 'ClientApprovalsPage')
 const ClientQuoteDetailPage = lazyPage(() => import('@/features/requests/portal/ClientQuoteDetailPage'), 'ClientQuoteDetailPage')
 const ClientInvoicesPage = lazyPage(() => import('@/features/requests/portal/ClientInvoicesPage'), 'ClientInvoicesPage')
 const ClientInvoiceDetailPage = lazyPage(() => import('@/features/requests/portal/ClientInvoiceDetailPage'), 'ClientInvoiceDetailPage')
@@ -76,7 +83,9 @@ const ClientsPortfolioPage = lazyPage(() => import('@/features/clients/ClientsPo
 const PortfolioPage = lazyPage(() => import('@/features/projects/PortfolioPage'), 'PortfolioPage')
 const ClientCommandCenterPage = lazyPage(() => import('@/features/clients/ClientCommandCenterPage'), 'ClientCommandCenterPage')
 const AlertsPage = lazyPage(() => import('@/features/alerts/AlertsPage'), 'AlertsPage')
+const FollowUpPage = lazyPage(() => import('@/features/notifications/FollowUpPage'), 'FollowUpPage')
 const SpendLimitsPage = lazyPage(() => import('@/features/budget/SpendLimitsPage'), 'SpendLimitsPage')
+const BudgetsPage = lazyPage(() => import('@/features/funding/BudgetsPage'), 'BudgetsPage')
 const DeliveryOverviewPage = lazyPage(() => import('@/features/clients/delivery/DeliveryOverviewPage'), 'DeliveryOverviewPage')
 const DevStatusPage = lazyPage(() => import('@/features/dev/DevStatusPage'), 'DevStatusPage')
 const IntegrationsPage = lazyPage(() => import('@/features/integrations/IntegrationsPage'), 'IntegrationsPage')
@@ -101,9 +110,11 @@ const PlatformOverviewPage = lazyPage(() => import('@/features/admin/PlatformOve
 const TenantsPage = lazyPage(() => import('@/features/admin/TenantsPage'), 'TenantsPage')
 const RegistrationsPage = lazyPage(() => import('@/features/admin/RegistrationsPage'), 'RegistrationsPage')
 const ServiceRequestsPage = lazyPage(() => import('@/features/admin/ServiceRequestsPage'), 'ServiceRequestsPage')
+const PlatformInboxPage = lazyPage(() => import('@/features/admin/PlatformInboxPage'), 'PlatformInboxPage')
 const PaymentSettingsPage = lazyPage(() => import('@/features/admin/PaymentSettingsPage'), 'PaymentSettingsPage')
 const PlatformFeaturesPage = lazyPage(() => import('@/features/admin/PlatformFeaturesPage'), 'PlatformFeaturesPage')
 const CurrencyRatesPage = lazyPage(() => import('@/features/admin/CurrencyRatesPage'), 'CurrencyRatesPage')
+const AiKeyPage = lazyPage(() => import('@/features/admin/AiKeyPage'), 'AiKeyPage')
 const ProviderSettingsPage = lazyPage(() => import('@/features/admin/ProviderSettingsPage'), 'ProviderSettingsPage')
 const MetaCandidatePage = lazyPage(() => import('@/features/admin/MetaCandidatePage'), 'MetaCandidatePage')
 const MetaSaasPage = lazyPage(() => import('@/features/admin/MetaCandidatePage'), 'MetaSaasPage')
@@ -112,13 +123,14 @@ const PlatformLegalPage = lazyPage(() => import('@/features/admin/PlatformLegalP
 const ProviderReviewPage = lazyPage(() => import('@/features/admin/ProviderReviewPage'), 'ProviderReviewPage')
 const AdminBillingPage = lazyPage(() => import('@/features/admin/BillingPage'), 'BillingPage')
 const AuditPage = lazyPage(() => import('@/features/admin/AuditPage'), 'AuditPage')
+const AdminNotificationsPage = lazyPage(() => import('@/features/admin/AdminNotificationsPage'), 'AdminNotificationsPage')
 const EmailOperationsPage = lazyPage(() => import('@/features/admin/EmailOperationsPage'), 'EmailOperationsPage')
 const CutoverPage = lazyPage(() => import('@/features/admin/CutoverPage'), 'CutoverPage')
 const AddonsPage = lazyPage(() => import('@/features/admin/AddonsPage'), 'AddonsPage')
 const PlanMigrationPage = lazyPage(() => import('@/features/admin/PlanMigrationPage'), 'PlanMigrationPage')
 const UsageMetersPage = lazyPage(() => import('@/features/admin/UsageMetersPage'), 'UsageMetersPage')
 const TaxPage = lazyPage(() => import('@/features/admin/TaxPage'), 'TaxPage')
-const AgencyDashboardPage = lazyPage(() => import('@/features/agency/AgencyDashboardPage'), 'AgencyDashboardPage')
+const OverviewDashboard = lazyPage(() => import('@/features/overview/OverviewDashboard'), 'OverviewDashboard')
 const RequireAgencyPortal = lazyPage(() => import('@/features/agency/RequireAgencyPortal'), 'RequireAgencyPortal')
 const AgencyTeamPage = lazyPage(() => import('@/features/agency/AgencyTeamPage'), 'AgencyTeamPage')
 const InfluencerShell = lazyPage(() => import('@/layouts/InfluencerShell'), 'InfluencerShell')
@@ -247,6 +259,7 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/portal/requests', element: <ClientRequestsPage /> },
   { path: '/portal/requests/new', element: <ClientNewRequestPage /> },
   { path: '/portal/requests/:reference', element: <ClientRequestDetailPage /> },
+  { path: '/portal/approvals', element: <ClientApprovalsPage /> },
   { path: '/portal/quotes', element: <ClientQuotesPage /> },
   { path: '/portal/quotes/:id', element: <ClientQuoteDetailPage /> },
   { path: '/portal/invoices', element: <ClientInvoicesPage /> },
@@ -277,6 +290,8 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/portal/:clientSlug/requests', element: <ClientRequestsPage /> },
   { path: '/portal/:clientSlug/requests/new', element: <ClientNewRequestPage /> },
   { path: '/portal/:clientSlug/requests/:reference', element: <ClientRequestDetailPage /> },
+  // CLIENT-PORTAL-THREE-SECTIONS-001 — «بانتظار اعتمادك». Every page above keeps its path.
+  { path: '/portal/:clientSlug/approvals', element: <ClientApprovalsPage /> },
   { path: '/portal/:clientSlug/quotes', element: <ClientQuotesPage /> },
   { path: '/portal/:clientSlug/quotes/:id', element: <ClientQuoteDetailPage /> },
   { path: '/portal/:clientSlug/invoices', element: <ClientInvoicesPage /> },
@@ -319,6 +334,7 @@ export const router = createBrowserRouter(withErrorBoundary([
       // ADR 0002: the portal/workspace switcher, for users who belong to more than one. Outside the
       // AppShell because it is the screen that decides WHICH shell the user is about to enter.
       { path: 'switch', element: <WorkspaceSwitcherPage /> },
+      { path: 'oauth/mcp', element: <McpConsentPage /> },
       {
         element: <OnboardingGate />,
         children: [{
@@ -350,8 +366,16 @@ export const router = createBrowserRouter(withErrorBoundary([
            * except an index. The agency tree has carried the equivalent redirect since ADR 0002;
            * the advertiser portal simply never got one.
            */
-          { index: true, element: <Navigate to="/app/dashboard" replace /> },
-          { path: 'dashboard', element: <AnalyticsPage surface="dashboard" /> },
+          /*
+           * AF1 — the landing IS the role dashboard (Owner: «يظهر أول ما يدخل المستخدم»). `/app` and `/agency` are where
+           * the server sends a person after sign-in, onboarding and an accepted invitation, and `Portal::landingPath`
+           * now names `/…/home` itself; this redirect only keeps the bare address and old bookmarks working. The detailed
+           * board stays at `/…/dashboard`, one tap away in the rail («لوحة التحليلات»).
+           */
+          { index: true, element: <Navigate to="/app/home" replace /> },
+          // ROLE-DASHBOARD-001 — the page per role, at its own address. `dashboard` below stays the detailed board it always was.
+          { path: 'home', element: <RoleDashboardPage portal="app" /> },
+          { path: 'dashboard', element: <OverviewDashboard portal="app" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           /*
            * RECOMMENDATIONS-001 — this address answered 404 while the records existed.
@@ -373,6 +397,7 @@ export const router = createBrowserRouter(withErrorBoundary([
            */
           { path: 'portfolio', element: <PortfolioPage /> },
           { path: 'projects', element: <ProjectsPage /> },
+          { path: 'projects/:projectId', element: <ProjectOpenPage /> },
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
                     { path: 'design', element: <DesignSystemPage /> },
@@ -380,6 +405,7 @@ export const router = createBrowserRouter(withErrorBoundary([
           /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
           /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
           { path: 'launch', element: <LaunchPage /> },
+          { path: 'accounts', element: <AccountsWorkspacePage /> },
           { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
           { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
           { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
@@ -401,6 +427,10 @@ export const router = createBrowserRouter(withErrorBoundary([
           // advertiser portal, and inside this tree the guard above would turn them away first.
           // Alerts management (the alerts engine's operator surface).
           { path: 'alerts', element: <AlertsPage /> },
+          // NOTIF-V2-FOLLOWUP-001 — ONE page for every workspace type; the portal prefix only decides the path.
+          { path: 'followup', element: <FollowUpPage /> },
+          // FIN-LOOP-001 — the approved budget of each project (money the client put in), apart from the limits below.
+          { path: 'budgets', element: <BudgetsPage /> },
           /*
            * BUDGET-GOVERNANCE-001 — the workspace's own limits, which are not the platforms'.
            *
@@ -481,7 +511,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             children: [
               { index: true, element: <Navigate to="/app/settings/workspace" replace /> },
               { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} navigation={false} /> },
-              { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء مساحة العمل وأدوارهم وصلاحياتهم" /> },
+              { path: 'permissions', element: <SettingsPage only={['team']} title="الفريق والنطاقات" subtitle="الدعوات والفئات وما يراه كل عضو" /> },
               // PLATFORM-level, moved to /admin/settings (ADMIN-001): the public marketing site is
               // the platform's, not one tenant's, and a tenant administrator could edit it here.
               { path: 'public-pages', element: <Navigate to="/admin/settings" replace /> },
@@ -508,6 +538,8 @@ export const router = createBrowserRouter(withErrorBoundary([
               { path: 'security', element: <SecurityPage /> },
               { path: 'preferences', element: <PreferencesPage /> },
               { path: 'notifications', element: <PersonalNotificationsPage /> },
+              // MCP-SERVER-001
+              { path: 'ai', element: <AiConnectPage /> },
             ],
           },
           // Sales CRM (behind sales_crm_enabled; routes always exist, nav is gated).
@@ -549,6 +581,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             // PLATFORM-SERVICE-INBOX-001 — services ordered from the official site. Platform-owned, never a
             // subscriber's requests: those stay in that subscriber's own `/agency/requests`.
             { path: 'requests', element: <ServiceRequestsPage /> },
+            { path: 'inbox', element: <PlatformInboxPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
             { path: 'addons', element: <AddonsPage /> },
             { path: 'plan-migration', element: <PlanMigrationPage /> },
@@ -579,6 +612,8 @@ export const router = createBrowserRouter(withErrorBoundary([
              * same day: a tenant able to set it could move their own reported ROAS by editing a number.
              */
             { path: 'settings/currency-rates', element: <CurrencyRatesPage /> },
+            // AI-PLATFORM-KEY-001
+            { path: 'settings/ai', element: <AiKeyPage /> },
             // REVIEW-001 — per-provider platform-review readiness, eight distinct checklists.
             { path: 'integrations/review', element: <ProviderReviewPage /> },
             { path: 'cutover', element: <CutoverPage /> },
@@ -586,6 +621,8 @@ export const router = createBrowserRouter(withErrorBoundary([
             // inside Audit: it is the surface an operator opens when a customer says an email never
             // arrived, and the audit trail is about people's actions rather than the mailer's.
             { path: 'email', element: <EmailOperationsPage /> },
+            // NOTIF-V2-SETTINGS-UI-001 — the platform's notification layer: catalog, texts, plan features, footprint, statistics.
+            { path: 'notifications', element: <AdminNotificationsPage /> },
             { path: 'audit', element: <AuditPage /> },
           ],
         }],
@@ -596,14 +633,19 @@ export const router = createBrowserRouter(withErrorBoundary([
         children: [{
           element: <AgencyShell />,
           children: [
-            { index: true, element: <Navigate to="/agency/dashboard" replace /> },
-            { path: 'dashboard', element: <AgencyDashboardPage /> },
+            // The landing is the role dashboard (see the `/app` index above).
+            { index: true, element: <Navigate to="/agency/home" replace /> },
+            { path: 'home', element: <RoleDashboardPage portal="agency" /> },
+            { path: 'dashboard', element: <OverviewDashboard portal="agency" /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },
             { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
             { path: 'requests', element: <RequestsDashboardPage /> },
             { path: 'requests/:requestId', element: <RequestDetailPage /> },
             { path: 'portfolio', element: <PortfolioPage /> },
-            { path: 'projects', element: <ProjectsPage /> },
+            // CLIENT-UNIT-001 — the project directory is merged into the clients; old links land on the client.
+            { path: 'projects', element: <AgencyProjectsIndexRedirect /> },
+            // PROJECT-LIFECYCLE-001 §8 — still lands on the client for a live project; an archived one opens view-only.
+            { path: 'projects/:projectId', element: <ProjectOpenPage /> },
             { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
             { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
             /*
@@ -634,6 +676,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
             /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
             { path: 'launch', element: <LaunchPage /> },
+            { path: 'accounts', element: <AccountsWorkspacePage /> },
             { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
             { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
@@ -643,6 +686,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'content/:creativeId', element: <CreativeDetailPage portal="agency" /> },
             { path: 'reports', element: <ReportsPage /> },
             { path: 'alerts', element: <AlertsPage /> },
+            { path: 'followup', element: <FollowUpPage /> },
             /*
              * AGENCY-DECISION-SURFACES-001 — the two decision pages existed only under `/app`.
              *
@@ -655,6 +699,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'automation', element: <AutomationPage /> },
             { path: 'agents', element: <AgentCenterPage /> },
             { path: 'agents/approvals', element: <ApprovalsPage /> },
+            { path: 'budgets', element: <BudgetsPage /> },
             { path: 'spend-limits', element: <SpendLimitsPage /> },
             { path: 'delivery', element: <DeliveryOverviewPage /> },
             { path: 'tasks', element: <TasksPage /> },
@@ -694,7 +739,7 @@ export const router = createBrowserRouter(withErrorBoundary([
               children: [
                 { index: true, element: <Navigate to="/agency/settings/workspace" replace /> },
                 { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} navigation={false} /> },
-                { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء الوكالة وأدوارهم وصلاحياتهم" /> },
+                { path: 'permissions', element: <SettingsPage only={['team']} title="الفريق والنطاقات" subtitle="الدعوات والفئات وما يراه كل عضو" /> },
                 { path: 'branding', element: <BrandingCenterPage /> },
               ],
             },
@@ -709,6 +754,8 @@ export const router = createBrowserRouter(withErrorBoundary([
                 { path: 'security', element: <SecurityPage /> },
                 { path: 'preferences', element: <PreferencesPage /> },
                 { path: 'notifications', element: <PersonalNotificationsPage /> },
+                // MCP-SERVER-001
+                { path: 'ai', element: <AiConnectPage /> },
               ],
             },
           ],
@@ -759,6 +806,8 @@ export const router = createBrowserRouter(withErrorBoundary([
               { path: 'security', element: <SecurityPage /> },
               { path: 'preferences', element: <PreferencesPage /> },
               { path: 'notifications', element: <PersonalNotificationsPage /> },
+              // MCP-SERVER-001
+              { path: 'ai', element: <AiConnectPage /> },
             ],
           },
           /*

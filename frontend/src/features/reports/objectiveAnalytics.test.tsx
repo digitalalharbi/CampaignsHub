@@ -93,7 +93,7 @@ describe('objective analytics section', () => {
   it('draws best and weakest only where the server ranked, platform then content', () => {
     renderWithProviders(<ObjectiveAnalyticsSection section={section([awareness, leads])} currency="SAR" ar={false} />)
 
-    expect(screen.getByTestId('objective-platform-leaders-awareness-best')).toHaveTextContent('5 SAR')
+    expect(screen.getByTestId('objective-platform-leaders-awareness-best')).toHaveTextContent('5 ر.س')
     expect(screen.getByTestId('objective-content-leaders-awareness-best')).toHaveTextContent('Brand film')
     expect(screen.getByTestId('objective-content-leaders-awareness-weakest')).toHaveTextContent('Teaser')
     // One candidate: no ranking card, not an empty one.

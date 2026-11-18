@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Automation\Services;
 
 use App\Domains\Automation\Models\AutomationRule;
+use App\Domains\Automation\Support\CampaignAge;
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalAdSet;
 use App\Domains\Campaigns\Models\ExternalCampaign;
@@ -19,7 +20,7 @@ use App\Support\AdPlatforms;
  */
 final class RuleTargets
 {
-    /** @return list<array{id: string, level: string, provider: string, external_account_id: ?string, external_id: string, name: ?string, status: ?string, daily_budget: ?float, currency: ?string, started_at: ?string, campaign_id: ?string}> */
+    /** @return list<array{id: string, level: string, provider: string, external_account_id: ?string, external_id: string, name: ?string, status: ?string, daily_budget: ?float, budget_source: ?string, currency: ?string, started_at: ?string, campaign_id: ?string}> */
     public function for(AutomationRule $rule): array
     {
         $scope = (array) ($rule->scope ?? []);
@@ -38,7 +39,9 @@ final class RuleTargets
             ->get();
 
         if ($rule->level === 'campaign') {
-            return $campaigns->map(fn (ExternalCampaign $c): array => $this->row('campaign', $c, (string) $c->getKey()))->all();
+            $setBudgets = $this->activeAdSetBudgets($rule, $campaigns->modelKeys());
+
+            return $campaigns->map(fn (ExternalCampaign $c): array => $this->row('campaign', $c, (string) $c->getKey(), null, $setBudgets[(string) $c->getKey()] ?? null))->all();
         }
 
         $campaignIds = $campaigns->modelKeys();
@@ -57,17 +60,43 @@ final class RuleTargets
             ->map(fn (ExternalAd $a): array => $this->row('ad', $a, (string) $a->external_campaign_id, $accountOf[(string) $a->external_campaign_id] ?? null))->all();
     }
 
-    private function row(string $level, mixed $m, string $campaignId, ?ExternalCampaign $parent = null): array
+    /**
+     * CONS-I-BUDGET — a campaign with no budget of its own may carry it on its ad sets (budget set below the campaign).
+     * The daily budget of the campaign is then what its ACTIVE ad sets add up to; with none stated it stays null.
+     *
+     * @param  list<string>  $campaignIds
+     * @return array<string, float>
+     */
+    private function activeAdSetBudgets(AutomationRule $rule, array $campaignIds): array
+    {
+        if ($campaignIds === []) {
+            return [];
+        }
+        $out = [];
+        foreach (ExternalAdSet::withoutGlobalScopes()->where('project_id', $rule->project_id)->whereIn('external_campaign_id', $campaignIds)
+            ->where('status', 'active')->where('daily_budget', '>', 0)->get(['external_campaign_id', 'daily_budget']) as $set) {
+            $out[(string) $set->external_campaign_id] = ($out[(string) $set->external_campaign_id] ?? 0.0) + (float) $set->daily_budget;
+        }
+
+        return $out;
+    }
+
+    private function row(string $level, mixed $m, string $campaignId, ?ExternalCampaign $parent = null, ?float $adSetBudgets = null): array
     {
         $parent ??= $m instanceof ExternalCampaign ? $m : null;
+        $own = isset($m->daily_budget) && (float) $m->daily_budget > 0 ? (float) $m->daily_budget : null;
+        $budget = $own ?? ($adSetBudgets !== null && $adSetBudgets > 0 ? $adSetBudgets : null);
 
         return [
             'id' => (string) $m->getKey(), 'level' => $level, 'provider' => AdPlatforms::canonical((string) $m->provider),
             'external_account_id' => $parent?->external_account_id !== null ? (string) $parent->external_account_id : null,
             'external_id' => (string) $m->external_id, 'name' => $m->name, 'status' => $m->status,
-            'daily_budget' => isset($m->daily_budget) ? (float) $m->daily_budget : null,
+            'daily_budget' => $budget,
+            // Where the budget was read: the object itself, or the sum of its ad sets (read-only: a change is asked of the ad sets, not the campaign).
+            'budget_source' => $budget === null ? null : ($own !== null ? 'self' : 'ad_sets'),
             'currency' => $m->currency ?? $parent?->currency, 'campaign_id' => $campaignId,
-            'started_at' => optional($m->starts_at ?? $m->created_at)->toIso8601String(),
+            // CONS-I-AGE — the CAMPAIGN's creation date on the platform (an ad set or ad is as old as its campaign); null when unknown, never the first-sync date.
+            'started_at' => CampaignAge::createdAt($parent)?->toIso8601String(),
         ];
     }
 }

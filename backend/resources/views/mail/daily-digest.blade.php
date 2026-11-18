@@ -124,7 +124,7 @@
 
     @if ($periodic && count($portfolio) > 1)
         <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;">{{ $t['health'] }}</div>
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" data-block="health" style="margin-bottom:16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="health" style="width:100%; margin-bottom:16px;">
             <tr>
                 {{-- A pill per state that HAS projects — a «0 at risk» pill is a count of nothing (Owner 2026-10-22). --}}
                 @foreach ([['good', $health['good']], ['warn', $health['warn']], ['bad', $health['bad']], ['neutral', $health['neutral']]] as [$k, $n])
@@ -134,6 +134,8 @@
                         </td>
                     @endif
                 @endforeach
+                {{-- EMAIL-CLIENT-COMPAT-001 — the row spans the column like every other block; this cell takes the rest. --}}
+                <td width="100%" style="font-size:1px; line-height:1px;">&nbsp;</td>
             </tr>
         </table>
     @endif
@@ -243,11 +245,20 @@
     @endif
 
     {{-- One button, and it says where it lands. --}}
-    <div style="margin:10px 0 18px; text-align:center;">
-        <a href="{{ $portfolio[0]['url'] ?? '#' }}" data-block="cta"
+    {{-- EMAIL-CLIENT-COMPAT-001 — a bullet-proof cell (ground on the cell, label nowrap), not an inline-block link. --}}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%; margin:10px 0 18px;">
+        <tr>
+            <td align="center" style="text-align:center;">
+                <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+                    <tr>
+                        <td align="center" bgcolor="#0b7a62" data-button="cta" style="background-color:#0b7a62; border-radius:8px; white-space:nowrap;"><a href="{{ $portfolio[0]['url'] ?? '#' }}" data-block="cta"
            class="ch-btn" style="display:inline-block; background-color:#0b7a62; color:#ffffff; font-size:15px; font-weight:700;
-                  text-decoration:none; line-height:44px; padding:0 28px; border-radius:8px;">{{ $client ? ($t['open_portal'] ?? $t['open_portfolio']) : $t['open_portfolio'] }}</a>
-    </div>
+                  text-decoration:none; line-height:44px; padding:0 28px; border-radius:8px; white-space:nowrap; mso-line-height-rule:exactly;">{{ $client ? ($t['open_portal'] ?? $t['open_portfolio']) : $t['open_portfolio'] }}</a></td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 
     <div style="font-size:12px; color:#8b9a97; line-height:1.7; margin-top:4px;">{{ $t['footer_note'] }}</div>
 
@@ -259,5 +270,10 @@
                 @foreach ($reportFooter['items'] as $item){{ $item[0] }}: {{ $item[1] }}@if (! $loop->last) | @endif @endforeach
             </div>
         </div>
+    @endif
+
+    {{-- MONEY-MARKS-001 — the one financial disclaimer (BUDGET-DISCLAIMER-001), wherever a team member's mail carries money figures. --}}
+    @if (! $noMoney)
+        <div data-block="financial-disclaimer" style="font-size:11px; color:#5b6b68; line-height:1.7; margin-top:12px; border-top:1px solid #e4e0d6; padding-top:8px;">{{ \App\Domains\Funding\Support\FundingDisclaimer::text($dir === 'rtl' ? 'ar' : 'en') }}</div>
     @endif
 </div>

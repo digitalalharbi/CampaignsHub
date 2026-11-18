@@ -36,7 +36,11 @@ export interface OverviewCampaign {
   name: string
   provider: string
   spend: number
-  results: number
+  /** OBJECTIVE-RESULT-001 — the campaign's own result (null: none reported, or objective not set). */
+  results: number | null
+  /** The unit that result counts in; each row names its own, because the rows' objectives differ. */
+  resultLabel?: { ar: string; en: string } | null
+  /** Cost of ONE of that result. */
   cpa: number | null
   roas: number | null
 }
@@ -234,7 +238,8 @@ export function UnifiedCampaignOverview({
   lang?: 'ar' | 'en'
 }) {
   const w = OVERVIEW_COPY[lang]
-  const currency = vm.currency ?? 'SAR'
+  // FX-APPLY-001 — never a guessed currency: no currency → bare figure.
+  const currency = vm.currency ?? null
   const c = palette(variant)
   const isMarketing = variant === 'marketing'
   const lg = !compact // dashboard = larger, more readable typography; marketing preview stays compact
@@ -327,7 +332,10 @@ export function UnifiedCampaignOverview({
                       </span>
                     </td>
                     <td className={`py-1.5 text-center ${c.sub}`}><span className="tnum">{money(cp.spend, currency)}</span></td>
-                    <td className={`py-1.5 text-center ${c.sub}`}><span className="tnum">{num(cp.results)}</span></td>
+                    <td className={`py-1.5 text-center ${c.sub}`}>
+                      <span className="tnum">{cp.results === null ? '—' : num(cp.results)}</span>
+                      {cp.resultLabel && <span className={`ms-1 text-xs ${c.muted}`}>{lang === 'ar' ? cp.resultLabel.ar : cp.resultLabel.en}</span>}
+                    </td>
                     <td className={`py-1.5 text-center ${c.sub}`}><span className="tnum">{cp.cpa === null ? '—' : moneyExact(cp.cpa, currency ?? null)}</span></td>
                     <td className={`py-1.5 text-center font-semibold ${c.value}`}><span className="tnum">{cp.roas === null ? '—' : ratio(cp.roas)}</span></td>
                   </tr>

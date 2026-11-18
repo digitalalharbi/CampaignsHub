@@ -58,8 +58,17 @@ final class CampaignMetricsController extends Controller
             $deltas[$k] = is_numeric($v) && is_numeric($p) && $p != 0 ? round(($v - $p) / abs($p), 4) : null;
         }
 
+        /*
+         * OBJECTIVE-RESULT-001 — the campaign's result for ITS objective rides on `current`, from the
+         * same table and the same landing-page-view rule as the campaign list. `reported` says which
+         * metrics a platform actually sent, so the page can say «بدون بيانات» rather than «0».
+         */
+        $objective = UnifiedCampaign::query()->whereKey($id)->value('objective');
+        $current += $agg->resultOfTotals($objective === null ? null : (string) $objective, $current, $from, $to);
+        $reported = $agg->reportedKeys($from, $to);
+
         return ApiResponse::success(
-            ['current' => $current, 'previous' => $previous, 'delta' => $deltas, 'currency' => $currency],
+            ['current' => $current, 'previous' => $previous, 'delta' => $deltas, 'currency' => $currency, 'reported' => $reported],
             'Campaign metrics summary.',
             meta: ['currency' => $currency] + $this->meta($from, $to),
         );

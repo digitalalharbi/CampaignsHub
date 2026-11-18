@@ -15,6 +15,7 @@ import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import { formatMoneyParts, formatMoneyReading, moneyParts, readMoney, type MoneyTotals } from '@/lib/money/contract'
 import { metricState } from '@/features/content/metrics'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * REPORT-AD-PREVIEW-001 — the ads that ran, in the document the client keeps.
@@ -491,6 +492,7 @@ function AdGroupBlock({
             currency={currency}
             testidPrefix={`report-ad-poster-${group.family}-${i}`}
             onOpen={onOpen}
+            family={group.family}
           />
         ))}
       </div>
@@ -506,13 +508,15 @@ function AdGroupBlock({
  * ad got silence.
  */
 function AdCard({
-  ad, locale, currency, testidPrefix, onOpen,
+  ad, locale, currency, testidPrefix, onOpen, family,
 }: {
   ad: ReportAd
   locale: Locale
   currency: string | null
   testidPrefix: string
   onOpen?: (ad: ReportAd) => void
+  /** REPORT-CARD-OBJECTIVE-001 — the objective group this card sits in: its own count and, for sales, its return. */
+  family?: string
 }) {
   const ar = locale === 'ar'
   const body = (
@@ -534,7 +538,7 @@ function AdCard({
       <AdPoster preview={ad.preview ?? null} name={ad.name ?? ''} className="h-32 w-full" testid={testidPrefix} fit="cover" forClient />
 
       <div className="min-w-0">
-        <div className="truncate text-sm font-bold text-text-primary" title={ad.name ?? undefined}>
+        <div dir="auto" className="truncate text-start text-sm font-bold text-text-primary" title={ad.name ?? undefined}>
           {ad.name ?? '—'}
         </div>
         <div className="flex items-center gap-1 truncate text-[11px] text-text-muted">
@@ -557,7 +561,7 @@ function AdCard({
       </div>
 
       <dl className="grid grid-cols-3 gap-1.5 text-center">
-        {figuresFor(ad, ar, currency).map((f) => (
+        {figuresFor(ad, ar, currency, { family }).map((f) => (
           <div key={f.label} className="rounded-lg bg-surface-secondary p-1.5">
             <dt className="text-[10px] font-semibold text-text-muted">{f.label}</dt>
             <dd className="tnum text-xs font-bold text-text-primary"><Num>{f.value}</Num></dd>
@@ -595,7 +599,7 @@ function AdCard({
  * filling the ones the platform never measured with «—» is how a report teaches a client that half
  * its numbers are missing; these are the three that exist, in the order that answers «did it work».
  */
-export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, opts: { resultsOnly?: boolean } = {}): { label: string; value: string; pending?: string | null }[] {
+export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, opts: { resultsOnly?: boolean; family?: string | null } = {}): { label: string; value: string; pending?: string | null }[] {
   const out: { label: string; value: string; pending?: string | null }[] = []
   // `numberFormatter`, not `toLocaleString`: the same text, through one formatter per shape rather than one per figure (PERF-RENDER-001).
   const n = (v: number | null | undefined, digits = 0) =>
@@ -609,7 +613,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   const cash = (v: number | null | undefined, digits = 0) => {
     const text = n(v, digits)
 
-    return text === null ? null : (currency ? `${text} ${currency}` : text)
+    return text === null ? null : withMark(text, currency)
   }
 
   /*
@@ -627,7 +631,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   const fmtCash = (value: number | null | undefined, unit?: string) => {
     const text = n(value, 0)
 
-    return text === null ? '—' : (unit ? `${text} ${unit}` : text)
+    return text === null ? '—' : withMark(text, unit)
   }
   const spendText = spendParts === null ? formatMoneyReading(spendReading, fmtCash) : formatMoneyParts(spendParts, currency ?? null, fmtCash)
 
@@ -704,8 +708,17 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
     return out.slice(0, 3)
   }
 
+  /*
+   * REPORT-CARD-OBJECTIVE-001 — Owner 2026-11-17: a content card states its spend, its result and its return BY ITS OBJECTIVE.
+   * A card inside an objective's group with no stated result printed «الإنفاق» alone while the ad had 81 purchases and a
+   * 35.08× return. The group's own count (purchases for sales, leads for leads, clicks for traffic …) is printed when the
+   * platform reported it, and a sales card carries its return. Never a generic `conversions`, never a zero for «not reported».
+   */
+  const familyCount = !countIsStated && verified === undefined && opts.family ? objectiveCount(ad, opts.family, ar) : null
+  if (familyCount !== null) out.push(familyCount)
+
   if (undefinedResult) {
-    // nothing named after a result
+    if (opts.family === 'sales' && ad.roas !== null && ad.roas !== undefined && ad.roas > 0) out.push({ label: ar ? 'العائد' : 'ROAS', value: `${ad.roas.toFixed(2)}×` })
   } else if (ad.roas !== null && ad.roas !== undefined && ad.roas > 0) {
     out.push({ label: ar ? 'العائد' : 'ROAS', value: `${ad.roas.toFixed(2)}×` })
   } else if (ad.cpa !== null && ad.cpa !== undefined && ad.cpa > 0) {
@@ -713,7 +726,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   }
 
   /* Delivery, for an ad with no result to show — never instead of one. Owner 2026-10-29: its clicks lead, as the result would have. */
-  if (!countIsStated) {
+  if (!countIsStated && (familyCount === null || opts.family === 'traffic')) {
     if (ad.ctr !== null && ad.ctr !== undefined) {
       out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
     } else {
@@ -723,6 +736,28 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   }
 
   return out.slice(0, 3)
+}
+
+/** REPORT-CARD-OBJECTIVE-001 — the count each objective is judged on, read from the ad's own reported figure. */
+const OBJECTIVE_COUNT: Record<string, { key: string; ar: string; en: string }> = {
+  sales: { key: 'purchases', ar: 'الطلبات', en: 'Purchases' },
+  leads: { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads' },
+  traffic: { key: 'clicks', ar: 'النقرات', en: 'Clicks' },
+  app: { key: 'installs', ar: 'التثبيتات', en: 'Installs' },
+  video: { key: 'video_views', ar: 'المشاهدات', en: 'Video views' },
+  engagement: { key: 'engagements', ar: 'التفاعل', en: 'Engagements' },
+  awareness: { key: 'impressions', ar: 'الظهور', en: 'Impressions' },
+}
+
+function objectiveCount(ad: ReportAd, family: string, ar: boolean): { label: string; value: string } | null {
+  const spec = OBJECTIVE_COUNT[family]
+  if (!spec) return null
+  const raw = (ad as Record<string, unknown>)[spec.key]
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null
+  const reported = (ad as Record<string, unknown>).reported as Record<string, boolean> | undefined
+  if (reported && reported[spec.key] === false) return null
+
+  return { label: ar ? spec.ar : spec.en, value: numberFormatter('en-US', { maximumFractionDigits: 0 }).format(raw) }
 }
 
 /**

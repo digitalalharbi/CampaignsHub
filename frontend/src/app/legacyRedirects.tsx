@@ -1,4 +1,6 @@
-import { Navigate, useLocation } from 'react-router-dom'
+import { Navigate, useLocation, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { getData } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 
 /**
@@ -110,6 +112,7 @@ const MOVED_TO_APP = [
   'account/security',
   'account/preferences',
   'account/notifications',
+  'account/ai',
   'leads',
   'opportunities',
   // Sections that existed at the root before the move but were missed the first time round, so a
@@ -217,6 +220,7 @@ const MOVED_TO_PORTAL = [
   'requests/:reference',
   'quotes',
   'quotes/:id',
+  'approvals',
   'invoices',
   'invoices/:id',
   'messages',
@@ -242,4 +246,34 @@ export function LegacyClientSpaceRedirect() {
   const { pathname, search, hash } = useLocation()
 
   return <Navigate to={`${pathname.replace(/^\/portal\/clients\//, '/portal/')}${search}${hash}`} replace />
+}
+
+/**
+ * CLIENT-UNIT-001 — the agency's project directory is gone: a client IS the visible unit.
+ *
+ * `/agency/projects` lands on the clients list, and `/agency/projects/:projectId` resolves the project to its client and
+ * lands on that client's page. A project the caller cannot reach answers like an unknown one and falls back to the list,
+ * so the redirect never confirms that an id exists. The project pages that do real work —
+ * `/agency/projects/:id/integrations` and `/team` — keep their addresses.
+ */
+export function AgencyProjectToClientRedirect() {
+  const { projectId = '' } = useParams()
+  const { search, hash } = useLocation()
+  const project = useQuery({
+    queryKey: ['legacy-project-client', projectId],
+    queryFn: () => getData<{ client_workspace_id: string }>(`/projects/${projectId}`),
+    retry: false,
+  })
+
+  if (project.isPending) return null
+  if (project.isError || !project.data?.client_workspace_id) return <Navigate to={`/agency/clients${search}${hash}`} replace />
+
+  return <Navigate to={`/agency/clients/${project.data.client_workspace_id}${search}${hash}`} replace />
+}
+
+/** `/agency/projects` → `/agency/clients`, keeping the query string and hash like every other redirect here. */
+export function AgencyProjectsIndexRedirect() {
+  const { search, hash } = useLocation()
+
+  return <Navigate to={`/agency/clients${search}${hash}`} replace />
 }

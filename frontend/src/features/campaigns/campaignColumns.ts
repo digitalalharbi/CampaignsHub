@@ -45,7 +45,7 @@ export const CAMPAIGN_COLUMNS: readonly CampaignColumn[] = [
   metric('engagements', 'التفاعلات', 'Engagements'),
   metric('video_views', 'مشاهدات الفيديو', 'Video views'),
   metric('leads', 'العملاء المحتملون', 'Leads'),
-  metric('purchases', 'المشتريات', 'Purchases'),
+  metric('purchases', 'الطلبات', 'Purchases'),
   metric('revenue', 'الإيرادات', 'Revenue'),
   metric('roas', 'العائد على الإنفاق', 'ROAS'),
   metric('aov', 'متوسط قيمة الطلب', 'AOV'),

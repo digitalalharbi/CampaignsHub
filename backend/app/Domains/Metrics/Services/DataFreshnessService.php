@@ -142,7 +142,18 @@ final class DataFreshnessService
         $out = [];
 
         foreach ($this->sources($tenantId, $projectIds) as $source) {
+            /*
+             * A-8 — «آخر مزامنة» is the latest SUCCESSFUL sync, not only the newest stored figure.
+             *
+             * `data_as_of` is the newest `data_freshness_at` on stored metric rows, so a source whose successful
+             * syncs stored nothing (an X or LinkedIn account with no delivery) had none and the column read «—»
+             * while its runs were succeeding. A run that reached the provider (`success`/`no_data`) counts too.
+             */
             $at = $source['data_as_of'] ?? null;
+            $ranAt = $source['succeeded_at'] ?? null;
+            if ($ranAt !== null && ($at === null || $ranAt > $at)) {
+                $at = $ranAt;
+            }
             $projectId = (string) $source['project_id'];
 
             if ($at !== null && (! isset($out[$projectId]) || $at > $out[$projectId])) {

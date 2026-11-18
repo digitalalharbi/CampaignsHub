@@ -98,7 +98,7 @@ describe('the dashboard and the analysis are different surfaces', () => {
 
     const overview = await screen.findByTestId('dashboard-overview')
 
-    expect(overview.textContent).toMatch(/Spend, results and revenue/i)
+    expect(overview.textContent).toMatch(/Spend, platform conversions and revenue/i)
     /* CTR appears here only as a rate-trend panel, so its presence is exactly the claim being made. */
     expect(overview.textContent).toMatch(/CTR/)
   })
@@ -109,7 +109,7 @@ describe('the dashboard and the analysis are different surfaces', () => {
 
     const overview = await screen.findByTestId('analytics-overview')
 
-    expect(overview.textContent).toMatch(/Spend, results and revenue/i)
+    expect(overview.textContent).toMatch(/Spend, platform conversions and revenue/i)
     expect(overview.textContent).toMatch(/CTR/)
   })
 })

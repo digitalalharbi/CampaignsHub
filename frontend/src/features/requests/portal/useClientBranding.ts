@@ -1,3 +1,4 @@
+import { tokenColor } from '@/lib/designTokens'
 import { useQuery } from '@tanstack/react-query'
 import { fetchClientBranding, useClientSpaceSlug, type ClientBranding } from './clientSpace'
 
@@ -43,7 +44,7 @@ export function brandStyle(branding: ClientBranding | null): Record<string, stri
 }
 
 /** The product's own accent, which every workspace has until it chooses one (BrandingController::DEFAULTS). */
-const DEFAULT_ACCENT = '#0d8a6f'
+const DEFAULT_ACCENT = tokenColor('brand-600')
 
 /** BRANDING-HIERARCHY-001 — the agency portal's accent: only one the agency chose, and only one white text can be read on. */
 export function agencyAccentFor(color: string | null | undefined): Record<string, string> | undefined {

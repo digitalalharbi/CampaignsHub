@@ -6,6 +6,7 @@ namespace App\Domains\Agents\Jobs;
 
 use App\Domains\Agents\Models\AgentThread;
 use App\Domains\Agents\Services\AgentConversation;
+use App\Domains\Agents\Services\AgentLiveState;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
@@ -47,6 +48,9 @@ final class RunAgentTurnJob implements ShouldQueue
                 report($e);
             }
             $thread->forceFill(['status' => 'failed', 'last_error' => $named ? $e->getMessage() : 'agent_turn_failed'])->save();
+        } finally {
+            // The live buffer and the Stop flag belong to this turn only; the stored messages are the record.
+            AgentLiveState::clear((string) $thread->getKey());
         }
     }
 }

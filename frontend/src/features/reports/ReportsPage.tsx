@@ -48,7 +48,9 @@ import type { CreatedShare, GenericNameKind, ReportDetail, ReportEditorState, Re
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Modal } from '@/components/ui/Modal'
+import { DateRangeField } from '@/components/ui/DateRangeField'
 import { DateField } from '@/components/ui/DateField'
+import { usePeriod } from '@/lib/period/usePeriod'
 import { Skeleton } from '@/components/ui/States'
 import { ErrorSummary, SelectField, type FieldError } from '@/components/forms'
 import { exportFailureCopy, exportStaleCopy } from './exportFailureCopy'
@@ -63,7 +65,7 @@ import { ReportSectionControls } from './ReportSectionControls'
 import {
   ShareCreativeControls,
   creativeSharingBody,
-  emptyCreativeSharing,
+  defaultCreativeSharing,
   type CreativeSharing,
 } from './ShareCreativeControls'
 import { ProvenanceBadge, type Provenance } from '@/features/analytics/components'
@@ -72,11 +74,13 @@ import { AnnotationsPanel } from './AnnotationsPanel'
 import { KeptCopyNote, ReportVersionHistory } from './ReportVersionHistory'
 import { AttentionDecisionsPanel } from './AttentionDecisionsPanel'
 import { useProject } from '@/stores/project'
+import { useClientProjectAutoSelect } from '@/features/agency/clientProject'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { FilterBar, FilterSearch, FilterSelect } from '@/components/ui/FilterBar'
 import { useUi } from '@/stores/ui'
 import { reports as countedReports } from '@/lib/counted'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import { promptDialog } from '@/stores/dialogs'
 
 const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-[var(--positive-background)] text-success',
@@ -91,12 +95,6 @@ const STATUS_LABEL: Record<string, { ar: string; en: string }> = {
   draft: { ar: 'مسودة', en: 'Draft' },
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
-const daysAgo = (n: number) => {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
-}
 
 /**
  * The reader's language (APP-100).
@@ -116,6 +114,8 @@ export function ReportsPage() {
   /* EMAIL-DIGESTS-OPERATIONAL-001 — a button in an email carries `?project=`; it is chosen on arrival. */
   useProjectFromUrl()
   const { currentProjectId } = useProject()
+  // CONS-CLIENT-PROJECT — a client chosen in the sidebar brings its project with it.
+  useClientProjectAutoSelect()
   const locale = useUi((s) => s.locale)
   const qc = useQueryClient()
   // Report-type labels come from the taxonomy engine (report.type) — no hardcoded type array.
@@ -179,7 +179,7 @@ export function ReportsPage() {
   })
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['reports', currentProjectId] })
-  const regen = useMutation({ mutationFn: (id: string) => regenerateReport(currentProjectId!, id), onSuccess: invalidate })
+  const regen = useMutation({ meta: { feedback: 'none' }, mutationFn: (id: string) => regenerateReport(currentProjectId!, id), onSuccess: invalidate })
   /* REPORT-LIFECYCLE-MENU-001 — rename in place; duplicate to an independent report. Neither touches the original's link. */
   const rename = useMutation({ mutationFn: ({ id, name }: { id: string; name: string }) => renameReport(currentProjectId!, id, name), onSuccess: invalidate })
   /*
@@ -193,7 +193,7 @@ export function ReportsPage() {
   const [rowNote, setRowNote] = useState<string | null>(null)
   const [editOriginal, setEditOriginal] = useState<ReportRow | null>(null)
   const refusal = (e: unknown) => setRowNote(toApiError(e).message || (ar ? 'تعذّر تنفيذ الإجراء.' : 'The action could not be completed.'))
-  const duplicate = useMutation({
+  const duplicate = useMutation({ meta: { feedback: 'none' },
     mutationFn: (id: string) => startDuplicate(currentProjectId!, id),
     onSuccess: (d) => {
       setRowNote(null)
@@ -207,7 +207,7 @@ export function ReportsPage() {
     onError: refusal,
   })
   /* «نسخ الرابط» — the link as it is. Nothing is created, and with several links the person picks which in the links dialog. */
-  const copyLink = useMutation({
+  const copyLink = useMutation({ meta: { feedback: 'none' },
     mutationFn: async (id: string): Promise<'copied' | 'none' | 'many' | 'unrecoverable'> => {
       const usable = (await listShares(currentProjectId!, id)).filter((x) => !x.revoked_at)
       if (usable.length === 0) return 'none'
@@ -229,7 +229,7 @@ export function ReportsPage() {
   })
   const del = useMutation({ mutationFn: (id: string) => deleteReport(currentProjectId!, id), onSuccess: invalidate })
   const drill = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => setReportPdfBreakdowns(currentProjectId!, id, { platform_drilldown: on }), onSuccess: invalidate })
-  const exp = useMutation({
+  const exp = useMutation({ meta: { feedback: 'none' },
     mutationFn: ({ id, format }: { id: string; format: ReportFormat }) => exportReport(currentProjectId!, id, format),
     // Straight away: the row now holds a `processing` export, which is what keeps the poll above alive.
     onSuccess: invalidate,
@@ -711,10 +711,10 @@ export function ReportsPage() {
           ar={ar}
           report={editOriginal}
           onClose={() => setEditOriginal(null)}
-          onRename={() => {
+          onRename={async () => {
             const r = editOriginal
             setEditOriginal(null)
-            const name = window.prompt(ar ? 'اسم التقرير:' : 'Report name:', r.name)?.trim()
+            const name = await promptDialog({ title: ar ? 'غيّر الاسم' : 'Rename the report', label: ar ? 'اسم التقرير' : 'Report name', initial: r.name })
             if (name && name !== r.name) rename.mutate({ id: r.id, name })
           }}
           onNames={() => { setNamesId(editOriginal.id); setEditOriginal(null) }}
@@ -1256,8 +1256,11 @@ export function ReportBuilder({ projectId, onClose, onCreated, seed }: { project
    * operator who skips this step gets exactly what they used to.
    */
   const [scope, setScope] = useState<ReportScopeShape>(start?.scope ?? {})
-  const [from, setFrom] = useState(start?.period_start ?? daysAgo(29))
-  const [to, setTo] = useState(start?.period_end ?? today())
+  // DATE-RANGE-001 — a new report starts on the system's period (ending yesterday), not on «30 days to today».
+  // URL-WRITE-RACE-001 — a dialog seeds its own dates from the period and leaves the page address alone.
+  const sharedPeriod = usePeriod({ writeUrl: false }).range
+  const [from, setFrom] = useState(start?.period_start ?? sharedPeriod.from)
+  const [to, setTo] = useState(start?.period_end ?? sharedPeriod.to)
   // Type & audience are fed by the taxonomy engine (report.type / report.audience) — system definitions, so
   // the option keys are exactly the values ReportController::TYPES / the audience Rule::in already accept.
   const types = useTaxonomyOptions('report.type')
@@ -1392,7 +1395,7 @@ export function ReportBuilder({ projectId, onClose, onCreated, seed }: { project
       draftId ? publishReportDraft(projectId, draftId, body) : createReport(projectId, { ...body, ...(seed?.sourceId ? { source_report_id: seed.sourceId } : {}) }),
     onSuccess: onCreated,
   })
-  const preview = useMutation({
+  const preview = useMutation({ meta: { feedback: 'none' },
     mutationFn: (body: Record<string, unknown>) => {
       const from = draftId ?? seed?.sourceId
       return previewReportDraft(projectId, { ...body, ...(from ? { source_report_id: from } : {}) })
@@ -1661,9 +1664,8 @@ export function ReportBuilder({ projectId, onClose, onCreated, seed }: { project
           clearable={false}
         />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={ar ? 'من' : 'From'} htmlFor="rb-from"><DateField id="rb-from" value={from} onChange={setFrom} /></Field>
-          <Field label={ar ? 'إلى' : 'To'} htmlFor="rb-to"><DateField id="rb-to" value={to} onChange={setTo} /></Field>
+        <div className="grid gap-3">
+          <Field label={ar ? 'الفترة' : 'Period'} htmlFor="rb-from"><DateRangeField id="rb-from" testId="report-period" from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t) }} /></Field>
         </div>
         <div className="border-t border-border pt-4">
           {/*
@@ -1743,7 +1745,8 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
    * before this existed does.
    */
   const [form, setForm] = useState('')
-  const [creatives, setCreatives] = useState<CreativeSharing>(emptyCreativeSharing)
+  // REPORT-ADS-ALL-ON-001 — the report's own share dialog starts from the same default as the live-link builder.
+  const [creatives, setCreatives] = useState<CreativeSharing>(defaultCreativeSharing)
   /*
    * ATTRIB-VIS-001 — off unless the operator turns it on, for this link.
    *
@@ -2058,7 +2061,7 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
                     {s.expires_at && <span className="tnum text-xs text-text-muted">{ar ? 'ينتهي' : 'expires'} {fmtDate(s.expires_at)}</span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <button type="button" data-testid={`share-copy-${s.id}`} onClick={() => copyCurrent.mutate(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
+                    <button type="button" data-testid={`share-copy-${s.id}`} disabled={copyCurrent.isPending} onClick={() => copyCurrent.mutate(s.id)} className="text-xs font-semibold text-text-secondary hover:underline">
                       {ar ? 'نسخ الرابط الحالي' : 'Copy current link'}
                     </button>
                     {(s.active || s.paused_at) && (
@@ -2098,12 +2101,12 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
                           them to pick a date to express that is a step for nothing.
                         */}
                         <button
-                          onClick={() => renew.mutate({ id: s.id, until: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10) })}
+                          disabled={renew.isPending} onClick={() => renew.mutate({ id: s.id, until: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10) })}
                           className="text-xs font-semibold text-text-secondary hover:underline"
                         >
                           {ar ? 'تمديد شهر' : 'Extend a month'}
                         </button>
-                        <button onClick={() => revoke.mutate(s.id)} className="text-xs font-semibold text-danger hover:underline">{ar ? 'إلغاء' : 'Revoke'}</button>
+                        <button disabled={revoke.isPending} onClick={() => revoke.mutate(s.id)} className="text-xs font-semibold text-danger hover:underline">{ar ? 'إلغاء' : 'Revoke'}</button>
                       </>
                     )}
                   </div>

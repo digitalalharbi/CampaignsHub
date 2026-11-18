@@ -146,6 +146,9 @@ export interface ShareRow {
   /** How much of the report this link is; null means the report's own. */
   form?: 'executive_summary' | 'detailed' | null
   sections?: { previous_comparison?: boolean } & Record<string, boolean | undefined>
+  /** REPORT-LINK-EDIT-ADS-001 — the ad section as the link publishes it now (resolved), and its listing policy (null: never chosen). */
+  creatives?: Record<string, boolean>
+  creative_display?: { policy: 'activity' | 'all' | 'selected'; include_zero_activity: boolean; auto_refresh: boolean } | null
   scope: {
     project_id?: string
     campaign_ids?: string[]
@@ -436,6 +439,10 @@ export interface ShareEdit {
   sections?: Record<string, boolean>
   /** REPORT-TABLES-OWNER-COLUMNS-001 — the whole column choice per table; a table absent means every column. */
   columns?: Record<string, string[]>
+  /** REPORT-LINK-EDIT-ADS-001 — the ad section's fifteen switches, sent whole; the server resolves the dependencies. */
+  creatives?: Record<string, boolean>
+  /** REPORT-LINK-EDIT-ADS-001 — which ads the link lists. */
+  creative_display?: { policy: 'activity' | 'all' | 'selected'; include_zero_activity: boolean; auto_refresh: boolean }
 }
 
 export const updateShare = (p: string, reportId: string, shareId: string, body: ShareEdit) =>
@@ -475,6 +482,13 @@ export interface AdsBasis {
   label_en: string | null
   family_label_ar: string | null
   family_label_en: string | null
+  /**
+   * CHATGPT-ADS-CONTENT-RANKABLE-001 — the objective's own result is not reported by the platform, so the ads are
+   * ordered on the volume it did report; `note_*` is the plain sentence that says so.
+   */
+  fallback?: boolean
+  note_ar?: string | null
+  note_en?: string | null
 }
 
 export interface ShareWindow { from: string; to: string; views: number; devices: number; downloads: number }
@@ -1039,6 +1053,10 @@ export interface ReportScheduleRow {
   cron: string | null
   report_id: string | null
   active: boolean
+  /** CONS-SCHEDULE-ONE — `duplicate_schedule` on a copy switched off because another schedule builds the same report. */
+  disabled_reason?: string | null
+  disabled_at?: string | null
+  duplicate_of?: string | null
   is_demo: boolean
   last_run_at: string | null
   next_run_at: string | null
@@ -1048,7 +1066,7 @@ export interface ReportScheduleRow {
   delivery_reasons?: Record<string, number>
 }
 
-export type ReportScheduleInput = Partial<Omit<ReportScheduleRow, 'id' | 'deliveries' | 'is_demo' | 'last_run_at' | 'next_run_at'>>
+export type ReportScheduleInput = Partial<Omit<ReportScheduleRow, 'id' | 'deliveries' | 'is_demo' | 'last_run_at' | 'next_run_at' | 'disabled_reason' | 'disabled_at' | 'duplicate_of'>>
 
 const schedulesBase = (projectId: string) => `/projects/${projectId}/reports/schedules`
 

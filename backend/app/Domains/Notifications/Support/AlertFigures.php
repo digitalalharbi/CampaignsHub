@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Funding\Support\FundingMoney;
+
 /**
  * EMAIL-PERF-DASHBOARDS-001 — the figures an alert carries, as one lead and a compact strip.
  *
@@ -54,8 +56,10 @@ final class AlertFigures
             $metric = substr($key, 0, -8);
             $previous = $context[$metric.'_previous'] ?? null;
             $strip = [];
+            // ALERT-MAIL-DATED-BARS-001 — the figures line names its days too, never a bare «قبل / الآن».
+            $when = AlertMailItem::when($context, $ar);
             if (is_numeric($previous)) {
-                $strip[] = ['label' => $ar ? 'قبل' : 'Before', 'value' => self::metric($metric, (float) $previous)];
+                $strip[] = ['label' => $when['before_when'] ?? ($ar ? 'قبل' : 'Before'), 'value' => self::metric($metric, (float) $previous)];
                 if ((float) $previous != 0.0) {
                     $change = ((float) $value - (float) $previous) / abs((float) $previous);
                     $strip[] = ['label' => $ar ? 'التغيّر' : 'Change', 'value' => ($change > 0 ? '+' : '').self::percent($change)];
@@ -65,7 +69,9 @@ final class AlertFigures
                 $strip[] = ['label' => $ar ? 'النافذة' : 'Window', 'value' => (int) $context['window_days'].' '.($ar ? 'يوم' : 'days')];
             }
 
-            return ['lead' => ['label' => self::metricLabel($metric, $ar), 'value' => self::metric($metric, (float) $value)], 'strip' => $strip];
+            $lead = isset($when['now_when']) ? trim(preg_replace('/\s*(الآن|now)$/u', '', self::metricLabel($metric, $ar)) ?? '').' · '.$when['now_when'] : self::metricLabel($metric, $ar);
+
+            return ['lead' => ['label' => $lead, 'value' => self::metric($metric, (float) $value)], 'strip' => $strip];
         }
 
         // Spend with no results — the count that is zero, beside the money it cost.
@@ -91,7 +97,7 @@ final class AlertFigures
     {
         $n = number_format((float) $value, 2);
 
-        return $currency === null || $currency === '' ? $n : $n.' '.$currency;
+        return FundingMoney::withMark($n, $currency);
     }
 
     private static function metric(string $metric, float $value): string

@@ -66,6 +66,9 @@ final class ProjectAbilities
         'campaigns.budget.change' => [ProjectCapability::BUDGET_MANAGE],
         'budget.view' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
         'budget.manage' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::BUDGET_MANAGE, ProjectCapability::MONEY_VIEW],
+        // FIN-LOOP-001 — an approved project budget is money: its readers read money, and a membership's `denied` list still wins.
+        'funding.view' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
+        'funding.manage' => [ProjectCapability::BUDGET_VIEW, ProjectCapability::MONEY_VIEW],
         'leads.view' => [ProjectCapability::LEADS_VIEW],
         'leads.update' => [ProjectCapability::LEADS_UPDATE],
         /* Named separately at the tenant layer too — see the note in `PermissionSeeder`. */
@@ -79,6 +82,25 @@ final class ProjectAbilities
         'users.invite' => [ProjectCapability::TEAM_MANAGE],
         'integrations.connect' => [ProjectCapability::INTEGRATIONS_MANAGE],
     ];
+
+    /**
+     * ACCESS-SECTIONS-001 — every tenant key that this class turns into at least one of these capabilities for a
+     * non-member. Read by `AccessSections::opens()` so «held by role» is exactly what the routes already accept.
+     *
+     * @param  list<string>  $capabilities
+     * @return list<string>
+     */
+    public static function tenantKeysGranting(array $capabilities): array
+    {
+        $out = [];
+        foreach (self::FROM_TENANT as $key => $caps) {
+            if (array_intersect($caps, $capabilities) !== []) {
+                $out[] = $key;
+            }
+        }
+
+        return $out;
+    }
 
     /**
      * The capabilities this user holds in this project. Empty when they hold none.
@@ -172,7 +194,8 @@ final class ProjectAbilities
      */
     private function fromTenant(User $user, string $projectId): array
     {
-        if (! $user->hasPermission('projects.view.all')) {
+        // TEAM-ROLE-PRESETS-001 — no named client and no `clients.view_all`: no tenant-wide reach (ProjectReach).
+        if (! $user->hasPermission('projects.view.all') || $this->reach->agencyMemberWithoutClients()) {
             return [];
         }
 

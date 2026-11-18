@@ -197,7 +197,12 @@ final class Sec1CrmReachTest extends TestCase
 
     public function test_an_opportunity_named_after_a_lead_hides_the_name_from_a_reader_without_identity_access(): void
     {
-        $viewer = $this->user('noid@crm.dev', ['leads.view', 'projects.view', 'projects.view.all']);
+        /*
+         * TEAM-ROLE-PRESETS-001 — `clients.view_all` added: an agency member who names no client and
+         * lacks it no longer gets tenant-wide project reach (ProjectReach::agencyMemberWithoutClients),
+         * which is what /agency/team already told the operator. This test is about the name, not reach.
+         */
+        $viewer = $this->user('noid@crm.dev', ['leads.view', 'projects.view', 'projects.view.all', 'clients.view_all']);
 
         $row = $this->actingAs($viewer, 'sanctum')->getJson("/api/v1/opportunities/{$this->oppA->id}")->assertOk()->json('data');
         $this->assertStringNotContainsString('Alice', (string) $row['name']);

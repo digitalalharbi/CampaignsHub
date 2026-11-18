@@ -8,6 +8,7 @@ use App\Domains\Billing\Models\Invoice;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
@@ -20,6 +21,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\RequestCatalogSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -140,6 +142,33 @@ final class ClientPortalVisibilityTest extends TestCase
         $res = $this->getJson('/api/v1/client/campaigns', $this->login('b@x.test'))->assertOk();
         $this->assertArrayHasKey('spend', $res->json('data.campaigns.0'));
         $this->assertSame('USD', $res->json('data.campaigns.0.currency'));
+    }
+
+    /**
+     * OBJECTIVE-RESULT-001 — the client sees each campaign's OWN result (visits for a traffic one), not
+     * «النتائج 0» read off conversions; and never its cost, which is money.
+     */
+    public function test_a_clients_campaign_carries_its_objective_result_and_no_cost(): void
+    {
+        $client = $this->client('a@x.test', '+966500000001');
+        $campaign = $this->campaign($client, 'Coffee');
+        $campaign->forceFill(['objective' => 'traffic'])->save();
+        foreach (['spend' => 1440.5, 'clicks' => 18464, 'landing_page_views' => 2881, 'conversions' => 0] as $key => $value) {
+            DailyMetric::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id, 'project_id' => $client['project']->id,
+                'external_account_id' => (string) Str::uuid(), 'external_campaign_id' => (string) Str::uuid(),
+                'unified_campaign_id' => $campaign->id, 'provider' => 'meta', 'metric_key' => $key,
+                'metric_date' => now()->subDays(2)->toDateString(), 'value' => $value, 'project_currency' => 'SAR',
+            ]);
+        }
+
+        $res = $this->getJson('/api/v1/client/campaigns', $this->login('a@x.test'))->assertOk();
+        $metrics = $res->json('data.campaigns.0.metrics');
+
+        $this->assertSame('landing_page_views', $metrics['result_key']);
+        $this->assertEquals(2881, $metrics['result']);
+        $this->assertSame('زيارات الصفحة', $metrics['result_label']['ar']);
+        $this->assertStringNotContainsString('cost_per_result', $res->getContent());
     }
 
     public function test_hidden_requests_are_not_listed_or_readable(): void

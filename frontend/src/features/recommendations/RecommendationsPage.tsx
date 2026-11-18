@@ -1,7 +1,11 @@
+import { AgencyFit, FitPanel, useFitCompact } from '@/components/fit/AgencyFit'
+import { DetailPanel } from '@/components/fit/DetailPanel'
+import { FitPaged } from '@/components/fit/FitPaged'
+import { TabStrip } from '@/components/fit/TabStrip'
 import { useMemo, useState } from 'react'
 import { useAuth } from '@/stores/auth'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 
 import { setRecommendationStatus, type RecommendationStatus, listRecommendations, type Recommendation, type RecommendationPriority } from './api'
 import { Badge } from '@/components/ui/Badge'
@@ -17,9 +21,11 @@ import { EmptyState } from '@/components/ui/States'
 import { ProjectChooser } from '@/features/projects/ProjectChooser'
 import { FilterBar, FilterSelect } from '@/components/ui/FilterBar'
 import { PageIntro } from '@/components/ui/PageIntro'
+import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { listProjects } from '@/features/projects/api'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 /**
  * RECOMMENDATIONS-001 — «ماذا نفعل الآن», on one screen.
@@ -50,13 +56,16 @@ export function RecommendationsPage() {
   const { currentProjectId } = useProject()
   const [status, setStatus] = useState('all')
   const [priority, setPriority] = useState('all')
+  /* AF2 — under /agency the page fits the screen: what the product noticed, and what the team wrote, are two tabs. */
+  const fit = useLocation().pathname.startsWith('/agency')
+  const [tab, setTab] = useState<'findings' | 'team'>('findings')
 
   const t = ar
     ? {
         title: 'التوصيات',
         purpose: 'ما يستحق التنفيذ الآن — مجمَّعًا من حملات المشروع، بأولويته وصاحبه وما بُني عليه.',
         status: 'الحالة', priority: 'الأولوية', all: 'الكل',
-        approve: 'اعتماد', review: 'مراجعة', reject: 'رفض', hide: 'إخفاء',
+        approve: 'اعتماد', review: 'مراجعة', reject: 'رفض', hide: 'إخفاء', details: 'التفاصيل', close: 'إغلاق',
         decisionFailed: 'تعذّر حفظ القرار.',
         empty: 'لا توجد توصيات في هذا المشروع بعد.',
         emptyFiltered: 'لا توجد توصيات تطابق هذه الفلاتر.',
@@ -70,7 +79,7 @@ export function RecommendationsPage() {
         title: 'Recommendations',
         purpose: 'What is worth doing now — gathered from the project’s campaigns, with its priority, its owner and what it rests on.',
         status: 'Status', priority: 'Priority', all: 'All',
-        approve: 'Approve', review: 'Review', reject: 'Reject', hide: 'Hide',
+        approve: 'Approve', review: 'Review', reject: 'Reject', hide: 'Hide', details: 'Details', close: 'Close',
         decisionFailed: 'The decision could not be saved.',
         empty: 'No recommendations have been written for this project yet.',
         emptyFiltered: 'No recommendations match these filters.',
@@ -172,6 +181,8 @@ export function RecommendationsPage() {
     return (
       <div className="space-y-6">
         <PageIntro title={t.title} purpose={t.purpose} />
+        {/* OPS-TABS-001 — recommendations open under the operations tab «التنبيهات». */}
+        <OpsHubBar />
         {/* PROJECT-FIRST-VISIT-001 — the choice is on the page, not behind the switcher. */}
         <ProjectChooser purpose="recommendations" />
       </div>
@@ -179,7 +190,7 @@ export function RecommendationsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <AgencyFit className="space-y-4" testid="recommendations-fit">
       {/*
         PRODUCT-VISUAL-001 §4 §17 — the scope and the severity mix, in the head.
 
@@ -208,13 +219,28 @@ export function RecommendationsPage() {
           )
           : undefined}
       />
-
+      <OpsHubBar />
+      <div className={fit ? 'flex flex-wrap items-center justify-between gap-x-4 gap-y-1' : 'contents'}>
+      <FinancialDisclaimer />
       {/* AGENTS-APPROVAL-GATEWAY-001 — the requests agents and colleagues have put forward, one press away. */}
       <p className="text-xs">
         <Link to={portalTo('/agents/approvals')} data-testid="approvals-link" className="font-semibold text-brand-700 hover:underline">
           {ar ? 'طلبات الموافقة على التغييرات' : 'Approvals for proposed changes'}
         </Link>
       </p>
+      </div>
+      {fit && (
+        <TabStrip
+          label={ar ? 'أقسام التوصيات' : 'Recommendation sections'}
+          testid="recommendations-tabs"
+          active={tab}
+          onChange={(k) => setTab(k as 'findings' | 'team')}
+          items={[
+            { key: 'findings', label: ar ? 'ما يحتاج قرارًا' : 'Needs a decision', count: findings.length },
+            { key: 'team', label: ar ? 'توصيات الفريق' : 'Written by the team', count: rows.length },
+          ]}
+        />
+      )}
 
       {/*
         RECOMMENDATIONS-ACTION-CENTER-002 — what the PRODUCT noticed, above what people wrote.
@@ -227,6 +253,8 @@ export function RecommendationsPage() {
         Every source fails independently and silently. An action centre that shows nothing because
         one of three sidecars is down is a worse outcome than one that shows two of them.
       */}
+      {(!fit || tab === 'findings') && (
+      <FitPanel className={fit ? '' : 'space-y-4'}>
       <FindingsBoard
         findings={findings}
         loading={signalsLoading}
@@ -236,10 +264,14 @@ export function RecommendationsPage() {
         ar={ar}
         activeCampaigns={campaigns.isSuccess ? (campaigns.data ?? []).filter((c) => (c.impressions ?? 0) > 0 || (c.spend ?? 0) > 0).length : null}
       />
+      </FitPanel>
+      )}
 
-      <h2 className="pt-2 text-base font-bold text-text-primary">{ar ? 'توصيات كتبها الفريق' : 'Recommendations the team wrote'}</h2>
-
+      {(!fit || tab === 'team') && (
+      <>
+      {!fit && <h2 className="pt-2 text-base font-bold text-text-primary">{ar ? 'توصيات كتبها الفريق' : 'Recommendations the team wrote'}</h2>}
       <FilterBar
+        density={fit ? 'dense' : undefined}
         id="recommendations"
         ar={ar}
         applied={[
@@ -268,14 +300,29 @@ export function RecommendationsPage() {
         <EmptyState title={filtersTouched ? t.emptyFiltered : t.empty} description="" />
       )}
 
-      <ul className="grid gap-3" data-testid="recommendations-list">
-        {rows.map((r) => (
-          <li key={r.id}>
-            <RecommendationRow rec={r} t={t} projectId={currentProjectId!} />
-          </li>
-        ))}
-      </ul>
-    </div>
+      {fit ? (
+        <FitPanel>
+          <FitPaged
+            items={rows}
+            itemHeight={92}
+            rowKey={(r) => String(r.id)}
+            render={(r) => <RecommendationRow rec={r} t={t} projectId={currentProjectId!} />}
+            ar={ar}
+            testid="recommendations-list"
+          />
+        </FitPanel>
+      ) : (
+        <ul className="grid gap-3" data-testid="recommendations-list">
+          {rows.map((r) => (
+            <li key={r.id}>
+              <RecommendationRow rec={r} t={t} projectId={currentProjectId!} />
+            </li>
+          ))}
+        </ul>
+      )}
+      </>
+      )}
+    </AgencyFit>
   )
 }
 
@@ -304,6 +351,54 @@ function RecommendationRow({ rec, t, projectId }: { rec: Recommendation; t: Reco
   /* A decision already taken is not offered again, and one with no campaign has no route to send it. */
   const open = rec.status !== 'approved' && rec.status !== 'rejected' && rec.status !== 'hidden'
   const decidable = canDecide && open && rec.campaign_id !== null
+  const compact = useFitCompact()
+  const [more, setMore] = useState(false)
+
+  /*
+   * AF2 — on a fitted `/agency` page a recommendation is one fixed-height card: its title, whose it is, the badges, and
+   * the decision buttons. The body, the proposed action, the evidence and the due date are the same record in the
+   * layer «Details» opens.
+   */
+  if (compact) {
+    const decide1 = (status: RecommendationStatus, label: string, primary = false) => (
+      <button key={status} type="button" disabled={decide.isPending} onClick={() => decide.mutate(status)}
+        className={`rounded-lg px-2.5 py-1 text-xs font-bold disabled:opacity-50 ${primary ? 'bg-brand-600 text-white hover:bg-brand-700' : 'border border-border text-text-primary hover:bg-surface-hover'}`}>{label}</button>
+    )
+
+    return (
+      <>
+        <article className="flex h-full min-w-0 flex-col justify-between gap-1 overflow-hidden rounded-xl border border-border bg-surface px-3 py-2" data-testid={`recommendation-${rec.id}`}>
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <h2 className="min-w-0 truncate text-sm font-bold text-text-primary" title={rec.title}>{rec.title}</h2>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Badge tone={rec.priority ? PRIORITY_TONE[rec.priority] : 'neutral'}>{rec.priority ? t.priorities[rec.priority] : rec.priority ?? '—'}</Badge>
+              <Badge tone={rec.status === 'approved' ? 'success' : 'neutral'}>{t.statuses[rec.status] ?? rec.status}</Badge>
+            </div>
+          </div>
+          <p className="truncate text-xs text-text-secondary">
+            {rec.campaign_name && (
+              <Link to={portalTo(`/campaigns/${projectId}/${rec.campaign_id}`)} className="font-semibold hover:text-text-primary">{rec.campaign_name}</Link>
+            )}
+            {rec.platform && <span> · {rec.platform}</span>}
+            {rec.kpi && <span> · {rec.kpi}</span>}
+          </p>
+          <div className="flex min-w-0 items-center gap-1.5">
+            {decidable && [decide1('approved', t.approve, true), decide1('reviewed', t.review), decide1('rejected', t.reject), decide1('hidden', t.hide)]}
+            {decide.isError && <span className="text-xs text-danger" data-testid={`recommendation-${rec.id}-failed`}>{t.decisionFailed}</span>}
+            <button type="button" onClick={() => setMore(true)} data-testid={`recommendation-${rec.id}-details`} className="ms-auto rounded-lg border border-border px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-surface-hover">{t.details}</button>
+          </div>
+        </article>
+        <DetailPanel open={more} onClose={() => setMore(false)} title={rec.title} closeLabel={t.close}>
+          <div className="space-y-2">
+            {rec.body && <p className="text-sm text-text-secondary">{rec.body}</p>}
+            {rec.proposed_action && <p className="text-sm text-text-primary"><span className="font-semibold">{t.action}: </span>{rec.proposed_action}</p>}
+            <p className="text-xs text-text-secondary"><span className="font-semibold">{t.evidence}: </span>{rec.evidence ? rec.evidence : <span className="italic opacity-80">{t.noEvidence}</span>}</p>
+            {rec.due_date && <p className="tnum text-xs text-text-secondary">{t.due}: {rec.due_date}</p>}
+          </div>
+        </DetailPanel>
+      </>
+    )
+  }
 
   return (
     <article className="rounded-xl border border-border bg-surface p-4" data-testid={`recommendation-${rec.id}`}>

@@ -228,6 +228,20 @@ final class ReportShare extends Model
     }
 
     /**
+     * REPORT-SETTINGS-AUDIT-001 — whether an operator ever saved this link's content panel (`settings.creatives`), master on OR off.
+     *
+     * A saved report's link applied the panel's copy switches only with the master on, so a panel saved with the master off kept
+     * publishing the headline and body its own switches (closed with the master) withheld — while the live link of the same share,
+     * and the panel itself, said they were hidden. A link made before the panel existed has no such key and keeps what it showed.
+     */
+    public function creativePanelConfigured(): bool
+    {
+        $panel = ((array) ($this->settings ?? []))['creatives'] ?? null;
+
+        return is_array($panel) && $panel !== [];
+    }
+
+    /**
      * Which optional sections this link may open — fail-closed, and closed for every older link.
      *
      * ATTRIB-VIS-001. Sibling of `creativeVisibility()` rather than a second pattern, because the

@@ -315,7 +315,7 @@ final class CreativeInsights
                 'Conversion rate is improving',
                 'ارتفع معدل التحويل من '.$this->pct($m['previous']).' إلى '.$this->pct($m['current']).'.',
                 'Conversion rate rose from '.$this->pct($m['previous']).' to '.$this->pct($m['current']).'.',
-                'ثبّت هذا المحتوى في المجموعة الإعلانية الحالية قبل توسيع الاستهداف، حتى يبقى التحسّن قابلًا للعزو إليه.',
+                'ثبّت هذا المحتوى في المجموعة الحالية قبل توسيع الاستهداف، حتى يبقى التحسّن قابلًا للعزو إليه.',
                 'Hold this creative in its current ad set before widening targeting, so the gain stays attributable to it.',
             );
         }

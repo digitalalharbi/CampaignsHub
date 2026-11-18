@@ -4,8 +4,8 @@ import { compact, money, moneyExact, num, percent, ratio } from './format'
 /**
  * COMPACT-ZERO-001 — the formatters may abbreviate a figure; they may not deny it.
  *
- * `compact()` rounded everything under 1000 with `Math.round`, so a cost of 0.028 SAR per impression
- * printed «0 SAR» on the funnel — «this step is free», beside a bar that cost thirty-six thousand
+ * `compact()` rounded everything under 1000 with `Math.round`, so a cost of 0.028 ر.س per impression
+ * printed «0 ر.س» on the funnel — «this step is free», beside a bar that cost thirty-six thousand
  * riyals. `CreativeDetailPage` had already met this and worked around it by refusing to put money on
  * its bars at all; the funnel had no such guard and stated the falsehood outright.
  */
@@ -19,7 +19,7 @@ describe('compact never rounds a real figure away to nothing', () => {
 
   it('still says zero when the figure IS zero', () => {
     expect(compact(0)).toBe('0')
-    expect(money(0, 'SAR')).toBe('0 SAR')
+    expect(money(0, 'SAR')).toBe('0 ر.س')
   })
 
   it('says nothing when there is nothing to say', () => {
@@ -62,20 +62,20 @@ describe('compact never rounds a real figure away to nothing', () => {
  */
 describe('moneyExact', () => {
   it('keeps the decimals on a cost-per, where they are the number', () => {
-    expect(moneyExact(29.71, 'SAR')).toBe('29.71 SAR')
-    expect(moneyExact(73.72, 'SAR')).toBe('73.72 SAR')
-    expect(moneyExact(1.83, 'SAR')).toBe('1.83 SAR')
+    expect(moneyExact(29.71, 'SAR')).toBe('29.71 ر.س')
+    expect(moneyExact(73.72, 'SAR')).toBe('73.72 ر.س')
+    expect(moneyExact(1.83, 'SAR')).toBe('1.83 ر.س')
   })
 
   it('leaves every large total reading exactly as it did', () => {
-    expect(moneyExact(96121, 'SAR')).toBe('96,121 SAR')
-    expect(moneyExact(96121.37, 'SAR')).toBe('96,121 SAR')
-    expect(moneyExact(8900, 'SAR')).toBe('8,900 SAR')
+    expect(moneyExact(96121, 'SAR')).toBe('96,121 ر.س')
+    expect(moneyExact(96121.37, 'SAR')).toBe('96,121 ر.س')
+    expect(moneyExact(8900, 'SAR')).toBe('8,900 ر.س')
   })
 
   it('does not dress a whole number in decimals it does not have', () => {
-    expect(moneyExact(30, 'SAR')).toBe('30 SAR')
-    expect(moneyExact(0, 'SAR')).toBe('0 SAR')
+    expect(moneyExact(30, 'SAR')).toBe('30 ر.س')
+    expect(moneyExact(0, 'SAR')).toBe('0 ر.س')
   })
 
   it('still says nothing rather than zero for an absent figure', () => {
@@ -155,6 +155,6 @@ describe('compact — three significant digits, trailing zeros dropped', () => {
 
   /* Currency is appended, never folded into the abbreviation. */
   it('states the currency beside the compact value', () => {
-    expect(money(4_850_000, 'SAR')).toBe('4.85M SAR')
+    expect(money(4_850_000, 'SAR')).toBe('4.85M ر.س')
   })
 })

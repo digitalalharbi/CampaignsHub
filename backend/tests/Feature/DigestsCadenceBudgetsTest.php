@@ -11,8 +11,12 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Notifications\Mail\AlertBundleMail;
+use App\Domains\Notifications\Mail\DailyDigestMail;
+use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Mail\SpendSummaryMail;
 use App\Domains\Notifications\Models\AppNotification;
+use App\Domains\Notifications\Providers\LaravelMailProvider;
 use App\Domains\Notifications\Services\DailyDigest;
 use App\Domains\Notifications\Services\DigestDispatcher;
 use App\Domains\Notifications\Services\MailSendGate;
@@ -34,6 +38,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 use Tests\TestCase;
@@ -105,6 +110,30 @@ final class DigestsCadenceBudgetsTest extends TestCase
     }
 
     // ── 1. Cadence ───────────────────────────────────────────────────────────
+
+    /** FINANCE-DIGEST-001 — a reader who opens budgets and nothing else receives the spend summary, never the performance digest. */
+    public function test_a_finance_reader_receives_the_spend_summary_not_the_performance_digest(): void
+    {
+        Mail::fake();
+        config([
+            'mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.provider.test', 'mail.mailers.smtp.username' => 'operator-login',
+            'providers.channels.email' => LaravelMailProvider::class,
+        ]);
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Finance', 'slug' => 'finance-cad-'.uniqid()]);
+        $role->givePermissionTo('projects.view', 'projects.view.all', 'clients.view', 'clients.view_all', 'budget.view', 'budget.manage');
+        $finance = User::create(['name' => 'Fin', 'email' => 'fin-'.uniqid().'@cad.test', 'password' => 'secret123']);
+        Membership::create(['tenant_id' => $this->tenant->id, 'user_id' => $finance->id, 'portal' => 'agency', 'status' => 'active']);
+        $finance->assignRole($role);
+        app(TenantContext::class)->forget();
+
+        $result = app(DigestDispatcher::class)->sendDaily($finance, (string) $this->tenant->id, Carbon::parse('2026-11-16'), 'ar', 'agency', null, true);
+
+        $this->assertSame('sent', $result);
+        Mail::assertSent(SpendSummaryMail::class);
+        Mail::assertNotSent(DailyDigestMail::class);
+        Mail::assertNotSent(OperationalDigestMail::class);
+    }
 
     public function test_the_digest_sweep_is_pinned_to_riyadh(): void
     {
@@ -289,7 +318,7 @@ final class DigestsCadenceBudgetsTest extends TestCase
         $this->assertSame('on_track', $b(['pace' => 1.0])['band']);
         $this->assertSame('ahead', $b(['pace' => 1.25])['band']);
         $this->assertSame('behind', $b(['pace' => 0.7])['band']);
-        $this->assertSame('6,000 SAR', $b(['pace' => 1.0])['remaining']);
+        $this->assertSame('6,000 ر.س', $b(['pace' => 1.0])['remaining']);
         $this->assertSame(40, $b(['pace' => 1.0])['used']);
 
         $over = $b(['spent' => 11000.0, 'pace' => 1.1]);
@@ -422,7 +451,7 @@ final class DigestsCadenceBudgetsTest extends TestCase
         $html = MailGallery::render('digest-project-monthly', 'ar');
         $this->assertStringContainsString('data-block="weeks"', (string) $html);
         $this->assertStringContainsString('data-block="budget"', (string) $html);
-        $this->assertStringContainsString('تقرير المشروع · الشهر', (string) $html);
+        $this->assertStringContainsString('ملخص المشروع • الشهر الماضي', (string) $html);
     }
 
     // ── 3. Every alert and notification in the approved grammar ─────────────

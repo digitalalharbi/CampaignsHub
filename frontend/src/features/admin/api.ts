@@ -1,4 +1,5 @@
 import { deleteData, getData, patchData, postData, putData } from '@/lib/api/client'
+import type { FxConversion } from '@/lib/money/fx'
 
 /**
  * The platform owner's console (ADMIN-001).
@@ -526,6 +527,14 @@ export interface AdminRegistration {
   concessions: Record<string, unknown> | null
   created_at: string | null
   tenant_id: string | null
+  /** PLATFORM-INBOX-ATTENTION-001 — the verification step it is held at, or null when it is not held at one. */
+  verification_stage?: {
+    channel: 'email' | 'mobile'
+    since: string | null
+    sends: number
+    last_sent_at: string | null
+    last_outcome: string | null
+  } | null
 }
 
 export interface RegistrationGates {
@@ -681,6 +690,17 @@ export function reevaluateRegistrationVerification(id: string, reason: string): 
   policy: RegistrationGates
 }> {
   return postData(`/admin/registrations/${id}/reevaluate-verification`, { reason })
+}
+
+/**
+ * PLATFORM-INBOX-ATTENTION-001 — a fresh challenge on the step the application is held at. The server sends it and
+ * returns only the outcome: the code or link is the applicant's, and nothing here verifies anything.
+ */
+export function resendRegistrationVerification(id: string): Promise<{
+  registration: AdminRegistration
+  verification: { channel: 'email' | 'mobile'; delivery_status: string; expires_at: string | null }
+}> {
+  return postData(`/admin/registrations/${id}/resend-verification`, {})
 }
 
 export interface RegistrationVerificationPolicy {
@@ -1310,24 +1330,115 @@ export interface StoredRate {
   rate: number
   rate_date: string
   source: string
+  /** FX-ENGINE-001 — manual · pegged · automatic */
+  kind?: 'manual' | 'pegged' | 'automatic'
+  effective_to?: string | null
+  note?: string | null
+  recorded_by?: string | null
+  version?: number
+  outcome?: 'applied' | 'shadowed'
+}
+
+/** FX-ENGINE-001 — a currency used by connected ad accounts, and whether it converts today. */
+export interface UsedCurrency {
+  currency: string
+  accounts: number
+  providers: string[]
+  status: 'valid' | 'stale' | 'missing' | 'base'
+  rate: number | null
+  rate_date: string | null
+  kind: string | null
+  source: string | null
+  recorded_by: string | null
+  withheld: number
+}
+
+export interface FxPolicy {
+  display_currency: 'USD' | 'SAR'
+  auto_source_enabled: boolean
+  auto_source: string
+  auto_source_label: string
+}
+
+export interface FxWorkspace { id: string; name: string; display_currency: 'USD' | 'SAR' | null; effective: 'USD' | 'SAR' }
+
+export interface FxAlert { id: string; kind: 'fx_rate_missing' | 'fx_rate_stale'; severity: string; currency: string; accounts: number; withheld: number; rate_date: string | null; since: string | null }
+
+export interface FxGuard { checked_from: string; stored_without_rate: number; unit_unknown_but_converted: number; bypasses: Record<string, number>; ok: boolean; ran_at?: string }
+
+export interface RateVersion {
+  id: string
+  rate: number
+  previous_rate: number | null
+  rate_date: string
+  effective_to: string | null
+  kind: string
+  source: string
+  note: string | null
+  version: number
+  outcome: 'applied' | 'shadowed'
+  recorded_by: string | null
+  recorded_at: string
+}
+
+export interface RecomputeSummary {
+  from: string
+  to: string
+  applied: boolean
+  examined: number
+  changed: number
+  released: number
+  withheld: number
+  unchanged: number
+  by_currency: Array<{ currency: string; rows: number; changed: number; before: number; after: number }>
+  entity: { examined: number; changed: number }
+  budgets_refreshed: number
 }
 
 export function fetchCurrencyRates(): Promise<{
   feed: CurrencyRateFeedState
   unmet_pairs: UnmetRatePair[]
   rates: StoredRate[]
+  policy?: FxPolicy
+  currencies?: UsedCurrency[]
+  alerts?: FxAlert[]
+  workspaces?: FxWorkspace[]
+  guard?: FxGuard | null
 }> {
   return getData('/admin/fx/rates')
 }
 
-/** Hand entry is a first-class path: an operator is a real source, and the rate records who they are. */
+/** Hand entry is a first-class path: an operator is a real source, and the rate records who they are. Editing makes a new version. */
 export function recordCurrencyRate(body: {
   base: string
   quote: string
   rate: number
   rate_date: string
+  effective_to?: string | null
+  note?: string | null
+  kind?: 'manual' | 'pegged'
 }): Promise<StoredRate> {
   return postData('/admin/fx/rates', body)
+}
+
+export function fetchRateHistory(base: string, quote: string): Promise<{ versions: RateVersion[] }> {
+  return getData(`/admin/fx/rates/history?base=${encodeURIComponent(base)}&quote=${encodeURIComponent(quote)}`)
+}
+
+export function updateFxPolicy(body: Partial<Pick<FxPolicy, 'display_currency' | 'auto_source_enabled'>>): Promise<FxPolicy> {
+  return putData('/admin/fx/policy', body)
+}
+
+export function setWorkspaceDisplayCurrency(tenantId: string, display_currency: 'USD' | 'SAR' | null): Promise<FxWorkspace> {
+  return putData(`/admin/fx/workspaces/${tenantId}/display-currency`, { display_currency })
+}
+
+export function previewConversion(body: { amount: number; from: string; to: string; date: string }): Promise<FxConversion> {
+  return postData('/admin/fx/preview', body)
+}
+
+export function recomputeConverted(body: { from: string; to: string; apply?: boolean }): Promise<RecomputeSummary> {
+  return postData('/admin/fx/recompute', body)
 }
 
 /*
@@ -1750,6 +1861,8 @@ export interface ServiceRequestDetail extends ServiceRequestRow {
   messages: { id: number; from_visitor: boolean; author: string | null; body: string; at: string | null }[]
   files: { id: number; name: string; size: number; mime: string | null; at: string | null }[]
   activity: { type: string; from: string | null; to: string | null; message: string | null; actor_id: number | null; at: string | null }[]
+  /** PLATFORM-INBOX-ATTENTION-001 — what the console emailed the visitor, each with the mail ledger's state. */
+  replies?: InboxReply[]
 }
 
 export type ServiceRequestFilter = 'open' | 'unassigned' | 'all'
@@ -1774,4 +1887,164 @@ export function updateServiceRequest(
   body: { status?: string; assigned_to?: number | null; reason?: string },
 ): Promise<{ request: ServiceRequestDetail }> {
   return patchData(`/admin/service-requests/${encodeURIComponent(id)}`, body)
+}
+
+/** PLATFORM-INBOX-ATTENTION-001 — reply to the visitor: on their tracking page, and by email to the request's contact. */
+export function replyToServiceRequest(id: string, body: string): Promise<{ request: ServiceRequestDetail }> {
+  return postData(`/admin/service-requests/${encodeURIComponent(id)}/reply`, { body })
+}
+
+/*
+ * PLATFORM-INBOX-ATTENTION-001 — «الوارد»: contact messages, support tickets and data requests.
+ *
+ * Addressed to the platform, never to a workspace. Opening a row marks it read for everyone; a reply goes by email to
+ * the address the visitor gave, and its state is the mail ledger's — `awaiting_credentials` says no mail left.
+ */
+export type InboxQueue = 'contact' | 'support' | 'data'
+
+export interface InboxSummary {
+  contact: { unread: number; open: number }
+  support: { unread: number; open: number }
+  data: { unread: number; open: number }
+  unread: number
+}
+
+export interface InboxReply { id: string; author: string | null; body: string; delivery_status: string; at: string | null }
+
+interface InboxRowBase {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  status: string
+  read_at: string | null
+  created_at: string
+  locale: string | null
+}
+
+export interface ContactMessageRow extends InboxRowBase {
+  company: string | null
+  topic: string | null
+  source: string | null
+  subject: string | null
+  message: string | null
+}
+
+export interface SupportTicketRow extends InboxRowBase {
+  reference: string
+  subject: string
+  message: string
+  category: string
+  priority: string | null
+}
+
+export interface DataRequestRow extends InboxRowBase {
+  reference: string
+  type: string
+  details: string | null
+  source: string | null
+  verified_at: string | null
+}
+
+export type InboxRow = ContactMessageRow | SupportTicketRow | DataRequestRow
+
+export const INBOX_STATUSES: Record<InboxQueue, readonly string[]> = {
+  contact: ['new', 'read', 'answered', 'closed', 'spam'],
+  support: ['open', 'in_progress', 'waiting_on_customer', 'resolved', 'closed'],
+  data: ['pending', 'verifying', 'in_review', 'blocked', 'completed', 'rejected', 'withdrawn'],
+}
+
+const INBOX_PATH: Record<InboxQueue, string> = {
+  contact: '/admin/legal/contact-messages',
+  support: '/admin/legal/support-tickets',
+  data: '/admin/legal/data-requests',
+}
+
+const INBOX_LIST_KEY: Record<InboxQueue, 'messages' | 'tickets' | 'requests'> = {
+  contact: 'messages',
+  support: 'tickets',
+  data: 'requests',
+}
+
+const INBOX_ROW_KEY: Record<InboxQueue, 'message' | 'ticket' | 'request'> = {
+  contact: 'message',
+  support: 'ticket',
+  data: 'request',
+}
+
+export const fetchInboxSummary = () => getData<InboxSummary>('/admin/inbox/summary')
+
+export async function fetchInbox(queue: InboxQueue, page = 1): Promise<{ rows: InboxRow[]; total: number; unread: number }> {
+  const data = await getData<Record<string, unknown>>(`${INBOX_PATH[queue]}?page=${page}`)
+
+  return {
+    rows: (data[INBOX_LIST_KEY[queue]] as InboxRow[] | undefined) ?? [],
+    total: Number(data.total ?? 0),
+    unread: Number(data.unread ?? 0),
+  }
+}
+
+export async function fetchInboxItem(queue: InboxQueue, id: string): Promise<{ row: InboxRow; replies: InboxReply[] }> {
+  const data = await getData<Record<string, unknown>>(`${INBOX_PATH[queue]}/${encodeURIComponent(id)}`)
+
+  return { row: data[INBOX_ROW_KEY[queue]] as InboxRow, replies: (data.replies as InboxReply[] | undefined) ?? [] }
+}
+
+export function updateInboxStatus(queue: InboxQueue, id: string, status: string): Promise<unknown> {
+  return patchData(`${INBOX_PATH[queue]}/${encodeURIComponent(id)}`, { status })
+}
+
+export async function replyToInboxItem(queue: Exclude<InboxQueue, 'data'>, id: string, body: string): Promise<{ delivery_status: string }> {
+  const data = await postData<{ reply: { delivery_status: string } }>(`${INBOX_PATH[queue]}/${encodeURIComponent(id)}/reply`, { body })
+
+  return data.reply
+}
+
+/*
+ * PLATFORM-PAYMENT-ALERTS-001 — customers stuck at payment or sign-up, for the platform owner only.
+ *
+ * The server writes every word and draws every card (the same card the owner's email carries), from recorded facts
+ * only. The screen lays it out; it adds no figure of its own.
+ */
+export type PlatformAlertState = 'ok' | 'watch' | 'bad' | 'none'
+
+export type PlatformAlertViz =
+  | { type: 'steps'; steps: { label: string; state: PlatformAlertState }[] }
+  | { type: 'count'; n: number; blocks: number; more: boolean; label: string; state: PlatformAlertState }
+
+export interface PlatformAlertRow {
+  id: string
+  kind: 'checkout_abandoned' | 'payment_unverified' | 'payment_activation_mismatch' | 'settlement_missing' | 'customer_blocking_error'
+  severity: 'critical' | 'warning'
+  card: {
+    severity: string
+    title: string
+    context: string
+    line: string
+    more: string[]
+    steps: string
+    viz: PlatformAlertViz
+    links: { label: string; path: string }[]
+  }
+  occurrences: number
+  first_seen_at: string | null
+  last_seen_at: string | null
+  emailed_at: string | null
+  resolved_at: string | null
+  acknowledged_at: string | null
+  contact: { email: string | null; phone: string | null } | null
+}
+
+export interface PlatformAlertList {
+  alerts: PlatformAlertRow[]
+  counts: { open: number; critical: number; by_kind: Record<string, number> }
+  settlement_check: 'available' | 'BLOCKED_EXTERNAL_CREDENTIALS' | 'refused_by_gateway' | 'no_settlement_history'
+}
+
+export function fetchPlatformAlerts(scope: 'open' | 'all' = 'open'): Promise<PlatformAlertList> {
+  return getData<PlatformAlertList>(`/admin/platform-alerts?status=${scope}`)
+}
+
+export function acknowledgePlatformAlert(id: string, acknowledged: boolean): Promise<{ alert: PlatformAlertRow }> {
+  return patchData(`/admin/platform-alerts/${encodeURIComponent(id)}`, { acknowledged })
 }

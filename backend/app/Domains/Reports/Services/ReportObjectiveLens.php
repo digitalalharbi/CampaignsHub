@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Funding\Support\FundingMoney;
 
 /**
  * What a report of this kind is allowed to say — §14.6.
@@ -88,6 +89,29 @@ final class ReportObjectiveLens
     }
 
     /**
+     * REPORT-MULTI-OBJECTIVE-001 — EVERY template a scope's objective choice names, in the order chosen.
+     *
+     * `fromScopeObjectives()` returns the first match, which is what folded «زيارات + مبيعات» into one template. This keeps them all; one
+     * entry means one objective, exactly as before.
+     *
+     * @param  list<string>  $objectives
+     * @return list<string>
+     */
+    public static function templatesOf(array $objectives): array
+    {
+        $out = [];
+        foreach ($objectives as $objective) {
+            foreach (self::TEMPLATE_MEMBERS as $template => $members) {
+                if (in_array($objective, $members, true) || $objective === $template) {
+                    $out[$template] = true;
+                }
+            }
+        }
+
+        return array_keys($out);
+    }
+
+    /**
      * The report objective for a scope, from the campaigns' own declarations.
      *
      * @param  list<array<string,mixed>>  $campaigns  rows from `MetricsAggregator::byCampaign()`
@@ -101,10 +125,18 @@ final class ReportObjectiveLens
             if ((float) ($c['spend'] ?? 0) <= 0) {
                 continue;
             }
-            if (($c['objective_source'] ?? 'unset') === 'unset') {
+            $objective = CampaignObjective::tryFrom((string) ($c['objective'] ?? ''));
+            /*
+             * OBJECTIVE-GAPS-001 — the column DEFAULT is the placeholder, not `unset` itself.
+             *
+             * `objective_source = unset` also covers a real objective the importer seeded (17 TikTok
+             * WEB_CONVERSIONS campaigns on Production carry `conversions` that way), and skipping
+             * those let a traffic or sales month fall back to the outcome heuristic. Only `other` —
+             * what the column defaults to — under an `unset` source is «nobody classified it».
+             */
+            if (($c['objective_source'] ?? 'unset') === 'unset' && ($objective === null || $objective === CampaignObjective::Other)) {
                 continue;
             }
-            $objective = CampaignObjective::tryFrom((string) ($c['objective'] ?? ''));
             if ($objective !== null) {
                 $declared[] = $objective;
             }
@@ -224,7 +256,7 @@ final class ReportObjectiveLens
         return match ($this->rankingMetric()['key']) {
             'roas' => number_format($value, 2).'×',
             'ctr' => number_format($value * 100, 2).'%',
-            default => number_format($value, 2).' '.$currency,
+            default => FundingMoney::withMark(number_format($value, 2), $currency),
         };
     }
 }

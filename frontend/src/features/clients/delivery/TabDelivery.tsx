@@ -16,6 +16,7 @@ import {
   preparePack, setComponents, setRecommendationStatus, uploadEvidence, whatsappText,
   type DeliveryPack, type PackDetail, type PackRecommendation,
 } from './deliveryApi'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * WD-PACK-001, WD-DRAFTS-001, WD-WHATSAPP-001, WD-EVIDENCE-001 — the periodic delivery, as the Owner works it.
@@ -28,7 +29,7 @@ import {
  */
 const COPY = {
   ar: {
-    title: 'التسليم الدوري', prepare: 'تجهيز الأسبوع الماضي', none: 'لا توجد حزم تسليم بعد. جهّز الأسبوع الماضي لتبدأ.',
+    title: 'الجدولة الدورية', prepare: 'تجهيز الأسبوع الماضي', none: 'لا توجد حزم تسليم بعد. جهّز الأسبوع الماضي لتبدأ.',
     week: 'الأسبوع', draft: 'مسودة', approved: 'معتمدة', sent: 'أُرسلت', ready: 'جاهزة للاعتماد',
     checklist: 'قبل الاعتماد', report: 'التقرير', reportStates: { completed: 'جاهز', processing: 'قيد الإعداد', failed: 'فشل', missing: 'غير موجود' } as Record<string, string>,
     undecided: 'توصيات بلا قرار', evidenceCount: 'لقطات منصات', invoice: 'الفاتورة', invoiceNone: 'غير مرتبطة',
@@ -323,7 +324,7 @@ function Evidence({ pack, clientId, t, ar, open, onChange }: { pack: PackDetail;
               {e.mime?.startsWith('image/') ? <img src={evidenceFileUrl(e.id)} alt={e.original_name} loading="lazy" className="h-9 w-9 shrink-0 rounded object-cover" /> : <ProviderMark provider={e.provider} />}
               <span className="truncate text-xs text-text-primary">{e.note || e.original_name}</span>
             </a>
-            {open && <button type="button" onClick={() => remove.mutate(e.id)} aria-label={t.remove} className="rounded p-1 text-text-muted hover:text-danger"><X size={14} /></button>}
+            {open && <button type="button" disabled={remove.isPending} onClick={() => remove.mutate(e.id)} aria-label={t.remove} className="rounded p-1 text-text-muted hover:text-danger"><X size={14} /></button>}
           </li>
         ))}
       </ul>
@@ -361,9 +362,9 @@ function InvoiceLink({ pack, clientId, t, open, onChange }: { pack: PackDetail; 
   return (
     <div>
       <h4 className="mb-2 font-bold text-text-primary">{t.invoice}</h4>
-      <select data-testid="pack-invoice" value={pack.invoice_id ?? ''} onChange={(e) => e.target.value && attach.mutate(Number(e.target.value))} aria-label={t.pickInvoice} className="rounded-lg border border-border bg-surface px-2 py-2 text-xs">
+      <select data-testid="pack-invoice" value={pack.invoice_id ?? ''} disabled={attach.isPending} onChange={(e) => e.target.value && attach.mutate(Number(e.target.value))} aria-label={t.pickInvoice} className="rounded-lg border border-border bg-surface px-2 py-2 text-xs">
         <option value="">{t.pickInvoice}</option>
-        {mine.map((i) => <option key={i.id} value={i.id}>{i.number} — {Number(i.total).toLocaleString('en-US')} {i.currency}</option>)}
+        {mine.map((i) => <option key={i.id} value={i.id}>{i.number} — {withMark(Number(i.total).toLocaleString('en-US'), i.currency)}</option>)}
       </select>
     </div>
   )

@@ -22,9 +22,9 @@ const input = 'w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 t
  * the mode, the schedule and the safeguards. The project (and so the client) is the page's; a scope can
  * only name that project's own objects, and the server re-checks it.
  */
-export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { projectId: string; catalog: Catalog; rule: AutomationRule | null; ar: boolean; onClose: () => void }) {
+export function RuleBuilder({ projectId, catalog, rule, draft = null, ar, onClose }: { projectId: string; catalog: Catalog; rule: AutomationRule | null; /** OPS-READY-AGENTS-001 — a ready agent's rule to start from. */ draft?: RuleInput | null; ar: boolean; onClose: () => void }) {
   const qc = useQueryClient()
-  const [f, setF] = useState<RuleInput>(() => (rule ? { ...EMPTY, ...rule, scope: rule.scope ?? {} } : EMPTY))
+  const [f, setF] = useState<RuleInput>(() => (rule ? { ...EMPTY, ...rule, scope: rule.scope ?? {} } : draft ?? EMPTY))
   const targets = useQuery({ queryKey: ['automation-targets', projectId], queryFn: () => getTargets(projectId), retry: false })
   const support = useQuery({ queryKey: ['automation-metric-support', projectId], queryFn: () => getMetricSupport(projectId), retry: false })
   const save = useMutation({
@@ -87,7 +87,7 @@ export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { project
             <Pick label={ar ? 'الحسابات الإعلانية' : 'Ad accounts'} all={ar ? 'كل الحسابات' : 'All accounts'} options={accounts.map((a) => ({ id: a.id, name: `${platformLabel(a.provider, ar)} · ${a.name}` }))} value={f.scope.account_ids ?? []} onChange={(v) => setScope('account_ids', v)} testid="rule-accounts" />
             <Pick label={ar ? 'الحملات' : 'Campaigns'} all={ar ? 'كل الحملات' : 'All campaigns'} options={campaigns.map((c) => ({ id: c.id, name: `${platformLabel(c.provider, ar)} · ${c.name ?? c.id}` }))} value={f.scope.campaign_ids ?? []} onChange={(v) => setScope('campaign_ids', v)} testid="rule-campaigns" />
             {f.level !== 'campaign' && (
-              <Pick label={ar ? 'المجموعات الإعلانية' : 'Ad groups'} all={ar ? 'كل المجموعات' : 'All ad groups'} options={adSets.map((s) => ({ id: s.id, name: s.name ?? s.id }))} value={f.scope.ad_set_ids ?? []} onChange={(v) => setScope('ad_set_ids', v)} testid="rule-adsets" />
+              <Pick label={ar ? 'المجموعات' : 'Ad groups'} all={ar ? 'كل المجموعات' : 'All ad groups'} options={adSets.map((s) => ({ id: s.id, name: s.name ?? s.id }))} value={f.scope.ad_set_ids ?? []} onChange={(v) => setScope('ad_set_ids', v)} testid="rule-adsets" />
             )}
           </Section>
 
@@ -172,7 +172,7 @@ export function RuleBuilder({ projectId, catalog, rule, ar, onClose }: { project
               <Field label={ar ? 'المنطقة الزمنية' : 'Time zone'}>
                 <input className={input} dir="ltr" value={f.schedule.timezone ?? 'Asia/Riyadh'} onChange={(e) => set('schedule', { ...f.schedule, timezone: e.target.value })} />
               </Field>
-              <Field label={ar ? 'فترة التهدئة (ساعات)' : 'Cooldown (hours)'}>
+              <Field label={ar ? 'المدة بين التنبيهات (ساعات)' : 'Cooldown (hours)'}>
                 <input className={input} type="number" min={1} max={720} dir="ltr" value={f.cooldown_hours} onChange={(e) => set('cooldown_hours', Number(e.target.value))} data-testid="rule-cooldown" />
               </Field>
             </div>

@@ -69,7 +69,6 @@ const STILL_HAND_DRAWN = [
   'src/features/billing/PaymentsPage.tsx',
   'src/features/billing/QuotesPage.tsx',
   'src/features/campaigns/CampaignDetailPage.tsx',
-  'src/features/clients/ClientCommandCenterPage.tsx',
   'src/features/content/CreativeDetailPage.tsx',
   'src/features/content/CreativeGroupsPage.tsx',
   'src/features/crm/LeadsPage.tsx',

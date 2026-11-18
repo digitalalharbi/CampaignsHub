@@ -117,6 +117,9 @@ return [
     */
     'daily_limit_per_tenant' => (int) env('MAIL_DAILY_LIMIT_PER_TENANT', 1000),
 
+    // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — how many recipients OUTSIDE the platform one workspace may add (each is also charged to the daily allowance above).
+    'external_recipients_per_tenant' => 25,
+
     /*
     | DIGESTS-CADENCE-BUDGETS-001 — the part of that daily allowance digests may NOT spend, kept for alerts. Thirty projects ×
     | three rhythms × several readers is a morning of mail; an alert raised that afternoon must still be able to leave.
@@ -143,6 +146,13 @@ return [
     | default so merging changes nothing in an inbox until the Owner turns it on.
     */
     'operational_digests' => (bool) env('MAIL_OPERATIONAL_DIGESTS', true),
+
+    /*
+    | NOTIF-V2-ENGINE-001 — when the SMTP username is an address and From differs, every message carries a Sender header
+    | with the authenticated mailbox, so the SMTP envelope is the address the provider verified (Hostinger refuses any other
+    | with «553 Sender address rejected: not owned by user»). See App\Domains\Notifications\Engine\Mail\AlignEnvelopeSender.
+    */
+    'align_envelope_sender' => true,
 
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),

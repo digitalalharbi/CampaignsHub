@@ -22,14 +22,14 @@ const COPY = {
     title: 'الحملات', subtitle: 'متابعة مباشرة لأداء حملاتك — المؤشرات الرئيسية.',
     none: 'لا توجد حملات بعد.', noMatch: 'لا توجد حملات تطابق هذا البحث.', error: 'تعذّر تحميل الحملات.',
     search: 'ابحث باسم الحملة', allStatus: 'كل الحالات', allObjective: 'كل الأهداف', allProjects: 'كل المشاريع',
-    period: 'الفترة', to: '←', impressions: 'الظهور', clicks: 'النقرات', conversions: 'النتائج', ctr: 'نسبة النقر',
+    period: 'الفترة', to: '←', impressions: 'الظهور', clicks: 'النقرات', conversions: 'تحويلات المنصة', ctr: 'نسبة النقر',
     unnamed: 'حملة', prev: 'السابق', next: 'التالي', of: 'من', showing: 'تعرض',
   },
   en: {
     title: 'Campaigns', subtitle: 'A live view of your campaign delivery — the headline metrics.',
     none: 'No campaigns yet.', noMatch: 'No campaigns match this search.', error: 'Could not load campaigns.',
     search: 'Search by campaign name', allStatus: 'All statuses', allObjective: 'All objectives', allProjects: 'All projects',
-    period: 'Period', to: '→', impressions: 'Impressions', clicks: 'Clicks', conversions: 'Results', ctr: 'CTR',
+    period: 'Period', to: '→', impressions: 'Impressions', clicks: 'Clicks', conversions: 'Platform conversions', ctr: 'CTR',
     unnamed: 'Campaign', prev: 'Previous', next: 'Next', of: 'of', showing: 'Showing',
   },
 }
@@ -147,7 +147,13 @@ function CampaignRow({ campaign, t, locale }: { campaign: PortalCampaign; t: typ
       <dl className="mt-1.5 flex flex-wrap gap-x-5 gap-y-0.5 text-xs">
         <Metric label={t.impressions} value={formatNumber(m.impressions)} />
         <Metric label={t.clicks} value={formatNumber(m.clicks)} />
-        <Metric label={t.conversions} value={formatNumber(m.conversions)} />
+        {/*
+          OBJECTIVE-RESULT-001 — the campaign's OWN result, named in its unit (visits for a traffic
+          campaign); conversions only where the server sent no result (an older payload).
+        */}
+        {m.result_label || m.result_missing_label
+          ? <Metric label={(locale === 'ar' ? m.result_label?.ar : m.result_label?.en) ?? (locale === 'ar' ? 'النتيجة' : 'Result')} value={m.result === null || m.result === undefined ? ((locale === 'ar' ? m.result_missing_label?.ar : m.result_missing_label?.en) ?? '—') : formatNumber(m.result)} />
+          : <Metric label={t.conversions} value={formatNumber(m.conversions)} />}
         <Metric label={t.ctr} value={ctr} />
       </dl>
     </li>

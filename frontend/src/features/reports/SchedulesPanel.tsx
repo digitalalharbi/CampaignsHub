@@ -59,7 +59,7 @@ export function SchedulesPanel({ projectId }: { projectId: string }) {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['report-schedules', projectId] })
 
   const toggle = useMutation({ mutationFn: (id: string) => toggleSchedule(projectId, id), onSuccess: invalidate })
-  const run = useMutation({ mutationFn: (id: string) => runScheduleNow(projectId, id), onSuccess: invalidate })
+  const run = useMutation({ meta: { feedback: 'none' }, mutationFn: (id: string) => runScheduleNow(projectId, id), onSuccess: invalidate })
   const remove = useMutation({ mutationFn: (id: string) => deleteSchedule(projectId, id), onSuccess: invalidate })
 
   const rows = q.data ?? []
@@ -99,7 +99,10 @@ export function SchedulesPanel({ projectId }: { projectId: string }) {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-bold text-text-primary">{s.name}</span>
-                    <Badge tone={s.active ? 'success' : 'neutral'}>{s.active ? 'مفعّلة' : 'موقوفة'}</Badge>
+                    {/* CONS-SCHEDULE-ONE — a copy switched off because another schedule builds the same report. */}
+                    {s.disabled_reason === 'duplicate_schedule'
+                      ? <Badge tone="warning" data-testid={`schedule-copy-${s.id}`}>نسخة غير مجدولة</Badge>
+                      : <Badge tone={s.active ? 'success' : 'neutral'}>{s.active ? 'مفعّلة' : 'موقوفة'}</Badge>}
                     {s.is_demo && <Badge tone="warning">تجريبية</Badge>}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">

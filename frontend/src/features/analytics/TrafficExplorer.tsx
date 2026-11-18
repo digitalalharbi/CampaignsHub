@@ -129,7 +129,7 @@ export function TrafficExplorer({ projectId, range, ar }: { projectId: string; r
     },
     { key: 'sessions', header: ar ? 'الجلسات' : 'Sessions', sortable: true, align: 'end', value: (r) => r.sessions ?? -1, render: (r) => <span dir="ltr" className="tnum">{num(r.sessions)}</span> },
     { key: 'engagement_rate', header: ar ? 'التفاعل' : 'Engagement', sortable: true, align: 'end', hideable: true, value: (r) => r.engagement_rate ?? -1, render: (r) => <span dir="ltr" className="tnum">{r.engagement_rate != null ? percent(r.engagement_rate, 0) : '—'}</span> },
-    { key: 'purchases', header: ar ? 'المشتريات' : 'Purchases', sortable: true, align: 'end', value: (r) => r.purchases ?? -1, render: (r) => <span dir="ltr" className="tnum">{num(r.purchases)}</span> },
+    { key: 'purchases', header: ar ? 'الطلبات' : 'Purchases', sortable: true, align: 'end', value: (r) => r.purchases ?? -1, render: (r) => <span dir="ltr" className="tnum">{num(r.purchases)}</span> },
     { key: 'add_to_carts', header: ar ? 'إضافات للسلة' : 'Add to carts', sortable: true, align: 'end', hideable: true, defaultHidden: true, render: (r) => <span dir="ltr" className="tnum">{num(r.add_to_carts ?? null)}</span> },
     { key: 'checkouts', header: ar ? 'بدء الدفع' : 'Checkouts', sortable: true, align: 'end', hideable: true, defaultHidden: true, render: (r) => <span dir="ltr" className="tnum">{num(r.checkouts ?? null)}</span> },
     { key: 'conversion_rate', header: ar ? 'التحويل' : 'Conversion', sortable: true, align: 'end', hideable: true, value: (r) => r.conversion_rate ?? -1, render: (r) => <span dir="ltr" className="tnum">{r.conversion_rate != null ? percent(r.conversion_rate, 2) : '—'}</span> },

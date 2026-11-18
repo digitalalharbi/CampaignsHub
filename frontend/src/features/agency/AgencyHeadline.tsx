@@ -1,26 +1,25 @@
 import { useMemo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, ArrowRight } from 'lucide-react'
 import { fetchAgencyOverview } from './api'
 import { listAlertEvents, type AlertEvent } from '@/features/alerts/api'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { DataFreshness } from '@/components/ui/PageIntro'
-import { PeriodLabel } from '@/components/patterns/Status'
-import { FilterChips } from '@/components/ui/FilterBar'
-import { useUrlNumber } from '@/features/analytics/filterUrlState'
-import { lastNDays } from '@/features/analytics/api'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
+import { usePeriod } from '@/lib/period/usePeriod'
 import { Badge } from '@/components/ui/Badge'
 import { Skeleton } from '@/components/ui/States'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { ChartCard, KpiSparkline, SpendRevenueAreaChart } from '@/features/analytics/charts'
 import { sparkFor } from '@/features/analytics/metricCatalog'
 import type { TimePoint } from '@/features/analytics/api'
-import { money, num, ratio } from '@/features/analytics/format'
-import { formatMoneyReading, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
-import { allowsDerived, comparableWindows, coverageNote, readCoverage, windowsUnlikeNote } from '@/lib/coverage/contract'
+import { money, num, percent, ratio } from '@/features/analytics/format'
+import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
+import { comparableWindows, coverageNote, readCoverage, windowsUnlikeNote } from '@/lib/coverage/contract'
 import { providerLabel } from '@/features/campaigns/labels'
 import { headline as alertHeadline } from '@/features/recommendations/findingCopy'
+import { campaigns, countedEn } from '@/lib/counted'
 
 /**
  * DASHBOARD-FIRST-SCREEN-001 — the agency dashboard answers «what is happening» before it counts.
@@ -47,15 +46,25 @@ const STALE_AFTER_HOURS = 36
 const SEVERITY_ORDER: Record<AlertEvent['severity'], number> = { critical: 0, warning: 1, info: 2 }
 
 /**
- * The window is part of the ADDRESS (`?days=7|30|90`), as on Analytics, so a reload, Back and a
- * shared link show the same figures; the three components read the same key and share one cached read.
+ * DATE-RANGE-001 — the window is the system's one period (`from`, `to`, `compare` in the ADDRESS), so a reload,
+ * Back and a shared link show the same figures and the same days as every other page; the three components
+ * read the same key and share one cached read. Rolling presets end YESTERDAY, as the ad platforms' do.
  */
 function useOverview() {
-  const [days, setDays] = useUrlNumber('days', 30)
-  const range = useMemo(() => lastNDays(days), [days])
-  const query = useQuery({ queryKey: ['agency', 'overview', days], queryFn: () => fetchAgencyOverview(range), retry: false })
+  const { range, compareRange, period } = usePeriod()
+  const query = useQuery({
+    queryKey: ['agency', 'overview', range.from, range.to, compareRange?.from ?? null, compareRange?.to ?? null],
+    queryFn: () => fetchAgencyOverview(range, compareRange),
+    retry: false,
+    /*
+     * FILTERS-LIVE-001 — a new period keeps the figures on screen until the new ones land (no skeleton flash, and the
+     * period picker — which lives inside this block — is not torn down while it is open). The key holds no client, so
+     * this can never show one client's figures under another's name.
+     */
+    placeholderData: keepPreviousData,
+  })
 
-  return { ...query, days, setDays }
+  return { ...query, period }
 }
 
 function alertPath(a: AlertEvent): string {
@@ -68,7 +77,43 @@ function Door({ to, children }: { to: string; children: ReactNode }) {
   return <Link to={to} className="block transition-colors [&>*]:hover:border-brand-400">{children}</Link>
 }
 
-export function AgencyHeadline({ ar }: { ar: boolean }) {
+/**
+ * The window row: the period picker, how fresh the figures are, and what they are compared with — said ONCE for all the
+ * cards under it. Its own component so the fitted dashboard can seat it in the toolbar of both tabs that read the period.
+ */
+export function AgencyPeriodBar({ ar }: { ar: boolean }) {
+  const overview = useOverview()
+  const d = overview.data
+  const current = (d?.current ?? undefined) as MoneyTotals | undefined
+  const previous = (d?.previous ?? undefined) as MoneyTotals | undefined
+  const currency = d?.currency ?? null
+  const comparable = current !== undefined && previous !== undefined && comparableWindows({ current, previous })
+
+  if (overview.isLoading || overview.isError || !d) return <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary"><DateRangePicker budgetHint testId="agency-period-picker" /></div>
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
+      <DateRangePicker budgetHint testId="agency-period-picker" />
+      <DataFreshness lastSyncAt={d.freshness.last_synced_at} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="agency-freshness" />
+      {/*
+        The comparison window, said ONCE. It rode inside every movement pill («+22% since 2026-08-12»),
+        which on a half-width phone card in English was wider than the card and scrolled the page
+        sideways (responsive-sweep, chromium, ltr). One line here says it for all four.
+      */}
+      {comparable && (
+        <span data-testid="agency-compared-with">
+          {ar ? 'مقارنةً بـ ' : 'Compared with '}
+          <span dir="ltr">{d.previous_period.from} → {d.previous_period.to}</span>
+        </span>
+      )}
+      {currency === null && current !== undefined && (
+        <span data-testid="agency-currency-note">{ar ? 'الأرقام بلا عملة واحدة — لا تُجمع عبر العملات.' : 'No single currency — figures are not summed across currencies.'}</span>
+      )}
+    </div>
+  )
+}
+
+export function AgencyHeadline({ ar, bar = true }: { ar: boolean; /** The period row — the fitted dashboard seats it in its own toolbar and passes `false`. */ bar?: boolean }) {
   const overview = useOverview()
   const locale = ar ? 'ar' : 'en'
 
@@ -78,7 +123,6 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
   const currency = d?.currency ?? null
   const coverage = readCoverage(current)
   const comparable = current !== undefined && previous !== undefined && comparableWindows({ current, previous })
-  const derived = current !== undefined && allowsDerived(coverage)
   const providerName = (c: string) => providerLabel(c, locale)
   const note = current === undefined
     ? null
@@ -101,13 +145,14 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
   }
 
   const spend = current ? readMoney(current, 'spend', currency, ar) : null
-  const cpa = current ? readCostPer(current, 'cpa', 'conversions', currency, ar) : null
-  const roas = current ? readRoas(current, ar) : null
-  const conversions = current ? ((current as Record<string, unknown>).conversions as number | null | undefined) : undefined
-  const prevConversions = previous ? ((previous as Record<string, unknown>).conversions as number | null | undefined) : undefined
   const prevSpend = previous ? readMoney(previous, 'spend', currency, ar) : null
-  const prevCpa = previous ? readCostPer(previous, 'cpa', 'conversions', currency, ar) : null
-  const prevRoas = previous ? readRoas(previous, ar) : null
+  const objectives = d.by_objective ?? []
+  const salesBlock = objectives.find((o) => o.family === 'sales')
+  const roasHint = salesBlock?.roas != null
+    ? (ar
+      ? `دخلت ${num(salesBlock.roas_campaigns)} من ${campaigns(salesBlock.sales_campaigns ?? 0, 'ar')} مبيعات`
+      : `${num(salesBlock.roas_campaigns)} of ${countedEn(salesBlock.sales_campaigns ?? 0, 'sales campaign', 'sales campaigns')} entered it`)
+    : (ar ? 'لا حملات مبيعات بإيراد مُبلَّغ' : 'No sales campaign reported revenue')
   const sparkOf = (key: string): ReactNode => {
     const points = sparkFor(key, (d?.timeseries ?? []) as unknown as readonly TimePoint[], undefined)
 
@@ -115,39 +160,10 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
   }
   const deltaOf = (metric: string, cur: number | null | undefined, prev: number | null | undefined) =>
     comparable && cur != null && prev != null ? { metric, current: cur, previous: prev } : undefined
-  const notDerived = ar ? 'لا تُشتق على نافذة ناقصة' : 'Not derived over an incomplete window'
 
   return (
     <section data-testid="agency-headline" className="space-y-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-text-secondary">
-        <FilterChips
-          label={ar ? 'الفترة' : 'Period'}
-          value={String(overview.days)}
-          testid="agency-days"
-          options={[
-            { value: '7', label: ar ? '7 أيام' : '7 days' },
-            { value: '30', label: ar ? '30 يوم' : '30 days' },
-            { value: '90', label: ar ? '90 يوم' : '90 days' },
-          ]}
-          onChange={(v) => overview.setDays(Number(v))}
-        />
-        <PeriodLabel from={d.period.from} to={d.period.to} testId="agency-period" />
-        <DataFreshness lastSyncAt={d.freshness.last_synced_at} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="agency-freshness" />
-        {/*
-          The comparison window, said ONCE. It rode inside every movement pill («+22% since 2026-08-12»),
-          which on a half-width phone card in English was wider than the card and scrolled the page
-          sideways (responsive-sweep, chromium, ltr). One line here says it for all four.
-        */}
-        {comparable && (
-          <span data-testid="agency-compared-with">
-            {ar ? 'مقارنةً بـ ' : 'Compared with '}
-            <span dir="ltr">{d.previous_period.from} → {d.previous_period.to}</span>
-          </span>
-        )}
-        {currency === null && current !== undefined && (
-          <span data-testid="agency-currency-note">{ar ? 'الأرقام بلا عملة واحدة — لا تُجمع عبر العملات.' : 'No single currency — figures are not summed across currencies.'}</span>
-        )}
-      </div>
+      {bar && <AgencyPeriodBar ar={ar} />}
 
       {current === undefined ? (
         <p data-testid="agency-headline-empty" className="rounded-xl border border-dashed border-border px-4 py-5 text-center text-sm text-text-muted">
@@ -177,40 +193,51 @@ export function AgencyHeadline({ ar }: { ar: boolean }) {
                 delta={spend!.kind === 'converted' && prevSpend?.kind === 'converted' ? deltaOf('spend', spend!.amount, prevSpend.amount) : undefined}
               />
             </Door>
-            <Door to="/agency/campaigns?view=table&lifecycle=all">
-              <StatCard
-                testid="agency-kpi-results"
-                spark={sparkOf('conversions')}
-                tone="success"
-                label={ar ? 'النتائج المُبلَّغة' : 'Reported results'}
-                value={<span dir="ltr">{conversions == null ? '—' : num(conversions)}</span>}
-                hint={ar ? 'مجموع ما أبلغت به المنصات' : 'Summed across the platforms that reported'}
-                delta={deltaOf('conversions', conversions, prevConversions)}
-              />
-            </Door>
-            <Door to="/agency/analytics">
-              <StatCard
-                testid="agency-kpi-cpa"
-                spark={sparkOf('cpa')}
-                tone="info"
-                label={ar ? 'تكلفة النتيجة' : 'Cost per result'}
-                value={<span dir="ltr">{derived ? formatMoneyReading(cpa!, money) : '—'}</span>}
-                hint={derived ? (cpa!.note ?? undefined) : notDerived}
-                delta={derived && cpa!.kind === 'converted' && prevCpa?.kind === 'converted' ? deltaOf('cpa', cpa!.amount, prevCpa.amount) : undefined}
-              />
-            </Door>
             <Door to="/agency/analytics">
               <StatCard
                 testid="agency-kpi-roas"
-                spark={sparkOf('roas')}
                 tone="neutral"
                 label="ROAS"
-                value={<span dir="ltr">{derived && roas!.value !== null ? ratio(roas!.value) : '—'}</span>}
-                hint={derived ? (roas!.note ?? undefined) : notDerived}
-                delta={derived && roas!.value !== null && prevRoas?.value != null ? deltaOf('roas', roas!.value, prevRoas.value) : undefined}
+                /*
+                  DASH-KPI-OBJECTIVE-001 — a return on spend exists for SALES campaigns only, and only where
+                  revenue was reported. It was revenue ÷ spend over every campaign, so a views campaign's spend
+                  sat in the denominator of a number about orders. The card now says how many sales campaigns
+                  entered it, and the figure beside it is the sales family's own.
+                */
+                value={<span dir="ltr">{salesBlock?.roas != null ? ratio(salesBlock.roas) : '—'}</span>}
+                hint={roasHint}
               />
             </Door>
           </StatGrid>
+          {/*
+            DASH-KPI-OBJECTIVE-001 — results by what the money was FOR. Orders, leads, clicks and views are not
+            one currency: each family states its result and its OWN cost per result, and there is no cost per
+            result across them. A family whose platform sent no figure says so instead of printing 0.
+          */}
+          {objectives.length > 0 && (
+            <div data-testid="agency-objective-results" className="space-y-2">
+              <p className="text-xs font-bold text-text-secondary">{ar ? 'النتائج حسب الهدف — لكل هدف تكلفته' : 'Results by objective — each with its own cost'}</p>
+              <StatGrid columns="grid-cols-2 lg:grid-cols-4">
+                {objectives.map((o) => {
+                  const resultName = o.result_label ? (ar ? o.result_label.ar : o.result_label.en) : (ar ? 'النتيجة' : 'Result')
+                  const costName = o.cost_per_result_label ? (ar ? o.cost_per_result_label.ar : o.cost_per_result_label.en) : (ar ? 'تكلفة النتيجة' : 'Cost per result')
+
+                  return (
+                    <StatCard
+                      key={o.family}
+                      testid={`agency-kpi-result-${o.family}`}
+                      tone="success"
+                      label={resultName}
+                      value={<span dir="ltr">{o.result == null ? '—' : num(o.result)}</span>}
+                      hint={o.result == null
+                        ? (o.missing_label ? (ar ? o.missing_label.ar : o.missing_label.en) : undefined)
+                        : (o.cost_per_result != null ? `${costName}: ${money(o.cost_per_result, currency)}` : (ar ? `${costName}: غير متوفرة` : `${costName}: not available`))}
+                    />
+                  )
+                })}
+              </StatGrid>
+            </div>
+          )}
           {note && (
             <p data-testid="agency-coverage-note" className="rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-text-secondary">{note}</p>
           )}
@@ -225,17 +252,20 @@ export function AgencyTrendAndPlatforms({ ar }: { ar: boolean }) {
   const overview = useOverview()
   const locale = ar ? 'ar' : 'en'
   const d = overview.data
-  const current = (d?.current ?? undefined) as MoneyTotals | undefined
   const currency = d?.currency ?? null
-  const derived = current !== undefined && allowsDerived(readCoverage(current))
   const providerName = (c: string) => providerLabel(c, locale)
 
   const platformRows = useMemo(() => (d?.by_provider ?? []).map((row) => {
     const t = row as MoneyTotals
-    const conv = (row as Record<string, unknown>).conversions as number | null | undefined
 
-    return { provider: row.provider, spend: readMoney(t, 'spend', currency, ar), conversions: conv ?? null, cpa: readCostPer(t, 'cpa', 'conversions', currency, ar), roas: readRoas(t, ar) }
+    return { provider: row.provider, spend: readMoney(t, 'spend', currency, ar) }
   }), [d?.by_provider, currency, ar])
+  /*
+   * DASH-KPI-OBJECTIVE-001 — the platform rows state SPEND and its share only. A platform's conversions, cost per
+   * conversion and ROAS summed every objective it ran (views beside orders), the same blend the headline retired;
+   * each platform's results by objective live in Analytics and in the platform's own page.
+   */
+  const spendTotal = platformRows.reduce((a, r) => a + (r.spend.kind === 'converted' ? (r.spend.amount ?? 0) : 0), 0)
 
   if (overview.isLoading) return <div className="grid grid-cols-1 gap-4 lg:grid-cols-2"><Skeleton className="h-64" /><Skeleton className="h-64" /></div>
   if (overview.isError || !d) return null
@@ -259,22 +289,20 @@ export function AgencyTrendAndPlatforms({ ar }: { ar: boolean }) {
 
       <ChartCard
         title={ar ? 'مقارنة المنصات' : 'Platform comparison'}
-        subtitle={ar ? 'من حمل الإنفاق، وبأي تكلفة نتيجة.' : 'Who carried the spend, and at what cost per result.'}
+        subtitle={ar ? 'من حمل الإنفاق، وبأي حصة.' : 'Who carried the spend, and in what share.'}
       >
         {platformRows.length === 0
           ? <p data-testid="agency-platforms-empty" className="flex h-[220px] items-center justify-center text-sm text-text-muted">{ar ? 'لا منصة أبلغت في هذه الفترة.' : 'No platform reported in this period.'}</p>
           : (
             <div data-testid="agency-platforms" className="min-w-0">
               <MetricTable
-                head={ar ? ['المنصة', 'الإنفاق', 'النتائج', 'تكلفة النتيجة', 'ROAS'] : ['Platform', 'Spend', 'Results', 'Cost per result', 'ROAS']}
+                head={ar ? ['المنصة', 'الإنفاق', 'حصتها من الإنفاق'] : ['Platform', 'Spend', 'Share of spend']}
                 rows={platformRows.map((r) => [
                   <Link key="p" to={`/agency/content?providers=${r.provider}`} data-testid={`agency-platform-${r.provider}`} className="font-semibold text-text-primary underline decoration-dotted underline-offset-4 hover:text-brand-600">{providerName(r.provider)}</Link>,
                   <span key="s" dir="ltr">{formatMoneyReading(r.spend, money)}</span>,
-                  <span key="c" dir="ltr">{r.conversions === null ? '—' : num(r.conversions)}</span>,
-                  <span key="a" dir="ltr">{derived ? formatMoneyReading(r.cpa, money) : '—'}</span>,
-                  <span key="r" dir="ltr">{derived && r.roas.value !== null ? ratio(r.roas.value) : '—'}</span>,
+                  <span key="c" dir="ltr">{r.spend.kind === 'converted' && spendTotal > 0 ? percent((r.spend.amount ?? 0) / spendTotal, 0) : '—'}</span>,
                 ])}
-                values={platformRows.map((r): SortValues => [providerName(r.provider), r.spend.amount, r.conversions, r.cpa.amount, r.roas.value])}
+                values={platformRows.map((r): SortValues => [providerName(r.provider), r.spend.amount, r.spend.kind === 'converted' && spendTotal > 0 ? (r.spend.amount ?? 0) / spendTotal : null])}
                 initialSort={{ column: 1, dir: 'desc' }}
               />
             </div>

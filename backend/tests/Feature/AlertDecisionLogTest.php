@@ -256,6 +256,40 @@ final class AlertDecisionLogTest extends TestCase
         $this->assertSame('pause_ad', $after['action_tag']);
     }
 
+    /**
+     * ALERT-OBJECTIVE-RESULT-001 review (3) — «صرف بدون نتائج» is measured on the campaign's result, and a result
+     * is only comparable with itself. Form leads before and leads after are two different units: not a +60%.
+     */
+    public function test_a_no_results_impact_across_two_result_units_is_insufficient_not_a_change(): void
+    {
+        Carbon::setTestNow('2026-11-01 12:00:00');
+        $c = $this->campaign((string) $this->projectA->id);
+        $c->forceFill(['objective' => 'leads'])->save();
+        for ($d = 1; $d <= 7; $d++) {
+            $day = Carbon::parse('2026-11-01')->subDays($d)->toDateString();
+            $this->metric($c, $day, 'spend', 100);
+            $this->metric($c, $day, 'form_leads', 5);
+        }
+        $e = $this->event((string) $this->projectA->id, 'no_results', ['days' => 7], 'warning', $c);
+        $op = $this->owner();
+
+        $this->actingAs($op, 'sanctum')->postJson("/api/v1/alerts/events/{$e->id}/decision", ['status' => 'done', 'action_tag' => 'pause_ad'])->assertOk();
+        $baseline = $e->fresh()->impact_baseline;
+        $this->assertEquals(35.0, $baseline['value_at_done']);
+        $this->assertSame('form_leads', $baseline['result_key']);
+
+        for ($d = 1; $d <= 7; $d++) {
+            $day = Carbon::parse('2026-11-01')->addDays($d)->toDateString();
+            $this->metric($c, $day, 'spend', 100);
+            $this->metric($c, $day, 'leads', 8);
+        }
+        Carbon::setTestNow('2026-11-09 08:00:00');
+        $after = $this->actingAs($op, 'sanctum')->getJson("/api/v1/alerts/events/{$e->id}")->assertOk()->json('data.impact');
+        $this->assertSame('insufficient_data', $after['state'], json_encode($after));
+        $this->assertSame('result_unit_changed', $after['reason']);
+        $this->assertArrayNotHasKey('change_pct', $after);
+    }
+
     public function test_an_alert_that_is_not_a_campaign_figure_says_so(): void
     {
         $e = $this->event((string) $this->projectA->id, 'token_expiry', ['provider' => 'meta', 'expires_at' => '2026-11-20T00:00:00Z']);

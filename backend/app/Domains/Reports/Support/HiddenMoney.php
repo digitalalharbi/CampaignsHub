@@ -32,6 +32,8 @@ final class HiddenMoney
         'funnel_spend', 'blended_cpa', 'roas', 'blended_roas', 'attributed_roas',
         'spent', 'remaining', 'consumed_pct', 'pace', 'projected_spend', 'daily_average', 'over_under',
         'excluded_spend', 'includes_non_sales_spend', 'spend_share', 'platform_value',
+        // OBJECTIVE-PATHS-001 — the one total of the objective split.
+        'total_spend',
     ];
 
     /** Revenue, and everything that is revenue or returns it. */

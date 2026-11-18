@@ -82,7 +82,7 @@ describe('the agency dashboard’s attention rows', () => {
     // The bands must fit inside the whole, or the bar refuses to draw and there is no legend to link.
     const d = payload()
     vi.mocked(fetchAgencyDashboard).mockResolvedValue({ ...d, clients: { total: 6, active: 3, onboarding: 1, needs_attention: 2 } } as never)
-    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard', locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=mix', locale: 'en' })
     const legend = within(await screen.findByTestId('client-mix-legend'))
     expect(legend.getByRole('link', { name: 'Active' })).toHaveAttribute('href', '/agency/clients?status=active')
     expect(legend.getByRole('link', { name: 'Onboarding' })).toHaveAttribute('href', '/agency/clients?status=onboarding')
@@ -91,7 +91,7 @@ describe('the agency dashboard’s attention rows', () => {
 
   it('a project budget row opens that project’s campaigns, chosen in the address', async () => {
     vi.mocked(fetchClientBudgets).mockResolvedValue([budgetRow()])
-    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard', locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets', locale: 'en' })
     fireEvent.click(await screen.findByRole('button', { name: 'Acme' }))
     const panel = within(await screen.findByTestId('project-budgets'))
     expect(panel.getByRole('link', { name: 'Q3 Launch' })).toHaveAttribute('href', '/agency/campaigns?project=p9&view=table&lifecycle=all')

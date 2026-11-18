@@ -1,3 +1,5 @@
+import { ObjectivePathCards } from '@/features/analytics/ObjectivePathCards'
+import { spendHiddenByLink } from './liveMetrics'
 import { basisLine } from './ExecutiveSummary'
 import { carries } from '../chosenFigures'
 import { useMemo, useState } from 'react'
@@ -7,12 +9,12 @@ import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { ChartCard, MetricLineChart, ProgressRing } from '@/features/analytics/charts'
 import { liveRowMoney } from '@/features/analytics/format'
-import { canonicalPlatform } from '@/lib/platforms'
+import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import { moneyParts, type MoneyTotals } from '@/lib/money/contract'
 import { PendingConversionChip } from '../PendingConversionChip'
 import { Num } from '@/components/ui/Num'
 import type { Locale } from '@/stores/ui'
-import type { LivePayload } from '../api'
+import type { AdsBasis, LivePayload } from '../api'
 import { AttentionBlocks } from '../AttentionBlocks'
 import { ClientAttention } from '../ClientAttention'
 import { BusinessStreamsSection } from '../BusinessStreamsSection'
@@ -38,6 +40,8 @@ import { FormatComparisonReportBlock } from '../FormatComparisonBlocks'
 import type { useLiveMetricReader } from './liveMetrics'
 import type { LiveLoad } from './useLivePayload'
 import { sectionShown, type ReportSectionKey } from '../reportSections'
+import { AudienceReportBlocks } from '@/features/audience/AudienceBlocks'
+import type { AudienceParts } from '@/features/audience/types'
 import { resultWords } from './leadResults'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
@@ -104,7 +108,11 @@ function ContentStrip({
   action,
   empty,
   columns = 4,
+  note,
+  basis,
 }: {
+  basis?: AdsBasis | null
+  note?: string | null
   columns?: 3 | 4
   title: string
   items: ReportAd[]
@@ -121,12 +129,13 @@ function ContentStrip({
   return (
     <section data-testid={testid}>
       <SectionTitle action={action}>{title}</SectionTitle>
+      {items.length > 0 && note && <p className="-mt-1 mb-3 text-xs text-text-muted" data-testid={`${testid}-basis`}>{note}</p>}
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-text-secondary">{empty}</p>
       ) : (
         <div className={`grid grid-cols-2 gap-3 md:grid-cols-3 ${columns === 4 ? 'xl:grid-cols-4' : ''}`}>
           {items.map((c, i) => (
-            <ContentTile key={c.content_key ?? `${c.name}-${i}`} content={c} locale={locale} currency={currency} onOpen={onOpen} rank={ranked ? i + 1 : undefined} />
+            <ContentTile key={c.content_key ?? `${c.name}-${i}`} content={c} locale={locale} currency={currency} onOpen={onOpen} rank={ranked ? i + 1 : undefined} rankedBy={ranked ? basis : undefined} />
           ))}
         </div>
       )}
@@ -224,6 +233,7 @@ export function StandardView({ payload, reader, currency, locale, onOpenContent,
             title={`${ar ? 'أفضل المحتوى' : 'Best content'}${basisLine(payload.ads_basis, ar) ? ` — ${basisLine(payload.ads_basis, ar)}` : ''}`}
             items={(payload.ads ?? []).slice(0, 6)}
             testid="standard-best-content"
+            basis={payload.ads_basis}
             currency={currency}
             locale={locale}
             onOpen={onOpenContent}
@@ -272,6 +282,16 @@ export function DashboardView({
       <LiveKpiBoard payload={payload} reader={reader} ar={ar} keys={kpiKeysFor(payload, reader)} />
       <LiveScopeCounts payload={payload} ar={ar} />
       {/* CLIENT-FACING-PRESENTATION-001 — «at what cost» before «where»; shown only where it says something. */}
+      {/* OBJECTIVE-PATHS-001 — one total, its split by objective, one card per objective. */}
+      {/* Shown where there is more than one objective; one objective is already the KPI board above. */}
+      {sectionOn(payload, 'objective_breakdown') && payload.objective_performance?.objective_paths?.mixed && (
+        <ObjectivePathCards
+          block={payload.objective_performance?.objective_paths}
+          locale={locale}
+          currency={currency}
+          showMoney={!spendHiddenByLink(payload)}
+        />
+      )}
       {splitDiffers(payload) && <ObjectiveSplit payload={payload} ar={ar} reader={reader} />}
       {/* The charts come before the tables: the reader sees the shape of the period first, then the rows. */}
       <TrendAndDistribution payload={payload} ar={ar} currency={currency} />
@@ -407,10 +427,12 @@ export function LoadGate({ load, ar, children }: { load: LiveLoad; ar: boolean; 
 
 /** The platforms a link actually carries figures for, largest spend first. */
 export function platformsOf(payload: LivePayload): string[] {
-  return [...(payload.platforms ?? [])]
+  const ordered = [...(payload.platforms ?? [])]
     .sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
     .map((p) => canonicalPlatform(p.provider))
     .filter((p, i, all) => all.indexOf(p) === i)
+  // PLATFORM-ORDER-002 — Owner 2026-11-18: the product's order always (سناب · تيك توك · ميتا · جوجل · إكس · لينكدإن · ChatGPT), not by spend.
+  return sortPlatforms(ordered)
 }
 
 /* ─────────────────────────────── C — Platform breakdown ─────────────────────────────── */
@@ -511,6 +533,9 @@ export function PlatformsView({
           )
         })}
       </div>
+
+      {/* AUDIENCE-001 — the audience parts the server resolved for this link (absent = hidden or no data). */}
+      <AudienceReportBlocks payload={whole as unknown as AudienceParts} locale={ar ? 'ar' : 'en'} />
 
       {platform && (
         <LoadGate load={narrowed} ar={ar}>
@@ -619,6 +644,8 @@ function PlatformDetail({
             locale={locale}
             onOpen={onOpenContent}
             ranked
+            note={basisLine(payload.ads_basis, ar)}
+            basis={payload.ads_basis}
             action={goToContent ? <GoTo testid="live-platform-goto-content" ar={ar} label={ar ? 'كل محتوى المنصة' : 'All content on this platform'} onClick={() => goToContent(platform)} /> : undefined}
             empty={ar ? 'لا يوجد محتوى بأرقام على هذه المنصة في هذه الفترة.' : 'No content with figures on this platform in this period.'}
           />

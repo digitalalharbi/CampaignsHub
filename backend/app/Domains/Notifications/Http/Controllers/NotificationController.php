@@ -5,17 +5,16 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Http\Controllers;
 
 use App\Domains\Alerts\Models\AlertEvent;
+use App\Domains\Notifications\Internal\EngineKinds;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Resources\NotificationResource;
-use App\Domains\Projects\Models\Project;
-use App\Domains\Projects\Models\ProjectMembership;
-use App\Domains\Tenancy\Context\MembershipContext;
-use App\Domains\Tenancy\Enums\Portal;
-use App\Domains\Tenancy\Services\ClientScopeResolver;
+use App\Domains\Notifications\Services\NotificationInbox;
+use App\Domains\Notifications\Services\SoundPreferences;
+use App\Domains\Notifications\Support\BellKind;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,19 +25,15 @@ use Illuminate\Support\Facades\DB;
  */
 final class NotificationController extends Controller
 {
+    public function __construct(private readonly NotificationInbox $inbox) {}
+
     /** The most rows either list returns; `meta.total` says how many there are. */
     private const MAX_ROWS = 100;
 
     public function index(Request $request): JsonResponse
     {
-        $query = AppNotification::query()
-            // The user's own notifications PLUS the team-wide operational alerts (budget risk, sync failure,
-            // token expiry, …) raised with no specific recipient — but only those whose project / client the
-            // reader may reach. SEC-1: `user_id IS NULL` used to be served to EVERY member of the tenant,
-            // including a client-portal user of another client.
-            ->where(fn ($q) => $this->visibleTo($q, $request->user()))
-            ->where('type', '!=', 'suppressed') // hide delivery-ledger tombstones
-            ->latest('created_at');
+        $user = $request->user();
+        $query = $this->inbox->visible($user)->latest('created_at');
 
         if ($status = $request->string('status')->toString()) {
             $query->where('status', $status);
@@ -46,8 +41,31 @@ final class NotificationController extends Controller
         if ($project = $request->string('project_id')->toString()) {
             $query->where('project_id', $project);
         }
+        // NOTIF-V2-INTERNAL-001 — the centre's tabs and filters, all server-side so the count and the rows agree.
+        if ($request->string('tab')->toString() === 'unread') {
+            $this->inbox->unread($query, $user);
+        }
+        if ($type = $request->string('type')->toString()) {
+            $query->whereIn('kind', EngineKinds::aliases($type));
+        }
+        if ($priority = $request->string('priority')->toString()) {
+            $query->whereIn('severity', match ($priority) {
+                'critical' => ['critical', 'error'],
+                'important' => ['warning'],
+                default => ['info', 'success'],
+            });
+        }
+        // NOTIF-BELL-001 — the panel's filters (حرج / ميزانية / أداء / مزامنة), applied on the server so the count and the rows agree.
+        if ($group = $request->string('group')->toString()) {
+            $this->inbox->inGroup($query, $group);
+        }
 
-        $unread = (clone $query)->where('status', 'unread')->count();
+        /*
+         * The bell's number is the REAL unread count for this reader — every notification they can see that they
+         * have not read, not the rows of this page and not a capped figure. It does not follow the panel filter:
+         * a filter narrows the list, it must not change how much is waiting.
+         */
+        $unread = $this->inbox->unreadCount($user);
 
         /*
          * OPS-LEDGER-001 — the bound is stated, because `unread` never stated it.
@@ -72,7 +90,16 @@ final class NotificationController extends Controller
             ->whereIn('notification_id', $rows->pluck('id')->all())
             ->get(['id', 'notification_id', 'type', 'severity', 'context'])
             ->keyBy('notification_id');
-        $rows->each(static fn (AppNotification $n) => $n->setRelation('alertEvent', $events->get($n->id)));
+        $readByMe = DB::table('notification_reads')->where('user_id', $user->id)
+            ->whereIn('notification_id', $rows->pluck('id')->all())->pluck('notification_id')->flip();
+        $projectNames = DB::table('projects')->whereIn('id', $rows->pluck('project_id')->filter()->unique()->all())->pluck('name', 'id');
+        $workspace = (string) (DB::table('tenants')->where('id', app(TenantContext::class)->tenantId())->value('name') ?? '');
+        $rows->each(static function (AppNotification $n) use ($events, $readByMe, $projectNames, $workspace): void {
+            $n->setRelation('alertEvent', $events->get($n->id));
+            $n->setAttribute('read_by_me', $readByMe->has($n->id));
+            $n->setAttribute('project_name', $n->project_id === null ? null : ($projectNames[$n->project_id] ?? null));
+            $n->setAttribute('workspace_name', $workspace);
+        });
 
         return ApiResponse::success(
             NotificationResource::collection($rows),
@@ -81,104 +108,73 @@ final class NotificationController extends Controller
                 'unread' => $unread,
                 'total' => $total,
                 'withheld' => max(0, $total - $rows->count()),
+                'facets' => $this->facets($user, ($user->locale ?? 'ar') !== 'en'),
             ],
         );
     }
 
     /**
-     * The rows this reader may see: their own, plus the team-wide (no recipient) rows inside their reach.
+     * What the filters can offer, from everything this reader can see (not from the page): their projects and the kinds present.
      *
-     * Deny by default. Team-wide rows carry campaign names, spend and client messages for ONE project or
-     * client, so they are served only to the agency / app portals (never the client or influencer
-     * portal), and only when the row's project is one the reader reaches. A row naming a client but no
-     * project follows the client ceiling; a row naming neither is for readers with no ceiling at all.
+     * @return array{projects: list<array{id: string, name: string}>, kinds: list<array{kind: string, label: string}>}
      */
-    private function visibleTo(Builder $q, User $user): void
+    private function facets(User $user, bool $ar): array
     {
-        $q->where('user_id', $user->id);
+        $base = $this->inbox->visible($user);
+        $ids = (clone $base)->whereNotNull('project_id')->distinct()->limit(60)->pluck('project_id')->all();
+        $projects = DB::table('projects')->whereIn('id', $ids)->orderBy('name')->get(['id', 'name'])
+            ->map(static fn ($p): array => ['id' => (string) $p->id, 'name' => (string) $p->name])->all();
+        $kinds = (clone $base)->whereNotNull('kind')->distinct()->limit(60)->pluck('kind')->map(static function ($k) use ($ar): ?array {
+            $label = BellKind::label((string) $k, $ar);
 
-        $portal = app(MembershipContext::class)->portal();
-        if ($portal !== Portal::Agency && $portal !== Portal::App) {
-            return;
-        }
+            return $label === null ? null : ['kind' => (string) $k, 'label' => $label];
+        })->filter()->values()->all();
 
-        $projects = $this->reachableProjectIds($user);
-        $clients = app(ClientScopeResolver::class)->reachableClientIds($user);
-
-        $q->orWhere(function (Builder $team) use ($projects, $clients): void {
-            $team->whereNull('user_id')->where(function (Builder $row) use ($projects, $clients): void {
-                $row->where(function (Builder $p) use ($projects): void {
-                    $p->whereNotNull('project_id');
-                    if ($projects !== null) {
-                        $p->whereIn('project_id', $projects);
-                    }
-                })->orWhere(function (Builder $c) use ($clients): void {
-                    $c->whereNull('project_id')->whereNotNull('client_workspace_id');
-                    if ($clients !== null) {
-                        $c->whereIn('client_workspace_id', $clients);
-                    }
-                });
-
-                if ($projects === null && $clients === null) {
-                    $row->orWhere(fn (Builder $n) => $n->whereNull('project_id')->whereNull('client_workspace_id'));
-                }
-            });
-        });
+        return ['projects' => $projects, 'kinds' => $kinds];
     }
 
     /**
-     * Projects the reader may reach; NULL = no narrowing. The membership's named client / project
-     * ceiling always applies; inside it `projects.view.all` reaches everything, anyone else only the
-     * projects of a CURRENT membership (active, `expires_at` unset or in the future).
-     *
-     * @return list<string>|null
+     * The bell's live figure, cheap enough to ask every half minute: the real unread count, the ids of unread
+     * notifications that warrant a sound (critical or warning), and whether the sound may play for this reader now. One small query set; no rows are serialised.
      */
-    private function reachableProjectIds(User $user): ?array
+    public function summary(Request $request, SoundPreferences $sound): JsonResponse
     {
-        $context = app(MembershipContext::class);
-        $ceiling = null;
-        if ($context->projectScopeIds() !== [] || $context->clientScopeIds() !== []) {
-            $query = Project::withoutGlobalScopes()->where('tenant_id', $context->tenantId());
-            if ($context->clientScopeIds() !== []) {
-                $query->whereIn('client_workspace_id', $context->clientScopeIds());
-            }
-            if ($context->projectScopeIds() !== []) {
-                $query->whereIn('id', $context->projectScopeIds());
-            }
-            $ceiling = $query->pluck('id')->map(static fn (mixed $id): string => (string) $id)->all();
-        }
+        $user = $request->user();
+        $unread = $this->inbox->unread($this->inbox->visible($user), $user);
 
-        if ($user->hasPermission('projects.view.all')) {
-            return $ceiling;
-        }
+        $attention = (clone $unread)->whereIn('severity', ['critical', 'error', 'warning'])
+            ->latest('created_at')->limit(20)->get(['id', 'severity'])
+            ->map(static fn (AppNotification $n): array => [
+                'id' => (string) $n->id,
+                'severity' => $n->severity === 'error' ? 'critical' : (string) $n->severity,
+            ])->all();
 
-        $own = ProjectMembership::withoutGlobalScopes()
-            ->where('tenant_id', $context->tenantId())
-            ->where('user_id', $user->id)
-            ->where('status', 'active')
-            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
-            ->pluck('project_id')->map(static fn (mixed $id): string => (string) $id)->all();
-
-        return $ceiling === null ? $own : array_values(array_intersect($own, $ceiling));
+        return ApiResponse::success([
+            'unread' => $unread->count(),
+            'attention' => $attention,
+            // NOTIF-SOUND-001 — whether a ping may play for this reader right now (their setting and their quiet hours).
+            'sound' => $sound->forReader($user),
+        ], 'Notification summary retrieved.');
     }
 
     public function markRead(Request $request, AppNotification $notification): JsonResponse
     {
-        abort_unless($notification->user_id === $request->user()->id, 403);
+        $user = $request->user();
+        // Deny by default: only a notification the reader may SEE can be cleared by them (a team-wide row included).
+        abort_unless($this->inbox->visible($user)->whereKey($notification->id)->exists(), 403);
 
-        $notification->update(['status' => 'read', 'read_at' => now()]);
+        $this->inbox->markRead($user, $notification);
+        $notification->setAttribute('read_by_me', true);
 
-        return ApiResponse::success(new NotificationResource($notification), 'Notification marked read.');
+        return ApiResponse::success(new NotificationResource($notification->refresh()->setAttribute('read_by_me', true)), 'Notification marked read.');
     }
 
+    /** Everything unread for this reader, server-side and in one call — not just the rows the panel loaded. */
     public function markAllRead(Request $request): JsonResponse
     {
-        AppNotification::query()
-            ->where('user_id', $request->user()->id)
-            ->where('status', 'unread')
-            ->update(['status' => 'read', 'read_at' => now()]);
+        $cleared = $this->inbox->markAllRead($request->user());
 
-        return ApiResponse::success(null, 'All notifications marked read.');
+        return ApiResponse::success(['cleared' => $cleared, 'unread' => $this->inbox->unreadCount($request->user())], 'All notifications marked read.');
     }
 
     /**

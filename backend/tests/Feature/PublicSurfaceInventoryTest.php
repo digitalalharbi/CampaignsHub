@@ -39,6 +39,8 @@ final class PublicSurfaceInventoryTest extends TestCase
         // SIGNUP-VERIFY-POLICY-001 — which proofs the sign-up form must ask for; two booleans, no application data.
         'GET api/v1/auth/registration-policy',
         'GET api/v1/brand',
+        'GET api/v1/client/approvals',
+        'GET api/v1/client/audience',
         'GET api/v1/client/branding',
         'GET api/v1/client/branding/logo',
         'GET api/v1/client/campaigns',
@@ -101,8 +103,19 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/requests/track/{token}/files/{file}',
         'GET api/v1/salla/enter',
         'GET api/v1/salla/open',
+        // MCP-OAUTH-001 — «Add custom connector» in Claude or ChatGPT: discovery, self-registration, the hand-off to the
+        // consent page and the code/refresh exchange ARE the sign-in, so they answer before anyone is signed in. The one
+        // step that grants anything, «سماح» (POST mcp/oauth/approve), stays behind auth:sanctum + tenant.
+        'GET api/v1/mcp/oauth/authorize',
+        'GET api/v1/mcp/oauth/clients/{clientId}',
+        'GET api/v1/mcp/oauth/metadata',
+        'GET api/v1/mcp/oauth/protected-resource',
+        'POST api/v1/mcp/oauth/register',
+        'POST api/v1/mcp/oauth/token',
         'GET api/v1/subscriptions/invoices/shared/{token}',
         'GET api/v1/webhooks/{kind}/{provider}',
+        'GET api/v1/auth/two-factor',
+        'DELETE api/v1/auth/two-factor',
         'POST api/v1/auth/email/verify',
         'POST api/v1/auth/forgot-password',
         'POST api/v1/auth/login',
@@ -120,8 +133,13 @@ final class PublicSurfaceInventoryTest extends TestCase
         'POST api/v1/auth/registration/{registration}/verify-mobile',
         'POST api/v1/auth/reset-password',
         'POST api/v1/auth/tokens',
+        // TWO-STEP-001 — answering the second step: the person is not signed in yet; the pending state in the session is the authorisation.
+        'POST api/v1/auth/two-factor/send',
+        'POST api/v1/auth/two-factor/verify',
         'POST api/v1/billing/webhook/{provider}',
         'POST api/v1/client/invoices/{invoice}/pay',
+        'POST api/v1/client/approvals/{approval}/approve',
+        'POST api/v1/client/approvals/{approval}/request-changes',
         'POST api/v1/client/login/start',
         'POST api/v1/client/login/verify',
         'POST api/v1/client/logout',

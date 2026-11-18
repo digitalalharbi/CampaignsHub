@@ -49,6 +49,7 @@ final class WhatsAppTemplates
         'security_alert' => ['ar' => 'تنبيه أمني', 'en' => 'Security alert'],
         'role_changed' => ['ar' => 'تغيّرت صلاحيتك', 'en' => 'Your role changed'],
         'automation_rule' => ['ar' => 'طابقت قاعدة أتمتة', 'en' => 'An automation rule matched'],
+        'project_budget' => ['ar' => 'ميزانية المشروع', 'en' => 'Project budget'],
         'test_notification' => ['ar' => 'رسالة اختبار', 'en' => 'Test message'],
     ];
 

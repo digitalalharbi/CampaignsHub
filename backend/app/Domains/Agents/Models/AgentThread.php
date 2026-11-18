@@ -17,7 +17,9 @@ final class AgentThread extends Model
 
     protected $table = 'agent_threads';
 
-    protected $fillable = ['tenant_id', 'project_id', 'agent_key', 'title', 'status', 'last_error', 'created_by'];
+    protected $fillable = ['tenant_id', 'project_id', 'agent_key', 'title', 'status', 'last_error', 'created_by', 'pinned', 'context'];
+
+    protected $casts = ['pinned' => 'boolean', 'context' => 'array'];
 
     /** @return HasMany<AgentMessage, $this> */
     public function messages(): HasMany

@@ -211,7 +211,7 @@
 <main class="copy">
   <h1>{{ $who }}</h1>
   @if ($period !== null)
-    <p class="period"><bdi dir="ltr">{{ $period }}</bdi></p>
+    <p class="period"><bdi dir="{{ preg_match('/^\d/', $period) === 1 ? 'ltr' : 'auto' }}">{{ $period }}</bdi></p>
   @endif
 </main>
 

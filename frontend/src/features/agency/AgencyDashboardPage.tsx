@@ -1,21 +1,27 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { StatCard, StatGrid, type StatTone } from '@/components/ui/StatCard'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Building2, FolderKanban, Inbox, Megaphone, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, BarChart3, Bell, Building2, FolderKanban, Inbox, Megaphone, PieChart, ShieldCheck, Sparkles, TrendingUp, Wallet } from 'lucide-react'
 import { fetchAgencyDashboard, fetchClientBudgets, type AgencyDashboard, type ClientBudgetRow } from './api'
+import { ClientCards } from '@/features/overview/ClientCards'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { money, ratio } from '@/features/analytics/format'
 import { ChartCard, RankingBarChart, RatioBars, StatusMixBar } from '@/features/analytics/charts'
 import { Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Badge } from '@/components/ui/Badge'
-import { PageIntro } from '@/components/ui/PageIntro'
+import { FitPage } from '@/components/fit/FitPage'
+import { KpiMini, KpiStrip, type KpiTone } from '@/components/fit/KpiMini'
+import { TabStrip } from '@/components/fit/TabStrip'
+import { DetailPanel } from '@/components/fit/DetailPanel'
+import { useFitRows } from '@/components/fit/useFitRows'
+import { useTabParam } from '@/components/fit/useTabParam'
 import { useUi } from '@/stores/ui'
 import { clients as countedClients } from '@/lib/counted'
 import { CreativePulseSection } from '@/features/content/CreativePulseSection'
-import { AgencyAlerts, AgencyHeadline, AgencyTrendAndPlatforms } from './AgencyHeadline'
+import { AgencyAlerts, AgencyHeadline, AgencyPeriodBar, AgencyTrendAndPlatforms } from './AgencyHeadline'
 import type { LibraryQuery } from '@/features/content/api'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 
 /**
  * `/agency/dashboard` — the agency's own overview (ADR 0002, AGENCY-002).
@@ -42,53 +48,33 @@ const OBJECTIVE_LABELS: Record<string, { ar: string; en: string }> = {
 const num = (n: number) => n.toLocaleString('en-US')
 
 /**
- * UX-KPI-PRESENTATION-001 — the agency dashboard's figures, on the product's own card.
+ * AGENCY-FIT-001 — the agency dashboard's four counts, as the compact card (`KpiMini`) that opens the page it counts.
  *
- * This drew its own: a rounded card, a tinted icon square, a 3xl tabular figure, a label under it.
- * The composition was fine and that was never the problem — the problem is that it was a SECOND
- * opinion about the label size, the value size, the padding and the height, on a page a reader
- * reaches from the same rail as every surface that uses the shared one.
- *
- * What stays local is what is genuinely this page's: which icon names the figure, which tone it
- * carries, and where pressing it goes. The card owns the type.
+ * They were the product's `StatCard` (about 110px each) in a row of their own at the BOTTOM of a page that ran to six
+ * thousand pixels. They are now one strip under the title, 64px tall, and the sentence under each figure (how many are
+ * active, paused, waiting) is its tooltip. What stays local is which icon names the figure, which tone it carries and
+ * where pressing it goes.
  */
 function Metric({
   to,
   label,
   value,
   hint,
-  icon: Icon,
+  icon,
   tone,
+  testid,
 }: {
   to: string
   label: string
   value: number
   hint?: string
   icon: typeof Building2
-  tone: StatTone
+  tone: KpiTone
+  testid: string
 }) {
-  const tones: Record<string, string> = {
-    brand: 'bg-brand-primary-soft text-brand-700',
-    success: 'bg-success/15 text-success',
-    warning: 'bg-warning/15 text-warning',
-    info: 'bg-info/15 text-info',
-  }
-
   return (
-    <Link to={to} className="block transition-colors [&>*]:hover:border-brand-400">
-      <StatCard
-        tone={tone}
-        label={
-          <span className="flex items-center gap-2">
-            <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${tones[tone] ?? ''}`}>
-              <Icon size={15} aria-hidden />
-            </span>
-            {label}
-          </span>
-        }
-        value={<span dir="ltr">{num(value)}</span>}
-        hint={hint}
-      />
+    <Link to={to} className="block min-w-0 transition-colors [&>*]:hover:border-brand-400">
+      <KpiMini testid={testid} tone={tone} icon={icon} label={label} value={num(value)} hint={hint} />
     </Link>
   )
 }
@@ -125,7 +111,7 @@ function ObjectiveBreakdown({ data, ar }: { data: AgencyDashboard['campaigns']; 
         <div data-testid="agency-objective-chart" className="min-w-0">
           <RankingBarChart
             horizontal
-            height={Math.max(180, entries.length * 44)}
+            height={Math.max(160, entries.length * 34)}
             data={entries.map(([objective, count]) => ({
               label: objectiveLabel(objective, ar),
               count,
@@ -181,7 +167,7 @@ function objectiveLabel(objective: string, ar: boolean): string {
 function ClientMix({ clients, ar }: { clients: AgencyDashboard['clients']; ar: boolean }) {
   return (
     <ChartCard
-      title={ar ? 'حالة محفظة العملاء' : 'The shape of the client book'}
+      title={ar ? 'حالة العملاء' : 'The shape of the client book'}
       subtitle={ar
         ? 'نسبة كل حالة من إجمالي العملاء داخل نطاقك.'
         : 'What share of the clients in your scope sits in each state.'}
@@ -203,7 +189,11 @@ function ClientMix({ clients, ar }: { clients: AgencyDashboard['clients']; ar: b
   )
 }
 
-export function AgencyDashboardPage() {
+/**
+ * `onOpenClient` is given by `OverviewDashboard` (the home page's two levels). Without it the page is exactly what it was —
+ * the cards are the home's first level, not a property of this page.
+ */
+export function AgencyDashboardPage({ onOpenClient, extraActions }: { onOpenClient?: (row: ClientBudgetRow) => void; extraActions?: ReactNode } = {}) {
   const ar = useUi((s) => s.locale) === 'ar'
   const query = useQuery({ queryKey: ['agency', 'dashboard'], queryFn: fetchAgencyDashboard })
   /*
@@ -214,6 +204,7 @@ export function AgencyDashboardPage() {
     budget failing must not take the counts down with it.
   */
   const budgets = useQuery({ queryKey: ['agency', 'client-budgets'], queryFn: fetchClientBudgets, retry: false })
+  const [tab, setTab] = useTabParam<TabKey>(TAB_KEYS, 'attention')
 
   if (query.isLoading) {
     return (
@@ -243,184 +234,154 @@ export function AgencyDashboardPage() {
   }
 
   const d = query.data
+  const t = ar ? TAB_COPY.ar : TAB_COPY.en
+  const rows = budgets.data ?? []
+
+  const tabs = [
+    { key: 'attention', label: t.attention, icon: Bell },
+    { key: 'figures', label: t.figures, icon: BarChart3 },
+    { key: 'trend', label: t.trend, icon: TrendingUp },
+    ...(onOpenClient !== undefined ? [{ key: 'clients', label: t.clients, icon: Building2 }] : []),
+    ...(rows.length > 0 || budgets.isLoading ? [{ key: 'budgets', label: t.budgets, icon: Wallet }] : []),
+    { key: 'mix', label: t.mix, icon: PieChart },
+    { key: 'creative', label: t.creative, icon: Sparkles },
+  ]
+  const active = tabs.some((x) => x.key === tab) ? tab : 'attention'
+  const periodTab = active === 'figures' || active === 'trend'
+
+  const scopeBanner = (
+    <div
+      data-testid="agency-scope-banner"
+      hidden={!d.scope.is_restricted}
+      className={`flex items-start gap-2.5 rounded-xl border px-3 py-2 text-sm ${d.scope.is_restricted ? 'border-info/30 bg-info/10 text-text-primary' : 'hidden'}`}
+    >
+      <ShieldCheck size={17} className="mt-0.5 shrink-0 text-info" aria-hidden />
+      <span>
+        {d.scope.is_restricted
+          ? ar
+            ? `عضويتك محدّدة بعملاء بعينهم. الأرقام أدناه تغطي ${countedClients(d.scope.client_count, 'ar')} فقط.`
+            : `Your membership names specific clients. The figures below cover ${countedClients(d.scope.client_count, 'en')} only.`
+          : ar
+            ? `الأرقام أدناه تغطي كامل عملاء الوكالة (${num(d.scope.client_count)}).`
+            : `The figures below cover the whole agency (${countedClients(d.scope.client_count, 'en')}).`}
+      </span>
+    </div>
+  )
 
   return (
-    <div className="w-full">
-      {/*
-        PRODUCT-VISUAL-001 §4 §34 — the same head as every other surface, and not a hero.
-
-        This opened with a 3xl heading and a sentence, which is a third of the first screen spent
-        saying the name of a page the reader navigated to deliberately. The heading is now the
-        product's standard size, and the space goes to the one thing the old head could not say:
-        the SCOPE these figures cover, beside the title rather than in a banner below it.
-      */}
-      <div className="mb-4">
-        <PageIntro
-          testid="agency-intro"
-          title={ar ? 'لوحة الوكالة' : 'Agency overview'}
-          badges={
-            <Badge tone={d.scope.is_restricted ? 'warning' : 'neutral'} data-testid="agency-scope">
-              {d.scope.is_restricted
-                ? (ar ? `${countedClients(d.scope.client_count, 'ar')} من العملاء` : countedClients(d.scope.client_count, 'en'))
-                : (ar ? 'كل العملاء' : 'All clients')}
-            </Badge>
-          }
-          purpose={ar
-            ? 'كل رقم هنا محسوب على العملاء الذين تصل إليهم فعليًا — لا أكثر.'
-            : 'Every figure here covers the clients you can actually reach — and no others.'}
-        />
-      </div>
-
-      {/*
-        The boundary, stated before the numbers — but only where it IS one.
-
-        An unrestricted reader was shown a banner saying the figures cover the whole agency, which
-        is what an unqualified figure already means: a line of reassurance that costs a row on every
-        load and tells nobody anything. A RESTRICTED membership is different — a subset read as the
-        whole agency is the misreading this banner exists to prevent — so that one stays, and the
-        chip in the head carries the fact in both cases.
-      */}
-      <div
-        data-testid="agency-scope-banner"
-        hidden={!d.scope.is_restricted}
-        className={`mb-4 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm ${
-          d.scope.is_restricted
-            ? 'border-info/30 bg-info/10 text-text-primary'
-            : 'hidden'
-        }`}
-      >
-        <ShieldCheck size={17} className="mt-0.5 shrink-0 text-info" aria-hidden />
-        <span>
+    <FitPage
+      testid="agency-dashboard"
+      introTestid="agency-intro"
+      fit={active !== 'creative'}
+      title={ar ? 'لوحة الوكالة' : 'Agency overview'}
+      info={ar
+        ? 'كل رقم هنا محسوب على العملاء الذين تصل إليهم فعليًا — لا أكثر.'
+        : 'Every figure here covers the clients you can actually reach — and no others.'}
+      actions={
+        <>
+        {extraActions}
+        <Badge tone={d.scope.is_restricted ? 'warning' : 'neutral'} data-testid="agency-scope">
           {d.scope.is_restricted
-            ? ar
-              ? `عضويتك محدّدة بعملاء بعينهم. الأرقام أدناه تغطي ${countedClients(d.scope.client_count, 'ar')} فقط.`
-              : `Your membership names specific clients. The figures below cover ${countedClients(d.scope.client_count, 'en')} only.`
-            : ar
-              ? `الأرقام أدناه تغطي كامل عملاء الوكالة (${num(d.scope.client_count)}).`
-              : `The figures below cover the whole agency (${countedClients(d.scope.client_count, 'en')}).`}
-        </span>
-      </div>
+            ? (ar ? `${countedClients(d.scope.client_count, 'ar')} من العملاء` : countedClients(d.scope.client_count, 'en'))
+            : (ar ? 'كل العملاء' : 'All clients')}
+        </Badge>
+        </>
+      }
+      kpis={
+        <KpiStrip testid="agency-counts">
+          <Metric testid="agency-count-clients" to="/agency/clients" label={ar ? 'العملاء' : 'Clients'} value={d.clients.total}
+            hint={ar ? `${num(d.clients.active)} نشط` : `${num(d.clients.active)} active`} icon={Building2} tone="brand" />
+          <Metric testid="agency-count-projects" to="/agency/clients" label={ar ? 'المشاريع' : 'Projects'} value={d.projects.total}
+            hint={ar ? `${num(d.projects.active)} نشط` : `${num(d.projects.active)} active`} icon={FolderKanban} tone="info" />
+          <Metric testid="agency-count-campaigns" to="/agency/campaigns" label={ar ? 'الحملات' : 'Campaigns'} value={d.campaigns.total}
+            hint={ar ? `${num(d.campaigns.active)} نشطة · ${num(d.campaigns.paused)} موقوفة` : `${num(d.campaigns.active)} active · ${num(d.campaigns.paused)} paused`}
+            icon={Megaphone} tone="success" />
+          <Metric testid="agency-count-requests" to="/agency/requests" label={ar ? 'طلبات مفتوحة' : 'Open requests'} value={d.requests.open}
+            hint={ar ? `${num(d.requests.awaiting_client)} بانتظار العميل` : `${num(d.requests.awaiting_client)} awaiting the client`}
+            icon={Inbox} tone="warning" />
+        </KpiStrip>
+      }
+      toolbar={
+        <div className="flex min-w-0 flex-col gap-2">
+          {scopeBanner}
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <TabStrip testid="agency-tabs" label={ar ? 'أقسام اللوحة' : 'Overview sections'} items={tabs} active={active} onChange={(k) => setTab(k as TabKey)} />
+            {periodTab && <AgencyPeriodBar ar={ar} />}
+          </div>
+        </div>
+      }
+    >
+      {active === 'attention' && (
+        // DASHBOARD-FIRST-SCREEN / Owner directive 2026-10-09 §11 — the dashboard's one question is «what needs attention now?»,
+        // so the answer is the tab it opens on.
+        <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-2.5 lg:grid-cols-2">
+          <section data-testid="agency-attention" className="rounded-xl border border-border bg-surface p-3">
+            <h2 className="font-heading text-base font-extrabold text-text-primary">{ar ? 'تنبيهات' : 'Needs your attention'}</h2>
+            <ul className="mt-2 space-y-2 text-sm">
+              {/*
+                DASHBOARD-DRILLDOWN-001 — each row lands on exactly what it counts, not on the surface
+                that happens to contain it: the count is a question, and the page it opens is the answer.
+              */}
+              <AttentionRow to="/agency/clients?status=needs_attention" label={ar ? 'عملاء يحتاجون متابعة' : 'Clients needing attention'} value={d.clients.needs_attention} ar={ar} />
+              <AttentionRow to="/agency/clients?status=onboarding" label={ar ? 'عملاء قيد التهيئة' : 'Clients onboarding'} value={d.clients.onboarding} ar={ar} />
+              <AttentionRow to="/agency/requests?status=client_review" label={ar ? 'طلبات بانتظار رد العميل' : 'Requests awaiting the client'} value={d.requests.awaiting_client} ar={ar} />
+              <PausedCampaignsRow campaigns={d.campaigns} ar={ar} />
+            </ul>
+          </section>
+          <AgencyAlerts ar={ar} />
+        </div>
+      )}
 
-      {/* DASHBOARD-FIRST-SCREEN-001 — money, results, cost, movement, platforms, freshness and alerts come first. */}
-      <div className="mb-4">
-        <AgencyHeadline ar={ar} />
-      </div>
+      {active === 'figures' && <AgencyHeadline ar={ar} bar={false} />}
 
-      {/*
-        Owner directive 2026-10-09 §11, and the standing feature-first rule: the Dashboard's one
-        question is «what needs attention now?», so the answer comes before anything that merely
-        describes the estate. The attention block and the client pace — the operational signals —
-        open the page; the client-mix bar, the objective chart and the creative section follow.
-        The page used to draw two charts first and put the attention block at the fold, with the
-        money signals three thousand pixels down behind the creative section.
-      */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <section data-testid="agency-attention" className="rounded-2xl border border-border bg-surface p-5">
-          <h2 className="font-heading text-lg font-extrabold text-text-primary">
-            {ar ? 'ما يحتاج انتباهك' : 'Needs your attention'}
-          </h2>
-          <ul className="mt-4 space-y-2.5 text-sm">
-            {/*
-              DASHBOARD-DRILLDOWN-001 — each row lands on exactly what it counts, not on the surface
-              that happens to contain it: the count is a question, and the page it opens is the answer.
-            */}
-            <AttentionRow
-              to="/agency/clients?status=needs_attention"
-              label={ar ? 'عملاء يحتاجون متابعة' : 'Clients needing attention'}
-              value={d.clients.needs_attention}
-              ar={ar}
-            />
-            <AttentionRow
-              to="/agency/clients?status=onboarding"
-              label={ar ? 'عملاء قيد التهيئة' : 'Clients onboarding'}
-              value={d.clients.onboarding}
-              ar={ar}
-            />
-            <AttentionRow
-              to="/agency/requests?status=client_review"
-              label={ar ? 'طلبات بانتظار رد العميل' : 'Requests awaiting the client'}
-              value={d.requests.awaiting_client}
-              ar={ar}
-            />
-            <PausedCampaignsRow campaigns={d.campaigns} ar={ar} />
-          </ul>
-        </section>
-        <AgencyAlerts ar={ar} />
-      </div>
-      <div className="mt-4">
-        <AgencyTrendAndPlatforms ar={ar} />
-      </div>
-      <div className="mt-4">
-        <ClientPace rows={budgets.data ?? []} ar={ar} />
-      </div>
-      {/* Owner directive 2026-10-09 §8 — the shared grid, so these spark-less cards reserve no sparkline row. */}
-      <div className="mb-4 mt-4">
-      <StatGrid columns="grid-cols-2 lg:grid-cols-4">
-        <Metric
-          to="/agency/clients"
-          label={ar ? 'العملاء' : 'Clients'}
-          value={d.clients.total}
-          hint={ar ? `${num(d.clients.active)} نشط` : `${num(d.clients.active)} active`}
-          icon={Building2}
-          tone="brand"
-        />
-        <Metric
-          to="/agency/projects"
-          label={ar ? 'المشاريع' : 'Projects'}
-          value={d.projects.total}
-          hint={ar ? `${num(d.projects.active)} نشط` : `${num(d.projects.active)} active`}
-          icon={FolderKanban}
-          tone="info"
-        />
-        <Metric
-          to="/agency/campaigns"
-          label={ar ? 'الحملات' : 'Campaigns'}
-          value={d.campaigns.total}
-          hint={ar
-            ? `${num(d.campaigns.active)} نشطة · ${num(d.campaigns.paused)} موقوفة`
-            : `${num(d.campaigns.active)} active · ${num(d.campaigns.paused)} paused`}
-          icon={Megaphone}
-          tone="success"
-        />
-        <Metric
-          to="/agency/requests"
-          label={ar ? 'طلبات مفتوحة' : 'Open requests'}
-          value={d.requests.open}
-          hint={ar
-            ? `${num(d.requests.awaiting_client)} بانتظار العميل`
-            : `${num(d.requests.awaiting_client)} awaiting the client`}
-          icon={Inbox}
-          tone="warning"
-        />
-      </StatGrid>
-      </div>
-      <ClientBudgets rows={budgets.data ?? []} loading={budgets.isLoading} failed={budgets.isError} ar={ar} />
-      {/*
-        The shape of the book: full width, because a composition bar is one row tall and reads worse
-        the narrower it gets — a segment holding 4% of 24 clients is a sliver at 340px.
-      */}
-      <div className="mt-4 mb-4">
-        <ClientMix clients={d.clients} ar={ar} />
-      </div>
-      <ObjectiveBreakdown data={d.campaigns} ar={ar} />
-      {/*
-        §15.11 — the creative section, over the clients this operator actually reaches.
+      {active === 'trend' && <AgencyTrendAndPlatforms ar={ar} />}
 
-        This page carries no filters of its own, so the section renders its own: period, client,
-        project, platform, objective and creative type. Every one of them narrows inside the
-        membership ceiling the banner above describes — a control here cannot widen what the scope
-        already decided, and the same options populate it that populate the library's filter bar.
-      */}
-      <div className="mt-4">
+      {active === 'clients' && onOpenClient !== undefined && <ClientCards ar={ar} onOpenClient={onOpenClient} fit />}
+
+      {active === 'budgets' && (
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-2.5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          <ClientPace rows={rows} ar={ar} />
+          <ClientBudgets rows={rows} loading={budgets.isLoading} failed={budgets.isError} ar={ar} />
+        </div>
+      )}
+
+      {active === 'mix' && (
+        <div className="grid min-h-0 flex-1 grid-cols-1 content-start gap-2.5 lg:grid-cols-2">
+          <ClientMix clients={d.clients} ar={ar} />
+          <ObjectiveBreakdown data={d.campaigns} ar={ar} />
+        </div>
+      )}
+
+      {active === 'creative' && (
+        /*
+          §15.11 — the creative section, over the clients this operator actually reaches.
+
+          This page carries no filters of its own, so the section renders its own: period, client,
+          project, platform, objective and creative type. Every one of them narrows inside the
+          membership ceiling the banner above describes — a control here cannot widen what the scope
+          already decided, and the same options populate it that populate the library's filter bar.
+
+          It is the one tab that lets the page flow (`fit` above): a filter bar, a poster wall and the findings
+          are a document of their own and cannot be budgeted against a screen.
+        */
         <CreativePulseSection
           libraryPath="/agency/content"
           axes={['period', 'clients', 'projects', 'providers', 'objectives', 'kinds']}
           filters={AGENCY_WINDOW}
         />
-      </div>
+      )}
 
-    </div>
+      <FinancialDisclaimer className="mt-auto shrink-0 pt-1" />
+    </FitPage>
   )
+}
+
+const TAB_KEYS = ['attention', 'figures', 'trend', 'clients', 'budgets', 'mix', 'creative'] as const
+type TabKey = (typeof TAB_KEYS)[number]
+
+const TAB_COPY = {
+  ar: { attention: 'تحتاج متابعة', figures: 'الأرقام', trend: 'الاتجاه والمنصات', clients: 'العملاء', budgets: 'الميزانيات', mix: 'التوزيع', creative: 'المحتوى' },
+  en: { attention: 'Attention', figures: 'Figures', trend: 'Trend & platforms', clients: 'Clients', budgets: 'Budgets', mix: 'Mix', creative: 'Creatives' },
 }
 
 /**
@@ -436,7 +397,7 @@ function AttentionRow({ to, label, value, ar }: { to: string; label: string; val
     <li>
       <Link
         to={to}
-        className="flex items-center justify-between gap-3 rounded-xl border border-border px-3.5 py-3 transition-colors hover:border-brand-400"
+        className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2.5 transition-colors hover:border-brand-400"
       >
         <span className="flex items-center gap-2 font-semibold text-text-primary">
           {value > 0 && <AlertTriangle size={15} className="shrink-0 text-warning" aria-hidden />}
@@ -478,7 +439,7 @@ function PausedCampaignsRow({ campaigns, ar }: { campaigns: AgencyDashboard['cam
       {projects.length > 1 && (
         <li>
           <ul data-testid="attention-paused-projects" className="ms-4 space-y-1.5 border-s border-border ps-3">
-            {projects.map((p) => (
+            {projects.slice(0, 3).map((p) => (
               <li key={p.project_id}>
                 <Link
                   to={pausedIn(p.project_id)}
@@ -489,6 +450,11 @@ function PausedCampaignsRow({ campaigns, ar }: { campaigns: AgencyDashboard['cam
                 </Link>
               </li>
             ))}
+            {projects.length > 3 && (
+              <li className="px-2 text-xs text-text-muted">
+                <Link to="/agency/campaigns?view=table&lifecycle=all&band=paused" className="hover:text-text-primary">{ar ? `و${num(projects.length - 3)} مشاريع أخرى` : `+${num(projects.length - 3)} more projects`}</Link>
+              </li>
+            )}
           </ul>
         </li>
       )}
@@ -522,6 +488,9 @@ function PausedCampaignsRow({ campaigns, ar }: { campaigns: AgencyDashboard['cam
  * Both are counted in a note under the chart, never dropped silently, because a pace ranking missing
  * the client with no budget reads as «every client is accounted for».
  */
+/** How many clients the pace chart draws; the budgets table beside it carries the rest, a page at a time. */
+const PACE_MAX = 6
+
 function ClientPace({ rows, ar }: { rows: ClientBudgetRow[]; ar: boolean }) {
   if (rows.length === 0) return null
 
@@ -533,8 +502,11 @@ function ClientPace({ rows, ar }: { rows: ClientBudgetRow[]; ar: boolean }) {
   const unmeasured = rows.filter((r) => (r.unmeasured ?? 0) > 0 && r.pace === null).length
   const otherWithheld = withheld - unmeasured
 
+  const shown = [...drawable].sort((x, y) => y.value - x.value).slice(0, PACE_MAX)
+  const hiddenByFit = drawable.length - shown.length
+
   return (
-    <section className="mt-6">
+    <section className="min-h-0 min-w-0">
       <ChartCard
         title={ar ? 'سرعة إنفاق كل عميل' : 'How fast each client is spending'}
         subtitle={ar
@@ -544,19 +516,24 @@ function ClientPace({ rows, ar }: { rows: ClientBudgetRow[]; ar: boolean }) {
         <RatioBars
           testId="client-pace"
           ar={ar}
-          rows={drawable}
+          rows={shown}
           reference={1}
           referenceLabel={ar ? 'على الميزانية' : 'On budget'}
         />
+        {hiddenByFit > 0 && (
+          <p data-testid="client-pace-more" className="mt-2 text-xs text-text-muted">
+            {ar ? `الأعلى ${num(PACE_MAX)} فقط — و${num(hiddenByFit)} آخرون في الجدول.` : `Top ${num(PACE_MAX)} only — ${num(hiddenByFit)} more are in the table.`}
+          </p>
+        )}
         {unmeasured > 0 && (
-          <p data-testid="client-pace-unmeasured" className="mt-3 text-sm text-text-muted">
+          <p data-testid="client-pace-unmeasured" className="mt-2 text-xs text-text-muted">
             {ar
               ? `${num(unmeasured)} من العملاء بلا أرقام مقاسة في هذه الفترة — لم تُقرأ أي بيانات من مصادرهم، فلا سرعة تُحسب.`
               : `${num(unmeasured)} client(s) have no measured figures in this period — nothing was read from their sources, so no pace is stated.`}
           </p>
         )}
         {otherWithheld > 0 && (
-          <p data-testid="client-pace-withheld" className="mt-3 text-sm text-text-muted">
+          <p data-testid="client-pace-withheld" className="mt-2 text-xs text-text-muted">
             {ar
               ? `${num(otherWithheld)} من العملاء بلا سرعة قابلة للمقارنة — إمّا بلا ميزانية معتمدة أو بميزانية بعملات مختلفة.`
               : `${num(otherWithheld)} client(s) have no comparable pace — either no committed budget, or a budget held in more than one currency.`}
@@ -577,6 +554,8 @@ function ClientPace({ rows, ar }: { rows: ClientBudgetRow[]; ar: boolean }) {
 function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[]; loading: boolean; failed: boolean; ar: boolean }) {
   /* Declared before the early return: a hook after a conditional return is a hook that sometimes runs. */
   const [openClient, setOpenClient] = useState<string | null>(null)
+  /* Whole rows that fit the card, so the table pages instead of growing the page (it is 41px a row, plus its head and pager). */
+  const fit = useFitRows({ rowHeight: 58, reserve: 37 + 28 + 64, min: 3, max: 30, fallback: 10 })
 
   const dash = '—'
 
@@ -586,13 +565,24 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
   const open = rows.find((r) => r.client_id === openClient) ?? null
 
   return (
-    <section className="mt-6" data-testid="client-budgets">
-      <h2 className="mb-2 font-heading text-lg font-bold text-text-primary">
-        {ar ? 'ميزانيات العملاء' : 'Client budgets'}
+    <section className="flex min-h-0 min-w-0 flex-col rounded-xl border border-border bg-surface p-3" data-testid="client-budgets">
+      {/*
+        ONE-BUDGET-001 — this table sums the campaign budgets set INSIDE the platforms over the dashboard window. It is
+        informational and named for what it is; «the budget» of a client is its approved project budget (the cards above,
+        /agency/budgets), which this window never changes.
+      */}
+      <h2 className="font-heading text-base font-bold text-text-primary">
+        {ar ? 'ميزانيات الحملات في المنصات' : 'Campaign budgets in the platforms'}
       </h2>
+      <p className="mb-1 text-xs text-text-muted" data-testid="client-budgets-note">
+        {ar ? 'للاطلاع فقط — ميزانية المشروع المعتمدة في صفحة الميزانيات.' : 'For reference only — the approved project budget is on the budgets page.'}
+      </p>
+      <div ref={fit.ref as never} className="min-h-0 flex-1">
       <MetricTable
+        pageSize={fit.rows}
+        testId="client-budgets-table"
         head={ar
-          ? ['العميل', 'الميزانية', 'المصروف', 'المتبقي', 'المتوقع', 'السرعة']
+          ? ['العميل', 'الميزانية', 'الإنفاق', 'المتبقي', 'المتوقع', 'السرعة']
           : ['Client', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
         rows={rows.map((r) => [
           <div key="c" className="flex flex-col">
@@ -644,14 +634,14 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
         ])}
         initialSort={{ column: 1, dir: 'desc' }}
       />
+      </div>
+      {/* The project rung is a layer, not a second table under the first: the page does not grow when a client is opened. */}
+      <DetailPanel open={open !== null} onClose={() => setOpenClient(null)} title={open ? (ar ? `مشاريع ${open.client_name}` : `Projects in ${open.client_name}`) : ''} closeLabel={ar ? 'إغلاق' : 'Close'} testid="project-budgets-panel">
       {open && (
-        <div className="mt-3" data-testid="project-budgets">
-          <h3 className="mb-2 text-sm font-semibold text-text-primary">
-            {ar ? `مشاريع ${open.client_name}` : `Projects in ${open.client_name}`}
-          </h3>
+        <div data-testid="project-budgets">
           <MetricTable
             head={ar
-              ? ['المشروع', 'الميزانية', 'المصروف', 'المتبقي', 'المتوقع', 'السرعة']
+              ? ['المشروع', 'الميزانية', 'الإنفاق', 'المتبقي', 'المتوقع', 'السرعة']
               : ['Project', 'Budget', 'Spent', 'Remaining', 'Forecast', 'Pace']}
             rows={(open.projects_breakdown ?? []).map((p) => [
               <div key="n" className="flex flex-col">
@@ -683,6 +673,7 @@ function ClientBudgets({ rows, loading, failed, ar }: { rows: ClientBudgetRow[];
           />
         </div>
       )}
+      </DetailPanel>
     </section>
   )
 }

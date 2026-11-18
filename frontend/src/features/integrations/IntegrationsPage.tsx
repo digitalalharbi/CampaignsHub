@@ -1,15 +1,16 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import {
   fetchConnectionHub, removeConnection,
   type ConnectableProvider, type HubConnection,
 } from './api'
-import { ConnectionHub, HubSummary, isGone } from './ConnectionHub'
+import { ConnectionHub, HubSummary, isGone, sourceNeedsAction } from './ConnectionHub'
 import { ConnectionDrawer, type DrawerTab } from './ConnectionDrawer'
 import { ConnectionFlow } from './ConnectionFlow'
 import { IntegrationAudit } from './IntegrationAudit'
 import { ProjectLinkFlow } from './ProjectLinkFlow'
+import { AllClientsIntegrations } from './AllClientsIntegrations'
 import { SourcePlatformRows } from './SourcePlatformRows'
 import { useNavigate } from 'react-router-dom'
 import { usePortalPath } from '@/app/portalPath'
@@ -17,9 +18,14 @@ import { listProjects } from '@/features/projects/api'
 import { StoresPanel } from '@/features/commerce/StoresPanel'
 import { PropertiesPanel } from '@/features/measurement/PropertiesPanel'
 import { Button } from '@/components/ui/Button'
-import { PageIntro } from '@/components/ui/PageIntro'
+import { FitPage } from '@/components/fit/FitPage'
+import { Pager } from '@/components/fit/Pager'
+import { useFitRows } from '@/components/fit/useFitRows'
+import { useColumns } from '@/components/fit/useColumns'
+import { useTabParam } from '@/components/fit/useTabParam'
 import { Skeleton } from '@/components/ui/States'
-import { Plus } from 'lucide-react'
+import { Check, Plus } from 'lucide-react'
+import { Badge } from '@/components/ui/Badge'
 import { ProviderMark } from '@/components/ProviderMark'
 import { PLATFORM_ORDER, canonicalPlatform, platformLabel, sortByPlatform } from '@/lib/platforms'
 import { useUi } from '@/stores/ui'
@@ -48,13 +54,58 @@ export const HUB_SECTIONS: Array<{ key: 'sources' | 'platforms' | 'audit'; ar: s
  */
 export function IntegrationsPage() {
   const currentProjectId = useProject((s) => s.currentProjectId)
+  const setProject = useProject((s) => s.setCurrentProjectId)
+  const setClient = useAgencyClient((s) => s.setCurrentClientId)
+  const inAgency = useLocation().pathname.startsWith('/agency')
+  const ar = useUi((s) => s.locale) === 'ar'
+  const [params, setParams] = useSearchParams()
+  // INTEGRATIONS-ALL-CLIENTS-001 — the agency's second view: every client at once. It lives in the address (`?view=all`) and on THIS page:
+  // changing the client in the side menu never navigates away from it.
+  const all = inAgency && params.get('view') === 'all'
+  const setView = (next: 'client' | 'all') => setParams((p) => { const n = new URLSearchParams(p); if (next === 'all') n.set('view', 'all'); else n.delete('view'); return n }, { replace: true })
 
-  return currentProjectId === null ? <ProjectChooser /> : <ProjectSpace key={currentProjectId} projectId={currentProjectId} />
+  /* A project opens on its sources: the tab of the previous project (kept in the address now) is not carried over to the next. */
+  const lastProject = useRef(currentProjectId)
+  useEffect(() => {
+    if (lastProject.current === currentProjectId) return
+    lastProject.current = currentProjectId
+    setParams((p) => { const next = new URLSearchParams(p); next.delete('section'); return next }, { replace: true })
+  }, [currentProjectId, setParams])
+
+  /*
+   * AGENCY-FIT-001 — the two views are a control in the page's own title row (every body is a fitted page that
+   * seats it there), not a block of their own above it.
+   */
+  const viewSwitch = inAgency ? (
+    <div role="tablist" aria-label={ar ? 'عرض التكاملات' : 'Integrations view'} className="flex w-fit gap-1 rounded-[13px] border border-border bg-surface-secondary p-1" data-testid="integrations-view">
+      {([['client', ar ? 'العميل المحدد' : 'Selected client'], ['all', ar ? 'كل العملاء' : 'All clients']] as const).map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          role="tab"
+          aria-selected={(key === 'all') === all}
+          onClick={() => setView(key)}
+          data-testid={`integrations-view-${key}`}
+          className={`whitespace-nowrap rounded-[10px] px-3.5 py-1 text-sm font-semibold transition-colors ${(key === 'all') === all ? 'bg-surface text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  ) : undefined
+
+  return all
+    ? <AllClientsIntegrations viewSwitch={viewSwitch} onPick={(clientId) => { setClient(clientId); setProject(null); setView('client') }} />
+    : currentProjectId === null ? <ProjectChooser viewSwitch={viewSwitch} /> : <ProjectSpace key={currentProjectId} projectId={currentProjectId} viewSwitch={viewSwitch} />
 }
 
 const isAdPlatform = (key: string): boolean => (PLATFORM_ORDER as readonly string[]).includes(canonicalPlatform(key))
 
-function ProjectChooser() {
+/** A project card in the chooser is this tall, and the grid's gap is 8px. */
+const CHOOSER_CARD = 68
+const CHOOSER_GAP = 8
+
+function ProjectChooser({ viewSwitch }: { viewSwitch?: ReactNode }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const choose = useProject((s) => s.setCurrentProjectId)
   const setClient = useAgencyClient((s) => s.setCurrentClientId)
@@ -66,22 +117,41 @@ function ProjectChooser() {
   const shown = (projects.data ?? [])
     .filter((p) => !inAgency || client === null || p.client_workspace_id === client)
     .filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+  /* AGENCY-FIT-001 — a page of whole rows of cards that fit the screen. */
+  const cols = useColumns([[1280, 3], [640, 2]])
+  const fit = useFitRows({ rowHeight: CHOOSER_CARD + CHOOSER_GAP, reserve: 0, min: 1, max: 12, fallback: 1000 })
+  const perPage = fit.locked ? Math.max(1, fit.rows * cols) : 1000
+  const [page, setPage] = useState(1)
+  const pages = Math.max(1, Math.ceil(shown.length / perPage))
+  const current = Math.min(page, pages)
+  useEffect(() => { setPage(1) }, [search])
+  const pageRows = shown.slice((current - 1) * perPage, current * perPage)
 
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid="hub-project-chooser" dir={ar ? 'rtl' : 'ltr'}>
-      <PageIntro testid="integrations-intro" title={ar ? 'التكاملات' : 'Integrations'} purpose={ar ? 'اختر مشروعًا' : 'Choose a project'} />
-      <input
-        type="search"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder={ar ? 'بحث' : 'Search'}
-        aria-label={ar ? 'بحث' : 'Search'}
-        className="w-full max-w-sm rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none"
-        data-testid="hub-project-search"
-      />
+    <FitPage
+      testid="hub-project-chooser"
+      dir={ar ? 'rtl' : 'ltr'}
+      introTestid="integrations-intro"
+      title={ar ? 'التكاملات' : 'Integrations'}
+      info={ar ? 'اختر مشروعًا' : 'Choose a project'}
+      actions={viewSwitch}
+      toolbar={
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={ar ? 'بحث' : 'Search'}
+          aria-label={ar ? 'بحث' : 'Search'}
+          className="w-full max-w-sm rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none"
+          data-testid="hub-project-search"
+        />
+      }
+    >
+      <div className="flex min-h-0 flex-1 flex-col" dir={ar ? 'rtl' : 'ltr'}>
+      <div ref={fit.ref as never} className="min-h-0 flex-1">
       {projects.isLoading ? <Skeleton className="h-32 w-full" /> : (
-        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {shown.map((p) => (
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {pageRows.map((p) => (
             <li key={p.id} className="min-w-0">
               <button
                 type="button"
@@ -90,7 +160,8 @@ function ProjectChooser() {
                   if (inAgency) setClient(p.client_workspace_id)
                   choose(p.id)
                 }}
-                className="flex w-full min-w-0 items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-4 py-3 text-start transition-colors hover:bg-surface-hover"
+                style={{ height: CHOOSER_CARD }}
+                className="flex w-full min-w-0 items-center justify-between gap-3 rounded-2xl border border-border bg-surface px-4 text-start transition-colors hover:bg-surface-hover"
                 data-testid={`hub-choose-${p.id}`}
               >
                 <span className="flex min-w-0 flex-col gap-1">
@@ -117,14 +188,18 @@ function ProjectChooser() {
           {ar ? 'لا مشروع' : 'No project'}
         </p>
       )}
-    </div>
+      </div>
+      {fit.locked && <Pager testid="hub-project-pager" page={current} pages={pages} onPage={setPage} total={shown.length} ar={ar} hideWhenSingle />}
+      </div>
+    </FitPage>
   )
 }
 
-function ProjectSpace({ projectId: currentProjectId }: { projectId: string }) {
+function ProjectSpace({ projectId: currentProjectId, viewSwitch }: { projectId: string; viewSwitch?: ReactNode }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<'sources' | 'platforms' | 'audit'>('sources')
+  // AGENCY-FIT-001 — the tab is in the address (`?section=`), so a reload, Back and a link land on the same one.
+  const [tab, setTab] = useTabParam<'sources' | 'platforms' | 'audit'>(['sources', 'platforms', 'audit'], 'sources', 'section')
   const project = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), retry: false }).data?.find((p) => p.id === currentProjectId) ?? null
   const projectName = project?.name ?? null
 
@@ -226,44 +301,49 @@ function ProjectSpace({ projectId: currentProjectId }: { projectId: string }) {
   const live = connections.filter((c) => !isGone(c))
 
   return (
-    <div className="flex min-w-0 flex-col gap-6" data-testid="connection-hub" dir={ar ? 'rtl' : 'ltr'}>
-      {/*
+    <FitPage
+      testid="connection-hub"
+      dir={ar ? 'rtl' : 'ltr'}
+      introTestid="integrations-intro"
+      title={projectName ?? (ar ? 'التكاملات' : 'Integrations')}
+      info={ar ? 'التكاملات' : 'Integrations'}
+      /*
         UX-PAGE-HERO-001 — the page's one shared head. It carries the ONE connect entry (with nothing
         connected the sources section's empty state carries it instead, so the button is never drawn
-        twice), and no figures: those are the summary under the work.
-      */}
-      <PageIntro
-        testid="integrations-intro"
-        title={projectName ?? (ar ? 'التكاملات' : 'Integrations')}
-        purpose={ar ? 'التكاملات' : 'Integrations'}
-        // One primary action: with nothing linked the sources' empty state carries it instead.
-        actions={live.length === 0 ? undefined : (
+        twice), and the figures are the compact strip under it.
+      */
+      actions={<>
+        {viewSwitch}
+        {live.length === 0 ? null : (
           <Button onClick={() => startLink()} data-testid="hub-connect">
             <Plus size={15} /> {ar ? 'ربط' : 'Link'}
           </Button>
         )}
-      />
-
-      <HubSummary connections={connections} campaigns={project?.summary?.campaigns ?? null} projectId={currentProjectId} />
-
-      <div role="tablist" aria-label={ar ? 'التكاملات' : 'Integrations'} data-testid="hub-sections" className="flex min-w-0 gap-1 overflow-x-auto rounded-[13px] border border-border bg-surface-secondary p-1">
-        {HUB_SECTIONS.map((section) => (
-          <button
-            key={section.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === section.key}
-            data-testid={`hub-section-link-${section.key}`}
-            onClick={() => setTab(section.key)}
-            className={`shrink-0 whitespace-nowrap rounded-[10px] px-3.5 py-1.5 text-sm font-semibold transition-colors ${tab === section.key ? 'bg-surface text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
-          >
-            {ar ? section.ar : section.en}
-          </button>
-        ))}
-      </div>
+      </>}
+      kpis={<HubSummary connections={connections} campaigns={project?.summary?.campaigns ?? null} projectId={currentProjectId} compact />}
+      toolbar={
+        <div role="tablist" aria-label={ar ? 'التكاملات' : 'Integrations'} data-testid="hub-sections" className="flex min-w-0 w-fit max-w-full gap-1 overflow-x-auto rounded-[13px] border border-border bg-surface-secondary p-1">
+          {HUB_SECTIONS.map((section) => (
+            <button
+              key={section.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === section.key}
+              data-testid={`hub-section-link-${section.key}`}
+              onClick={() => setTab(section.key)}
+              className={`shrink-0 whitespace-nowrap rounded-[10px] px-3.5 py-1 text-sm font-semibold transition-colors ${tab === section.key ? 'bg-surface text-text-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'}`}
+            >
+              {ar ? section.ar : section.en}
+            </button>
+          ))}
+        </div>
+      }
+    >
+    <div className="flex min-h-0 flex-1 flex-col" dir={ar ? 'rtl' : 'ltr'}>
 
       {tab === 'sources' && (
         <ConnectionHub
+          fit
           projectId={currentProjectId}
           onConnect={() => startLink()}
           onOpen={(connection, t) => setDrawer({ id: connection.id, tab: t ?? 'overview' })}
@@ -280,14 +360,20 @@ function ProjectSpace({ projectId: currentProjectId }: { projectId: string }) {
         <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="hub-platforms">
           {hub.isLoading && <li><Skeleton className="h-16 w-full" /></li>}
           {sortByPlatform((hub.data?.connectable ?? []).filter((p) => p.kind === 'advertising'), (p) => p.key).map((provider) => {
-            const linked = live.filter((c) => c.provider === provider.key).reduce((n, c) => n + c.selected_accounts, 0)
+            const mine = live.filter((c) => c.provider === provider.key)
+            const linked = mine.reduce((n, c) => n + c.selected_accounts, 0)
+            // «متصل» only for a platform that is linked AND asks for nothing; one that asks says «يحتاج إجراء» instead.
+            const attention = mine.some(sourceNeedsAction)
             return (
               <li key={provider.key} className="flex min-w-0 items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-3" data-testid={`hub-platform-${provider.key}`}>
                 <ProviderMark provider={provider.key} size={26} />
                 <span className="min-w-0 flex-1 truncate text-sm font-bold text-text-primary">{platformLabel(provider.key, ar)}</span>
-                {linked > 0 && <span className="tnum rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-bold text-success" data-testid={`hub-platform-linked-${provider.key}`}>{linked.toLocaleString('en-US')}</span>}
-                {/* «إعادة الربط» and «ربط» are the same journey: the platform's own sign-in, for this project. */}
-                <Button size="sm" variant={linked > 0 ? 'ghost' : 'primary'} onClick={() => startLink(provider)} data-testid={`hub-platform-link-${provider.key}`}>
+                {linked > 0 && <span className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-bold text-text-secondary" data-testid={`hub-platform-linked-${provider.key}`}>{linked.toLocaleString('en-US')}</span>}
+                {linked > 0 && (attention
+                  ? <span data-testid={`hub-platform-attention-${provider.key}`}><Badge tone="warning">{ar ? 'يحتاج إجراء' : 'Needs action'}</Badge></span>
+                  : <span data-testid={`hub-platform-connected-${provider.key}`}><Badge tone="success"><Check size={12} aria-hidden /> {ar ? 'متصل' : 'Connected'}</Badge></span>)}
+                {/* «إعادة الربط» and «ربط» are the same journey: the platform's own sign-in, for this project. Re-linking is secondary: it is not an error. */}
+                <Button size="sm" variant={linked > 0 ? 'secondary' : 'primary'} onClick={() => startLink(provider)} data-testid={`hub-platform-link-${provider.key}`}>
                   {linked > 0 ? (ar ? 'إعادة الربط' : 'Re-link') : (ar ? 'ربط' : 'Link')}
                 </Button>
               </li>
@@ -383,6 +469,7 @@ function ProjectSpace({ projectId: currentProjectId }: { projectId: string }) {
         />
       )}
     </div>
+    </FitPage>
   )
 }
 

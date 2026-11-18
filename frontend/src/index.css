@@ -165,3 +165,98 @@
   from { opacity: 1; transform: rotate(var(--a)) translateX(0) scale(1); }
   to { opacity: 0; transform: rotate(var(--a)) translateX(46px) scale(0.4); }
 }
+
+/*
+ * NOV-MOBILE-001 — the phone foundations, in one place and outside every layer.
+ *
+ * Unlayered on purpose: a rule outside `@layer` beats every Tailwind utility, so a control written
+ * `text-sm` or `h-8` anywhere in the product still meets these floors without being edited one by one.
+ *
+ * Every feature used here is in Safari 16.4, which is also the floor Tailwind v4 itself sets.
+ */
+
+/* iOS rotates the page and then re-scales the text unless told otherwise. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/*
+ * An iPhone in landscape puts the notch beside the page. `viewport-fit=cover` (index.html) lets the page
+ * reach it; this keeps the content out of it. Both are 0 everywhere that has no cut-out.
+ */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/*
+ * 16px inside a field on a phone or any touch screen, or iOS zooms the page on focus and does not zoom back.
+ * Checkboxes, radios, ranges and files are not text fields and keep their own size.
+ */
+@media (max-width: 767px), (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/*
+ * A finger needs 44×44 CSS px (WCAG 2.5.5, Apple HIG). Applied to what is pressed on a touch screen: buttons,
+ * tabs, menu rows and fields. An icon-only button is also 44 wide; a button with words keeps its own width.
+ * `.touch-exempt` is the deliberate escape for a control that is a link inside a line of text.
+ */
+@media (pointer: coarse) {
+  button:not(.touch-exempt),
+  [role='tab'],
+  [role='menuitem'],
+  [role='option'],
+  summary,
+  select,
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']) {
+    min-height: 44px;
+  }
+  button:not(.touch-exempt):has(> svg:only-child) {
+    min-width: 44px;
+  }
+}
+
+/*
+ * NOV-FIT-001 — a page that fits the screen is locked to it, on a desktop only.
+ *
+ * `PortalFrame` sets `data-fit` while a page that called `useFitLock()` is mounted. Here the root is pinned to the
+ * viewport and every level between it and the page may shrink (`min-height: 0` — a flex item otherwise refuses to
+ * go below its content), so the page's own body is what gives. Nothing here hides content: a page that did not
+ * budget its height would be cut off, and `e2e/shell.spec.ts` measures every converted page for exactly that.
+ *
+ * The query is `FIT_LOCK_QUERY` in `styles/scale.ts` (`fitMedia.test.ts` keeps the two equal). Below it — a phone,
+ * a tablet, a short window — the page flows and scrolls vertically like any other. `100vh` first, `100dvh` after:
+ * a browser without `dvh` keeps the first, and one with it takes the viewport that tracks its toolbars.
+ */
+/* SCROLL-RESTORE-001 — no screen matches: every page flows and scrolls (see `FIT_LOCK_QUERY`). */
+@media (min-width: 100000px) {
+  [data-fit='true'] {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  [data-fit='true'] .portal-col,
+  [data-fit='true'] .portal-main {
+    min-height: 0;
+  }
+  [data-fit='true'] .portal-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 0.5rem;
+  }
+  /* AF2 — the part of a fitted page that takes what is left; its contents are budgeted against its height. */
+  [data-fit='true'] .fit-panel {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+}

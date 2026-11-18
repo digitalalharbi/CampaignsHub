@@ -19,7 +19,7 @@ import { useUi } from '@/stores/ui'
  * the same filters as the table beneath — one data pipeline, not a second one. The strip states the
  * project's figures within the page's filters; the search box narrows rows, never the figures.
  */
-export function ManagementOverview({ projectId, range, filters, testid }: { projectId: string; range: Range; filters: MetricFilters; testid: string }) {
+export function ManagementOverview({ projectId, range, filters, testid, chartHeight }: { projectId: string; range: Range; filters: MetricFilters; testid: string; chartHeight?: number }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const s = useSummary(projectId, range, filters)
   const ts = useTimeseries(projectId, range, filters)
@@ -58,7 +58,7 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
         <div className="lg:col-span-2">
           <Panel
             title={ar ? 'الأداء بمرور الوقت' : 'Performance over time'}
-            description={series.note ?? (ar ? 'الإنفاق والنتائج والإيرادات يومًا بيوم' : 'Spend, results and revenue, day by day')}
+            description={series.note ?? (ar ? 'الإنفاق وتحويلات المنصة والإيرادات يومًا بيوم' : 'Spend, platform conversions and revenue, day by day')}
             loading={ts.isPending}
             error={ts.isError}
             empty={!ts.isPending && !ts.isError && series.rows.length === 0}
@@ -66,19 +66,19 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
             <div data-testid={`${testid}-trend`}>
               <MetricLineChart
                 data={series.rows}
-                height={240}
+                height={chartHeight ?? 240}
                 currency={series.currency ?? reportingCurrency ?? ''}
                 rightAxisFor="conversions"
                 series={[
                   { key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' },
-                  { key: 'conversions', name: ar ? 'النتائج' : 'Results', kind: 'num' },
+                  { key: 'conversions', name: ar ? 'تحويلات المنصة' : 'Platform conversions', kind: 'num' },
                   ...(series.hasMoney ? [{ key: 'revenue', name: ar ? 'الإيرادات' : 'Revenue', kind: 'money' as const }] : []),
                 ]}
               />
             </div>
           </Panel>
         </div>
-        <ChartCard title={ar ? 'مصادر النتائج' : 'Sources of results'}>
+        <ChartCard title={ar ? 'مصادر التحويلات' : 'Sources of conversions'}>
           {platforms.isPending ? (
             <div className="h-[200px] animate-pulse rounded-xl bg-surface-secondary" />
           ) : results.length === 0 ? (
@@ -87,7 +87,7 @@ export function ManagementOverview({ projectId, range, filters, testid }: { proj
             </p>
           ) : (
             <div data-testid={`${testid}-share`}>
-              <PlatformDonutChart data={results} height={200} centerValue={totalResults.toLocaleString('en-US')} centerLabel={ar ? 'النتائج' : 'Results'} />
+              <PlatformDonutChart data={results} height={chartHeight ?? 200} centerValue={totalResults.toLocaleString('en-US')} centerLabel={ar ? 'تحويلات المنصة' : 'Platform conversions'} />
             </div>
           )}
         </ChartCard>

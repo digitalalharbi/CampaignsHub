@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d8a6f" />
+    <title>لا يوجد اتصال — كمبينز هب</title>
+    <style>
+      html,body{margin:0;height:100%}
+      body{display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;
+        background:#062d29;color:#f7f5f0;font:500 16px/1.7 "IBM Plex Sans Arabic",system-ui,-apple-system,"Segoe UI",sans-serif}
+      main{max-width:360px;text-align:center}
+      svg{width:72px;height:72px;margin-bottom:20px}
+      h1{font-size:22px;margin:0 0 8px}
+      p{margin:0 0 24px;color:#9fb3ad}
+      button{font:inherit;font-weight:700;background:#0d8a6f;color:#fff;border:0;border-radius:12px;padding:12px 28px;cursor:pointer}
+      button:focus-visible{outline:3px solid #2bb894;outline-offset:3px}
+    </style>
+  </head>
+  <body>
+    <main>
+      <svg viewBox="0 0 64 64" aria-hidden="true">
+        <g fill="none" stroke="#f7f5f0" stroke-width="6" stroke-linecap="round">
+          <path d="M8 14 H24 C34 14 34 32 42 32" /><path d="M8 32 H42" /><path d="M8 50 H24 C34 50 34 32 42 32" />
+        </g>
+        <circle cx="52" cy="32" r="7" fill="#e8a33d" />
+      </svg>
+      <h1>لا يوجد اتصال بالإنترنت</h1>
+      <p>تأكد من اتصالك ثم حاول مرة ثانية. لا نعرض بيانات قديمة، عشان أرقام الحملات تكون دائمًا حديثة.</p>
+      <button type="button" onclick="location.reload()">حاول مرة ثانية</button>
+    </main>
+  </body>
+</html>

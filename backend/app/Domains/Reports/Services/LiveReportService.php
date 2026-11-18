@@ -24,6 +24,7 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
+use App\Domains\Reports\Measurement\AudienceReportSections;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
 use App\Domains\Reports\Measurement\SiteMeasurementService;
 use App\Domains\Reports\Measurement\StoreAnalyticsSection;
@@ -35,15 +36,18 @@ use App\Domains\Reports\Services\Attention\AttentionAudience;
 use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\ClientAccountRows;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\ContentKey;
 use App\Domains\Reports\Support\GenericNames;
+use App\Domains\Reports\Support\HiddenMoney;
 use App\Domains\Reports\Support\PreviousComparison;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
 use App\Domains\Reports\Support\ReportDataFreshness;
+use App\Domains\Reports\Support\ReportObjectives;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportReadMemo;
 use App\Domains\Reports\Support\ReportScope;
@@ -478,6 +482,27 @@ final class LiveReportService
         $destinations = app(CampaignDestinations::class)->for($ids);
 
         return ($results->configured() ? $results->over($rows, $destinations) : $none) + ['leads' => $leads->leadBreakdown($rows, $destinations)];
+    }
+
+    /**
+     * REPORT-MULTI-OBJECTIVE-001 — the KPI cards a live link shows; see the note where it is called.
+     *
+     * @return list<string>
+     */
+    private function visibleKpis(ReportShare $share): array
+    {
+        $report = $share->report;
+        $listed = ChosenFigures::listed($report, $share);
+        // The objective fallback is for reports that carry the objective choice this change introduced; every link made before it keeps
+        // «all of them» when nobody chose a list (a saved report's inferred `campaign_objective` is not a choice made for its link).
+        if ($listed !== [] || $report === null || ! ReportObjectives::chosenForLink($report)) {
+            return $listed;
+        }
+
+        return array_values(array_diff(
+            ReportObjectives::kpis($report),
+            HiddenMoney::keys((bool) $share->hide_spend, (bool) $share->hide_revenue),
+        ));
     }
 
     /**
@@ -1223,10 +1248,12 @@ final class LiveReportService
              * of merely blanking a number — a blank card still tells the reader a figure exists and
              * is being withheld.
              */
-            'metrics' => array_values(array_filter(
-                (array) ($share->scope['metrics'] ?? []),
-                static fn ($m): bool => is_string($m) && $m !== '',
-            )),
+            /*
+             * Master task 10 (REPORT-MULTI-OBJECTIVE-001) — ONE reader for every surface: the link's own list, else the report's own
+             * (`ChosenFigures::listed`, the chain its PDF is cut by), else the KPIs of the report's objective(s) — one, or «زيارات + مبيعات»
+             * as the union of both presets — less the money this link hides. A link with none of these still means «all of them».
+             */
+            'metrics' => $this->visibleKpis($share),
             'available' => [
                 // WEBSITE-TAB-001 — the platform chips are AD platforms: the website is a measurement source with a tab of its own.
                 'providers' => self::withoutMeasurement($scope['providers']),
@@ -1252,6 +1279,8 @@ final class LiveReportService
 
         // GA4-REPORT-SECTIONS-001 — read against this link's OWN platform rows, so the link's source ceiling is the gap's too.
         $payload = array_merge($payload, $this->ga4Sections($share, $scope, $from, $to, (array) $payload['platforms'], $currency));
+        // AUDIENCE-001 — each audience data type a SHOW/HIDE of its own, cut for the reader on the server.
+        $payload = array_merge($payload, $this->audienceSections($share, $scope, $from, $to));
 
         /*
          * REPORT-ANALYTICAL-DEPTH-001 — the client's link says what it contains, and why anything is
@@ -1623,8 +1652,8 @@ final class LiveReportService
             'campaign_ids' => $scope['campaign_ids'],
             'account_ids' => $share->scope['account_ids'] ?? [],
             'objectives' => $share->scope['objectives'] ?? [],
-            // A link's objectives are a ceiling the operator granted: they keep filtering (nothing widens).
-            'objective_filter' => true,
+            // OBJECTIVE-FILTERS-INCLUSIVE-001 — a link's objectives choose its KPIs; they never drop a campaign or a riyal
+            // (Owner-approved, 2026-11-13, for links already shared too). ReportScope reads them as a template.
             'paths' => $share->scope['paths'] ?? [],
             'ad_set_ids' => $share->scope['ad_set_ids'] ?? [],
             'ad_ids' => $share->scope['ad_ids'] ?? [],
@@ -2192,6 +2221,63 @@ final class LiveReportService
             ! $this->namesCampaigns($share), $this->ga4PlatformCeiling($share),
             // The link can only narrow what the report shows: its own list joins the report's.
             [...$report->sectionSettings()->ga4Hidden(), ...Ga4Visibility::normalise(((array) ($share->settings ?? []))['ga4_hidden'] ?? null)],
+        );
+    }
+
+    /**
+     * AUDIENCE-001 — the audience parts of a link, or nulls. The operator's switches (report AND link) decide
+     * each part; a client-facing report never carries money or campaign / ad-set names; a link narrower than
+     * its project by campaign carries none (see AudienceReportSections).
+     *
+     * @param  array{project_id: string, campaign_ids: list<string>}  $scope
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function audienceSections(ReportShare $share, array $scope, Carbon $from, Carbon $to): array
+    {
+        $none = array_fill_keys(AudienceReportSections::KEYS, null);
+        if ($this->namesNothing($share, $scope)) {
+            return $none;
+        }
+        $report = ReportReadMemo::remember('report-find|'.$share->report_id, fn (): ?Report => Report::withoutGlobalScopes()->find($share->report_id));
+        if ($report === null) {
+            return $none;
+        }
+        $surfaces = app(ReportSectionSurfaces::class);
+        $linkScope = (array) ($share->scope ?? []);
+        // The report's own scope can be narrower than its link: the two are intersected, never unioned.
+        $reportScope = ReportScope::fromReport($report->scope, (string) $report->project_id);
+        $providers = $this->ga4PlatformCeiling($share);
+        if ($reportScope->providers !== []) {
+            $providers = array_values(array_intersect($providers ?? $reportScope->providers, $reportScope->providers));
+        }
+        $accounts = array_values(array_filter((array) ($linkScope['account_ids'] ?? []), 'is_string'));
+        if ($reportScope->accountIds !== []) {
+            $accounts = array_values(array_intersect($accounts, $reportScope->accountIds));
+        }
+        // Axes the audience rows cannot follow: withheld, never widened.
+        $cannotFollow = array_filter(array_intersect_key($linkScope, array_flip(['objectives', 'paths', 'destinations', 'creative_ids', 'ad_set_ids', 'ad_ids']))) !== []
+            || ($reportScope->objectiveFilter && $reportScope->objectives !== []) || $reportScope->paths !== [] || $reportScope->destinations !== []
+            || $reportScope->creativeIds !== [] || $reportScope->adSetIds !== [] || $reportScope->adIds !== [];
+        /*
+         * The campaign ceiling is the one the link NAMES. A link over accounts follows its accounts (LIVE-LINK-BEFORE-CAMPAIGNS-001):
+         * the account ceiling above already bounds it, and its resolved list (campaigns that have figures) would wrongly drop an ad set
+         * whose campaign is not linked yet. The report's own list narrows either.
+         */
+        $named = array_values(array_filter((array) ($linkScope['campaign_ids'] ?? []), 'is_string'));
+        $campaigns = $named === [] ? null : $named;
+        if ($reportScope->campaignIds !== []) {
+            $campaigns = array_values(array_intersect($campaigns ?? $reportScope->campaignIds, $reportScope->campaignIds));
+        }
+
+        return app(AudienceReportSections::class)->build(
+            (string) $share->tenant_id, $scope['project_id'], $from, $to,
+            (string) ($report->audience ?? 'client') !== 'internal',
+            static fn (string $key): bool => $surfaces->operatorAllows($key, $report, $share),
+            $providers,
+            $cannotFollow,
+            $accounts,
+            (bool) $share->hide_spend,
+            $campaigns,
         );
     }
 

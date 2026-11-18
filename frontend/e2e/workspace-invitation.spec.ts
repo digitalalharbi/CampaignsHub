@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, csrfHeaders, E2E_ORIGIN, switchToEnglish } from './helpers'
+import { AUTH, csrfHeaders, E2E_ORIGIN, switchToEnglish, openRail } from './helpers'
 
 /**
  * Workspace invitation acceptance: the owner invites a member (secure token), and the invitee — with no
@@ -35,12 +35,13 @@ test('owner invites a member → invitee accepts → joins the workspace', async
   await expect(join).toBeEnabled()
   await join.click()
 
-  // 3) Joined the existing workspace → dashboard with the personal full menu.
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 10_000 })
+  // 3) Joined the existing workspace → the role home with the personal full menu.
+  await expect(page).toHaveURL(/\/(agency|app)\/home/, { timeout: 10_000 })
   await switchToEnglish(page)
+  await openRail(page, { optional: true })
   await expect(page.getByRole('link', { name: /Campaigns|الحملات/ }).first()).toBeVisible()
 
   // Persistence across reload.
   await page.reload()
-  await expect(page).toHaveURL(/\/dashboard/)
+  await expect(page).toHaveURL(/\/(agency|app)\/home/)
 })

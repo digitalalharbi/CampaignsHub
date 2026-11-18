@@ -1,3 +1,4 @@
+import type { FxConversion } from '@/lib/money/fx'
 import { api, ensureCsrfCookie, getData, postData, putData } from '@/lib/api/client'
 
 /**
@@ -27,6 +28,19 @@ export interface Proposal {
   expires_at: string | null
   executed_at: string | null
   created_at: string | null
+  /** The daily budget when the change was asked — the «before» of the preview (null when unknown or not a budget). */
+  current_daily_budget?: number | null
+  /**
+   * CONS-I-APPROVAL — the same budget in the currency the reader reads. `daily_budget` / `current_daily_budget` are null when no
+   * rate exists (`reason` says why); `converted` is false when the platform's currency already is the display currency.
+   */
+  display?: {
+    currency: string; daily_budget: number | null; current_daily_budget: number | null; converted: boolean; source_currency: string | null; reason: string | null
+    /** FX-APPLY-001 — the FxEngine conversion of each figure; withheld → «—» + ⚠ + the rates link. */
+    conversion?: FxConversion | null
+    current_conversion?: FxConversion | null
+    stale?: boolean
+  } | null
 }
 
 export interface ProposalList {
@@ -46,14 +60,20 @@ export async function decideProposal(projectId: string, id: string, decision: 'a
 
 /* AGENTS-CENTER-001 — the six agents and their conversations. */
 
+export type SpecialistKey = 'campaign' | 'analyst' | 'creative' | 'leads' | 'reports' | 'builder'
+export type AgentJob = 'watch' | 'analyse' | 'content' | 'reports' | 'build'
+export type AgentAutonomy = 'suggests' | 'acts_after_approval'
+
 export interface AgentRole {
-  key: 'orchestrator' | 'campaign' | 'analyst' | 'creative' | 'leads' | 'reports'
+  key: 'assistant' | 'orchestrator' | SpecialistKey
   ar: string
   en: string
   enabled: boolean
   /** Why a listed agent cannot work today (a code worded by `agentCopy`). */
   why_disabled: string | null
   can_propose: boolean
+  job?: AgentJob | null
+  autonomy?: AgentAutonomy | null
 }
 
 export interface AgentThreadSummary {
@@ -64,10 +84,27 @@ export interface AgentThreadSummary {
   updated_at: string | null
   /** A scheduled run: the project's, not a person's. */
   shared?: boolean
+  pinned?: boolean
 }
 
 export interface ThreadFilters { q?: string; agent?: string; status?: string }
 export interface ThreadList { threads: AgentThreadSummary[]; total?: number; retention_days?: number }
+
+/** A data card cut by the SERVER from what the tools returned — never from the model's words. */
+export type AnswerCard =
+  | { type: 'campaigns'; window: { from?: string; to?: string }; currency: string | null; count: number; rows: { id: string | null; name: string | null; objective: string | null; spend: number | null; results: number | null; cpa: number | null; roas: number | null }[] }
+  | { type: 'targets'; window: { from?: string; to?: string }; rules: number; counts: { on_target: number; off_target: number; not_judged: number; no_figure: number } }
+  | { type: 'series'; window: { from?: string; to?: string }; campaign_id: string | null; points: { date: string | null; spend: number | null; results: number | null }[] }
+  | { type: 'creatives'; window: { from?: string; to?: string }; rows: { id: string | null; name: string | null; spend: number | null; ctr: number | null; fatigue: string | null }[] }
+
+export interface MessageMeta {
+  /** stopped | max_tool_rounds | max_tokens | memory_saved | memory_rejected | memory_forgotten | needs_lead_sources … */
+  code?: string
+  cards?: AnswerCard[]
+  sources?: { tool: string; from?: string; to?: string }[]
+  proposals?: string[]
+  drafts?: string[]
+}
 
 export interface AgentMessage {
   id: string
@@ -75,7 +112,12 @@ export interface AgentMessage {
   text: string | null
   tools: { name: string; ok?: boolean; input?: unknown }[] | null
   at: string | null
+  /** Which specialist answered an «المساعد» turn. */
+  specialist?: SpecialistKey | null
+  meta?: MessageMeta | null
 }
+
+export interface ThreadContext { days?: number; campaign_id?: string }
 
 export interface AgentThread {
   id: string
@@ -85,6 +127,8 @@ export interface AgentThread {
   /** A code (no_ai_credential, agent_turn_failed) — never a provider's or database's own text. */
   error: string | null
   messages: AgentMessage[]
+  pinned?: boolean
+  context?: ThreadContext | null
 }
 
 export const listAgents = (projectId: string) => getData<{ agents: AgentRole[] }>(`/projects/${projectId}/agents`)
@@ -108,9 +152,109 @@ export async function clearThreads(projectId: string) {
 
 export const getThread = (projectId: string, id: string) => getData<AgentThread>(`/projects/${projectId}/agent-threads/${id}`)
 
-export async function sendToAgent(projectId: string, body: { agent?: string; thread_id?: string; message: string }) {
+export interface SendResult {
+  thread_id: string
+  status: string
+  error?: string
+  /** «تذكّر …» / «انسَ …» were handled without a model. */
+  memory?: { action: 'saved' | 'rejected' | 'forgotten'; id?: string; text?: string; code?: string; count?: number }
+  /** A standing instruction the person may choose to keep (nothing is saved until they accept). */
+  suggested_memory?: string | null
+}
+
+export async function sendToAgent(projectId: string, body: { agent?: string; thread_id?: string; message: string; context?: ThreadContext }) {
   await ensureCsrfCookie()
-  return postData<{ thread_id: string; status: string }>(`/projects/${projectId}/agent-threads`, body)
+  return postData<SendResult>(`/projects/${projectId}/agent-threads`, body)
+}
+
+/* AGENTS-ASSISTANT-001 — the assistant: live reply, Stop, rename/pin, the team, settings and memory. */
+
+export interface LiveReply { status: AgentThreadSummary['status']; error: string | null; phase: 'routing' | 'reading' | 'writing' | null; specialist: SpecialistKey | null; text: string; tools: string[]; seq: number }
+
+export const getLive = (projectId: string, id: string) => getData<LiveReply>(`/projects/${projectId}/agent-threads/${id}/live`)
+
+export async function stopReply(projectId: string, id: string) {
+  await ensureCsrfCookie()
+  return postData<{ status: string; stopping: boolean }>(`/projects/${projectId}/agent-threads/${id}/stop`, {})
+}
+
+export async function updateThread(projectId: string, id: string, body: { title?: string; pinned?: boolean }) {
+  await ensureCsrfCookie()
+  return api.patch(`/projects/${projectId}/agent-threads/${id}`, body).then((r) => r.data.data as { id: string; title: string; pinned: boolean })
+}
+
+export interface TeamMember {
+  key: SpecialistKey
+  ar: string
+  en: string
+  job: AgentJob
+  autonomy: AgentAutonomy
+  job_ar: string
+  job_en: string
+  enabled: boolean
+  why_disabled: string | null
+  last_activity_at: string | null
+  pending_proposals: number
+  schedule: 'on' | 'off' | 'none'
+}
+
+export const getTeam = (projectId: string) => getData<{ jobs: AgentJob[]; members: TeamMember[] }>(`/projects/${projectId}/agents/team`)
+
+export interface AssistantSettingsState {
+  model: string
+  models: string[]
+  default_model: string
+  daily_token_cap: number
+  cap_min: number
+  cap_max: number
+  used_today: number
+  max_tool_rounds: number
+}
+
+export const getAssistantSettings = () => getData<AssistantSettingsState>('/ai/assistant')
+export async function saveAssistantSettings(body: { assistant_model?: string; daily_token_cap?: number }) {
+  await ensureCsrfCookie()
+  return putData<AssistantSettingsState>('/ai/assistant', body)
+}
+
+export async function testAiCredential(id: string) {
+  await ensureCsrfCookie()
+  return postData<{ ok: boolean; code: string; model?: string; masked_key: string }>(`/ai/credentials/${id}/test`, {})
+}
+
+export interface Memory { id: string; text: string; source: 'user' | 'suggested'; updated_at: string | null }
+export const listMemories = () => getData<{ memories: Memory[]; max: number; max_chars: number }>('/ai/memories')
+export const exportMemories = () => getData<{ exported_at: string; memories: Memory[] }>('/ai/memories/export')
+export async function addMemory(text: string, source: 'user' | 'suggested' = 'user') {
+  await ensureCsrfCookie()
+  return postData<Memory>('/ai/memories', { text, source })
+}
+export async function editMemory(id: string, text: string) {
+  await ensureCsrfCookie()
+  return putData<Memory>(`/ai/memories/${id}`, { text })
+}
+export async function deleteMemory(id: string) {
+  await ensureCsrfCookie()
+  return api.delete(`/ai/memories/${id}`)
+}
+export async function forgetAllMemories() {
+  await ensureCsrfCookie()
+  return api.delete('/ai/memories').then((r) => r.data.data as { deleted: number })
+}
+
+export async function runRoutineNow(projectId: string, routine: string) {
+  await ensureCsrfCookie()
+  return postData<{ outcome: string; thread_id: string | null; routines: AgentRoutineRow[] }>(`/projects/${projectId}/agent-routines/${routine}/run`, {})
+}
+
+export async function bulkDecide(projectId: string, decision: 'approve' | 'reject', ids: string[]) {
+  await ensureCsrfCookie()
+  return postData<{ results: { id: string; ok: boolean; status?: string; error?: string }[] }>(`${base(projectId)}/bulk`, { decision, ids })
+}
+
+export async function amendProposal(projectId: string, id: string, dailyBudget: number) {
+  await ensureCsrfCookie()
+  return api.patch(`${base(projectId)}/${id}`, { daily_budget: dailyBudget }).then((r) => r.data.data as Proposal)
 }
 
 /* The tenant's own AI keys (masked; the secret is never read back). */
@@ -130,7 +274,7 @@ export const listAiCredentials = () => getData<AiCredential[]>('/ai/credentials'
 export async function addAiCredential(provider: string, secret: string, model?: string) {
   await ensureCsrfCookie()
   return postData<AiCredential>('/ai/credentials', {
-    provider, secret, credential_scope: 'tenant', allowed_features: ['agents'],
+    provider, secret, credential_scope: 'tenant', allowed_features: ['agents'], replace_existing: true,
     // The model the agents use with this key; required for OpenAI, where no default is assumed.
     ...(model ? { allowed_models: [model] } : {}),
   })
@@ -150,6 +294,8 @@ export interface AgentRoutineRow {
   /** queued | skipped_busy | no_ai_credential | model_unavailable */
   last_outcome: string | null
   last_thread_id: string | null
+  /** ISO time of the next scheduled run (Riyadh). */
+  next_run_at?: string | null
 }
 
 export const listRoutines = (projectId: string) => getData<{ routines: AgentRoutineRow[] }>(`/projects/${projectId}/agent-routines`)

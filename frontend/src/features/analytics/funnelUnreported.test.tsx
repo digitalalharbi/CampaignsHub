@@ -186,3 +186,25 @@ describe('the conversion funnel tells silence from zero', () => {
     expect(screen.queryByText('subscriptions')).not.toBeInTheDocument()
   })
 })
+
+/* FUNNEL-MOBILE-001 — every stage states its count: a bar too short to hold it carries it just after the bar. */
+describe('the funnel on a narrow screen', () => {
+  it('writes every stage\'s count, outside the bar when the bar is short', () => {
+    renderWithProviders(
+      <ConversionFunnelChart
+        ar
+        stages={[
+          { stage: 'impressions', label: 'Impressions', count: 6_596_500, step_rate: null, cost_per: null },
+          { stage: 'clicks', label: 'Clicks', count: 20_400, step_rate: 0.003, cost_per: null },
+          { stage: 'purchases', label: 'Purchases', count: 838, step_rate: 0.04, cost_per: null },
+        ]}
+      />,
+    )
+    const counts = screen.getAllByTestId('funnel-count')
+    expect(counts).toHaveLength(3)
+    expect(counts[0]).not.toHaveAttribute('data-outside')
+    expect(counts[1]).toHaveAttribute('data-outside', 'true')
+    expect(counts[2]).toHaveTextContent('838')
+    expect(counts[2]).toHaveAttribute('data-outside', 'true')
+  })
+})

@@ -71,7 +71,7 @@ final class Ga4AlertSignals
         $ids = ProjectIntegrationBinding::withoutGlobalScopes()->where('tenant_id', $tenantId)->where('provider', 'ga4')->where('is_active', true)
             ->when($only !== null, fn ($q) => $q->where('project_id', $only))->distinct()->pluck('project_id')->all();
 
-        return $ids === [] ? [] : Project::withoutGlobalScopes()->whereIn('id', $ids)->get()->all();
+        return $ids === [] ? [] : Project::withoutGlobalScopes()->whereIn('id', $ids)->live()->get()->all(); // PROJECT-LIFECYCLE-001
     }
 
     /** @return array<string, mixed>|null */
@@ -153,7 +153,7 @@ final class Ga4AlertSignals
             return null;
         }
 
-        return $this->breach($project, 'ga4:tracking', 'Tracking may be broken', 'قد يكون التتبع معطّلًا',
+        return $this->breach($project, 'ga4:tracking', 'Website visits fell while ads kept spending', 'زيارات الموقع نزلت والإعلانات مكمّلة صرف',
             'Website sessions fell '.(int) round($drop * 100).'% while the platforms still report activity.', 'انخفضت زيارات الموقع '.(int) round($drop * 100).'% بينما تواصل المنصات تسجيل نشاط.',
             ['sessions' => $k['current'], 'previous' => $k['previous'], 'drop' => round($drop, 4)], 'critical');
     }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { frozenBeforeWebsiteTab, withDailyRecordsSlides, withEvidenceSlides, withFormatComparisonSlides, withGa4Slides, withStreamsSlide } from './reportSections'
+import { frozenBeforeWebsiteTab, withDailyRecordsSlides, withEvidenceSlides, withAudienceSlides, withFormatComparisonSlides, withGa4Slides, withStreamsSlide } from './reportSections'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { ATTENTION_SLIDE, SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
@@ -102,6 +102,8 @@ export function PrintReport() {
       withFormatComparisonSlides(visible, d, true)
       withDailyRecordsSlides(visible, d)
     }
+    // AUDIENCE-001 — the audience pages the server left in, after the report proper.
+    withAudienceSlides(visible, d as never)
     // WD-EVIDENCE-001 — the platform screenshots close the deck, as its appendix.
     withEvidenceSlides(visible, d)
     // REPORT-FOOTER-001 — no methodology page: the footer of every page carries the one note.
@@ -479,9 +481,18 @@ function largestEmptyRect(grid: Uint8Array, cols: number, rows: number): number 
   return best / (cols * rows)
 }
 
+/**
+ * REPORT-PDF-16-9-001 (master task 10) — a presentation page is a 16:9 slide, exactly the size of what is on it.
+ *
+ * It printed on A4 landscape (1.414) while `report-print.mjs` measures and fits every slide in Chromium's default 1280×720 viewport
+ * (16:9): the layout the gate approved was not the page that was printed, and the difference was blank space under every slide.
+ * 338.67mm × 190.5mm IS 1280×720 CSS px, so the printed page is the measured one, margin 0.
+ */
+export const SLIDE_PAGE = '338.67mm 190.5mm'
+
 function printCss(landscape: boolean): string {
   return `
-  @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 0; }
+  @page { size: ${landscape ? SLIDE_PAGE : 'A4 portrait'}; margin: 0; }
   html, body { background: var(--surface); }
   .report-print { background: var(--surface); color: var(--text-primary); }
   .report-slide {

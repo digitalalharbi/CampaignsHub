@@ -6,10 +6,12 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportSchedule;
 use App\Domains\Reports\Support\ReportIdentity;
+use App\Domains\Reports\Support\ReportScheduleKey;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -40,11 +42,28 @@ final class ScheduledReportDispatcher
         // Each report carries its own tenant_id/project_id.
         $due = ReportSchedule::withoutGlobalScopes()
             ->where('active', true)
+            ->whereIn('project_id', LiveProjects::idsQuery()) // PROJECT-LIFECYCLE-001 — no scheduled report for an archived/deleted project
             ->whereNotNull('next_run_at')
             ->where('next_run_at', '<=', $now)
             ->get();
 
+        /*
+         * CONS-SCHEDULE-ONE — until `reports:dedupe-schedules` has switched the old copies off, two active rows with the
+         * same key would each build the same report and each say «ready». The oldest active copy is the schedule; any
+         * other copy has its run taken (moved on) without building anything.
+         */
+        $owners = $due->isEmpty() ? collect() : ReportSchedule::withoutGlobalScopes()
+            ->where('active', true)->whereIn('project_id', $due->pluck('project_id')->unique()->all())
+            ->orderBy('created_at')->orderBy('id')->get()
+            ->groupBy(fn (ReportSchedule $s) => ReportScheduleKey::for($s))
+            ->map(fn ($rows) => (string) $rows->first()->getKey());
+
         foreach ($due as $schedule) {
+            if (($owners[ReportScheduleKey::for($schedule)] ?? (string) $schedule->getKey()) !== (string) $schedule->getKey()) {
+                $this->claimDue($schedule, $now);
+
+                continue;
+            }
             if ($this->claimDue($schedule, $now)) {
                 $this->dispatchOne($schedule, $now);
                 $count++;

@@ -12,7 +12,7 @@ const PRESETS = [30, 60, 90, 180, 365]
  * AGENT-CHAT-RETENTION-001 — for whoever manages the agents: how long this workspace keeps conversations after their last message.
  * A limit between 7 and 730 days; there is no «forever». It decides when conversations are deleted, and gives nobody a way to read them.
  */
-export function ChatRetentionCard({ ar }: { ar: boolean }) {
+export function ChatRetentionCard({ ar, bare = false }: { ar: boolean; bare?: boolean }) {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['ai-chat-retention'], queryFn: getChatRetention })
   const [draft, setDraft] = useState<string | null>(null)
@@ -27,8 +27,8 @@ export function ChatRetentionCard({ ar }: { ar: boolean }) {
   const valid = Number.isInteger(n) && n >= r.min && n <= r.max
 
   return (
-    <Card className="space-y-2" data-testid="chat-retention">
-      <p className="text-xs font-bold text-text-primary">{ar ? 'مدة حفظ المحادثات' : 'Conversation retention'}</p>
+    <Card className={bare ? 'space-y-2 border-0 bg-transparent p-0 shadow-none' : 'space-y-2'} data-testid="chat-retention">
+      {!bare && <p className="text-xs font-bold text-text-primary">{ar ? 'مدة حفظ المحادثات' : 'Conversation retention'}</p>}
       <p className="text-[11px] text-text-muted">
         {ar
           ? `تُحذف محادثات الوكلاء تلقائيًا بعد المدة التي تختارها من آخر رسالة (من ${r.min} إلى ${days(r.max, 'ar')}). المحادثات تبقى خاصة بأصحابها.`

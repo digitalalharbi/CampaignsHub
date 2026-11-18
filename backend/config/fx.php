@@ -44,13 +44,25 @@ return [
         'driver' => env('FX_RATE_DRIVER'),
 
         /*
-         * How stale a rate may be before the coverage surface calls it out.
+         * How stale a rate may be before it is flagged ⚠ (Owner order, FX-ENGINE-001: 7 days).
          *
          * Not an expiry: an old rate is still the best evidence available for its own date, and the
          * lookup is nearest-on-or-before by design. This is the age at which an operator should be
          * told the feed has stopped arriving.
          */
-        'stale_after_days' => (int) env('FX_RATE_STALE_AFTER_DAYS', 3),
+        'stale_after_days' => (int) env('FX_RATE_STALE_AFTER_DAYS', 7),
+
+        /*
+         * PROJECT-LIFECYCLE-001 §7 — the internal admin alert («fx_rate_expiring») is raised this many days before a rate's
+         * `effective_to`. An expired rate is still used (flagged «سعر قديم»), so this is a reminder, not a cliff.
+         */
+        'expiry_warning_days' => (int) env('FX_RATE_EXPIRY_WARNING_DAYS', 3),
     ],
+
+    /*
+     * FX-ENGINE-001 — raise the in-app «currency with no rate» alert the moment an ad account is linked in it (the daily
+     * fx:monitor sweep raises it regardless). On by default.
+     */
+    'alert_on_link' => (bool) env('FX_ALERT_ON_LINK', true),
 
 ];

@@ -12,7 +12,7 @@ import { AUTH, switchToEnglish } from './helpers'
 test.use({ storageState: AUTH.advertiser })
 
 test('the limits divide into their states, and «not comparable» is not green', async ({ page }) => {
-  await page.goto('/app/spend-limits')
+  await page.goto('/app/spend-limits?tab=readings')
   await switchToEnglish(page)
 
   await expect(page.getByTestId('spend-limits-intro')).toBeVisible({ timeout: 30000 })
@@ -44,7 +44,7 @@ test('the limits divide into their states, and «not comparable» is not green',
 })
 
 test('the pace ranking agrees with the count of limits it could not read', async ({ page }) => {
-  await page.goto('/app/spend-limits')
+  await page.goto('/app/spend-limits?tab=readings')
   await switchToEnglish(page)
 
   await expect(page.getByTestId('spend-limits-intro')).toBeVisible({ timeout: 30000 })
@@ -67,7 +67,7 @@ test('the pace ranking agrees with the count of limits it could not read', async
 })
 
 test('the ratios are Latin digits in Arabic, like every other figure in the product', async ({ page }) => {
-  await page.goto('/app/spend-limits')
+  await page.goto('/app/spend-limits?tab=readings')
 
   await expect(page.getByTestId('spend-limits-intro')).toBeVisible({ timeout: 30000 })
 

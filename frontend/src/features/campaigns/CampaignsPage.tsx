@@ -2,13 +2,14 @@ import { comparableWindows } from '@/lib/coverage/contract'
 import { useEffect, useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
-import { PeriodLabel } from '@/components/patterns/Status'
 import { listProjects } from '@/features/projects/api'
-import { portfolioBudget } from '@/lib/money/portfolioBudget'
+import { excludedRows, portfolioBudget } from '@/lib/money/portfolioBudget'
 import { CampaignLink } from './CampaignLink'
 import { CampaignSecondaryStrip } from './CampaignSecondaryStrip'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { portalBaseOf } from '@/app/portalPath'
 import { useQuery } from '@tanstack/react-query'
+import { FxAmount, FxCoverageNote, FxSpendNote } from '@/components/money/FxAmount'
 import { BarChart3, GitCompare, LayoutGrid, Plus, Rows, Search, TriangleAlert, History } from 'lucide-react'
 import { listCampaigns } from './api'
 import { CampaignFormModal } from './CampaignFormModal'
@@ -24,7 +25,8 @@ import { CampaignViewsBar } from './CampaignViewsBar'
 import { BulkCampaignActions } from './BulkCampaignActions'
 import { readMetric, SPECS } from '@/features/analytics/metricCatalog'
 import type { SavedView } from '@/features/dashboard/savedViews'
-import { Columns3 } from 'lucide-react'
+import { Columns3, Download } from 'lucide-react'
+import { downloadTableCsv } from '@/lib/tableCsv'
 import type { MetricReading } from '@/components/ui/MetricStrip'
 import { campaignRelevance, type CampaignRelevance } from './campaignRelevance'
 import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
@@ -45,15 +47,17 @@ const LIFECYCLE_LABELS: Record<Lifecycle, { ar: string; en: string }> = {
 }
 import { MetricTable } from '@/components/ui/MetricTable'
 import { Num } from '@/components/ui/Num'
-import { useUrlNumber, useUrlState, useUrlWriter } from '@/features/analytics/filterUrlState'
+import { useUrlState, useUrlWriter } from '@/features/analytics/filterUrlState'
 import { Badge } from '@/components/ui/Badge'
+import { DetailPanel } from '@/components/fit/DetailPanel'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ChartCard, PlatformDonutChart, RankingBarChart, SpendEfficiencyScatter, SpendRevenueAreaChart } from '@/features/analytics/charts'
 import { useBudget, useCampaigns, useFreshness, usePlatforms, useSummary, useTimeseries, type BudgetRow } from '@/features/analytics/api'
-import { useLastNDaysRange } from '@/features/analytics/hooks'
-import { ProvenanceBadge, RangeTabs, TrendPill } from '@/features/analytics/components'
+import { usePeriod } from '@/lib/period/usePeriod'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
+import { ProvenanceBadge, TrendPill } from '@/features/analytics/components'
 import { compact, money, num } from '@/features/analytics/format'
 import { campaigns as countedCampaigns } from '@/lib/counted'
 import { formatMoneyReading, rankableMoney, readMoney, resolveMoneySeries, type MoneyTotals } from '@/lib/money/contract'
@@ -65,6 +69,13 @@ import { useUi } from '@/stores/ui'
 import { useT } from '@/lib/i18n'
 import { orderAttention } from './attentionOrdering'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
+import { AgencyFit, FitPanel, useBoxHeight, useFitCompact } from '@/components/fit/AgencyFit'
+import { TabStrip } from '@/components/fit/TabStrip'
+import { useFitRows } from '@/components/fit/useFitRows'
+import { LevelTabs } from './LevelTabs'
+import { ApprovedBudgetPacing } from '@/features/funding/ApprovedBudget'
+import { useApprovedBudget } from '@/features/funding/fundingApi'
 
 const STATUS_COLORS: Record<string, string> = {
   active: 'var(--success)', paused: 'var(--warning)', completed: 'var(--info)',
@@ -131,6 +142,7 @@ export function CampaignsPage() {
   const locale = useUi((s) => s.locale)
   const ar = locale === 'ar'
   const navigate = useNavigate()
+  const location = useLocation()
   const canCreate = useAuth((s) => s.hasPermission('campaigns.create'))
 
   const { currentProjectId: projectId } = useProject()
@@ -147,8 +159,12 @@ export function CampaignsPage() {
    * load because a governance sidecar did would be a worse outcome than the missing chip.
    */
   const spendLimits = useSpendLimits(projectId)
+  // ONE-BUDGET-001 — the project's approved budget (one source, its own period); the strip and the pacing line read it.
+  const approved = useApprovedBudget(projectId)
+  const canAddBudget = useAuth((s) => s.hasPermission('funding.manage'))
 
-  const [days, setDays] = useUrlNumber('days', 30)
+  /* DATE-RANGE-001 — the system's one period; rolling presets end yesterday, as the platforms' do. */
+  const { days, setDays, range } = usePeriod()
   // PERF-CAMPAIGNS-001: the page opens on the CARD LIST, not the chart-heavy overview. Four charts plus
   // five metric queries on first paint made the page slow to become interactive on Firefox under load —
   // and a page called "campaigns" should show campaigns first anyway. Overview is one click away.
@@ -168,7 +184,9 @@ export function CampaignsPage() {
    * the reader's place. The default is untouched — the overview is what an operator should meet
    * first, and that is a product decision, not a consequence of where the state was kept.
    */
-  const [view, setView] = useUrlState('view', 'overview') as [ViewMode, (v: string) => void]
+  // CAMPAIGNS-TABLE-FIRST-001 — Owner 2026-11-18: the section opens on the management table, as every platform's ads
+  // manager does; the overview stays one click away as the first mode.
+  const [view, setView] = useUrlState('view', 'table') as [ViewMode, (v: string) => void]
   /* CAMPAIGN-VIEWS-001 — a band chip narrows the table to its band; empty means every band. */
   const [band] = useUrlState('band', '') as [CampaignBand | '', (v: string) => void]
   /* For the handlers that change the view AND a filter together — see the band button below. */
@@ -183,6 +201,8 @@ export function CampaignsPage() {
   const [status, setStatus] = useUrlState('status', '')
   const [objective, setObjective] = useUrlState('objective', '')
   const [search, setSearch] = useState('')
+  // CAMPAIGNS-PEEK-001 — the campaign whose figures are open in the side panel, without leaving the table.
+  const [peekId, setPeekId] = useState<string | null>(null)
   /*
    * CAMPAIGNS-TABLE-COMPARISON-001 — the chosen column travels to the SERVER.
    *
@@ -230,7 +250,7 @@ export function CampaignsPage() {
 
   const [modalOpen, setModalOpen] = useState(false)
   /*
-   * NAV-TAXONOMY-001 — «إطلاق الحملات» in the rail is this page with its builder open (`?launch=1`). The builder is the
+   * NAV-TAXONOMY-001 — «حملة جديدة» in the rail is this page with its builder open (`?launch=1`). The builder is the
    * same one the «new campaign» button opens; the address only says «open it», and closing it removes the parameter so
    * Back and a reload do not reopen it. Someone without `campaigns.create` is not shown a builder they cannot submit;
    * they are told why instead.
@@ -241,7 +261,6 @@ export function CampaignsPage() {
     setModalOpen(false)
     if (launching) setLaunch('')
   }
-  const range = useLastNDaysRange(days)
 
   /*
    * The canonical key expanded into the raw objectives the API filters on — the same expansion the
@@ -260,6 +279,20 @@ export function CampaignsPage() {
    * the relevance ranking it was cut from no longer exists.
    */
   const [page, setPage] = useState(1)
+
+  /*
+   * AF2 — on `/agency` the overview and the list fit the screen (`AgencyFit`). The overview's blocks become three
+   * tabs (money · ranking · objectives) and the list asks the server for the rows that fit. Reasons, comparison and
+   * the change history are long documents of their own: they flow, and the page is unlocked while one is open.
+   */
+  const fit = location.pathname.startsWith('/agency')
+  const fitView = fit && (view === 'overview' || view === 'table' || view === 'cards')
+  const [ovTab, setOvTab] = useState<'money' | 'ranking' | 'mix'>('money')
+  const ovBox = useBoxHeight(fit)
+  const listFit = useFitRows({ rowHeight: view === 'cards' ? 192 : 50, reserve: view === 'cards' ? 8 : 100, min: view === 'cards' ? 1 : 3, max: 25, fallback: 25 })
+  /* A chart takes what the panel has left (card title and padding ≈ 84px); unlocked, the old fixed heights stand. */
+  const chartH = fit && ovBox.height !== null ? Math.max(110, ovBox.height - 84) : 200
+  const perPage = fit && listFit.locked ? (view === 'cards' ? listFit.rows * 3 : listFit.rows) : undefined
 
   useEffect(() => setPage(1), [projectId, status, objectiveParam, search])
 
@@ -287,7 +320,7 @@ export function CampaignsPage() {
      * query, and keying on the canonical label instead would be one cache entry per label over
      * whatever the previous scope fetched.
      */
-    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir, lifecycle, metricsKnown }, page],
+    queryKey: ['project', projectId, 'campaigns', { status, objective: objectiveParam, search, sort, dir, lifecycle, metricsKnown, perPage }, page],
     /*
      * The answer records whether it was JUDGED — asked with the figures in hand — because
      * `placeholderData` holds the previous answer while the next one loads, and the previous answer
@@ -308,9 +341,10 @@ export function CampaignsPage() {
       lifecycle: lifecycle === 'all' || !metricsKnown ? undefined : lifecycle,
       /* Undefined when nothing is chosen — an empty string is a value, and «no sort» is not one. */
       sort: sort || undefined, dir: sort ? dir : undefined,
-      page, from: range.from, to: range.to,
+      page, per_page: perPage, from: range.from, to: range.to,
     })), judged: metricsKnown }),
-    enabled: Boolean(projectId),
+    /* AF2 — the list's page size is the screen's; asking before it is measured would fetch twice. */
+    enabled: Boolean(projectId) && (!fit || view === 'overview' || listFit.measured),
     placeholderData: (prev) => prev,
   })
   /* The provisional window: figures in flight, or held over from an answer asked without them. */
@@ -722,6 +756,28 @@ export function CampaignsPage() {
    * CAMPAIGN-VIEWS-001 — the chip narrows the list to its band; the counts above stay over the
    * whole set, so the strip keeps saying what the project holds while the table shows the band.
    */
+  /*
+   * CAMPAIGNS-PEEK-001 — one campaign's figure for a column, shared by the table row and the analysis panel so the two
+   * can never show different numbers for the same campaign.
+   */
+  const campaignCell = (c: UnifiedCampaign, m: Record<string, unknown> | undefined, key: string) => {
+    const col = CAMPAIGN_COLUMNS.find((x) => x.key === key)!
+    switch (col.kind) {
+      case 'spend': return <MetricCell reading={campaignSpendReading(m, ar, reportingCurrency)} locale={locale} />
+      case 'results': return <MetricCell reading={campaignHeadline(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
+      case 'cost': return <MetricCell reading={campaignEfficiency(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
+      case 'return': { const ret = campaignReturn(c.objective, m, ar, reportingCurrency); return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} /> }
+      // FX-APPLY-001 — the budget in the display currency through FxEngine, «محوّل» + the rate in its tooltip.
+      case 'budget': return c.total_budget === null ? <span className="text-text-muted">—</span> : <FxAmount c={c.budget_fx} ar={ar} testId="campaign-budget-cell" />
+      case 'linked': return <span className="tnum">{c.external_campaigns_count ?? 0}</span>
+      case 'last_active': return <span dir="ltr" className="tnum text-text-secondary">{typeof m?.last_active_on === 'string' ? m.last_active_on : '—'}</span>
+      default: {
+        const spec = SPECS[key]
+        return spec && m ? <MetricCell reading={readMetric(key, spec, m as Record<string, number | null>, undefined, reportingCurrency)} locale={locale} /> : <span className="text-text-muted">—</span>
+      }
+    }
+  }
+
   const shownCampaigns = useMemo(
     () => (band === '' ? orderedCampaigns : orderedCampaigns.filter((c) => campaignBand(c, range.to) === band)),
     [orderedCampaigns, band, range.to],
@@ -783,8 +839,55 @@ export function CampaignsPage() {
     )
   }
 
+  const ovTabs = (
+  <TabStrip
+    label={ar ? 'أقسام النظرة العامة' : 'Overview sections'}
+    testid="campaigns-overview-tabs"
+    active={ovTab}
+    onChange={(k) => setOvTab(k as 'money' | 'ranking' | 'mix')}
+    items={[
+      { key: 'money', label: ar ? 'المال' : 'Money' },
+      { key: 'ranking', label: ar ? 'الترتيب' : 'Ranking' },
+      { key: 'mix', label: ar ? 'الأهداف والحركة' : 'Objectives & movers', count: movement.up.length + movement.down.length > 0 ? movement.up.length + movement.down.length : undefined },
+    ]}
+  />
+  )
+
+  const finders = (
+    <>
+          <div className={`relative w-full ${fit ? 'sm:w-44' : 'sm:w-56'}`}>
+            <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="campaigns-search"
+              placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'}
+              className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
+            />
+          </div>
+          {/* Sized, because the control is `w-full` by default and a full-width select in a header
+              row pushes everything after it onto a line of its own. */}
+          <Select className={`w-full ${fit ? 'sm:w-36' : 'sm:w-40'}`} value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
+          <Select className={`w-full ${fit ? 'sm:w-36' : 'sm:w-44'}`} value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
+    </>
+  )
+
+  const secondaryStrip = (
+    <CampaignSecondaryStrip
+      totals={k}
+      budget={{ ...budgetTotals, projected: portfolioBudget(budget.data ?? []).projected }}
+      currency={summary.data?.currency ?? null}
+      paused={counts.paused ?? 0}
+      ar={ar}
+      approved={approved.data}
+      canAddBudget={canAddBudget}
+    />
+  )
+
   return (
-    <div className="space-y-6">
+    <AgencyFit active={fitView} testid="campaigns-fit">
+      {/* CAMPAIGN-LEVELS-001 — الحملات · المجموعات · الإعلانات, one strip, the query carried along. */}
+      <LevelTabs />
       {/*
         PRODUCT-VISUAL-001 §4 §13 — the head answers WHERE, WHAT SCOPE, WHAT PERIOD, HOW FRESH.
 
@@ -803,7 +906,6 @@ export function CampaignsPage() {
         badges={<ProvenanceBadge provenance={summary.data?.provenance} />}
         meta={
           <>
-            <PeriodLabel from={range.from} to={range.to} testId="campaigns-period" />
             {/*
               Freshness from the project's own freshness endpoint — the newest arrival across its
               sources. `null` while it answers, which `DataFreshness` already draws as «لم تصل
@@ -827,22 +929,9 @@ export function CampaignsPage() {
            * they are a narrowing OF the list and belong against the list.
            */
           <>
-          <div className="relative w-full sm:w-56">
-            <Search size={15} className="pointer-events-none absolute inset-y-0 start-3 my-auto text-text-muted" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              data-testid="campaigns-search"
-              placeholder={ar ? 'ابحث في حملات المشروع…' : 'Search this project’s campaigns…'}
-              className="h-10 w-full rounded-xl border border-border bg-surface ps-9 pe-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
-            />
-          </div>
-          {/* Sized, because the control is `w-full` by default and a full-width select in a header
-              row pushes everything after it onto a line of its own. */}
-          <Select className="w-full sm:w-40" value={status} onChange={(e) => setStatus(e.target.value)} options={[{ value: '', label: ar ? 'كل الحالات' : 'All statuses' }, ...CAMPAIGN_STATUSES.map((s) => ({ value: s, label: campaignStatusLabel(s, locale) }))]} />
-          <Select className="w-full sm:w-44" value={objective} onChange={(e) => setObjective(e.target.value)} options={[{ value: '', label: ar ? 'كل الأهداف' : 'All objectives' }, ...CANONICAL_OBJECTIVE_KEYS.map((o) => ({ value: o, label: canonicalObjectiveLabel(o, locale) }))]} />
-          <RangeTabs value={days} onChange={setDays} />
-          {canCreate && <Button onClick={() => setModalOpen(true)}><Plus size={16} /> {t('new_campaign')}</Button>}
+          {!fit && finders}
+          <DateRangePicker projectId={projectId} budgetHint testId="campaigns-period-picker" />
+          {canCreate && <Button data-testid="new-campaign" onClick={() => navigate(`${portalBaseOf(location.pathname)}/launch`)}><Plus size={16} /> {t('new_campaign')}</Button>}
           </>
         }
         kpis={
@@ -877,10 +966,20 @@ export function CampaignsPage() {
               tone={metricsKnown && attention.length > 0 ? 'warning' : undefined}
             />
             <StatCard testid="campaigns-spend" label={ar ? 'الإنفاق' : 'Spend'} value={spendText} delta={cmp(d.spend)} />
-            <StatCard label={ar ? 'النتائج' : 'Results'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
+            {/*
+              OBJECTIVE-RESULT-001 — a total across every objective is not «النتائج»: a traffic
+              campaign's visits and a sales campaign's orders do not add up. What this figure IS
+              is the platforms' conversion count, and it is named that.
+            */}
+            <StatCard label={ar ? 'تحويلات المنصة' : 'Platform conversions'} value={num(k?.conversions)} delta={cmp(d.conversions)} />
           </>
         }
       />
+      <div className={fit ? 'flex flex-wrap items-center gap-x-3 gap-y-1' : 'contents'}>
+        <FxCoverageNote fx={summary.data?.fx} ar={ar} />
+        <FxSpendNote note={summary.data?.spend_reading} ar={ar} testId="campaigns-fx-spend-note" />
+        <FinancialDisclaimer />
+      </div>
 
       {/*
         * VISUAL-DECISION-001 — four primary figures, then everything else at its own weight.
@@ -902,15 +1001,10 @@ export function CampaignsPage() {
         * so the two cannot disagree about where the period is heading. The rest of the strip's
         * budget figures keep the page's stricter spend rule — see the strip's own note.
         */}
-      <CampaignSecondaryStrip
-        totals={k}
-        budget={{ ...budgetTotals, projected: portfolioBudget(budget.data ?? []).projected }}
-        currency={summary.data?.currency ?? null}
-        paused={counts.paused ?? 0}
-        ar={ar}
-      />
+      {!fit && secondaryStrip}
 
       {/* View switcher — the five modes of CAMPAIGN-010. */}
+      <div className={fit ? 'flex flex-wrap items-center justify-between gap-2' : ''}>
       <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface-secondary p-1">
         {VIEWS.map((v) => {
           const Icon = v.icon
@@ -933,6 +1027,8 @@ export function CampaignsPage() {
           )
         })}
       </div>
+      {fit && view === 'overview' && ovTabs}
+      </div>
 
       {view === 'overview' ? (
         <>
@@ -948,6 +1044,7 @@ export function CampaignsPage() {
             attention» is the answer somebody came for, and a strip that silently loses its most
             important word when the news is good is a strip that cannot be trusted when it is bad.
           */}
+          <div className={fit ? 'flex flex-wrap items-center justify-between gap-2' : 'space-y-6'}>
           <div data-testid="campaigns-bands" className="flex flex-wrap gap-2">
             {BANDS.map((b) => (
               <button
@@ -983,6 +1080,7 @@ export function CampaignsPage() {
               </button>
             ))}
           </div>
+          </div>
 
           {/*
             BUDGET-GOVERNANCE-001 — what is LEFT, where the period ENDS, and whether that is over.
@@ -996,15 +1094,24 @@ export function CampaignsPage() {
             An incomparable scope reads «—» and says why. It never reads 0%, which an operator takes
             as «we have spent nothing» when the truth is that nothing here could be added up.
           */}
-          <BudgetPacingRow rows={budget.data ?? []} ar={ar} />
+          {/* ONE-BUDGET-001 — paced against the APPROVED budget; the campaign budgets in the platforms are not «the budget». */}
+          {approved.data && !fit && <ApprovedBudgetPacing approved={approved.data} ar={ar} canAdd={canAddBudget} />}
+          {fit && ovTab === 'money' && (
+            <>
+              {secondaryStrip}
+              {approved.data && <ApprovedBudgetPacing approved={approved.data} ar={ar} canAdd={canAddBudget} />}
+            </>
+          )}
+          <div ref={fit ? ovBox.ref : undefined} className={fit ? 'fit-panel space-y-2.5' : 'space-y-6'}>
           {/* Charts — all from the project-scoped metrics API. */}
+          {(!fit || ovTab === 'money') && (
           <div className="grid gap-4 lg:grid-cols-3">
             <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'اتجاه المشروع' : 'How the project is trending'} className="lg:col-span-2">
               {timeseries.isLoading
                 ? <Skeleton className="h-[200px]" />
                 : moneySeries === null
                   ? <div className="flex h-[200px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'الإنفاق/الإيراد عبر الزمن غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend/revenue over time unavailable — amounts await a rate or span currencies'}</div>
-                  : <SpendRevenueAreaChart data={moneySeries.rows} currency={moneySeries.currency ?? undefined} height={200} />}
+                  : <SpendRevenueAreaChart data={moneySeries.rows} currency={moneySeries.currency ?? undefined} height={chartH} />}
             </ChartCard>
             <ChartCard
               title={ar ? 'توزيع الإنفاق' : 'Where the spend went'}
@@ -1018,9 +1125,12 @@ export function CampaignsPage() {
                 ? <Skeleton className="h-[200px]" />
                 : platformSpend === null
                   ? <div className="flex h-[200px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة لا تُجمع' : 'Spend share unavailable — partial or multi-currency amounts'}</div>
-                  : <PlatformDonutChart data={platformSpend.data} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformSpend.data.reduce((a, b) => a + b.value, 0))} height={200} currency={reportingCurrency ?? ''} />}
+                  : <PlatformDonutChart data={platformSpend.data} centerLabel={ar ? 'الإجمالي' : 'Total'} centerValue={compact(platformSpend.data.reduce((a, b) => a + b.value, 0))} height={chartH} currency={reportingCurrency ?? ''} />}
             </ChartCard>
           </div>
+          )}
+          {(!fit || ovTab === 'ranking') && (
+          <div className={fit ? 'grid gap-2.5 lg:grid-cols-2' : 'space-y-6'}>
           {/*
             * VISUAL-DECISION-001 — the status donut is gone, and the ranking took its column.
             *
@@ -1045,7 +1155,7 @@ export function CampaignsPage() {
               {topCampaigns === null
                 ? <div className="flex h-[190px] items-center justify-center text-center text-xs text-text-muted">{ar ? 'ترتيب الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend ranking unavailable — partial or multi-currency amounts'}</div>
                 : topCampaigns.data.length >= 2
-                  ? <RankingBarChart data={topCampaigns.data} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={190} colorByPlatform currency={reportingCurrency ?? ''} />
+                  ? <RankingBarChart data={topCampaigns.data} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} horizontal height={fit ? chartH : 190} colorByPlatform currency={reportingCurrency ?? ''} />
                   /*
                    * One campaign is not a ranking, and the card says so instead of drawing something else.
                    *
@@ -1081,9 +1191,14 @@ export function CampaignsPage() {
                   : (ar ? 'أعلى يمينًا: إنفاق أكبر بتكلفة أعلى' : 'Up and right: more spend at a higher cost')
               }
             >
-              <SpendEfficiencyScatter points={efficiency.points} currency={summary.data?.currency ?? null} ar={ar} />
+              <SpendEfficiencyScatter points={efficiency.points} currency={summary.data?.currency ?? null} ar={ar} height={fit ? chartH : undefined} />
             </ChartCard>
           </div>
+          </div>
+          )}
+          {(!fit || ovTab === 'mix') && (
+          <>
+          {fit && <LandingAnswer answer={landing} ar={ar} range={range} currency={summary.data?.currency ?? null} />}
           {mix !== null && mix.rows.length > 0 && (
             <div data-testid="campaigns-objective-mix" className="rounded-2xl border border-border bg-surface p-4">
               <h3 className="mb-3 text-sm font-bold text-text-primary">{ar ? 'الإنفاق حسب الهدف' : 'Spend by objective'}</h3>
@@ -1109,7 +1224,13 @@ export function CampaignsPage() {
                   r.spend === null
                     ? <span key="s" className="text-text-muted">—</span>
                     : <Num key="s">{money(r.spend, mix.currency ?? undefined)}</Num>,
-                  <Num key="r">{num(r.results)}</Num>,
+                  /*
+                   * OBJECTIVE-RESULT-001 — each objective's results in its own unit, named; a group
+                   * whose campaigns share no unit says so rather than adding them.
+                   */
+                  r.results === null
+                    ? <span key="r" className="text-xs text-text-muted">{ar ? 'أهداف مختلفة' : 'Different objectives'}</span>
+                    : <span key="r"><Num>{num(r.results)}</Num>{r.resultLabel && <span className="ms-1 text-xs text-text-muted">{ar ? r.resultLabel.ar : r.resultLabel.en}</span>}</span>,
                 ])}
               />
 
@@ -1192,6 +1313,9 @@ export function CampaignsPage() {
               </span>
             </button>
           )}
+          </>
+          )}
+          </div>
         </>
       ) : view === 'history' ? (
         <ProjectChangeHistory projectId={projectId} />
@@ -1210,7 +1334,8 @@ export function CampaignsPage() {
           {/* Filters — search + taxonomy chips for status and objective. */}
           <div className="space-y-2">
             {/* Taxonomy chips — the same taxonomy the selects use, one tap away, with live counts. */}
-            <div className="flex flex-wrap gap-1.5">
+            <div className={fit ? 'flex flex-wrap items-center gap-1.5' : 'flex flex-wrap gap-1.5'} data-testid={fit ? 'campaigns-fit-finders' : undefined}>
+            {fit && finders}
             {/*
               CAMPAIGN-INTELLIGENCE-HUB — what the workspace answers before the reader scrolls.
 
@@ -1218,7 +1343,7 @@ export function CampaignsPage() {
               and «nothing could be examined» are separate answers, and a pacing question nobody
               could measure is not answered «no».
             */}
-            <LandingAnswer answer={landing} ar={ar} range={range} currency={summary.data?.currency ?? null} />
+            {!fit && <LandingAnswer answer={landing} ar={ar} range={range} currency={summary.data?.currency ?? null} />}
               {/*
                 CAMPAIGN-INTELLIGENCE-HUB — what is RUNNING, first.
                 Inactive is one click away with its count beside it: a campaign silently missing from a
@@ -1231,7 +1356,7 @@ export function CampaignsPage() {
                 </Chip>
               ))}
               <Chip active={status === '' && objective === ''} onClick={() => { setStatus(''); setObjective('') }}>{ar ? 'الكل' : 'All'} <span className="tnum">{counts.total}</span></Chip>
-              {CAMPAIGN_STATUSES.filter((s) => (counts[s] ?? 0) > 0).map((s) => (
+              {!fit && CAMPAIGN_STATUSES.filter((s) => (counts[s] ?? 0) > 0).map((s) => (
                 <Chip key={s} active={status === s} onClick={() => setStatus(status === s ? '' : s)}>
                   {campaignStatusLabel(s, locale)} <span className="tnum">{counts[s]}</span>
                 </Chip>
@@ -1241,7 +1366,7 @@ export function CampaignsPage() {
                 `canonicalOfRaw` maps each campaign's raw objective up, so a project of video buys
                 offers «الوعي والتفاعل» rather than a chip nobody can use.
               */}
-              {CANONICAL_OBJECTIVE_KEYS.filter((o) => campaigns.some((c) => c.objective !== null && canonicalOfRaw(c.objective) === o)).map((o) => (
+              {!fit && CANONICAL_OBJECTIVE_KEYS.filter((o) => campaigns.some((c) => c.objective !== null && canonicalOfRaw(c.objective) === o)).map((o) => (
                 <Chip key={o} active={objective === o} onClick={() => setObjective(objective === o ? '' : o)}>
                   {canonicalObjectiveLabel(o, locale)}
                 </Chip>
@@ -1286,6 +1411,8 @@ export function CampaignsPage() {
           )}
 
           {/* Campaign list */}
+          <FitPanel testid={fit ? 'campaigns-fit-list' : undefined} className={fit ? '' : 'space-y-6'}>
+          <div ref={fit ? (listFit.ref as React.RefCallback<HTMLDivElement>) : undefined} className={fit ? 'h-full min-h-0' : ''}>
           {campaignsQuery.isLoading || (listProvisional && view !== 'attention') ? (
             <div data-testid="campaigns-list-pending" aria-busy="true" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40" />)}</div>
           ) : campaigns.length === 0 ? (
@@ -1436,7 +1563,7 @@ export function CampaignsPage() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[var(--shadow-small)]">
-              <div className="flex flex-col gap-2 border-b border-border p-3" data-testid="campaigns-table-controls">
+              <div className={fit ? 'flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border p-2' : 'flex flex-col gap-2 border-b border-border p-3'} data-testid="campaigns-table-controls">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-bold text-text-secondary">{ar ? 'المقاييس:' : 'Metrics:'}</span>
                   {(Object.keys(CAMPAIGN_PRESETS) as Array<Exclude<CampaignPreset, 'custom'>>).map((name) => (
@@ -1449,6 +1576,12 @@ export function CampaignsPage() {
                   <button type="button" onClick={() => setChoosingColumns((v) => !v)} aria-expanded={choosingColumns} data-testid="campaigns-columns-toggle"
                     className="ms-auto inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-text-secondary hover:border-brand-400">
                     <Columns3 size={14} aria-hidden /> {ar ? 'الأعمدة' : 'Columns'}
+                  </button>
+                  {/* CAMPAIGNS-DOWNLOAD-001 — the table as shown (its columns, filter and order) to a CSV file. */}
+                  <button type="button" data-testid="campaigns-download" disabled={shownCampaigns.length === 0}
+                    onClick={() => { const t = document.querySelector<HTMLTableElement>('[data-testid="campaigns-table"]'); if (t) downloadTableCsv(t, `campaigns-${range.from}-${range.to}`) }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-text-secondary hover:border-brand-400 disabled:opacity-40">
+                    <Download size={14} aria-hidden /> {ar ? 'تنزيل' : 'Download'}
                   </button>
                 </div>
                 {choosingColumns && (
@@ -1494,24 +1627,10 @@ export function CampaignsPage() {
                 <tbody>
                   {shownCampaigns.map((c) => {
                     const m = metricsByCampaign.get(c.id) as Record<string, unknown> | undefined
-                    const cell = (key: string) => {
-                      const col = CAMPAIGN_COLUMNS.find((x) => x.key === key)!
-                      switch (col.kind) {
-                        case 'spend': return <MetricCell reading={campaignSpendReading(m, ar, reportingCurrency)} locale={locale} />
-                        case 'results': return <MetricCell reading={campaignHeadline(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
-                        case 'cost': return <MetricCell reading={campaignEfficiency(c.objective, m, ar, reportingCurrency)?.reading ?? null} locale={locale} />
-                        case 'return': { const ret = campaignReturn(c.objective, m, ar, reportingCurrency); return ret === null ? null : <MetricCell reading={ret.reading} locale={locale} /> }
-                        case 'budget': return <span className="tnum">{money(c.total_budget, c.budget_currency)}</span>
-                        case 'linked': return <span className="tnum">{c.external_campaigns_count ?? 0}</span>
-                        case 'last_active': return <span dir="ltr" className="tnum text-text-secondary">{typeof m?.last_active_on === 'string' ? m.last_active_on : '—'}</span>
-                        default: {
-                          const spec = SPECS[key]
-                          return spec && m ? <MetricCell reading={readMetric(key, spec, m as Record<string, number | null>, undefined, reportingCurrency)} locale={locale} /> : <span className="text-text-muted">—</span>
-                        }
-                      }
-                    }
+                    const cell = (key: string) => campaignCell(c, m, key)
                     return (
-                      <tr key={c.id} data-testid="campaign-row" className="border-b border-border last:border-0 hover:bg-surface-hover">
+                      <tr key={c.id} data-testid="campaign-row" className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-hover"
+                        onClick={(e) => { if (!(e.target as HTMLElement).closest('a, button, input, label')) setPeekId(c.id) }}>
                         <td className="p-3"><input type="checkbox" aria-label={c.name} checked={selectedIds.includes(c.id)} onChange={() => toggleSelected(c.id)} data-testid={`campaigns-select-${c.id}`} /></td>
                         <td className="p-3 font-semibold" data-testid="campaign-row-name">
                           <CampaignLink projectId={projectId} campaignId={c.id} name={c.name} className="text-text-primary" />
@@ -1528,6 +1647,8 @@ export function CampaignsPage() {
               </table></div>
             </div>
           )}
+          </div>
+          </FitPanel>
         </>
       )}
 
@@ -1564,14 +1685,44 @@ export function CampaignsPage() {
         </nav>
       )}
 
+      {(() => {
+        /*
+         * CAMPAIGNS-PEEK-001 — the analysis panel: every figure of one campaign, read by the same function as its row,
+         * one tap from the table and one more to the full campaign. Nothing here is fetched again.
+         */
+        const pc = peekId ? shownCampaigns.find((x) => x.id === peekId) : undefined
+        if (!pc) return null
+        const pm = metricsByCampaign.get(pc.id) as Record<string, unknown> | undefined
+
+        return (
+          <DetailPanel open onClose={() => setPeekId(null)} title={pc.name} closeLabel={ar ? 'إغلاق' : 'Close'} testid="campaign-peek" variant="center"
+            footer={<button type="button" data-testid="campaign-peek-open" onClick={() => navigate(`/campaigns/${projectId}/${pc.id}`)} className="w-full rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700">{ar ? 'افتح الحملة' : 'Open the campaign'}</button>}>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <Badge tone={campaignStatusTone(pc.status)}>{campaignStatusLabel(pc.status, locale)}</Badge>
+                <span className="text-text-secondary">{objectiveLabel(pc.objective, locale)}</span>
+              </div>
+              <dl className="grid grid-cols-2 gap-2">
+                {CAMPAIGN_COLUMNS.filter((col) => col.kind !== 'linked').map((col) => (
+                  <div key={col.key} className="min-w-0 rounded-xl border border-border bg-surface-secondary p-2.5" data-testid={`campaign-peek-${col.key}`}>
+                    <dt className="truncate text-xs text-text-secondary">{columnLabel(col, locale)}</dt>
+                    <dd className="mt-0.5 truncate text-base font-bold text-text-primary">{campaignCell(pc, pm, col.key) ?? '—'}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </DetailPanel>
+        )
+      })()}
+
       <CampaignFormModal open={modalOpen || (launching && canCreate)} onClose={closeBuilder} projectId={projectId} />
       {launching && !canCreate && (
         <p role="status" data-testid="launch-not-permitted" className="mt-3 rounded-xl bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
-          {ar ? 'إطلاق الحملات يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
+          {ar ? 'إنشاء حملة جديدة يحتاج صلاحية إنشاء الحملات في هذا المشروع.' : 'Launching campaigns needs the permission to create campaigns in this project.'}
         </p>
       )}
-      <LivePerformanceNotice variant="compact" />
-    </div>
+      <LivePerformanceNotice variant={fit ? 'footer' : 'compact'} />
+    </AgencyFit>
   )
 }
 
@@ -1679,9 +1830,11 @@ function MetricCell({ reading, locale }: { reading: MetricReading | null; locale
 
 /** One named figure, or the honest reason there is not one. Never a score. */
 function ReadingCell({ reading, locale }: { reading: CampaignHeadline; locale: 'ar' | 'en' }) {
+  const compact = useFitCompact()
+
   return (
     <span
-      className="rounded-lg bg-surface-secondary px-2 py-1.5"
+      className={compact ? 'inline-block rounded-lg bg-surface-secondary px-2 py-0.5 leading-tight' : 'rounded-lg bg-surface-secondary px-2 py-1.5'}
       data-testid={`campaign-headline-${reading.key}`}
       data-state={reading.reading.kind}
     >
@@ -1732,7 +1885,7 @@ function LandingAnswer({ answer, ar, range, currency }: { answer: ReturnType<typ
       {answer.needsAttention > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-text-primary" data-testid="landing-attention">
           <TriangleAlert size={13} className="text-warning" />
-          {ar ? `${answer.needsAttention} تحتاج انتباهًا` : `${answer.needsAttention} need attention`}
+          {ar ? `${answer.needsAttention} تنبيه` : `${answer.needsAttention} need attention`}
         </span>
       )}
       {answer.healthy > 0 && (
@@ -1807,7 +1960,7 @@ function CampaignCard({ c, locale, headline, efficiency, state, freshness, trend
         )}
       </div>
       <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-        <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'الميزانية' : 'Budget'} <b className="tnum block text-text-primary">{money(c.total_budget, c.budget_currency)}</b></span>
+        <span className="rounded-lg bg-surface-secondary px-2 py-1.5">{locale === 'ar' ? 'الميزانية' : 'Budget'} <b className="tnum block text-text-primary">{c.total_budget === null ? '—' : <FxAmount c={c.budget_fx} ar={locale === 'ar'} />}</b></span>
         {/*
           CAMPAIGN-INTELLIGENCE-HUB — the result this campaign was BOUGHT for, beside what it cost.
           A budget and a count of linked platform campaigns say nothing about whether the money is
@@ -1953,13 +2106,13 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
       {/*
         The bar and the sentence. NOT the four figures again.
 
-        The Arabic dark review of `/app/campaigns` showed «الميزانية 795K · المصروف 3.67K · المتبقي
+        The Arabic dark review of `/app/campaigns` showed «الميزانية 795K · الإنفاق 3.67K · المتبقي
         791K · المتوقع 3.67K» in the secondary strip and then the same four numbers, same order,
         same currency, in this card a few hundred pixels below. A reader meeting a figure twice does
         not read it twice — they stop to work out which of the two to believe.
 
         The strip keeps them, because it is where the budget's REFUSALS live: «ميزانيات بعملات
-        مختلفة — لا تُجمع» and «المصروف غير متاح» are its wording, under a stricter spend rule than
+        مختلفة — لا تُجمع» and «الإنفاق غير متاح» are its wording, under a stricter spend rule than
         this card applies. What this card has that nothing else does is the pacing — a bar drawn
         against the budget so an overrun is visible past the end rather than clamped away, and one
         sentence naming the overrun in money. That is what it now shows.
@@ -1985,13 +2138,22 @@ export function BudgetPacingRow({ rows, ar }: { rows: BudgetRow[]; ar: boolean }
         </div>
       )}
 
-      {/* No silent caps: a campaign left out of the total is counted where the total is read. */}
+      {/* No silent caps: a campaign left out of the total is counted where the total is read, and NAMED on request. */}
       {b.excluded > 0 && (
-        <span className="text-[11px] text-text-muted" data-testid="budget-pacing-excluded">
-          {ar ? `${countedCampaigns(b.excluded, 'ar')} خارج الحساب — بلا ميزانية أو بعملة مختلفة` : `${countedCampaigns(b.excluded, 'en')} excluded — no budget, or a different currency`}
-        </span>
+        <details className="text-[11px] text-text-muted" data-testid="budget-pacing-excluded">
+          <summary className="cursor-pointer select-none">
+            {ar ? `${countedCampaigns(b.excluded, 'ar')} خارج الحساب — بلا ميزانية أو بعملة مختلفة` : `${countedCampaigns(b.excluded, 'en')} excluded — no budget, or a different currency`}
+          </summary>
+          <ul className="mt-1 space-y-0.5" data-testid="budget-pacing-excluded-list">
+            {excludedRows(rows).map(({ row, reason }) => (
+              <li key={row.campaign_id} className="flex flex-wrap items-center gap-x-2">
+                <span className="font-semibold text-text-secondary">{row.campaign_name}</span>
+                <span>{reason === 'no_budget' ? (ar ? 'بلا ميزانية' : 'no budget') : reason === 'other_currency' ? (ar ? 'بعملة مختلفة' : 'different currency') : (ar ? 'إنفاق ناقص' : 'partial spend')}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   )
 }
-

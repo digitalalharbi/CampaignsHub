@@ -6,17 +6,23 @@ namespace App\Domains\Metrics\Http\Controllers;
 
 use App\Domains\Campaigns\Management\WriteCapabilityRegistry;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Funding\Models\ProjectFunding;
+use App\Domains\Funding\Services\ConvertSpendLimits;
+use App\Domains\Funding\Services\FundingReach;
+use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Enums\SpendLimitScope;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\SpendLimit;
+use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Support\AdPlatforms;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
@@ -46,7 +52,11 @@ final class SpendLimitController extends Controller
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
 
-        $today = Carbon::today();
+        // RIYADH-DAY-001 — the limits are read on the Riyadh day, the day the run-out's «last three complete days» are counted in.
+        $today = PeriodResolver::today();
+
+        // ONE-BUDGET-001 — limits are thresholds of the approved budget: linked automatically once the project has one.
+        app(ConvertSpendLimits::class)->linkProject($project);
 
         $limits = SpendLimit::query()
             ->where('project_id', $project)
@@ -54,8 +64,10 @@ final class SpendLimitController extends Controller
             ->orderBy('scope')
             ->orderBy('starts_on')
             ->get()
-            ->map(fn (SpendLimit $l): array => $this->governor->read($l, $today) + ['actions' => $this->actions($request, $project, $l)])
+            ->map(fn (SpendLimit $l): array => $this->governor->read($l, $today, detail: true) + ['actions' => $this->actions($request, $project, $l)] + $this->budgetLink($l))
             ->all();
+        $user = $request->user();
+        $withheld = $user instanceof User && app(FundingReach::class)->moneyWithheld($user, $project);
 
         return ApiResponse::success($limits, 'Spend limits.', [
             'enforcement' => SpendLimit::ENFORCEMENT,
@@ -67,7 +79,34 @@ final class SpendLimitController extends Controller
             'enforcement_note_en' => 'CampaignsHub watches spend against this limit and warns. It does not stop delivery on any ad platform.',
             'enforcement_note_ar' => 'يراقب كامبينز هب الإنفاق مقابل هذا الحد ويُنبّه — ولا يوقف عرض الإعلانات على أي منصة.',
             'today' => $today->toDateString(),
+            // The currency a NEW limit starts in: the one this project reports its money in (the figures' own), else the riyal.
+            'project_currency' => $this->projectCurrency($project),
+            // ONE-BUDGET-001 — the same approved budget /agency/budgets shows (SAR, its own period), with its alert steps.
+            'budget' => $withheld ? ProjectBudgetReader::none() : app(ProjectBudgetReader::class)->forProject($project),
         ]);
+    }
+
+    /**
+     * ONE-BUDGET-001 — which budget a limit belongs to, and its record from before it was linked (read-only).
+     *
+     * @return array{project_funding_id: string|null, converted_at: string|null, legacy: array<string, mixed>|null}
+     */
+    private function budgetLink(SpendLimit $limit): array
+    {
+        return [
+            'project_funding_id' => $limit->project_funding_id,
+            'converted_at' => $limit->converted_at?->toIso8601String(),
+            'legacy' => $limit->legacy_snapshot === null ? null : array_intersect_key($limit->legacy_snapshot, array_flip(['scope', 'scope_id', 'amount', 'currency', 'starts_on', 'ends_on', 'thresholds', 'active'])),
+        ];
+    }
+
+    private function projectCurrency(string $project): string
+    {
+        $value = DailyMetric::query()->where('project_id', $project)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereNotNull('project_currency')->orderByDesc('metric_date')->toBase()->value('project_currency');
+
+        return $value !== null ? strtoupper((string) $value) : 'SAR';
     }
 
     /**
@@ -131,10 +170,12 @@ final class SpendLimitController extends Controller
             'thresholds' => $data['thresholds'] ?? null,
             'active' => true,
             'created_by' => Auth::id(),
+            // ONE-BUDGET-001 — a new limit is a threshold of the project's approved budget when it has one.
+            'project_funding_id' => ProjectFunding::query()->where('project_id', $project)->whereNull('voided_at')->value('id'),
         ]);
 
         return ApiResponse::success(
-            $this->governor->read($limit, Carbon::today()),
+            $this->governor->read($limit, PeriodResolver::today(), detail: true) + $this->budgetLink($limit),
             'Spend limit created.',
             ['enforcement' => SpendLimit::ENFORCEMENT],
             status: 201,
@@ -148,7 +189,7 @@ final class SpendLimitController extends Controller
 
         $spendLimit->update($this->validated($request, partial: true));
 
-        return ApiResponse::success($this->governor->read($spendLimit->refresh(), Carbon::today()), 'Spend limit updated.');
+        return ApiResponse::success($this->governor->read($spendLimit->refresh(), PeriodResolver::today(), detail: true), 'Spend limit updated.');
     }
 
     /**

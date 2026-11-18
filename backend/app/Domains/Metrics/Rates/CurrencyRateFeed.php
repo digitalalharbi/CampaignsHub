@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Metrics\Rates;
 
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
+use App\Domains\Metrics\Fx\RateLedger;
 use App\Domains\Metrics\Models\CurrencyRate;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -61,7 +62,7 @@ final class CurrencyRateFeed
             'state' => $state,
             'driver' => $driver,
             'label' => $this->source?->label(),
-            'stale_after_days' => (int) config('fx.rates.stale_after_days', 3),
+            'stale_after_days' => (int) config('fx.rates.stale_after_days', 7),
             'last_rate_date' => CurrencyRate::query()->max('rate_date') === null
                 ? null
                 : Carbon::parse((string) CurrencyRate::query()->max('rate_date'))->toDateString(),
@@ -175,6 +176,10 @@ final class CurrencyRateFeed
             ];
         }
 
+        // FX-ENGINE-001 — a daily source also keeps every floating currency IN USE current against USD, not only the
+        // pairs already withheld: a rate older than 7 days is flagged stale, and the point of a daily feed is that it never is.
+        $pairs = $this->withUsedCurrencies($pairs);
+
         if ($pairs === []) {
             return ['state' => 'ready', 'requested' => $pegged, 'imported' => $pegged, 'missing' => [], 'error' => null];
         }
@@ -263,6 +268,30 @@ final class CurrencyRateFeed
     }
 
     /**
+     * The withheld pairs plus «X→USD» for every floating currency a connected ad account uses (pegs need no feed).
+     *
+     * @param  list<array{base: string, quote: string, withheld: int, earliest: ?string, latest: ?string, sources: list<string>}>  $pairs
+     * @return list<array{base: string, quote: string, withheld: int, earliest: ?string, latest: ?string, sources: list<string>}>
+     */
+    private function withUsedCurrencies(array $pairs): array
+    {
+        $have = array_map(static fn (array $p): string => $p['base'].'|'.$p['quote'], $pairs);
+        $used = DB::table('external_accounts')->where('account_type', 'ad_account')->whereNotNull('currency')
+            ->selectRaw('DISTINCT UPPER(currency) AS currency')->pluck('currency');
+
+        foreach ($used as $currency) {
+            $currency = (string) $currency;
+            if (preg_match('/^[A-Z]{3}$/', $currency) !== 1 || $currency === 'USD' || OfficialPegs::rate($currency, 'USD') !== null
+                || in_array($currency.'|USD', $have, true)) {
+                continue;
+            }
+            $pairs[] = ['base' => $currency, 'quote' => 'USD', 'withheld' => 0, 'earliest' => null, 'latest' => null, 'sources' => ['in_use']];
+        }
+
+        return $pairs;
+    }
+
+    /**
      * Record every usable row of a partial answer; the count is what the caller reports.
      *
      * @param  list<array{base: string, quote: string, rate: float, rate_date: string}>  $rows
@@ -282,22 +311,15 @@ final class CurrencyRateFeed
     }
 
     /**
-     * Write one rate, replacing any earlier answer for the same pair and date.
-     *
-     * `updateOrCreate` on the natural key rather than an insert: a source restating a day's rate
-     * (a correction, a late fixing) must not leave two rows that the nearest-on-or-before lookup
-     * would choose between arbitrarily.
+     * Write one rate through the ONE writer (FX-ENGINE-001 {@see RateLedger}): a new version for the pair and day,
+     * audited, never an overwrite of history. A legal peg is recorded as `pegged`, anything a feed publishes as
+     * `automatic` — and an automatic quote never replaces a manual rate an operator recorded for the same day.
      */
     public function record(string $base, string $quote, float $rate, Carbon $date, string $source): CurrencyRate
     {
-        return CurrencyRate::updateOrCreate(
-            [
-                'base_currency' => strtoupper($base),
-                'quote_currency' => strtoupper($quote),
-                'rate_date' => $date->toDateString(),
-            ],
-            ['rate' => $rate, 'source' => $source],
-        );
+        $kind = CurrencyRate::kindOf($source);
+
+        return app(RateLedger::class)->record($base, $quote, $rate, $date, $kind, $source)['rate'];
     }
 
     private function earlier(?string $current, mixed $candidate): ?string

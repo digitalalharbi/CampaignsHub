@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Metrics\Http\Controllers;
 
-use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\CampaignOutcome;
-use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricDefinition;
@@ -21,7 +20,9 @@ use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\EntityMetricsAggregator;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Settings\AttributionSettings;
+use App\Domains\Metrics\Spend\SpendLedger;
 use App\Domains\Metrics\Support\EntityScope;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
@@ -105,6 +106,17 @@ final class MetricsController extends Controller
             'current' => $current,
             'previous' => $previous,
             'delta' => $deltas,
+            // FX-APPLY-001 — what these totals were converted from: «يشمل عملات محوّلة», ⚠ stale, withheld rows and their currency.
+            'fx' => $this->scoped($request)->fxCoverage($from, $to),
+            /*
+             * PROJECT-LIFECYCLE-001 §7, rule 9 — the project's spend for the same window from THE one aggregation (`SpendLedger`:
+             * each account-day from its original currency through FxEngine), the figure the budgets page, the clients list, the
+             * dashboard and the projects summary read. It names what it excluded for want of a rate and every old rate it used.
+             * Only for the unfiltered scope: a platform/campaign/outcome filter is a narrower question than «the project's spend».
+             */
+            'spend_reading' => $this->unfiltered($request) && $projectId !== ''
+                ? app(SpendLedger::class)->read([$projectId], $from, $to, ReportingCurrency::DEFAULT)
+                : null,
             /*
              * UX-METRICS-001 — which of those figures are measurements and which are absences.
              *
@@ -265,10 +277,9 @@ final class MetricsController extends Controller
              * sentence off this, so nobody reads a whole-shop figure as one platform's share.
              */
             'filtered_view' => $this->providerFilter($request) !== []
-                || $this->objectiveFilter($request) !== []
                 || $this->campaignFilter($request) !== [],
-            'unfiltered_note_ar' => 'أرقام المتجر لكامل المتجر ولا تتأثر بفلتر المنصة أو الهدف، لأن جزءًا من الطلبات يصل بلا إسناد.',
-            'unfiltered_note_en' => 'Store figures cover the whole shop and are not narrowed by the platform or objective filter — some orders arrive with no attribution.',
+            'unfiltered_note_ar' => 'أرقام المتجر لكامل المتجر ولا تتأثر بفلتر المنصة أو الحملة، لأن جزءًا من الطلبات يصل بلا إسناد.',
+            'unfiltered_note_en' => 'Store figures cover the whole shop and are not narrowed by the platform or campaign filter — some orders arrive with no attribution.',
             'orders' => $funnel['totals']['orders'],
             'revenue' => $funnel['totals']['revenue'],
             // COMMERCE-FX-001 — the currency the money below is stated in, and how many orders are
@@ -399,8 +410,17 @@ final class MetricsController extends Controller
         $rows = $this->scoped($request)->compare($ids, $from, $to);
         $objectives = array_values(array_unique(array_filter(array_column($rows, 'objective'))));
 
+        // FX-APPLY-001 — each plan (budget) in the reader's display currency through FxEngine; the costs are in `currency`.
+        $fx = FxDisplay::forRequest();
+        $display = $fx->currencyFor((string) app(TenantContext::class)->tenantId());
+        $rows = array_map(static fn (array $r): array => $r + [
+            'budget_fx' => $r['total_budget'] === null ? null : $fx->one((float) $r['total_budget'], $r['budget_currency'] ?? null, Carbon::today(), $display, 'metrics.compare.budget'),
+        ], $rows);
+
         return ApiResponse::success([
             'campaigns' => $rows,
+            'currency' => $this->rangeCurrency($from, $to),
+            'fx' => $this->scoped($request)->fxCoverage($from, $to),
             // The UI shows a warning instead of a blended total when this is true.
             'mixed_objectives' => count($objectives) > 1,
             'objectives' => $objectives,
@@ -533,12 +553,11 @@ final class MetricsController extends Controller
          * a bare uuid the moment they also filtered by platform.
          */
         $providers = $this->providerFilter($request);
-        $objectives = $this->objectiveFilter($request);
 
+        // OBJECTIVE-FILTERS-INCLUSIVE-001 — every campaign stays pickable whatever objective's KPIs are chosen.
         $rows = UnifiedCampaign::query()
             ->where('project_id', $projectId)
             ->when($q !== '', fn ($b) => $b->whereRaw('LOWER(name) LIKE ?', ['%'.mb_strtolower($q).'%']))
-            ->when($objectives !== [], fn ($b) => $b->whereIn('objective', $objectives))
             ->when($providers !== [], fn ($b) => $b->whereHas(
                 'externalCampaigns',
                 fn ($e) => $e->whereIn('provider', $providers),
@@ -720,6 +739,26 @@ final class MetricsController extends Controller
         return ApiResponse::success(
             $this->objectivePaths($request)->explainByPath($from, $to),
             'Objective path explanations.',
+            meta: $this->meta($from, $to) + [
+                'filter_scope' => $this->filterScope($request, self::OBJECTIVE_PANEL_AXES),
+            ],
+        );
+    }
+
+    /**
+     * OBJECTIVE-PATHS-001 — one total spend, its split by objective path, one card per objective.
+     *
+     * Paths are ad sets classified by their own optimisation goal ({@see ObjectivePerformance::objectivePaths()}),
+     * so a campaign buying store purchases and branch visits shows both, each with its own result.
+     */
+    public function objectivePathCards(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        return ApiResponse::success(
+            $this->objectivePaths($request)->objectivePaths($from, $to),
+            'Spend and results by objective path.',
             meta: $this->meta($from, $to) + [
                 'filter_scope' => $this->filterScope($request, self::OBJECTIVE_PANEL_AXES),
             ],
@@ -1250,7 +1289,8 @@ final class MetricsController extends Controller
             $request->filled('attribution_window') ? $request->string('attribution_window')->toString() : null,
             new EntityScope(
                 providers: $this->providerFilter($request),
-                objectives: $this->objectiveFilter($request),
+                // OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective never narrows the rows.
+                objectives: [],
                 campaigns: $this->campaignFilter($request),
             ),
         );
@@ -1383,41 +1423,6 @@ final class MetricsController extends Controller
         return array_values(array_filter(array_map('trim', $list)));
     }
 
-    /** The objective filter from the request (?objective=sales,leads). Empty when absent. @return list<string> */
-    private function objectiveFilter(Request $request): array
-    {
-        $objectives = $this->listFilter($request, 'objective');
-
-        /*
-         * ANALYTICS-OBJECTIVE-FILTERS-001 — a FAMILY narrows the query, not just the KPI order.
-         *
-         * `?objective=` takes exact objective values, which is right for a precise filter and wrong
-         * for the control an operator actually wants: «show me the awareness work» means awareness
-         * AND reach, and «sales» means sales, conversions, purchases and add-to-cart. Making the
-         * user tick four boxes to mean one thing is how a filter stops being used.
-         *
-         * Expanded to member objectives HERE, so the narrowing happens in the aggregator's SQL. A
-         * family resolved in the frontend would filter rows already aggregated across every
-         * objective — the totals would still be the unfiltered ones, and the page would look
-         * filtered while telling the truth about nothing.
-         */
-        foreach ($this->listFilter($request, 'objective_family') as $family) {
-            $case = ObjectiveFamily::tryFrom($family);
-
-            if ($case === null) {
-                continue;
-            }
-
-            foreach (CampaignObjective::cases() as $objective) {
-                if ($objective->family() === $case) {
-                    $objectives[] = $objective->value;
-                }
-            }
-        }
-
-        return array_values(array_unique($objectives));
-    }
-
     /**
      * The campaign filter from the request (?campaign=<uuid>,<uuid>). Empty when absent.
      *
@@ -1484,9 +1489,7 @@ final class MetricsController extends Controller
             $requested[] = 'provider';
         }
 
-        if ($this->objectiveFilter($request) !== []) {
-            $requested[] = 'objective';
-        }
+        // OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective chooses KPIs and narrows nothing, so it is never «applied» or «declined».
 
         if ($this->campaignFilter($request) !== []) {
             $requested[] = 'campaign';
@@ -1524,13 +1527,19 @@ final class MetricsController extends Controller
     }
 
     /** The aggregator scoped by the dashboard's platform, objective and campaign filters. */
+    /** No platform, campaign or outcome filter: the request asks about the whole project. */
+    private function unfiltered(Request $request): bool
+    {
+        return $this->providerFilter($request) === [] && $this->campaignFilter($request) === [] && $this->outcomeFilter($request) === [];
+    }
+
     private function scoped(Request $request): MetricsAggregator
     {
         $campaigns = $this->campaignFilter($request);
 
         $agg = $this->agg
             ->forProviders($this->providerFilter($request))
-            ->forObjectives($this->objectiveFilter($request))
+            // OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective chip chooses the KPIs the page leads with; it never narrows the figures.
             /*
              * CAMPAIGN-OUTCOME-DIMENSION-001 — «what did it buy», beside «what was it for».
              *

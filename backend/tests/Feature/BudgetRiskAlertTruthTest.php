@@ -47,10 +47,21 @@ final class BudgetRiskAlertTruthTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        /*
+         * A daytime clock. These tests seed «yesterday» as the UTC date, while an alert measures yesterday in Riyadh
+         * (DIGESTS-YESTERDAY-BY-OBJECTIVE-001): from 21:00 to 24:00 UTC the two days differ and the fixture is not yesterday.
+         */
+        Carbon::setTestNow(Carbon::parse('2026-11-12 09:00:00', 'UTC'));
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a-'.uniqid(), 'status' => 'active']);
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $client = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'C', 'slug' => 'c-'.uniqid(), 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active']);
         $this->project = Project::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $client->id, 'name' => 'P', 'status' => 'active']);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
     }
 
     /**

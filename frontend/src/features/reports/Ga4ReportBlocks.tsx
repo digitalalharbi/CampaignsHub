@@ -121,21 +121,24 @@ export function WebsiteStrip({ payload, ar, onOpen }: { payload: WithGa4Sections
   if (kpis.length === 0) return null
 
   return (
-    <section data-testid="website-strip" aria-label={ar ? 'الموقع' : 'Website'} className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-border bg-surface px-4 py-3">
-      <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-text-primary"><Globe size={15} aria-hidden />{ar ? 'الموقع' : 'Website'}</span>
-      <dl className="flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-1">
+    /* REPORT-WEBSITE-CARDS-001 — Owner 2026-11-17: the website's four figures are cards, not a line of text. */
+    <section data-testid="website-strip" aria-label={ar ? 'الموقع' : 'Website'} className="min-w-0 rounded-2xl border border-border bg-surface p-3 sm:p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 text-sm font-extrabold text-text-primary"><Globe size={15} aria-hidden />{ar ? 'الموقع' : 'Website'}</span>
+        {onOpen && (
+          <button type="button" data-testid="website-strip-open" onClick={onOpen} className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-semibold text-text-secondary hover:bg-surface-hover">
+            {ar ? 'التفاصيل' : 'Details'}<ArrowUpLeft size={13} className="rtl:hidden" aria-hidden /><ArrowUpRight size={13} className="hidden rtl:block" aria-hidden />
+          </button>
+        )}
+      </div>
+      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {kpis.map((k) => (
-          <div key={k.key} data-testid={`website-strip-${k.key}`} className="min-w-0">
-            <dt className="text-xs text-text-muted">{ar ? KPI_LABEL[k.key]?.ar : KPI_LABEL[k.key]?.en}</dt>
-            <dd className="tnum text-sm font-bold text-text-primary"><Num>{kpiText(k, k.current, k.kind === 'money' ? k.current_usd : undefined)}</Num></dd>
+          <div key={k.key} data-testid={`website-strip-${k.key}`} className="min-w-0 rounded-xl bg-surface-secondary px-3 py-2.5">
+            <dt className="truncate text-[11px] font-semibold text-text-muted">{ar ? KPI_LABEL[k.key]?.ar : KPI_LABEL[k.key]?.en}</dt>
+            <dd className="tnum mt-0.5 text-lg font-extrabold leading-tight text-text-primary sm:text-xl"><Num>{kpiText(k, k.current, k.kind === 'money' ? k.current_usd : undefined)}</Num></dd>
           </div>
         ))}
       </dl>
-      {onOpen && (
-        <button type="button" data-testid="website-strip-open" onClick={onOpen} className="inline-flex items-center gap-1 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-hover">
-          {ar ? 'الموقع' : 'Website'}<ArrowUpLeft size={13} className="rtl:hidden" aria-hidden /><ArrowUpRight size={13} className="hidden rtl:block" aria-hidden />
-        </button>
-      )}
     </section>
   )
 }

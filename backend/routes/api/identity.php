@@ -2,7 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Domains\Access\Http\Controllers\MyAccessController;
 use App\Domains\Accounts\Http\Controllers\RegistrationController;
+use App\Domains\Agency\Http\Controllers\RoleDashboardController;
+use App\Domains\Agency\Http\Controllers\RoleDashboardPerformanceController;
+use App\Domains\Agency\Http\Controllers\RoleDashboardWatchController;
+use App\Domains\Agents\Http\Controllers\McpController;
+use App\Domains\Agents\Http\Controllers\McpOAuthController;
+use App\Domains\Agents\Http\Controllers\McpTokenController;
+use App\Domains\Agents\Http\Middleware\McpAuthChallenge;
 use App\Domains\Identity\Http\Controllers\AuthController;
 use App\Domains\Identity\Http\Controllers\EmailVerificationController;
 use App\Domains\Identity\Http\Controllers\InvitationController;
@@ -12,6 +20,8 @@ use App\Domains\Identity\Http\Controllers\OAuthPendingLinkController;
 use App\Domains\Identity\Http\Controllers\OnboardingController;
 use App\Domains\Identity\Http\Controllers\PhoneConfirmationController;
 use App\Domains\Identity\Http\Controllers\PhoneSignInController;
+use App\Domains\Identity\Http\Controllers\TwoFactorChallengeController;
+use App\Domains\Identity\Http\Controllers\TwoFactorSettingsController;
 use App\Domains\Identity\Http\Controllers\UserController;
 use App\Domains\Legal\Http\Controllers\ConsentController;
 use App\Domains\Tenancy\Http\Controllers\MembershipController;
@@ -75,6 +85,18 @@ Route::prefix('auth')->name('auth.')->group(function (): void {
         ->middleware('throttle:otp-request');
     Route::post('/phone/verify', [PhoneSignInController::class, 'verify'])->name('phone.verify')
         ->middleware('throttle:otp-check');
+
+    /*
+     * TWO-STEP-001 — answering the second step. Public, because the person is not signed in yet; the authorisation is the
+     * pending state the first step left in THIS browser's session. `otp-check` bounds an address; the controller bounds the
+     * pending step (five wrong answers) and the account (ten per fifteen minutes). Sending a code spends `otp-request`.
+     */
+    Route::prefix('/two-factor')->name('two-factor.')->group(function (): void {
+        Route::get('/', [TwoFactorChallengeController::class, 'show'])->name('show')->middleware('throttle:60,1');
+        Route::post('/send', [TwoFactorChallengeController::class, 'send'])->name('send')->middleware('throttle:otp-request');
+        Route::post('/verify', [TwoFactorChallengeController::class, 'verify'])->name('verify')->middleware('throttle:otp-check');
+        Route::delete('/', [TwoFactorChallengeController::class, 'cancel'])->name('cancel');
+    });
 
     Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->name('forgot-password')
         ->middleware('throttle:6,1');
@@ -179,8 +201,44 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency,influencers'])->
 });
 
 // The signed-in user's own account (self-only; no user id is ever accepted from the client).
+/*
+ * MCP-SERVER-001 — CampaignsHub as an MCP server (Streamable HTTP, JSON-RPC). Authenticated by the person's own token and
+ * resolved to their workspace like any other request; the controller refuses any project they cannot see.
+ */
+Route::middleware([McpAuthChallenge::class, 'auth:sanctum', 'tenant'])->group(function (): void {
+    Route::post('/mcp', [McpController::class, 'handle'])->middleware('throttle:120,1')->name('mcp');
+    Route::get('/mcp', [McpController::class, 'stream'])->name('mcp.stream');
+});
+
+/*
+ * MCP-OAUTH-001 — «Add custom connector» in Claude or ChatGPT: discovery, self-registration, sign-in and tokens. The edge maps
+ * mcp.campaignshub.io's /.well-known/*, /register, /authorize and /token onto these. Public by design (they ARE the sign-in);
+ * only `approve` needs the signed-in person, and it is their press of «سماح».
+ */
+Route::prefix('mcp/oauth')->name('mcp.oauth.')->group(function (): void {
+    Route::get('/protected-resource', [McpOAuthController::class, 'protectedResource'])->middleware('throttle:120,1')->name('protected-resource');
+    Route::get('/metadata', [McpOAuthController::class, 'metadata'])->middleware('throttle:120,1')->name('metadata');
+    Route::post('/register', [McpOAuthController::class, 'register'])->middleware('throttle:20,1')->name('register');
+    Route::get('/authorize', [McpOAuthController::class, 'authorizeRequest'])->middleware('throttle:60,1')->name('authorize');
+    Route::post('/token', [McpOAuthController::class, 'token'])->middleware('throttle:60,1')->name('token');
+    Route::get('/clients/{clientId}', [McpOAuthController::class, 'show'])->middleware('throttle:60,1')->name('client');
+    Route::post('/approve', [McpOAuthController::class, 'approve'])->middleware(['auth:sanctum', 'tenant', 'throttle:20,1'])->name('approve');
+});
+
 Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(function (): void {
     Route::get('/', [MeController::class, 'show'])->name('show');
+    // ACCESS-SECTIONS-001 — the signed-in member's effective role, sections and clients, from the one resolver.
+    Route::get('/access', MyAccessController::class)->name('access');
+    // ROLE-DASHBOARD-001 — the landing page per role, server-filtered to the member's reach (agency and advertiser portals).
+    Route::get('/dashboard', RoleDashboardController::class)->middleware('portal:app,agency')->name('dashboard');
+    // DASH-PERF-SPLIT-001 — the performance panels, read on their own so the page is not held for them.
+    Route::get('/dashboard/performance', RoleDashboardPerformanceController::class)->middleware('portal:app,agency')->name('dashboard.performance');
+    // WATCH-BOARD-001 — the follow-up board: best and weakest campaigns and content of every platform, per client.
+    Route::get('/dashboard/watch', RoleDashboardWatchController::class)->middleware('portal:app,agency')->name('dashboard.watch');
+    // MCP-SERVER-001 — the person's own tokens for connecting Claude, Gemini or ChatGPT; each shown once, listed and revocable.
+    Route::get('/mcp-tokens', [McpTokenController::class, 'index'])->name('mcp-tokens.index');
+    Route::post('/mcp-tokens', [McpTokenController::class, 'store'])->middleware('throttle:10,1')->name('mcp-tokens.store');
+    Route::delete('/mcp-tokens/{id}', [McpTokenController::class, 'destroy'])->name('mcp-tokens.destroy');
     Route::patch('/profile', [MeController::class, 'updateProfile'])->name('profile.update');
     Route::get('/sessions', [MeController::class, 'sessions'])->name('sessions');
 
@@ -198,6 +256,26 @@ Route::middleware(['auth:sanctum', 'tenant'])->prefix('me')->name('me.')->group(
         ->middleware('throttle:otp-check');
     Route::delete('/phone', [PhoneConfirmationController::class, 'revoke'])->name('phone.revoke')
         ->middleware('throttle:6,1');
+
+    /*
+     * TWO-STEP-001 — the person's own second-step methods. Codes are sent under `otp-request` and checked under `otp-check`,
+     * like every other code; removing a method or turning the step off needs the password or a valid code again.
+     */
+    Route::prefix('two-factor')->name('two-factor.')->group(function (): void {
+        Route::get('/', [TwoFactorSettingsController::class, 'show'])->name('show');
+        Route::post('/totp/setup', [TwoFactorSettingsController::class, 'totpSetup'])->name('totp.setup')->middleware('throttle:10,1');
+        Route::post('/totp/confirm', [TwoFactorSettingsController::class, 'totpConfirm'])->name('totp.confirm')->middleware('throttle:otp-check');
+        Route::post('/{method}/start', [TwoFactorSettingsController::class, 'channelStart'])->name('channel.start')
+            ->whereIn('method', ['email', 'sms'])->middleware('throttle:otp-request');
+        Route::post('/{method}/confirm', [TwoFactorSettingsController::class, 'channelConfirm'])->name('channel.confirm')
+            ->whereIn('method', ['email', 'sms'])->middleware('throttle:otp-check');
+        Route::post('/default', [TwoFactorSettingsController::class, 'setDefault'])->name('default')->middleware('throttle:30,1');
+        Route::delete('/methods/{method}', [TwoFactorSettingsController::class, 'removeMethod'])->name('methods.remove')
+            ->whereIn('method', ['totp', 'email', 'sms'])->middleware('throttle:6,1');
+        Route::post('/disable', [TwoFactorSettingsController::class, 'disable'])->name('disable')->middleware('throttle:6,1');
+        Route::post('/recovery-codes', [TwoFactorSettingsController::class, 'regenerateRecoveryCodes'])->name('recovery-codes')
+            ->middleware('throttle:6,1');
+    });
 
     // Credential-changing actions are rate limited independently of login.
     Route::patch('/password', [MeController::class, 'updatePassword'])->name('password.update')

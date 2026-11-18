@@ -180,6 +180,8 @@ final class MetricSyncRun extends Model
             'started_at' => $this->started_at?->toIso8601String(),
             'finished_at' => $this->finished_at?->toIso8601String(),
             'error' => $this->error,
+            // X-NO-ACTIVITY-001 — success where every stored figure was zero.
+            'no_activity' => (bool) (((array) ($this->meta ?? []))['no_activity'] ?? false),
             // Demo runs are labelled, never disguised as production traffic.
             'is_demo' => (bool) $this->is_demo,
         ];

@@ -148,12 +148,11 @@ final class ReportShareController extends Controller
              * «closed», so a link cannot acquire a section by omission.
              */
               /*
-             * REPORT-CLIENT-NO-DELTAS-001 — «compared with the previous period» is OFF on a new client link
-             * unless the Owner switched it on. It is the agency's own working view (it invites a question
-             * about last week the client was never promised an answer to), so a link that did not ask for
-             * it does not carry it. Links created before this keep what they were stored with.
+             * REPORT-BEFORE-AFTER-001 — Owner 2026-11-17: «أضف مقارنات قبل وبعد». A new link carries the comparison with the
+             * previous period unless the operator switches it off (it replaces REPORT-CLIENT-NO-DELTAS-001's default of off). Links
+             * created before this keep what they were stored with; the switch stays on the link's edit dialog.
              */
-              'sections' => ShareSections::fromArray(($opts['sections'] ?? []) + ['previous_comparison' => false])->toArray(),
+              'sections' => ShareSections::fromArray(($opts['sections'] ?? []) + ['previous_comparison' => true])->toArray(),
               'columns' => ReportColumns::fromArray($opts['columns'] ?? [])->toArray(),
           ];
 
@@ -381,6 +380,11 @@ final class ReportShareController extends Controller
             'paths.*' => ['string', 'max:40'],
             'creatives' => ['array'],
             'creatives.*' => ['boolean'],
+            // REPORT-LINK-EDIT-ADS-001 — which ads the link lists, editable on a published link like the switches above.
+            'creative_display' => ['sometimes', 'array'],
+            'creative_display.policy' => ['sometimes', 'in:activity,all,selected'],
+            'creative_display.include_zero_activity' => ['sometimes', 'boolean'],
+            'creative_display.auto_refresh' => ['sometimes', 'boolean'],
             'sections' => ['array'],
             'sections.*' => ['boolean'],
             // REPORT-TABLES-OWNER-COLUMNS-001 — the published link's columns may be changed after creation.
@@ -409,6 +413,10 @@ final class ReportShareController extends Controller
         $settings = (array) ($link->settings ?? []);
         if (array_key_exists('creatives', $opts)) {
             $settings['creatives'] = CreativeVisibility::fromArray($opts['creatives'])->toArray();
+        }
+        if (array_key_exists('creative_display', $opts)) {
+            // REPORT-LINK-EDIT-ADS-001 — resolved the same way as at creation, so an edit cannot store a policy creation would refuse.
+            $settings['creative_display'] = (CreativeDisplay::fromArray((array) $opts['creative_display']) ?? new CreativeDisplay)->toArray();
         }
         if (array_key_exists('sections', $opts)) {
             // Merged over what the link already has: naming one switch must not reset the others to their default.
@@ -726,6 +734,8 @@ final class ReportShareController extends Controller
             // the report's own, which is what every link made before §15.12 does.
             'form' => $s->form,
             'creatives' => $s->creativeVisibility()->toArray(),
+            // REPORT-LINK-EDIT-ADS-001 — so the edit dialog starts from the link's own listing policy (null: none was ever chosen).
+            'creative_display' => $s->creativeDisplay()?->toArray(),
             'sections' => $s->sectionVisibility()->toArray(),
             // REPORT-TABLES-OWNER-COLUMNS-001 — what the link publishes per table, so the edit dialog starts from it.
             'columns' => ReportColumns::forShare($s)->toArray(),

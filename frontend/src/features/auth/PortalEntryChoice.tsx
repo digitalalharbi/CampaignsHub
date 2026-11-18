@@ -19,7 +19,7 @@ export function PortalEntryChoice({ portal, current, targets }: { portal: Portal
   const navigate = useNavigate()
   const { pathname, search, hash } = useLocation()
 
-  const move = useMutation({
+  const move = useMutation({ meta: { feedback: 'none' },
     mutationFn: (target: Membership) => switchMembership(target.id).then(() => target),
     onSuccess: (target) => completeWorkspaceSwitch(queryClient, `${pathname}${search}${hash}`, target.landing_path),
     // The list on screen was wrong about something: read it again rather than leave it there.

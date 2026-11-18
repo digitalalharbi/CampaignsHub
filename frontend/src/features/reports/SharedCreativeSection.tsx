@@ -104,7 +104,7 @@ const COPY = {
     of: 'من',
     attribution: 'المصدر: ما أبلغت عنه المنصة الإعلانية',
     confidence: { high: 'ثقة عالية', medium: 'ثقة متوسطة', insufficient_data: 'بيانات غير كافية' },
-    severity: { warning: 'يحتاج انتباهًا', opportunity: 'فرصة', positive: 'تحسّن' },
+    severity: { warning: 'تنبيه', opportunity: 'فرصة', positive: 'تحسّن' },
     evidence: 'الأدلة',
     showing: 'المعروض',
     details: 'تفاصيل الإعلان',
@@ -902,6 +902,23 @@ function SharedCreativeDetail({
             <button type="button" onClick={() => setZoom((z) => Math.min(z + 0.25, 4))} className="rounded border border-border px-2 py-1">+</button>
             <button type="button" onClick={() => setZoom(1)} className="rounded border border-border px-2 py-1">100%</button>
           </div>
+        )}
+
+        {/*
+          REPORT-OPENABLE-OPTIONS-001 (master task 10) — «تحميل الأصل» shown is a working control: the server set `can_download` from the
+          link's switch, and nothing drew it, so the option did nothing either way. Off, there is no control.
+        */}
+        {permissions.download && preview.can_download !== false && (reading.kind === 'video' ? reading.src : still) && (
+          <a
+            href={(reading.kind === 'video' ? reading.src : still) ?? undefined}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="shared-creative-download"
+            className="justify-self-start rounded-lg border border-border px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-surface-hover"
+          >
+            {ar ? 'حمّل الأصل' : 'Download the asset'}
+          </a>
         )}
 
         <h3 className="font-heading text-base font-extrabold">{creative.name}</h3>

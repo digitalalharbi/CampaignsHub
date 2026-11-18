@@ -111,9 +111,24 @@ final class ClientManagementController
     {
         $c = $this->access->resolve($client);
         $this->access->assert($request->user(), 'clients.archive', $c);
+        // PROJECT-LIFECYCLE-001 §8 — «أرشفة العميل» archives its projects too, so the client's name must be typed (server-checked).
+        $request->validate(['confirm_name' => ['required', 'string'], 'reason' => ['sometimes', 'nullable', 'string', 'max:500']]);
+        if (trim((string) $request->input('confirm_name')) !== trim((string) $c->name)) {
+            throw ValidationException::withMessages(['confirm_name' => [__('Type the client name exactly to confirm.')]]);
+        }
+        $archived = $this->service->archiveImpact($c)['projects'];
         $c = $this->service->archive($c, $request->user(), $request->string('reason')->toString() ?: null);
 
-        return response()->json(['data' => ['is_archived' => true, 'archived_at' => optional($c->archived_at)->toIso8601String()]]);
+        return response()->json(['data' => ['is_archived' => true, 'archived_at' => optional($c->archived_at)->toIso8601String(), 'projects_archived' => $archived]]);
+    }
+
+    /** GET /app/clients/{client}/archive-impact — the projects «أرشفة العميل» archives with it + shared accounts. */
+    public function archiveImpact(Request $request, string $client): JsonResponse
+    {
+        $c = $this->access->resolve($client);
+        $this->access->assert($request->user(), 'clients.archive', $c);
+
+        return response()->json(['data' => $this->service->archiveImpact($c)]);
     }
 
     /** POST /app/clients/{client}/restore */

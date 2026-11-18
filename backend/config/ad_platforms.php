@@ -198,7 +198,7 @@ return [
             'authorize_url' => 'https://www.linkedin.com/oauth/v2/authorization',
             'token_url' => 'https://www.linkedin.com/oauth/v2/accessToken',
             'api_base' => 'https://api.linkedin.com/rest',
-            'scopes' => ['r_ads', 'r_ads_reporting', 'r_basicprofile'],
+            // LINKEDIN-SCOPES-001 — no `scopes` here: the consent asks for ProviderCatalogue's list, the one source.
             'client_id' => env('LINKEDIN_ADS_CLIENT_ID'),
             'client_secret' => env('LINKEDIN_ADS_CLIENT_SECRET'),
             /*

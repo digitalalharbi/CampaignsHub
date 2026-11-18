@@ -232,9 +232,14 @@ final class TokenVault
             $existing->forceFill(array_filter([
                 'connection_name' => $connectionName,
                 'external_owner_id' => $externalOwnerId,
-                'scopes' => $tokens->scope === null ? $creds->scopes() : explode(' ', $tokens->scope),
+                /*
+                 * LINKEDIN-SCOPES-001 — `scopes` is the GRANT the provider returned (LinkedIn answers with commas), or
+                 * empty when it returned none: unknown, never the request restated as a grant. The request is kept
+                 * beside it. Not in the array_filter below on purpose — an empty grant must overwrite an old one.
+                 */
+                'requested_scopes' => $creds->scopes(),
                 'last_health_check_at' => Carbon::now(),
-            ], static fn ($v) => $v !== null))->save();
+            ], static fn ($v) => $v !== null) + ['scopes' => GrantedScopes::parse($tokens->scope)])->save();
 
             /*
              * INTEG-SOURCE-REMOVAL-001 — reconnecting a REMOVED source restores this same row.
@@ -301,7 +306,9 @@ final class TokenVault
             'scope' => $projectId !== null ? 'project_only' : ($clientWorkspaceId === null ? 'tenant_shared' : 'workspace_shared'),
             'project_id' => $projectId,
             'external_owner_id' => $externalOwnerId,
-            'scopes' => $tokens->scope === null ? $creds->scopes() : explode(' ', $tokens->scope),
+            // LINKEDIN-SCOPES-001 — the returned grant only (empty = unknown); the request is recorded apart from it.
+            'scopes' => GrantedScopes::parse($tokens->scope),
+            'requested_scopes' => $creds->scopes(),
             'status' => 'connected',
             'token_expires_at' => $tokens->expiresAt,
             'last_health_check_at' => Carbon::now(),

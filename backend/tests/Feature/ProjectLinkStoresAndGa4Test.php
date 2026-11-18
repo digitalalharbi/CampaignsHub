@@ -388,13 +388,14 @@ final class ProjectLinkStoresAndGa4Test extends TestCase
 
         $others = $this->actingAs($this->owner, 'sanctum')->getJson($path.'?project_id='.$this->b->id)->assertOk();
         $this->assertSame([], $rows($others));
-        $this->assertStringNotContainsString(self::SOURCE[$provider], $others->getContent());
+        // The DATA, not the whole body: the envelope's random request id can itself contain «111» (CI 2026-11-17).
+        $this->assertStringNotContainsString(self::SOURCE[$provider], (string) json_encode($others->json('data')));
 
         $rival = Tenant::create(['name' => 'Rival', 'slug' => 'rival-'.uniqid(), 'status' => 'active']);
         $rivalOwner = $this->member($rival, Permission::pluck('key')->all(), 'Rival Owner');
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $abroad = $this->actingAs($rivalOwner, 'sanctum')->withHeader('X-Tenant-ID', $rival->id)->getJson($path)->assertOk();
-        $this->assertStringNotContainsString(self::SOURCE[$provider], $abroad->getContent());
+        $this->assertStringNotContainsString(self::SOURCE[$provider], (string) json_encode($abroad->json('data')));
         $this->actingAs($rivalOwner, 'sanctum')->withHeader('X-Tenant-ID', $rival->id)->getJson($path.'?project_id='.$this->a->id)->assertNotFound();
     }
 

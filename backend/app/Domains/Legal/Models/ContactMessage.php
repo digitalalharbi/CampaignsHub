@@ -23,7 +23,7 @@ final class ContactMessage extends Model
         'status', 'operator_note', 'handled_by', 'handled_at', 'ip', 'user_agent', 'locale',
     ];
 
-    protected $casts = ['handled_at' => 'datetime'];
+    protected $casts = ['handled_at' => 'datetime', 'read_at' => 'datetime'];
 
     /** `spam` is a STATE, not a deletion — deleting the message loses the fact that it was judged. */
     public const STATUSES = ['new', 'read', 'answered', 'closed', 'spam'];

@@ -5,14 +5,20 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Support;
 
 use App\Domains\Alerts\Services\AlertEventMailer;
+use App\Domains\Notifications\Engine\Content\ComposedMessage;
+use App\Domains\Notifications\Engine\Sending\EngineMail;
+use App\Domains\Notifications\External\Consent\ConsentMessage;
+use App\Domains\Notifications\External\Content\ExternalMode;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\InvitationMail;
 use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Mail\PlatformReplyMail;
 use App\Domains\Notifications\Mail\ScheduledReportMail;
 use App\Domains\Notifications\Mail\SecurityAlertMail;
+use App\Domains\Notifications\Mail\SpendSummaryMail;
 use App\Support\Frontend;
 use Illuminate\Mail\Mailable;
 
@@ -85,6 +91,91 @@ final class MailGallery
     }
 
     /** @return array<string, Mailable> */
+    /**
+     * SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — the shape `ProjectSpendSummary::build()` returns, every state on purpose: over the
+     * limit, close to it, within it, unconverted (never a 0), and no limit set. The outside recipient's sees its two projects only.
+     *
+     * @return array<string,mixed>
+     */
+    private static function spendSummary(bool $external = false): array
+    {
+        $row = static fn (string $name, string $state, ?float $spend, ?float $cap, ?float $consumed, ?float $used, ?int $days, bool $withheld = false): array => [
+            'id' => md5($name), 'name' => $name, 'spend' => $spend, 'spend_currency' => 'SAR', 'spend_withheld' => $withheld,
+            'cap' => $cap, 'cap_currency' => $cap === null ? null : 'SAR', 'consumed' => $consumed,
+            'remaining' => $cap !== null && $consumed !== null ? $cap - $consumed : null, 'used' => $used,
+            'limit_from' => '2026-11-01', 'limit_to' => '2026-11-30', 'days_left' => $days, 'state' => $state,
+        ];
+        $projects = [
+            $row('Diwan Coffee', 'over', 4200.0, 15000.0, 15600.0, 1.04, null),
+            $row('Al-Ettifaq Club', 'near', 6100.0, 20000.0, 17400.0, 0.87, 2),
+            $row('Karam Alnakhil', 'ok', 2100.0, 12000.0, 5200.0, 0.433, 22),
+            $row('Al-Reef Restaurants', 'unconverted', null, 8000.0, null, null, null, true),
+            $row('Rose Store', 'none', 950.0, null, null, null, null),
+        ];
+        if ($external) {
+            $projects = array_slice($projects, 1, 2);
+        }
+
+        return ['from' => '2026-11-08', 'to' => '2026-11-14', 'days' => 7, 'projects' => $projects, 'total' => $external
+            ? ['spend' => 8200.0, 'spend_currency' => 'SAR', 'spend_left_out' => 0, 'cap' => 32000.0, 'remaining' => 9400.0, 'cap_currency' => 'SAR', 'cap_left_out' => 0, 'used' => 0.71, 'near' => 1, 'projects' => 2]
+            : ['spend' => null, 'spend_currency' => 'SAR', 'spend_left_out' => 1, 'cap' => 47000.0, 'remaining' => 8800.0, 'cap_currency' => 'SAR', 'cap_left_out' => 1, 'used' => 0.81, 'near' => 2, 'projects' => 5]];
+    }
+
+    /**
+     * EMAIL-CLIENT-COMPAT-001 — every message the compatibility checks render: the gallery, the seven external templates and the
+     * external subscription confirmation. Fixtures only, like the rest of this class.
+     *
+     * @return array<string, Mailable>
+     */
+    public static function compatMessages(string $locale): array
+    {
+        $out = self::messages($locale);
+        foreach (['finance', 'project_manager', 'admin_owner', 'client', 'achievement', 'continuity_planning', 'month_end'] as $tpl) {
+            $mail = self::externalDemo($tpl, $locale);
+            if ($mail !== null) {
+                $out['external-'.str_replace('_', '-', $tpl)] = $mail;
+            }
+        }
+        $out['external-confirmation'] = new EngineMail(
+            ConsentMessage::compose('Nour Agency', ['Al-Waha Store'], 'https://campaignshub.io/n/c/sample', $locale),
+            'REF-SAMPLE', $locale,
+        );
+
+        return $out;
+    }
+
+    /**
+     * NOTIF-V2 — the seven external templates, from the SAME approved templates in their external mode, on fixture data (previews only:
+     * the real message is composed from the project's own figures by `ExternalMessageComposer`). Null when nothing goes by that name.
+     */
+    public static function externalDemo(string $template, string $locale): ?Mailable
+    {
+        $ar = $locale === 'ar';
+        $scope = ($ar ? 'Nour Agency · مشروع: ' : 'Nour Agency · Project: ');
+        $privacy = static fn (string $role, string $project): string => $ar ? "مخصصة لك بصفتك {$role} — بيانات {$project} فقط" : "For you as {$role} — {$project} data only";
+        $disclaimer = $ar ? 'المرجع المالي: فواتير المنصات والمحاسبة المالية.' : 'Financial reference: platform invoices and accounting records.';
+        $name = $ar ? 'سارة' : 'Sarah';
+        $project = static function (array $row, string $kind, int $days, string $role) use ($locale, $ar, $name, $scope, $privacy, $disclaimer): OperationalDigestMail {
+            $model = ExternalMode::digestModel(OperationalDigestModel::project($row, $locale, $days, $kind), $ar);
+
+            return (new OperationalDigestMail($model, $locale, $name, $kind, 'project', null, external: true, scopeNote: $scope.$model['name'], privacyLine: $privacy($role, (string) $model['name']), disclaimer: $disclaimer))
+                ->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE);
+        };
+        $spend = static fn (bool $near) => (new SpendSummaryMail(self::spendSummary(external: true), $locale, 'weekly', external: true, recipientName: $name,
+            scopeNote: $scope.'Al-Ettifaq Club', privacyLine: $privacy($ar ? 'المالية' : 'Finance', 'Al-Ettifaq Club'), disclaimer: $disclaimer))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE);
+        $ops = self::operationalDigest()['projects'];
+
+        return match ($template) {
+            'finance', 'continuity_planning' => $spend($template === 'continuity_planning'),
+            'project_manager' => $project($ops[0], 'weekly', 7, $ar ? 'مدير المشاريع' : 'Project manager'),
+            'admin_owner' => $project($ops[1], 'weekly', 7, $ar ? 'الإدارة' : 'Management'),
+            'client' => $project($ops[0], 'weekly', 7, $ar ? 'العميل' : 'Client'),
+            'achievement' => $project($ops[1], 'daily', 1, $ar ? 'الإدارة' : 'Management'),
+            'month_end' => $project(DigestDemo::payload(2, 4, monthly: true)['projects'][1], 'monthly', 31, $ar ? 'الإدارة' : 'Management'),
+            default => null,
+        };
+    }
+
     public static function messages(string $locale): array
     {
         $ar = $locale === 'ar';
@@ -107,13 +198,16 @@ final class MailGallery
 
             // EMAIL-DIGESTS-OPERATIONAL-001 — the operational digests: one project with a block per platform, and the portfolio of all of them.
             'digest-project' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][0], $locale, 7), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'project'),
-            'digest-project-leads' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][1], $locale, 7), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'project'),
+            'digest-project-leads' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][1], $locale, 1), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'project', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', $ar)),
             'digest-portfolio' => new OperationalDigestMail(OperationalDigestModel::portfolio(self::operationalDigest(), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio'),
             // DIGESTS-CADENCE-BUDGETS-001 — the three rhythms of each: a project's monthly report, and «ملخص المشاريع» daily and monthly over thirty projects.
-            'digest-project-monthly' => new OperationalDigestMail(OperationalDigestModel::project(DigestDemo::payload(2, 4, monthly: true)['projects'][1], $locale, 31, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'project', AlertEventText::ltr('2026-10-01').' – '.AlertEventText::ltr('2026-10-31')),
-            'digest-projects-daily' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6), $locale, 'daily'), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'portfolio', AlertEventText::ltr('2026-11-03').' – '.AlertEventText::ltr('2026-11-09')),
-            'digest-projects-weekly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, weekly: true), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio', AlertEventText::ltr('2026-11-01').' – '.AlertEventText::ltr('2026-11-07')),
-            'digest-projects-monthly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, monthly: true), $locale, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'portfolio', AlertEventText::ltr('2026-10-01').' – '.AlertEventText::ltr('2026-10-31')),
+            'digest-project-monthly' => new OperationalDigestMail(OperationalDigestModel::project(DigestDemo::payload(2, 4, monthly: true)['projects'][1], $locale, 31, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'project', DigestSchedule::periodLabel('monthly', '2026-10-01', '2026-10-31', $ar)),
+            'digest-projects-daily' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6), $locale, 'daily'), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'portfolio', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', $ar)),
+            'digest-projects-weekly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, weekly: true), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio', DigestSchedule::periodLabel('weekly', '2026-11-05', '2026-11-11', $ar)),
+            'digest-projects-monthly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, monthly: true), $locale, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'portfolio', DigestSchedule::periodLabel('monthly', '2026-10-01', '2026-10-31', $ar)),
+            // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق» for the workspace, and the self-contained follow-up for a recipient outside the platform.
+            'spend-summary-weekly' => new SpendSummaryMail(self::spendSummary(), $locale, 'weekly'),
+            'spend-summary-external' => new SpendSummaryMail(self::spendSummary(external: true), $locale, 'weekly', external: true, recipientName: $ar ? 'سارة' : 'Sarah'),
             // Every alert family, one card each, built by the real `AlertMailItem::build()` from an alert outbox item.
             ...self::alertTypes($locale),
 
@@ -188,6 +282,16 @@ final class MailGallery
                 ]],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
             ),
+
+            // NOTIF-V2-ENGINE-001 — the shared engine's own message (internal catalog words, and the consent request).
+            'notifications-v2-notice' => new EngineMail(new ComposedMessage(
+                subject: $ar ? 'متجر تجريبي — وكالة المدى | انتهى ربط منصة' : 'Demo store — Almada Agency | A platform link expired',
+                title: $ar ? 'انتهى ربط منصة' : 'A platform link expired',
+                body: $ar ? 'ربط منصة في متجر تجريبي انتهى ويحتاج إعادة ربط.' : 'A platform link in Demo store expired and needs relinking.',
+                html: $ar ? '<p><strong>انتهى ربط منصة</strong></p><p>ربط منصة في متجر تجريبي انتهى ويحتاج إعادة ربط.</p><p>الرقم المرجعي: N-261115-ABCDEFGH</p>'
+                    : '<p><strong>A platform link expired</strong></p><p>A platform link in Demo store expired and needs relinking.</p><p>Reference: N-261115-ABCDEFGH</p>',
+                text: $ar ? 'انتهى ربط منصة' : 'A platform link expired',
+            ), 'N-261115-ABCDEFGH', $locale),
 
             // DELIVERY-REMINDERS-001 — a reviewer's nudge, sent by `MemberNotices`.
             'delivery-reminder' => new OperationalMail(
@@ -295,16 +399,25 @@ final class MailGallery
                 why: $ar ? 'وصلتك لأنك صاحب هذا الطلب.' : 'Sent because you filed this request.',
             ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
 
+            // PLATFORM-INBOX-ATTENTION-001 — an administrator's reply to somebody who wrote from the website.
+            'platform-reply' => (new PlatformReplyMail(
+                about: $ar ? 'استفسار عن الباقات' : 'A question about the plans',
+                body: $ar
+                    ? "شكرًا على تواصلك.\nباقة الفريق تناسب ثلاثة حسابات إعلانية أو أكثر.\n\nإذا رغبت نرتب لك عرضًا قصيرًا هذا الأسبوع."
+                    : "Thank you for writing.\nThe Team plan suits three or more ad accounts.\n\nIf you like, we can arrange a short demo this week.",
+                lang: $locale, recipientName: $ar ? 'سارة' : 'Sarah', reference: 'CH-7Q2M4K',
+            ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
+
             // EMAIL-TRANSACTIONAL-SET-001 — the two messages a member is owed about their own access.
             'member-welcome' => new OperationalMail(
                 kind: 'member_welcome', severity: 'positive',
                 title: $ar ? 'أهلًا بك في وكالة العرض' : 'Welcome to Demo Agency',
                 detail: $ar
-                    ? 'انضممت بدور «محلل». تابع الحملات والتقارير من لوحة التحكم.'
+                    ? 'انضممت بدور «محلل». تابع الحملات والتقارير من الرئيسية.'
                     : 'You joined as «Analyst». Follow campaigns and reports from the dashboard.',
                 context: $ar ? 'وكالة العرض' : 'Demo Agency',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
-                path: '/app/dashboard', action: $ar ? 'فتح لوحة التحكم' : 'Open the dashboard',
+                path: '/app/dashboard', action: $ar ? 'فتح الرئيسية' : 'Open the dashboard',
                 why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
 
@@ -543,7 +656,7 @@ final class MailGallery
                     [
                         'id' => 'b', 'kind' => 'rising_cost', 'severity' => 'warning', 'reveals' => ['spend'],
                         'title' => 'ارتفاع تكلفة النتيجة',
-                        'detail' => 'ارتفعت تكلفة النتيجة 27% إلى 88.72 SAR، ربما بسبب منافسة أعلى أو محتوى تعب.',
+                        'detail' => 'ارتفعت تكلفة النتيجة 27% إلى 88.72 SAR.',
                         'scope' => ['type' => 'period', 'name' => null],
                     ],
                 ],

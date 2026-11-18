@@ -78,7 +78,8 @@ export function useOverviewData({ projectId, range, filters, objective }: Overvi
    * reading instead, so a line and the card above it cannot disagree about the same window.
    */
   const series = plotSeries(points, reportingCurrency, ar)
-  const chartCurrency = series.currency ?? reportingCurrency ?? 'SAR'
+  // FX-APPLY-001 — the series' own currency, else the reporting one, else none — never a guessed «SAR».
+  const chartCurrency = series.currency ?? reportingCurrency ?? null
 
   /*
    * ANALYTICS-COMPARE-001 — six mute dashes were the page's way of saying «there is no yesterday».
@@ -185,7 +186,8 @@ const axis = { fill: 'var(--text-secondary)', fontSize: 12 }
 function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: boolean }) {
   if (!commerce) return null
 
-  const cur = commerce.reporting_currency || 'SAR'
+  // FX-APPLY-001 — the store figures' own reporting currency, never a guessed «SAR».
+  const cur = commerce.reporting_currency || null
 
   return (
     <div data-testid="dashboard-store" className="rounded-2xl border border-border bg-surface p-4">
@@ -350,7 +352,7 @@ export function DashboardOverview(d: OverviewData) {
           the axis says which.
         */}
         <Panel
-          title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'}
+          title={ar ? 'الإنفاق وتحويلات المنصة والإيرادات' : 'Spend, platform conversions and revenue'}
           description={
             series.basis === 'original'
               ? ar
@@ -379,7 +381,7 @@ export function DashboardOverview(d: OverviewData) {
                 <Tooltip
                   {...tooltipProps}
                   formatter={(v: number, name: string) =>
-                    name === (ar ? 'النتائج' : 'Results') ? num(v) : money(v, chartCurrency)
+                    name === (ar ? 'تحويلات المنصة' : 'Platform conversions') ? num(v) : money(v, chartCurrency)
                   }
                 />
                 <Legend wrapperStyle={{ fontSize: 13 }} />
@@ -389,7 +391,7 @@ export function DashboardOverview(d: OverviewData) {
                 {series.hasMoney && series.basis !== 'mixed' && (
                   <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
                 )}
-                <Line yAxisId="count" name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="count" name={ar ? 'تحويلات المنصة' : 'Platform conversions'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -521,22 +523,10 @@ export function AnalyticsOverview(d: OverviewData) {
   return (
     <div className="space-y-4" data-testid="analytics-overview" data-composition="analytics">
       {/*
-        WHERE the weakness is — read on the stages of the journey, never asserted without the
-        measurement behind it. First, because that is the question this surface exists to answer.
-        Same `useSummary` entry the strip below reads, so the diagnosis and its evidence cannot
-        disagree about the account they describe.
+        ANALYTICS-VISUAL-FIRST-001 (owner: «احتاج جانب ابداعي وبياني بدون النصي») — the page opens on DRAWINGS: where the
+        money sits and the three rates the operator acts on. The reading of the journey follows them, and the figures
+        after that, as before.
       */}
-      <DiagnosticPanel
-        objective={d.objective}
-        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
-        reported={s.data?.reported}
-        rowsInScope={s.data?.rows_in_scope}
-        loading={s.isPending}
-        error={s.isError ? s.error : undefined}
-        onRetry={() => void s.refetch()}
-        ar={ar}
-      />
-
       {/*
         Then WHERE THE MONEY SITS. «What moved» and «what carries the weight» are different
         questions, and a stable account can still hold most of its budget behind one platform.
@@ -563,6 +553,23 @@ export function AnalyticsOverview(d: OverviewData) {
       </div>
 
       {/*
+        WHERE the weakness is — read on the stages of the journey, never asserted without the
+        measurement behind it. First, because that is the question this surface exists to answer.
+        Same `useSummary` entry the strip below reads, so the diagnosis and its evidence cannot
+        disagree about the account they describe.
+      */}
+      <DiagnosticPanel
+        objective={d.objective}
+        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
+        reported={s.data?.reported}
+        rowsInScope={s.data?.rows_in_scope}
+        loading={s.isPending}
+        error={s.isError ? s.error : undefined}
+        onRetry={() => void s.refetch()}
+        ar={ar}
+      />
+
+      {/*
         SURFACE-SEPARATION-001 — the store ledger reads here, where «why» is the question.
 
         It sat on the dashboard, which answers what is happening rather than what caused it. The Store
@@ -577,9 +584,6 @@ export function AnalyticsOverview(d: OverviewData) {
         a reader who is here is checking an argument.
       */}
       <section data-testid="analytics-evidence" className="space-y-4">
-        <h2 className="text-sm font-bold text-text-primary">
-          {ar ? 'الأرقام التي بُني عليها ما سبق' : 'The figures the reading above was drawn from'}
-        </h2>
 
         {!comparable && s.data && (
           <p
@@ -613,7 +617,7 @@ export function AnalyticsOverview(d: OverviewData) {
         )}
 
         <Panel
-          title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'}
+          title={ar ? 'الإنفاق وتحويلات المنصة والإيرادات' : 'Spend, platform conversions and revenue'}
           description={
             series.basis === 'original'
               ? ar
@@ -637,7 +641,7 @@ export function AnalyticsOverview(d: OverviewData) {
                 <Tooltip
                   {...tooltipProps}
                   formatter={(v: number, name: string) =>
-                    name === (ar ? 'النتائج' : 'Results') ? num(v) : money(v, chartCurrency)
+                    name === (ar ? 'تحويلات المنصة' : 'Platform conversions') ? num(v) : money(v, chartCurrency)
                   }
                 />
                 <Legend wrapperStyle={{ fontSize: 13 }} />
@@ -647,7 +651,7 @@ export function AnalyticsOverview(d: OverviewData) {
                 {series.hasMoney && series.basis !== 'mixed' && (
                   <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
                 )}
-                <Line yAxisId="count" name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="count" name={ar ? 'تحويلات المنصة' : 'Platform conversions'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -666,7 +670,7 @@ export function AnalyticsOverview(d: OverviewData) {
       */}
       <ChangeDiagnosis
         data={drivers.data}
-        currency={d.reportingCurrency ?? 'SAR'}
+        currency={d.reportingCurrency ?? null}
         loading={drivers.isPending}
         error={drivers.isError}
         subtitle={d.unlikeNote ?? undefined}

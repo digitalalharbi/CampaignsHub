@@ -16,7 +16,7 @@ import { AUTH, switchToEnglish } from './helpers'
 test.use({ storageState: AUTH.owner })
 
 test('the client book is divided against its total, and the remainder is named', async ({ page }) => {
-  await page.goto('/agency/dashboard')
+  await page.goto('/agency/dashboard?tab=mix')
   await switchToEnglish(page)
 
   const bar = page.getByTestId('client-mix-bar')
@@ -29,7 +29,7 @@ test('the client book is divided against its total, and the remainder is named',
 })
 
 test('the objective chart actually draws its bars and its category axis', async ({ page }) => {
-  await page.goto('/agency/dashboard')
+  await page.goto('/agency/dashboard?tab=mix')
   await switchToEnglish(page)
 
   const chart = page.getByTestId('agency-objective-chart')
@@ -87,7 +87,7 @@ test('the objective chart actually draws its bars and its category axis', async 
 })
 
 test('the pace chart ranks clients against a line it keeps on the card', async ({ page }) => {
-  await page.goto('/agency/dashboard')
+  await page.goto('/agency/dashboard?tab=budgets')
   await switchToEnglish(page)
 
   const chart = page.locator('[data-testid="client-pace-reference"], [data-testid="client-pace-empty"]').first()
@@ -107,7 +107,7 @@ test('the pace chart ranks clients against a line it keeps on the card', async (
 for (const width of [1440, 768, 390]) {
   test(`the drawn dashboard never scrolls the page sideways at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 })
-    await page.goto('/agency/dashboard')
+    await page.goto('/agency/dashboard?tab=mix')
     await expect(page.getByTestId('client-mix-bar')).toBeVisible({ timeout: 30000 })
 
     const overflow = await page.evaluate(
@@ -118,7 +118,7 @@ for (const width of [1440, 768, 390]) {
 }
 
 test('the pace ratios are Latin digits in Arabic, like every other figure in the product', async ({ page }) => {
-  await page.goto('/agency/dashboard')
+  await page.goto('/agency/dashboard?tab=budgets')
 
   const empty = page.getByTestId('client-pace-empty')
   const first = page.locator('[data-testid^="client-pace-row-"]').first()

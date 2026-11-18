@@ -139,12 +139,12 @@ describe('the executive summary (REPORT-EXECUTIVE-SUMMARY-001)', () => {
     const cards = await screen.findByTestId('exec-platform-cards')
     expect(within(cards).getByTestId('exec-platform-card-all')).toHaveTextContent('50')
     expect(within(cards).getByTestId('exec-platform-card-meta')).toHaveTextContent('40')
-    expect(cards).not.toHaveTextContent(/700|SAR/)
+    expect(cards).not.toHaveTextContent(/700|(?:SAR|ر\.س)/)
 
     const best = screen.getByTestId('exec-best-content')
     expect(best).toHaveTextContent('Best on meta')
     expect(best).toHaveTextContent('Best on snapchat')
-    expect(best).not.toHaveTextContent(/Spend|ROAS|SAR/)
+    expect(best).not.toHaveTextContent(/Spend|ROAS|(?:SAR|ر\.س)/)
     expect(screen.getByTestId('exec-improve-content')).toHaveTextContent('Weak on meta')
 
     fireEvent.click(screen.getByTestId('exec-platform-card-snapchat'))
@@ -211,8 +211,8 @@ describe('a detailed link', () => {
 
     const strongest = await screen.findByTestId('live-leaders-conversion-strongest')
     expect(strongest).toHaveTextContent('Meta')
-    expect(strongest).toHaveTextContent('17.50 SAR')
-    expect(screen.getByTestId('live-leaders-conversion-weakest')).toHaveTextContent('30 SAR')
+    expect(strongest).toHaveTextContent('17.50 ر.س')
+    expect(screen.getByTestId('live-leaders-conversion-weakest')).toHaveTextContent('30 ر.س')
   })
 
   it('reads one platform through the same endpoint, narrowed, and the view agrees with the whole link', async () => {
@@ -487,5 +487,47 @@ describe('the report levels are different products', () => {
 
     await screen.findByTestId('live-mode-standard')
     expect(screen.queryByTestId('live-mode-tables')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * CHATGPT-ADS-CONTENT-RANKABLE-001 — a platform that reports spend and clicks but none of the objective's result still
+ * lists its ads, and says why they are ordered on clicks.
+ */
+describe('a platform that does not report the objective’s result (ChatGPT Ads, sales objective)', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('lists its content with the fallback sentence, not «no content with figures»', async () => {
+    vi.mocked(fetchLiveShared).mockImplementation(async (_token, opts) => {
+      const base = payloadFor([])
+      const cards = [110, 80, 60].map((clicks, i) => ({
+        ...ad(`Chat card ${i + 1}`, 'openai_ads', `key-card-${i}`, 30 - i),
+        format: 'chat_card',
+        metrics: { spend: 30 - i, impressions: clicks * 40, clicks },
+      }))
+
+      return { status: 200, envelope: { data: {
+        ...base,
+        platforms: [{ provider: 'openai_ads', spend: 163, impressions: 16_000, clicks: 421, conversions: 0, ctr: 0.026 }],
+        ads: cards,
+        ads_weakest: [],
+        ads_basis: {
+          family: null, metric: 'clicks', label_ar: 'النقرات', label_en: 'Clicks', family_label_ar: null, family_label_en: null,
+          fallback: true,
+          note_ar: 'الهدف مبيعات، والمنصة ما تبلّغ عن طلبات — رتّبنا حسب النقرات',
+          note_en: 'The goal is sales and the platform does not report orders — ranked by clicks',
+        },
+        available: { ...base.available, providers: ['openai_ads'] },
+        applied: { ...base.applied, providers: opts.providers },
+      } } } as never
+    })
+    renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { route: '/r/tok?view=platforms&platform=openai_ads' })
+
+    const view = await screen.findByTestId('live-platform-view-openai_ads')
+    const best = await within(view).findByTestId('live-platform-best-content')
+    expect(best).toHaveTextContent('Chat card 1')
+    expect(best).toHaveTextContent('Chat card 3')
+    expect(best).not.toHaveTextContent('No content with figures')
+    expect(within(best).getByTestId('live-platform-best-content-basis')).toHaveTextContent('does not report orders — ranked by clicks')
   })
 })

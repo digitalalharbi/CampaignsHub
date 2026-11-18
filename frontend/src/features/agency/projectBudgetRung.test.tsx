@@ -49,7 +49,7 @@ describe('the project rung under the client that raised the question', () => {
 
   it('names the projects a client’s money is in', async () => {
     vi.mocked(fetchClientBudgets).mockResolvedValue([client()])
-    renderWithProviders(<AgencyDashboardPage />)
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets' })
 
     fireEvent.click(await screen.findByRole('button', { name: /Acme/ }))
 
@@ -60,7 +60,7 @@ describe('the project rung under the client that raised the question', () => {
 
   it('offers no drill-down for a client whose projects hold nothing', async () => {
     vi.mocked(fetchClientBudgets).mockResolvedValue([client({ projects_breakdown: [] })])
-    renderWithProviders(<AgencyDashboardPage />)
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=budgets' })
 
     /*
       Scoped to the table, because the client's name is now in two places on this page: the pace

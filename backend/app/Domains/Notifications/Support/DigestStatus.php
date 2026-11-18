@@ -113,7 +113,7 @@ final class DigestStatus
     }
 
     /**
-     * @param  array{alert?: ?string, spend?: mixed, spend_withheld?: bool, results?: mixed, results_reported?: bool, results_key?: string, results_prev?: mixed,
+     * @param  array{live?: false|array<string, mixed>|null, alert?: ?string, spend?: mixed, spend_withheld?: bool, results?: mixed, results_reported?: bool, results_key?: string, results_prev?: mixed,
      *     headline_now?: mixed, headline_prev?: mixed, headline_lower_is_better?: bool, pace?: mixed, source?: ?string}  $in
      * @return array{state: string, reason: ?string, severity: float}
      */
@@ -129,7 +129,22 @@ final class DigestStatus
         if ($source === 'failed') {
             return ['state' => 'bad', 'reason' => 'sync_failed', 'severity' => 1.0];
         }
-        if ($spend !== null && $spend > 0 && ($in['results_reported'] ?? false) === true && $results !== null && $results == 0.0 && isset($in['results_key'])) {
+        /*
+         * ALERT-DELIVERING-YESTERDAY-001 — when the caller says which campaigns a decision may be about (`live`: the platform's
+         * figures from campaigns running and delivering on the period's last day, each since it last started; null when none),
+         * «no results» is judged on those alone. A campaign stopped mid-period does not make its platform «spend with no results».
+         * `false` (an older payload, a demo) keeps the whole-platform figures.
+         */
+        $live = array_key_exists('live', $in) ? $in['live'] : false;
+        if ($live !== false) {
+            $liveSpend = is_array($live) && is_numeric($live['spend'] ?? null) ? (float) $live['spend'] : null;
+            $key = (string) ($in['results_key'] ?? '');
+            $liveResults = is_array($live) && $key !== '' && is_numeric($live[$key] ?? null) ? (float) $live[$key] : (is_array($live) && $key !== '' ? 0.0 : null);
+            $noResults = $liveSpend !== null && $liveSpend > 0 && $spend !== null && $liveResults !== null && $liveResults == 0.0;
+        } else {
+            $noResults = $spend !== null && $spend > 0 && $results !== null && $results == 0.0;
+        }
+        if ($noResults && ($in['results_reported'] ?? false) === true && isset($in['results_key'])) {
             return ['state' => 'bad', 'reason' => 'no_results', 'severity' => 1.0];
         }
         if ($pace !== null && $pace > self::PACE_HOT) {

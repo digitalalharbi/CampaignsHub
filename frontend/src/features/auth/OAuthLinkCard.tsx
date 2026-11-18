@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Lock, Mail, X } from 'lucide-react'
-import { cancelPendingLink, confirmLinkWithEmail, confirmLinkWithPassword, fetchPendingLink, sendLinkEmail } from './api'
+import { cancelPendingLink, confirmLinkWithEmail, confirmLinkWithPassword, fetchPendingLink, sendLinkEmail, TwoStepRequired, type TwoStepInfo } from './api'
 import { IconField } from './loginFields'
 import { Button } from '@/components/ui/Button'
 import { toApiError } from '@/lib/api/client'
@@ -99,6 +99,7 @@ export function OAuthLinkCard({
   confirmToken,
   onSignedIn,
   onLeave,
+  onTwoStep,
 }: {
   locale: 'ar' | 'en'
   /** The secret from the mailed link, when this page was opened from it. Spent once, on mount. */
@@ -106,6 +107,8 @@ export function OAuthLinkCard({
   onSignedIn: (result: LinkedSignIn) => void
   /** Back to the ordinary sign-in form: cancelled, expired, or nothing to confirm. */
   onLeave: () => void
+  /** TWO-STEP-001 — the proof was right and the account has a second step on: the session is held until it passes. */
+  onTwoStep?: (info: TwoStepInfo | null) => void
 }) {
   const c = COPY[locale]
   const ar = locale === 'ar'
@@ -117,12 +120,13 @@ export function OAuthLinkCard({
   const [sent, setSent] = useState(false)
   const [expired, setExpired] = useState(false)
 
-  const byPassword = useMutation({ mutationFn: () => confirmLinkWithPassword(password), onSuccess: (r) => onSignedIn(r) })
-  const sendLink = useMutation({
+  const twoStep = (e: unknown) => { if (e instanceof TwoStepRequired) onTwoStep?.(e.info) }
+  const byPassword = useMutation({ meta: { feedback: 'none' }, mutationFn: () => confirmLinkWithPassword(password), onSuccess: (r) => onSignedIn(r), onError: twoStep })
+  const sendLink = useMutation({ meta: { feedback: 'none' },
     mutationFn: sendLinkEmail,
     onSuccess: (r) => { setSent(true); setDelivery(r.delivery); setCooldown(r.resend_after) },
   })
-  const byEmail = useMutation({ mutationFn: (token: string) => confirmLinkWithEmail(token), onSuccess: (r) => onSignedIn(r) })
+  const byEmail = useMutation({ mutationFn: (token: string) => confirmLinkWithEmail(token), onSuccess: (r) => onSignedIn(r), onError: twoStep })
   const cancel = useMutation({ mutationFn: cancelPendingLink, onSettled: onLeave })
 
   // The mailed link is spent exactly once, even where React runs the effect twice.

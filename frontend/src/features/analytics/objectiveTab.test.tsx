@@ -120,7 +120,7 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    expect(await screen.findByTestId('objective-family-awareness')).toHaveTextContent('412.50 USD')
+    expect(await screen.findByTestId('objective-family-awareness')).toHaveTextContent('412.50 $')
   })
 
   /** A campaign the platform never classified lands in Unclassified, never in Sales. */
@@ -137,8 +137,8 @@ describe('the objective analysis tab', () => {
  * NUMBER-PRESENTATION-001 — one number, written the same way wherever it appears.
  *
  * The family summary's two FALLBACK branches — money, and a metric with no spec — printed
- * `toLocaleString` directly, so a family that spent 1,284,663 read «1,284,663 SAR» here and
- * «1.28M SAR» on the KPI card above it. Same figure, two shapes, on one screen: the reader has to
+ * `toLocaleString` directly, so a family that spent 1,284,663 read «1,284,663 ر.س» here and
+ * «1.28M ر.س» on the KPI card above it. Same figure, two shapes, on one screen: the reader has to
  * work out that they are the same number before they can use either.
  *
  * «لم يتم تقريب الارقام 1k, 3M, 54.5K وهكذا» was answered for the entity tables and these two
@@ -187,7 +187,7 @@ describe('a family summary is written like the rest of the product', () => {
 
     expect(costs.length, 'no cost-per figure was rendered to check').toBeGreaterThan(0)
     for (const cost of costs) {
-      expect(cost.trim()).toMatch(/\s(SAR|USD)$/)
+      expect(cost.trim()).toMatch(/\s(ر.س|\$)$/)
     }
   })
 })

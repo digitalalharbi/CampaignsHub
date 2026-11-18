@@ -8,6 +8,7 @@ use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\Quote;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Models\ContentApproval;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Models\Report;
@@ -49,6 +50,7 @@ final class ClientPortalWriteIsolationTest extends TestCase
 
     /** @var list<string> every GET under /client the probe covers, written as the route is */
     private const COVERED = [
+        'api/v1/client/approvals/{approval}/approve', 'api/v1/client/approvals/{approval}/request-changes',
         'api/v1/client/invoices/{invoice}/pay', 'api/v1/client/messages', 'api/v1/client/messages/{thread}',
         'api/v1/client/quotes/{quote}/approve', 'api/v1/client/quotes/{quote}/reject', 'api/v1/client/requests',
         'api/v1/client/requests/{reference}/reply', 'api/v1/client/team', 'api/v1/client/team/{membership}',
@@ -108,7 +110,10 @@ final class ClientPortalWriteIsolationTest extends TestCase
             'objective' => $label.' objective', 'journey_stage' => 'in_progress', 'submitted_at' => now(),
         ]);
 
-        return ['invoice' => (string) $invoice->id, 'quote' => (string) $quote->id, 'thread' => (string) $thread->id, 'reference' => $request->reference];
+        // CLIENT-CONTENT-APPROVAL-001 — an open content approval, titled with the label so a leak names itself.
+        $approval = ContentApproval::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $w->id, 'project_id' => $project->id, 'title' => $label.' content', 'status' => 'pending']);
+
+        return ['invoice' => (string) $invoice->id, 'quote' => (string) $quote->id, 'thread' => (string) $thread->id, 'reference' => $request->reference, 'approval' => (string) $approval->id];
     }
 
     private function signInAsAlpha(): void
@@ -133,6 +138,7 @@ final class ClientPortalWriteIsolationTest extends TestCase
             'invoice' => Invoice::query()->whereKey($this->theirs['invoice'])->first()->only(['status', 'amount_paid']),
             'payments' => DB::table('payments')->count(),
             'quote' => Quote::query()->whereKey($this->theirs['quote'])->value('status'),
+            'approval' => ContentApproval::query()->whereKey($this->theirs['approval'])->value('status'),
             'invoices_beta' => Invoice::query()->where('client_workspace_id', $this->beta->id)->count(),
             'threads_beta' => MessageThread::query()->where('client_workspace_id', $this->beta->id)->count(),
             'messages_in_their_thread' => DB::table('messages')->where('thread_id', $this->theirs['thread'])->count(),
@@ -169,6 +175,20 @@ final class ClientPortalWriteIsolationTest extends TestCase
 
         $this->assertSame($before, $this->betaState(), 'a write the portal refused still changed the other client\'s records');
         $this->assertSame(0, DB::table('workspace_invitations')->where('email', 'intruder@x.test')->count(), 'an invitation into the other client\'s workspace was created');
+    }
+
+    /** CLIENT-CONTENT-APPROVAL-001 — the other client's content cannot be approved or sent back. Its own test: the throttle is per user. */
+    public function test_the_other_clients_content_approval_cannot_be_answered(): void
+    {
+        $this->signInAsAlpha();
+        $before = $this->betaState();
+
+        $this->postJson("/api/v1/client/approvals/{$this->theirs['approval']}/approve", [], $this->spa)->assertNotFound();
+        $this->postJson("/api/v1/client/approvals/{$this->theirs['approval']}/request-changes", ['note' => 'from Alpha'], $this->spa)->assertNotFound();
+        $this->assertSame($before, $this->betaState());
+
+        // The control: their own is answerable.
+        $this->postJson("/api/v1/client/approvals/{$this->ownIds['approval']}/approve", [], $this->spa)->assertOk();
     }
 
     /** A thread opened with the other client's workspace id is anchored to the caller's OWN workspace — never to theirs. */

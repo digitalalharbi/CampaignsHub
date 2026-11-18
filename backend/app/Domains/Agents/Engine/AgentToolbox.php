@@ -14,6 +14,7 @@ use App\Domains\Campaigns\Launch\JourneyPlanner;
 use App\Domains\Campaigns\Launch\LaunchPlan;
 use App\Domains\Campaigns\Launch\LaunchPlanService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Projects\Models\Project;
@@ -49,6 +50,8 @@ final class AgentToolbox
         $all = [
             'list_campaigns' => ['Campaigns of this project over the last N days, with spend, results, cost per result, ROAS and the previous period.', ['days' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 90]], []],
             'get_history' => ['Daily figures of one campaign over the last N days.', ['campaign_id' => ['type' => 'string'], 'days' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 90]], ['campaign_id']],
+            // MCP-STORE-001 — the store (Salla, Zid, Shopify) beside the ads, in one answer: what the ads cost and what the shop sold.
+            'get_store_sales' => ['The project\'s store sales (Salla, Zid, Shopify) beside its ad spend over the last N days, in the reporting currency: revenue, orders, new customers, refunds, spend, true ROAS, and the split by platform, campaign and product. has_store false when no store is connected.', ['days' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 90]], []],
             'compare_targets' => ['Every campaign judged against the client\'s own targets (on_target, off_target, not_judged, no_figure).', ['days' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 90]], []],
             'list_creatives' => ['The project\'s ads as the content library shows them, most-spent first, with each ad\'s copy, figures and fatigue verdict (fatigued, watch, stable, insufficient_data).', ['days' => ['type' => 'integer', 'minimum' => 7, 'maximum' => 90]], []],
             'get_rules' => ['The client\'s goals, decision rules, special days, forbidden words and the approval limits.', [], []],
@@ -117,6 +120,7 @@ final class AgentToolbox
             $result = match ($name) {
                 'list_campaigns' => $this->read->listCampaigns($project, $this->days($input)),
                 'get_history' => $this->history($project, $input),
+                'get_store_sales' => $this->storeSales($project, $input),
                 'compare_targets' => $this->read->compareTargets($project, $this->days($input)),
                 'get_rules' => $this->rules($project),
                 'list_creatives' => $this->read->listCreatives($project, max(7, $this->days($input + ['days' => 14]))),
@@ -205,6 +209,34 @@ final class AgentToolbox
         ];
     }
 
+    /**
+     * MCP-STORE-001 — the same funnel the dashboard's store block reads (one source, §15.17), trimmed to what a conversation needs.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    private function storeSales(Project $project, array $input): array
+    {
+        $days = $this->days($input + ['days' => 30]);
+        $funnel = app(StoreFunnelService::class)->build((string) $project->tenant_id, (string) $project->getKey(), now()->subDays($days - 1)->startOfDay(), now()->endOfDay());
+        $comparisons = is_array($funnel['comparisons'] ?? null) ? $funnel['comparisons'] : [];
+        $top = static fn (mixed $rows): array => is_array($rows) ? array_slice($rows, 0, 20) : [];
+        $coverage = is_array($funnel['coverage'] ?? null) ? $funnel['coverage'] : [];
+        $hasStore = is_array($coverage['stores'] ?? null) && $coverage['stores'] !== [];
+
+        return [
+            'has_store' => $hasStore,
+            'note' => $hasStore ? null : 'No store (Salla, Zid, Shopify) is connected to this project yet; connect one under Integrations to see sales beside spend.',
+            'window' => $funnel['window'] ?? null,
+            'totals' => $funnel['totals'] ?? null,
+            'derived' => $funnel['derived'] ?? null,
+            'by_platform' => $top($comparisons['platforms'] ?? null),
+            'by_campaign' => $top($comparisons['campaigns'] ?? null),
+            'by_product' => $top($comparisons['products'] ?? null),
+            'coverage' => $coverage,
+        ];
+    }
+
     /** @param array<string, mixed> $input */
     private function days(array $input): int
     {
@@ -264,6 +296,9 @@ final class AgentToolbox
             'payload' => isset($input['daily_budget']) ? ['daily_budget' => $input['daily_budget']] : [],
             'reason' => mb_substr((string) ($input['reason'] ?? ''), 0, 1000),
             'evidence' => ['conversation_user_id' => $user?->getKey()],
+            // AGENTS-ASSISTANT-001 — a change asked for in a CONVERSATION always waits for a person, whatever an owner granted the
+            // ladder: only a scheduled routine (no person in the loop) is ever eligible for the owner's standing grant.
+            'allow_auto' => $user === null,
         ]);
 
         return [

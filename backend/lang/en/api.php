@@ -14,6 +14,7 @@ return [
     'csrf' => 'This page has expired. Please refresh and try again.',
     'not_found' => 'The requested resource was not found.',
     'workspace_changed' => 'Your workspace was changed in another tab. Nothing was done here. Choose the workspace to continue in.',
+    'schedule_duplicate' => 'This report is already scheduled with the same settings. Edit the existing schedule instead of adding a copy.',
     'portal_unavailable' => 'This service is not available yet. We will announce it when it opens.',
     'report_send_unavailable' => 'The report was not sent: email sending is not available, and nothing reached any recipient. Use a secure link or export the file instead.',
     'report_is_draft' => 'This report is a draft that has not been published. Publish it from the report editor first.',

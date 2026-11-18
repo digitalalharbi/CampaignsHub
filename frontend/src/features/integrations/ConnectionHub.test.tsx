@@ -491,4 +491,21 @@ describe('the connection flow', () => {
     expect(login).toHaveTextContent('Read only')
     expect(login).toHaveTextContent('No account is ever synced unless you choose it')
   })
+
+  /** LINKEDIN-SCOPES-001 — only a grant PROVEN short asks for a reconnect; an unknown or full grant asks nothing. */
+  it('asks a LinkedIn source whose grant lacks the post scope to reconnect, and no other', async () => {
+    hub.data = {
+      connections: [
+        connection({ id: 'li-short', provider: 'linkedin', label: 'LinkedIn', label_ar: 'لينكدإن', project_id: 'p-1', missing_scopes: ['r_organization_social', 'rw_ads'] }),
+        connection({ id: 'li-full', provider: 'linkedin', label: 'LinkedIn', label_ar: 'لينكدإن', project_id: 'p-1', missing_scopes: [] }),
+      ],
+      connectable: [],
+    }
+
+    renderWithProviders(<IntegrationsPage />)
+
+    expect(await screen.findByTestId('hub-missing-scopes-li-short')).toHaveTextContent('Reconnect LinkedIn to allow reading posts')
+    expect(screen.getByTestId('hub-reauth-li-short')).toHaveAttribute('data-due', 'true')
+    expect(screen.queryByTestId('hub-missing-scopes-li-full')).toBeNull()
+  })
 })

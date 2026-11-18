@@ -1,7 +1,7 @@
 import { AlertCircle, CheckCircle2, Clock, Layers, MinusCircle, Target, XCircle } from 'lucide-react'
 import { MetricTable } from '@/components/ui/MetricTable'
 import { Num } from '@/components/ui/Num'
-import { useCampaignEvents, useCampaignSyncLog } from './metrics'
+import { useCampaignEvents, useCampaignSummary, useCampaignSyncLog } from './metrics'
 import { objectiveLabel } from './labels'
 import type { UnifiedCampaign } from './types'
 import { Badge } from '@/components/ui/Badge'
@@ -63,7 +63,7 @@ export function CampaignAudienceTab({ campaign, locale }: { campaign: UnifiedCam
       <div className="flex items-start gap-2 rounded-xl border border-border bg-surface-secondary p-3 text-sm">
         <Layers size={16} className="mt-0.5 shrink-0 text-text-muted" />
         <p className="text-text-secondary">
-          الاستهداف على مستوى <strong className="text-text-primary">المجموعات الإعلانية والإعلانات</strong> يُعرض في تبويب
+          الاستهداف على مستوى <strong className="text-text-primary">المجموعات والإعلانات</strong> يُعرض في تبويب
           «المجموعات والإعلانات» كما تُرجعه المنصة — الهدف، استراتيجية المزايدة، الميزانية اليومية، شرائح الاستهداف وحالة مراجعة كل إعلان.
           كل صف موسوم بمصدره، ولا يُعرض أي تقدير أو بيانات مُصطنعة.
         </p>
@@ -78,7 +78,8 @@ const EVENT_ICON = { high: CheckCircle2, low: AlertCircle }
 export function CampaignEventsTab({ campaign, projectId, range }: { campaign: UnifiedCampaign; projectId: string; range: Range }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const q = useCampaignEvents(projectId, campaign.id, range)
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — a cost per event is platform money in the REPORTING currency, never the budget's (nor a guessed «SAR»).
+  const cur = useCampaignSummary(projectId, campaign.id, range).data?.currency ?? null
 
   if (q.isLoading) return <Skeleton className="h-48" />
   if (q.isError) {

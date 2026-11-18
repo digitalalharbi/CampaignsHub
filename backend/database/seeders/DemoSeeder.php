@@ -102,7 +102,7 @@ final class DemoSeeder extends Seeder
             ['tenant_id' => $tenant->id, 'slug' => 'analyst'],
             ['name' => 'Analyst', 'is_system' => true],
         );
-        $analyst->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'integrations.view', 'reports.view');
+        $analyst->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'clients.view_all', 'integrations.view', 'reports.view');
         $analystUser = User::firstOrCreate(
             ['email' => 'analyst@demo-agency.local'],
             ['name' => 'Demo Analyst', 'password' => Hash::make('password'), 'email_verified_at' => now()],

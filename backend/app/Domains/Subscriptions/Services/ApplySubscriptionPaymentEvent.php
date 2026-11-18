@@ -11,6 +11,7 @@ use App\Domains\Billing\Models\PaymentWebhookEvent;
 use App\Domains\Billing\Providers\PaymentProvider;
 use App\Domains\Billing\Providers\ReconcilesCheckoutSessions;
 use App\Domains\Billing\Providers\SubscriptionProviderRegistry;
+use App\Domains\Billing\Support\WebhookPayloadRedactor;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -197,7 +198,8 @@ final class ApplySubscriptionPaymentEvent
                     action: 'subscription.payment.event_contradicted',
                     entityType: SubscriptionPayment::class,
                     entityId: (string) $payment->getKey(),
-                    after: ['event_said' => 'paid', 'gateway_says' => $status],
+                    // PLATFORM-PAYMENT-ALERTS-001 — the gateway's own status word beside our mapping, so the owner's alert quotes it.
+                    after: ['event_said' => 'paid', 'gateway_says' => $status, 'gateway_raw_status' => $result['provider_status'] ?? null],
                     reason: 'The webhook claimed a paid charge the gateway does not report as paid.',
                 );
 
@@ -579,6 +581,7 @@ final class ApplySubscriptionPaymentEvent
             'status' => (string) ($fetched['status'] ?? 'pending'),
             'amount' => $fetched['amount'] ?? null,
             'currency' => $fetched['currency'] ?? null,
+            'provider_status' => $fetched['provider_status'] ?? null,
         ];
     }
 
@@ -641,7 +644,8 @@ final class ApplySubscriptionPaymentEvent
             'event_id' => $eventId,
             'type' => $type,
             'verified' => $verified,
-            'payload' => json_decode($rawBody, true) ?: ['raw' => mb_substr($rawBody, 0, 2000)],
+            // PAY-WEBHOOK-SECRET-REDACT-001 — the body is evidence; the secret that authenticated it is not stored.
+            'payload' => WebhookPayloadRedactor::forStorage($rawBody) ?? ['raw' => ''],
             'processed_at' => $processed ? Carbon::now() : null,
         ]);
 

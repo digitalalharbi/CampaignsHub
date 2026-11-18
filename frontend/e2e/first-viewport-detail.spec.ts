@@ -64,6 +64,17 @@ async function measure(page: Page, ids: string[]) {
   }, ids)
 }
 
+/*
+ * NAV-ABORT-001 — no throwaway page before the one under test.
+ *
+ * `selectProject` is an init script: it writes the choice into storage before EVERY document loads, so it needs no
+ * page open first. The `goto('/agency/dashboard')` that used to come before it opened a whole dashboard and then left
+ * it about half a second later, after the `load` event but while its lazy chunks were still downloading. WebKit
+ * aborts those requests when the next navigation starts, and sometimes the next document is the one that suffers. In
+ * CI (PR #1025, webkit shard 2/4, twice) `/index.html` for the detail page was served, the document never asked for
+ * its own scripts, and the screenshot was a blank white page with no `<main>`. Each time the preview log showed the
+ * dashboard's chunks `ended=error` in the same second.
+ */
 test.describe('the first viewport, on the detail pages', () => {
   test.use({ storageState: AUTH.owner })
 
@@ -80,7 +91,7 @@ test.describe('the first viewport, on the detail pages', () => {
             await page.setViewportSize({ width: w, height: h })
 
             const projectId = await seededProject(request, PROJECT)
-            await page.goto('/agency/dashboard')
+            // NAV-ABORT-001 — the project is chosen by init script; nothing is opened (and abandoned) first.
             await selectProject(page, projectId)
             await page.goto(await detail.resolve(request, projectId))
             await expect(page.locator('main')).toBeVisible({ timeout: 30_000 })

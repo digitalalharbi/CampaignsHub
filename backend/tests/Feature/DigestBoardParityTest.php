@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Notifications\Services\DailyDigest;
 use App\Domains\Notifications\Support\DigestStatus;
+use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -65,7 +66,11 @@ final class DigestBoardParityTest extends TestCase
     {
         $m = new ReflectionMethod(DailyDigest::class, 'openAlerts');
 
-        return $m->invoke(app(DailyDigest::class), $projectId);
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — open alerts are read over the digest's own window (yesterday, the 8th), in the
+        // tenant the digest builds for (the dispatcher sets it).
+        app(TenantContext::class)->setTenantId((string) $this->agency->id);
+
+        return $m->invoke(app(DailyDigest::class), $projectId, Carbon::parse('2026-11-08'), Carbon::parse('2026-11-08')->endOfDay());
     }
 
     public function test_the_digest_cell_state_is_the_boards_cell_status(): void

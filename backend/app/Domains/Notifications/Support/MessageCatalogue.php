@@ -148,6 +148,8 @@ final class MessageCatalogue
             'rising_cost' => self::note('budget', 'budget', defaultEmail: true),
             'reallocation' => self::note('budget', 'budget', defaultEmail: true),
             'budget_risk' => self::event('budget', 'budget', 'AlertEvaluator', defaultEmail: true),
+            // FIN-LOOP-001 — the money the client put in: added, running low, over. On by default: it is the reason to renew.
+            'project_budget' => self::event('budget', 'budget', 'FundingNotifier', defaultEmail: true),
 
             // ── المحتوى ───────────────────────────────────────────────────────────────────────
             /*

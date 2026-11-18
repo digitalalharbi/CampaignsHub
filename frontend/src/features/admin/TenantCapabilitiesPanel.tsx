@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchTenantCapabilities, setTenantCapability } from './api'
 import { toApiError } from '@/lib/api/client'
+import { promptDialog } from '@/stores/dialogs'
 
 /**
  * SUPERADMIN-FEATURES-001 — one workspace's own switch for each capability: inherit its plan, force on, or force off.
@@ -14,10 +15,10 @@ export function TenantCapabilitiesPanel({ tenantId, ar }: { tenantId: string; ar
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'tenant-capabilities', tenantId] }),
   })
 
-  const set = (module: string, value: string) => {
+  const set = async (module: string, value: string) => {
     const enabled = value === 'on' ? true : value === 'off' ? false : null
-    const reason = window.prompt(ar ? 'سبب التغيير (يُسجَّل في سجل التدقيق):' : 'Reason (recorded in the audit trail):')
-    if (reason && reason.trim().length >= 5) change.mutate({ module, enabled, reason: reason.trim() })
+    const reason = await promptDialog({ title: ar ? 'سبب التغيير' : 'Reason for the change', label: ar ? 'يُسجَّل في سجل التدقيق' : 'Recorded in the audit trail', minLength: 5 })
+    if (reason) change.mutate({ module, enabled, reason })
   }
 
   return (

@@ -6,7 +6,8 @@ import type { UnifiedCampaign } from './types'
 import { getData, postData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
-import { money } from '@/features/analytics/format'
+import { FxAmount } from '@/components/money/FxAmount'
+import type { FxConversion } from '@/lib/money/fx'
 import { fmtDateTime } from '@/lib/datetime'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
@@ -57,6 +58,11 @@ interface AdSetRow {
   daily_budget: number | null
   lifetime_budget: number | null
   currency: string | null
+  /** FX-APPLY-001 — the budget's own currency (the row's, else its ad account's), resolved by the backend. */
+  budget_currency?: string | null
+  /** FX-APPLY-001 — the daily budget converted to the display currency by FxEngine. */
+  daily_budget_fx?: FxConversion | null
+  lifetime_budget_fx?: FxConversion | null
   targeting: Record<string, unknown> | null
   is_demo: boolean
   source_type: string
@@ -156,7 +162,7 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
    * So the honest confirmation is «أُرسل الطلب» — not «تمت المزامنة», which would claim a platform
    * round trip that has not happened yet and may still fail in the worker.
    */
-  const discover = useMutation({
+  const discover = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => postData<{ queued: number }>(`/projects/${projectId}/campaigns/${campaign.id}/structure/sync`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: key })
@@ -204,7 +210,7 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
     return (
       <EmptyState
         title="الحملة غير مرتبطة بأي حملة على منصة إعلانية"
-        description="المجموعات الإعلانية والإعلانات تُقرأ من المنصة نفسها. اربط حملة خارجية من تبويب «المنصات» لتظهر بنيتها هنا."
+        description="المجموعات والإعلانات تُقرأ من المنصة نفسها. اربط حملة خارجية من تبويب «المنصات» لتظهر بنيتها هنا."
       />
     )
   }
@@ -244,7 +250,7 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-secondary">
-          <span className="inline-flex items-center gap-1.5"><Layers size={14} /> <span className="tnum font-semibold text-text-primary">{adSets.length}</span> مجموعة إعلانية</span>
+          <span className="inline-flex items-center gap-1.5"><Layers size={14} /> <span className="tnum font-semibold text-text-primary">{adSets.length}</span> مجموعة</span>
           <span className="inline-flex items-center gap-1.5"><Megaphone size={14} /> <span className="tnum font-semibold text-text-primary">{totalAds}</span> إعلانًا</span>
           <span className="text-text-muted">مرتبطة بـ {linked.map((l) => PROVIDER(l.provider)).join(' · ')}</span>
         </div>
@@ -276,7 +282,8 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
                 <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
                   <span className="inline-flex items-center gap-1"><Target size={12} /> {GOAL[s.optimization_goal ?? ''] ?? s.optimization_goal ?? '—'}</span>
                   <span>{BID[s.bid_strategy ?? ''] ?? s.bid_strategy ?? '—'}</span>
-                  <span className="tnum">{s.daily_budget !== null ? `${money(s.daily_budget, s.currency ?? 'SAR')} / يوم` : '—'}</span>
+                  {/* FX-APPLY-001 — the ad set's budget converted by FxEngine (its own currency in the tooltip); it used to guess «SAR». */}
+                  <span className="inline-flex items-center gap-1">{s.daily_budget !== null ? <><FxAmount c={s.daily_budget_fx} ar={ar} testId="ad-set-daily-budget" /> / {ar ? 'يوم' : 'day'}</> : '—'}</span>
                   <span className="tnum text-text-muted">{s.ads.length} إعلان</span>
                 </span>
               </button>
@@ -320,10 +327,10 @@ export function CampaignStructureTab({ campaign, projectId }: { campaign: Unifie
 
       {looseAds.length > 0 && (
         <section data-testid="ads-without-ad-set" className="rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)]">
-          <p className="mb-1 font-bold text-text-primary">إعلانات بلا مجموعة إعلانية</p>
+          <p className="mb-1 font-bold text-text-primary">إعلانات بلا مجموعة</p>
           {/* Said plainly, because an empty ad-set list beside a list of ads otherwise reads as a bug. */}
           <p className="mb-3 text-[11px] text-text-muted">
-            بعض المنصات — مثل لينكدإن — لا تحتوي على مستوى «مجموعة إعلانية»، فتُعرض إعلاناتها أسفل الحملة مباشرة.
+            بعض المنصات — مثل لينكدإن — لا تحتوي على مستوى «مجموعة»، فتُعرض إعلاناتها أسفل الحملة مباشرة.
           </p>
           <ul className="space-y-1.5">
             {looseAds.map((a) => <Ad key={a.id} ad={a} />)}

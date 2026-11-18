@@ -109,7 +109,9 @@ final class AlertSweepBatchedReadsTest extends TestCase
                     $this->assertSame($one['coverage'], $set->coverageOfWindow($from, $to));
                     // The two annotations a batched read leaves out by design, and nothing else.
                     $expected = array_diff_key($one, array_flip(['coverage', 'spend_coverage', 'revenue_coverage', 'reach', 'frequency']));
-                    $this->assertSame($expected, array_diff_key($figures[$id], array_flip(['reach', 'frequency'])), "campaign {$id}");
+                    // OBJECTIVE-RESULT-001 — the batched read also names each campaign's objective result; the figures beside it are unchanged.
+                    $result = ['result_family', 'result_key', 'result', 'result_label', 'cost_per_result', 'cost_per_result_label', 'result_missing_reason', 'result_missing_label', 'result_note'];
+                    $this->assertSame($expected, array_diff_key($figures[$id], array_flip(['reach', 'frequency', ...$result])), "campaign {$id}");
                 }
             }
         }
@@ -250,8 +252,26 @@ final class AlertSweepBatchedReadsTest extends TestCase
         $after = $count();
 
         // Eighteen more campaigns. New breaches each cost their own event lookups, so the bound is well under one statement per campaign per read.
-        $this->assertLessThan(500, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
-        $this->assertLessThan($before + 18 * 2, $after, 'cost per campaign is back');
+        /*
+         * ALERT-DELIVERING-YESTERDAY-001 — 490 → 509 on this world: the eligibility read (platform statuses, one daily series per
+         * campaign set and clock, shared by every rule of the sweep) and one figures read per judgement window of «صرف بدون نتائج».
+         * All of it is per rule set, not per campaign — the growth bound below is unchanged and still holds (+34 for 18 campaigns).
+         * LINK-HEALTH-YESTERDAY-001 — 509 → 552 measured once both landed: the link rule's reads (yesterday's runs for the tenant's
+         * connections, the one open-links read, the project readings) are per tenant and per sweep, not per campaign.
+         * LIFECYCLE-6 — 552 → 558: the data-arrival rule reads live bindings and their runs per rule (two statements however many
+         * accounts), judges a project outage per project, and looks up each per-account finding it raises. Per rule, not per campaign.
+         * PROJECT-LIFECYCLE-001 (N4) — 560 → 562: every rule type now drops findings about projects that are not live, from ONE read
+         * of the tenant's live project ids per sweep (memoised), never per rule or per campaign.
+         * NOTIF-BELL-001 — 558 → 559 and +34 → +38 for 18 campaigns: when an alert closes, its bell notification closes with it, in ONE
+         * UPDATE (`NotificationInbox::closeForAlert`, hooked on the event so the sweep, the «حُلّ» button and a rule's removal all reach it).
+         * That is one statement per alert that closes — an event, not a campaign read — so the bound moves by the four closings in this world
+         * and still stays well under one statement per campaign.
+         * RELEASE-INTEGRATION (project-lifecycle + notifications-v2), measured on the merged tree: 561 before, 599 after (+38). The
+         * lifecycle side's live-project read and the bell side's closing UPDATEs add up without overlapping; the before-bound stays at 562,
+         * the growth bound is the bell side's +6 (four closings), nothing raised beyond what each side measured on its own.
+         */
+        $this->assertLessThan(562, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
+        $this->assertLessThan($before + 18 * 2 + 6, $after, 'cost per campaign is back');
     }
 
     public function test_the_schedule_will_not_stack_a_sweep_and_a_killed_run_costs_one_tick_at_most(): void

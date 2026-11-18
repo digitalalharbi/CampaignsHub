@@ -1,16 +1,21 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { Bell, ChevronDown, KeyRound, LogOut, Palette, Shield, User as UserIcon } from 'lucide-react'
 import { signOutCompletely } from '@/features/auth/signOut'
+import { InstallAppItem } from './InstallAppItem'
 import { usePortalPath } from '@/app/portalPath'
 import { useAuth } from '@/stores/auth'
 import { useT } from '@/lib/i18n'
+import { useUi } from '@/stores/ui'
 import type { AuthUser } from '@/lib/api/types'
+import type { NavGroup, NavLeaf } from '@/layouts/SidebarNav'
+import { WorkspaceHop } from './WorkspaceHop'
 
 /**
- * PERSONAL settings only — this menu is the single entry point for them. Workspace/system settings live in
- * the sidebar (/settings) and are deliberately NOT repeated here; each entry is one distinct route.
+ * PERSONAL settings, plus — when a shell passes it — the workspace's «الإعدادات» group (NAV-HOME-PLANS-001: the
+ * integrations, team, subscription and settings pages left the rail for this menu). Each entry is one distinct route.
  *
  * Suffixes, not absolute paths (LOGIN-002). They used to be hard-coded to `/app/account/…`, so an
  * agency operator opening their own profile was sent out of the agency portal into the advertiser
@@ -44,8 +49,9 @@ function StatusBadge({ status }: { status?: AuthUser['status'] }) {
 }
 
 /** The shared menu body — identical whether opened from the topbar avatar or the sidebar card. */
-function MenuBody({ onNavigate }: { onNavigate: (to: string) => void }) {
+function MenuBody({ onNavigate, onClose, workspace }: { onNavigate: (to: string, absolute?: boolean) => void; onClose: () => void; workspace?: NavLeaf[] }) {
   const t = useT()
+  const ar = useUi((s) => s.locale) === 'ar'
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -79,6 +85,25 @@ function MenuBody({ onNavigate }: { onNavigate: (to: string) => void }) {
         </div>
       </div>
 
+      {/* CONS-ADMIN-SWITCH — admin panel ⇄ own workspaces, for an account that holds both. Renders nothing otherwise. */}
+      <WorkspaceHop onNavigate={onNavigate} />
+
+      {workspace !== undefined && workspace.length > 0 && (
+        <div className="border-b border-border p-1.5" role="menu" aria-label={ar ? 'الإعدادات' : 'Settings'} data-testid="account-menu-workspace">
+          {workspace.map(({ to, ar: label, en, icon: Icon }) => (
+            <button
+              key={to}
+              role="menuitem"
+              onClick={() => onNavigate(to, true)}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start text-sm font-semibold text-text-secondary transition-colors hover:bg-surface-hover hover:text-text-primary"
+            >
+              <Icon size={16} className="shrink-0 text-text-muted" />
+              {ar ? label : en}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Options. */}
       <div className="p-1.5" role="menu">
         {OPTIONS.map(({ key, to, icon: Icon }) => (
@@ -92,6 +117,11 @@ function MenuBody({ onNavigate }: { onNavigate: (to: string) => void }) {
             {t(key)}
           </button>
         ))}
+      </div>
+
+      {/* NOTIF-PWA-001 — only where the browser can install it; empty otherwise. */}
+      <div className="border-t border-border p-1.5 empty:hidden" role="menu">
+        <InstallAppItem onDone={onClose} />
       </div>
 
       {/* Logout — last, calm danger, clearly separated. */}
@@ -113,17 +143,57 @@ function MenuBody({ onNavigate }: { onNavigate: (to: string) => void }) {
  * Unified account menu. Opens the SAME body from either the topbar avatar (`variant="topbar"`) or the
  * sidebar user card (`variant="sidebar"`). Closes on outside-click, Escape, or navigation.
  */
-export function AccountMenu({ variant, collapsed }: { variant: 'topbar' | 'sidebar'; collapsed?: boolean }) {
+export function AccountMenu({ variant, collapsed, workspace }: {
+  variant: 'topbar' | 'sidebar'
+  collapsed?: boolean
+  /** The portal's «الإعدادات» group and the same permission filter its rail applies. */
+  workspace?: { group: NavGroup; allow?: (leaf: NavLeaf) => boolean }
+}) {
   const t = useT()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const menuId = useId()
+  const [pos, setPos] = useState<CSSProperties | null>(null)
+
+  /*
+   * MENU-RAIL-CLIP-001 — the sidebar's menu is drawn on the page, not inside the rail. Placed absolutely inside a
+   * collapsed rail it was cut to the rail's width (only the icons and the first letter of each entry showed). It now
+   * opens BESIDE a collapsed rail and ABOVE the expanded card, held inside the screen, and scrolls inside itself when the
+   * screen is shorter than the menu (a phone held sideways, a small laptop) — the same in every browser.
+   */
+  useLayoutEffect(() => {
+    if (!open || variant !== 'sidebar') { setPos(null); return }
+    const place = () => {
+      const b = buttonRef.current?.getBoundingClientRect()
+      if (!b) return
+      const vw = window.innerWidth
+      const vh = window.innerHeight
+      const rtl = (document.documentElement.getAttribute('dir') ?? document.dir) === 'rtl'
+      const gap = 8
+      const width = Math.min(300, vw - 2 * gap)
+      const beside = collapsed && vw >= 640
+      let left = beside ? (rtl ? b.left - gap - width : b.right + gap) : (rtl ? b.right - width : b.left)
+      left = Math.max(gap, Math.min(left, vw - width - gap))
+      const bottom = Math.max(gap, beside ? vh - b.bottom : vh - b.top + gap)
+      setPos({ position: 'fixed', left, bottom, width, maxHeight: Math.max(160, vh - bottom - gap), zIndex: 90 })
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
+  }, [open, variant, collapsed])
 
   useEffect(() => {
     if (!open) return
-    const onDown = (e: MouseEvent) => { if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false) }
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return
+      setOpen(false)
+    }
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
@@ -132,7 +202,8 @@ export function AccountMenu({ variant, collapsed }: { variant: 'topbar' | 'sideb
 
   // Resolved against the CURRENT portal, so the account menu never walks the user out of it.
   const portalPath = usePortalPath()
-  const go = (to: string) => { setOpen(false); navigate(portalPath(to)) }
+  const go = (to: string, absolute?: boolean) => { setOpen(false); navigate(absolute ? to : portalPath(to)) }
+  const workspaceLeaves = workspace?.group.leaves.filter((l) => (workspace.allow ? workspace.allow(l) : true))
 
   return (
     <div ref={rootRef} className="relative">
@@ -146,6 +217,7 @@ export function AccountMenu({ variant, collapsed }: { variant: 'topbar' | 'sideb
         </button>
       ) : (
         <button
+          ref={buttonRef}
           onClick={() => setOpen((o) => !o)}
           aria-haspopup="menu" aria-expanded={open} aria-controls={menuId} aria-label={t('open_user_menu')}
           className={`mt-3 flex w-full items-center gap-2.5 rounded-xl border border-border bg-surface-secondary p-2 text-start transition-colors hover:border-border-strong ${collapsed ? 'justify-center' : ''}`}
@@ -165,13 +237,16 @@ export function AccountMenu({ variant, collapsed }: { variant: 'topbar' | 'sideb
         </button>
       )}
 
-      {open && (
-        <div
-          id={menuId}
-          className={`absolute z-50 ${variant === 'topbar' ? 'end-0 top-11' : 'bottom-full start-0 mb-2'}`}
-        >
-          <MenuBody onNavigate={go} />
+      {open && variant === 'topbar' && (
+        <div id={menuId} ref={menuRef} className="absolute end-0 top-11 z-50 max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain rounded-2xl">
+          <MenuBody onNavigate={go} onClose={() => setOpen(false)} workspace={workspaceLeaves} />
         </div>
+      )}
+      {open && variant === 'sidebar' && createPortal(
+        <div id={menuId} ref={menuRef} data-testid="account-menu-floating" style={pos ?? { position: 'fixed', visibility: 'hidden' }} className="overflow-y-auto overscroll-contain rounded-2xl [&>div]:w-full [&>div]:max-w-none">
+          <MenuBody onNavigate={go} onClose={() => setOpen(false)} workspace={workspaceLeaves} />
+        </div>,
+        document.body,
       )}
     </div>
   )

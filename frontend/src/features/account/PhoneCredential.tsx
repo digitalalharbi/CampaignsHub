@@ -52,7 +52,7 @@ export function PhoneCredentialCard() {
   const invalidate = () => { void qc.invalidateQueries({ queryKey: ['me', 'phone'] }) }
 
   const a = {
-    start: useMutation({
+    start: useMutation({ meta: { feedback: 'none' },
       mutationFn: (b: { phone: string; channel: Channel }) => startPhoneConfirmation(b.phone, b.channel),
     }),
     confirm: useMutation({

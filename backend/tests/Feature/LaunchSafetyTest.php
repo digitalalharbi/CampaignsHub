@@ -15,6 +15,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Metrics\Models\SpendLimit;
+use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
@@ -172,7 +173,7 @@ final class LaunchSafetyTest extends TestCase
     {
         SpendLimit::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'scope' => $scope, 'scope_id' => $scopeId,
-            'amount' => $amount, 'currency' => $currency, 'starts_on' => Carbon::now()->subDay()->toDateString(), 'ends_on' => Carbon::now()->addDays(9)->toDateString(),
+            'amount' => $amount, 'currency' => $currency, 'starts_on' => PeriodResolver::today()->subDay()->toDateString(), 'ends_on' => PeriodResolver::today()->addDays(9)->toDateString(), // RIYADH-DAY-001
             'thresholds' => [50, 80, 100], 'active' => true,
         ]);
     }

@@ -76,6 +76,25 @@ describe('the portfolio budget row', () => {
     expect(screen.getByTestId('budget-pacing-excluded')).toHaveTextContent(/1 campaign excluded/i)
   })
 
+  /** CONS-I-001 — the count opens into the NAMES, each with its reason: the reader can find and fix the campaign. */
+  it('names the campaigns it left out, each with its reason, behind a collapsible', () => {
+    render(<BudgetPacingRow ar={true} rows={[
+      row({}),
+      row({ campaign_id: 'c2', campaign_name: 'حملة بلا ميزانية', pacing_basis: 'no_budget', budget: 0 }),
+      row({ campaign_id: 'c3', campaign_name: 'حملة بعملة أخرى', pacing_basis: 'currency_mismatch' }),
+    ]} />)
+
+    const box = screen.getByTestId('budget-pacing-excluded')
+    expect(box.tagName).toBe('DETAILS')
+    expect(box).toHaveTextContent('خارج الحساب')
+    const list = screen.getByTestId('budget-pacing-excluded-list')
+    expect(list).toHaveTextContent('حملة بلا ميزانية')
+    expect(list).toHaveTextContent('بلا ميزانية')
+    expect(list).toHaveTextContent('حملة بعملة أخرى')
+    expect(list).toHaveTextContent('بعملة مختلفة')
+    expect(list).not.toHaveTextContent('C')
+  })
+
   /** Nothing at all renders nothing — an empty project is not a budget of zero. */
   it('renders nothing when there is no budget data at all', () => {
     const { container } = render(<BudgetPacingRow ar={false} rows={[]} />)

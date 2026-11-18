@@ -15,6 +15,9 @@ import { CoverageMatrix, RankedBars, Sparkline, StateDistribution } from '@/comp
 import { platformColor } from '@/features/analytics/components'
 import { usePortalBase, usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
+import { withMark } from '@/lib/money/mark'
+import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
+import { FxSpendNote } from '@/components/money/FxAmount'
 
 /**
  * PORTFOLIO-SCOPE-001 §13 §14 · PORTFOLIO-VISUAL-001 §9 — «جميع المشاريع», and what it is DOING.
@@ -75,7 +78,7 @@ const COPY = {
     contributionTitle: 'مصدر الإنفاق',
     contributionQuestion: 'من أين جاء؟ المشاريع مرتّبة بالأكبر إنفاقًا.',
     healthTitle: 'حالة المشاريع',
-    healthQuestion: 'ما الذي يحتاج انتباهًا، وكم عددها؟',
+    healthQuestion: 'كم تنبيه عندك؟',
     platformsTitle: 'المنصات المربوطة',
     platformsQuestion: 'أي منصة تغذّي أي مشروع؟',
     platformsEmpty: 'لا منصة مربوطة بأي مشروع بعد.',
@@ -218,6 +221,7 @@ export function PortfolioPage({ home = false, onOpenProject }: { home?: boolean;
 
   return (
     <section className="space-y-4">
+      <FinancialDisclaimer />
       {home ? (
         <div data-testid="portfolio-home">
           <SectionHeader title={t.homeTitle} question={t.homeQuestion} testId="portfolio-home-header" />
@@ -254,7 +258,7 @@ export function PortfolioPage({ home = false, onOpenProject }: { home?: boolean;
               value={
                 data.spend.by_currency.length === 0
                   ? '—'
-                  : `${Math.round(data.spend.by_currency[0]!.spend).toLocaleString('en-US')} ${data.spend.by_currency[0]!.currency}`
+                  : withMark(Math.round(data.spend.by_currency[0]!.spend).toLocaleString('en-US'), data.spend.by_currency[0]!.currency)
               }
               hint={data.spend.comparable ? undefined : t.notComparable}
               tone="neutral"
@@ -318,7 +322,7 @@ export function PortfolioPage({ home = false, onOpenProject }: { home?: boolean;
                 value={
                   data.spend.by_currency.length === 0
                     ? '—'
-                    : `${Math.round(data.spend.by_currency[0]!.spend).toLocaleString('en-US')} ${data.spend.by_currency[0]!.currency}`
+                    : withMark(Math.round(data.spend.by_currency[0]!.spend).toLocaleString('en-US'), data.spend.by_currency[0]!.currency)
                 }
                 hint={data.spend.comparable ? undefined : t.notComparable}
                 tone="neutral"
@@ -369,13 +373,14 @@ export function PortfolioPage({ home = false, onOpenProject }: { home?: boolean;
                 <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-border pt-3" data-testid="portfolio-spend-breakdown">
                   {data.spend.by_currency.map((row) => (
                     <span key={row.currency} data-testid={`portfolio-spend-${row.currency}`} className="tnum text-xs">
-                      <span className="font-extrabold text-text-primary">{row.spend.toLocaleString('en-US')}</span>{' '}
-                      <span className="text-text-secondary">{row.currency}</span>
+                      <span className="font-extrabold text-text-primary">{withMark(row.spend.toLocaleString('en-US'), row.currency)}</span>
                       <span className="ms-1.5 text-text-muted">· {row.projects.toLocaleString('en-US')} {t.inCurrency}</span>
                     </span>
                   ))}
                 </div>
               )}
+
+              <div className="mt-2"><FxSpendNote note={data.spend.reading} ar={ar} testId="portfolio-fx-spend-note" /></div>
 
               {!data.spend.comparable && (
                 <p data-testid="portfolio-not-comparable" className="mt-2 text-[11px] text-text-muted">
@@ -402,7 +407,7 @@ export function PortfolioPage({ home = false, onOpenProject }: { home?: boolean;
                           label: p.name,
                           value: p.spend,
                         }))}
-                        format={(v) => `${Math.round(v).toLocaleString('en-US')} ${group.currency}`}
+                        format={(v) => withMark(Math.round(v).toLocaleString('en-US'), group.currency)}
                       />
                     </div>
                   ))}

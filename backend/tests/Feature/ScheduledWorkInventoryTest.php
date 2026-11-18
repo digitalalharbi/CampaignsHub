@@ -55,7 +55,23 @@ final class ScheduledWorkInventoryTest extends TestCase
         'forms:purge-evidence',
         // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the hourly sweep never reached it again.
         'notifications:retry-failed',
+        // NOTIF-PUSH-001 — pushes held through quiet hours go out as ONE summary per person; every ten minutes, a few rows.
+        'notifications:flush-deferred-push',
+        // NOTIF-V2-ENGINE-001 — the shared engine: due digests into the outbox (5 min), the outbox drained in spread batches
+        // (1 min), the 7-day unconfirmed notice and the grace-period heads-up (daily).
+        'notifications:v2-digests',
+        'notifications:v2-send',
+        'notifications:v2-internal-scan',
+        'notifications:v2-morning-brief',
+        'notifications:v2-consent-sweep',
+        'notifications:v2-grace-heads-up',
+        // NOTIF-V2-EXTERNAL-001 — the review window of held external messages (15 min).
+        'notifications:v2-review-sweep',
+        // NOTIF-V2-EXTERNAL-001 — the default external events, daily 07:30 Riyadh.
+        'notifications:v2-external-events',
         'fx:rates',
+        // FX-ENGINE-001 — in-app alerts for a used currency with no rate or a stale one, and the daily money guard (03:00).
+        'fx:monitor',
         /*
          * Added 2026-09-07. `SyncAccountStructureJob::failed()` cannot close a run whose worker
          * vanished, so a structure run had been «running» since 2026-08-26 — twelve days, on a job
@@ -86,14 +102,24 @@ final class ScheduledWorkInventoryTest extends TestCase
         'ops:perf-check',
         'notifications:send-alerts',
         'notifications:send-digests',
+        // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — hourly from 08:00 Riyadh; ledger rows make it idempotent.
+        'notifications:send-spend-summaries',
         'reports:dispatch-scheduled',
         'requests:evaluate-sla',
         'requests:prune-uploads',
         // PRICING-SEATS-001 — hourly; stamps a released ad-account seat near when it was released.
         'seats:reconcile',
         'subscriptions:lifecycle',
+        // PROJECT-LIFECYCLE-001 §4 (N2) — daily 02:30; purges only trashed projects past purge_after, warns owners 3 days before.
+        'lifecycle:purge-expired',
         // PAY-RECONCILE-001 — every fifteen minutes; asks the gateway only about pending payments past their webhook's window.
         'subscriptions:reconcile-payments',
+        // PLATFORM-PAYMENT-ALERTS-001 — every fifteen minutes, offset from the reconcile sweep; reads only, files owner alerts.
+        'platform:payment-alerts',
+        // FIN-LOOP-001 — at :20 and :50, after each sync; copies spend into each project budget, one replaced row per account-day.
+        'funding:refresh',
+        // FIN-LOOP-001 — daily at 02:40 Riyadh; fixes last month's summary once per project.
+        'funding:close-month',
     ];
 
     /** @return list<string> the artisan commands the scheduler will actually run */
@@ -165,7 +191,15 @@ final class ScheduledWorkInventoryTest extends TestCase
             'integrations:sync-structure',
             'integrations:refresh-tokens',
             'notifications:send-digests',
+            'notifications:send-spend-summaries',
             'notifications:send-alerts',
+            // NOTIF-PUSH-001 — two overlapping flushes could each send a person's summary.
+            'notifications:flush-deferred-push',
+            // NOTIF-V2-ENGINE-001 — the claim makes a double send impossible; overlap would still be wasted work.
+            'notifications:v2-send',
+            'notifications:v2-digests',
+            'notifications:v2-internal-scan',
+            'notifications:v2-morning-brief',
             'commerce:sync',
             /*
              * Overlap here costs QUOTA rather than correctness: the unique key on
@@ -175,8 +209,13 @@ final class ScheduledWorkInventoryTest extends TestCase
              */
             'measurement:sync',
             'fx:rates',
+            'fx:monitor',
             'subscriptions:lifecycle',
+            'lifecycle:purge-expired',
             'subscriptions:reconcile-payments',
+            'platform:payment-alerts',
+            // Two overlapping refreshes write the same keys: harmless (an upsert), but doubled work for nothing.
+            'funding:refresh',
         ];
 
         foreach (app(Schedule::class)->events() as $event) {

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { aFreshSaudiNumber, signIn, switchToEnglish } from './helpers'
+import { aFreshSaudiNumber, signIn, switchToEnglish, openRail } from './helpers'
 
 /**
  * Full registration → onboarding acceptance: register → verify email → account type → service → workspace →
@@ -262,6 +262,25 @@ async function registerAndVerify(
   await signIn(page, email, 'secret1234')
 
   /*
+   * PROBE-CLOBBER-001 — the diagnostic below must not run while the sign-in is still in flight.
+   *
+   * Its `fetch('/api/v1/auth/me')` used to fire on the first `toPass` attempt, the instant the submit was clicked —
+   * while `/auth/login` was still being answered. That probe carried the GUEST session cookie. `regenerate()` keeps
+   * the guest id alive, so the probe got a guest answer, and its `Set-Cookie` wrote the guest id back into the jar.
+   * When that answer landed after the login's, it replaced the signed-in cookie: `/auth/memberships` → 401 twice, the
+   * app went to `/login?reason=session&redirect=/switch`, and the message blamed the product. The server log shows it
+   * every time: `/auth/login`, then an `/auth/me` that FINISHED after it, then the 401s. It failed on webkit because
+   * webkit's timing let the probe's answer arrive last. A different spec failed each time because the race moved.
+   *
+   * So first wait for the app to leave the sign-in form (polled on the URL, GATE-WK-NAV-001). It either reaches the wizard or settles somewhere else,
+   * including the `?reason=session` page a real failure lands on. Only then probe. A timeout here is not a verdict:
+   * the assertion below still runs and reports what it finds.
+   */
+  await expect(page)
+    .toHaveURL((u) => u.pathname !== '/login' || u.searchParams.has('reason'), { timeout: 20_000 })
+    .catch(() => undefined)
+
+  /*
    * When this lands anywhere but the wizard, say WHAT the application thought instead.
    *
    * CI has seen it once, on firefox, inside a 445-test run: «5 × /login, 38 × /agency» for an
@@ -455,21 +474,22 @@ test('personal (agency) account: register → onboard → full menu', async ({ p
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
   await page.getByLabel(/Project name|اسم المشروع/).fill('First Project')
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
-  await page.getByRole('button', { name: /Go to dashboard|لوحة التحكم/ }).click()
+  await page.getByRole('button', { name: /Go to dashboard|الرئيسية/ }).click()
 
   /*
    * The AGENCY portal, not merely «a dashboard» — that binding is the whole point of the signup
    * question (LAUNCH-PRICING-001): «لعملائي» → `/agency`, «لحملاتي وأعمالي» → `/app`. A walk that
-   * asserted `/dashboard` alone passed for either portal and so proved neither.
+   * asserted `/home` alone passed for either portal and so proved neither.
    */
-  await expect(page).toHaveURL(/\/agency\/dashboard/)
+  await expect(page).toHaveURL(/\/agency\/home/)
   // Personal full menu: Clients is present.
   await switchToEnglish(page)
+  await openRail(page)
   await expect(page.getByRole('link', { name: /Clients|العملاء/ }).first()).toBeVisible()
 
-  // Persistence across reload — stays onboarded on the dashboard.
+  // Persistence across reload — stays onboarded on the role home.
   await page.reload()
-  await expect(page).toHaveURL(/\/agency\/dashboard/)
+  await expect(page).toHaveURL(/\/agency\/home/)
 })
 
 test('company (brand) account: register → onboard → simplified menu, no agency tools', async ({ page }, testInfo) => {
@@ -487,10 +507,10 @@ test('company (brand) account: register → onboard → simplified menu, no agen
   // Company skips the client step → straight to first project.
   await page.getByLabel(/Project name|اسم المشروع/).fill('Brand Project')
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
-  await page.getByRole('button', { name: /Go to dashboard|لوحة التحكم/ }).click()
+  await page.getByRole('button', { name: /Go to dashboard|الرئيسية/ }).click()
 
   // The SELF-managed path is sold `/app`, and this is where the walk proves it landed there.
-  await expect(page).toHaveURL(/\/app\/dashboard/)
+  await expect(page).toHaveURL(/\/app\/home/)
   await switchToEnglish(page)
   // Simplified menu: Campaigns present, but NO Clients / Requests (the agency tools).
   await expect(page.getByRole('link', { name: /Campaigns|الحملات/ }).first()).toBeVisible()

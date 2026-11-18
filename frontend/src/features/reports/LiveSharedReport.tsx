@@ -1,10 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { FileText, Globe, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
-import { isAdPlatform } from '@/lib/platforms'
+import { canonicalPlatform, isAdPlatform, sortPlatforms } from '@/lib/platforms'
+import { formatSpan } from '@/lib/period/periodMath'
+import { providerLabel } from '@/features/campaigns/labels'
 import { useUi } from '@/stores/ui'
 import type { ReportAd } from './ReportAdsSection'
 import { ReportAdDetail } from './ReportAdDetail'
@@ -18,8 +20,14 @@ import { useLiveMetricReader } from './live/liveMetrics'
 import { levelOf, MODE_LABELS, modesFor, offeredViews, ownsPlatformChoice, readMode, type LiveLevel, type LiveMode } from './live/modes'
 import { sectionShown } from './reportSections'
 import { useLivePayload } from './live/useLivePayload'
-import { ReportFooter } from './reportFooter'
+import { ReportFooter, reportStamp } from './reportFooter'
 import { LiveDeliveryNote } from './live/LiveDeliveryNote'
+
+/*
+ * REPORT-DATE-PICKER-001 — the picker (calendar, presets, typed fields) is loaded when the period bar renders, not with the
+ * route: it pulled the /r/ closure 11.8 KB over PUBLIC_REPORT_BUDGET_BYTES. The fallback is the same-size button, so nothing shifts.
+ */
+const DateRangeField = lazy(() => import('@/components/ui/DateRangeField').then((m) => ({ default: m.DateRangeField })))
 
 /**
  * LIVEREP-001 — the client's own view of a live shared link.
@@ -43,12 +51,14 @@ import { LiveDeliveryNote } from './live/LiveDeliveryNote'
  *    because a zero and «we cannot see this account» look identical on a chart and mean the opposite.
  */
 
-/** Period choices, in days. Presets rather than a date picker: a client wants «this month», not a range. */
-const RANGES = [
-  { days: 7, ar: '7 أيام', en: '7 days' },
-  { days: 30, ar: '30 يومًا', en: '30 days' },
-  { days: 90, ar: '90 يومًا', en: '90 days' },
-] as const
+/*
+ * REPORT-MOBILE-APP-002 — Owner 2026-11-18: the period is chosen in the system's own picker only. The 7 / 30 / 90 buttons beside it are gone;
+ * the picker keeps its presets inside. Until the reader chooses, the link opens on the last 30 days.
+ */
+const DEFAULT_DAYS = 30
+
+/* The period in the system's own date style («10 نوفمبر – 16 نوفمبر 2026»), the one the picker prints. */
+const periodText = (from: string, to: string, ar: boolean): string => formatSpan({ from, to }, ar)
 
 const MODE_ICONS: Record<LiveMode, typeof LayoutDashboard> = {
   summary: FileText,
@@ -108,8 +118,10 @@ export function LiveSharedReport({
   }, [setSearch, form])
 
   const fixed = periodMode === 'fixed'
-  const [rollingDays, setDays] = useState(30)
-  const days = fixed ? null : rollingDays
+  const days = fixed ? null : DEFAULT_DAYS
+  /* REPORT-DATE-PICKER-001 — Owner 2026-11-17: the report's period is chosen in the system's own picker (presets, calendar, typed dates). */
+  const [custom, setCustom] = useState<{ from: string; to: string } | null>(null)
+  const range = fixed ? null : custom
   /*
    * CLIENT-REPORT-ENTITY-BOUNDARY-001 — platform is the only scope a client narrows by. The chips
    * belong to the summary and the dashboard; the platform and content modes choose one platform
@@ -125,6 +137,7 @@ export function LiveSharedReport({
     token,
     secret: password,
     days,
+    range,
     providers: ownsPlatformChoice(firstMode) ? [] : providers,
     failedMessage,
     refreshEveryMs: 5 * 60_000,
@@ -158,6 +171,7 @@ export function LiveSharedReport({
     token,
     secret: password,
     days,
+    range,
     providers: platform ? [platform] : [],
     enabled: platform !== null,
     failedMessage,
@@ -208,9 +222,9 @@ export function LiveSharedReport({
      * `[&>*]:min-w-0` — without it this page scrolls sideways on a phone: a grid item's `min-width`
      * is `auto`, and a chart container's min-content is wider than a 375px screen.
      */
-    <div className="grid gap-4 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
+    <div className="grid gap-3 sm:gap-4 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
       {offeredHere.length > 1 && (
-        <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="grid gap-1 rounded-2xl border border-border bg-surface p-1" style={{ gridTemplateColumns: `repeat(${offeredHere.length}, minmax(0, 1fr))` }}>
+        <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="grid w-full gap-0.5 rounded-2xl border border-border bg-surface p-1 sm:gap-1" style={{ gridTemplateColumns: `repeat(${offeredHere.length}, minmax(0, 1fr))` }}>
           {offeredHere.map((m) => {
             const Icon = MODE_ICONS[m]
             const selected = m === mode
@@ -223,11 +237,11 @@ export function LiveSharedReport({
                 aria-selected={selected}
                 data-testid={`live-mode-tab-${m}`}
                 onClick={() => navigate(m)}
-                className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-xs font-semibold transition-colors sm:flex-row sm:gap-1.5 sm:px-3.5 sm:text-sm ${
+                className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 text-center text-[11px] font-semibold leading-tight transition-colors active:scale-95 sm:min-h-0 sm:flex-row sm:gap-1.5 sm:px-3.5 sm:py-2 sm:text-sm ${
                   selected ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover'
                 }`}
               >
-                <Icon size={15} aria-hidden />
+                <Icon size={20} className="shrink-0" aria-hidden />
                 {ar ? MODE_LABELS[m].ar : MODE_LABELS[m].en}
               </button>
             )
@@ -235,11 +249,18 @@ export function LiveSharedReport({
         </nav>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3">
-        <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
+      <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border bg-surface p-2 sm:gap-2 sm:p-3" data-testid="live-controls">
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
+          {!fixed && (payload.period.kind ?? 'custom') === 'custom' && (
+            <div className="min-w-[14rem] max-w-full">
+              <Suspense fallback={<div className="min-h-11 w-full rounded-xl border border-border-strong bg-surface sm:min-h-10" aria-hidden />}>
+                <DateRangeField from={custom?.from ?? payload.period.from} to={custom?.to ?? payload.period.to} onChange={(from, to) => setCustom({ from, to })} testId="live-range-picker" />
+              </Suspense>
+            </div>
+          )}
           {!fixed && (payload.period.kind ?? 'custom') !== 'custom' && (
             <span data-testid="live-period-kind" data-kind={payload.period.kind} className="rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary">
-              {payload.period.from === payload.period.to ? payload.period.from : `${payload.period.from} → ${payload.period.to}`}
+              <bdi>{periodText(payload.period.from, payload.period.to, ar)}</bdi>
               {/* REPORT-CLIENT-NO-DELTAS-001 — «compared with the previous period» is the agency's view unless the Owner switched it on. */}
               {payload.sections?.previous_comparison !== false && (<>{' · '}{ar ? payload.period.comparison_ar : payload.period.comparison_en}</>)}
               {payload.period.partial ? (ar ? ' · الفترة لم تكتمل' : ' · in progress') : ''}
@@ -247,45 +268,37 @@ export function LiveSharedReport({
           )}
           {fixed && (
             <span data-testid="live-period-fixed" className="tnum rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary">
-              {payload.period.from === payload.period.to ? payload.period.from : `${payload.period.from} → ${payload.period.to}`}
+              <bdi>{periodText(payload.period.from, payload.period.to, ar)}</bdi>
             </span>
           )}
-          {!fixed && (payload.period.kind ?? 'custom') === 'custom' && RANGES.map((r) => (
-            <button
-              key={r.days}
-              type="button"
-              data-testid={`live-range-${r.days}`}
-              onClick={() => setDays(r.days)}
-              className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors ${
-                rollingDays === r.days
-                  ? 'bg-brand-600 text-white'
-                  : 'border border-border text-text-secondary hover:bg-surface-hover'
-              }`}
-            >
-              {ar ? r.ar : r.en}
-            </button>
-          ))}
         </div>
 
         {!ownsPlatformChoice(mode) && payload.available.providers.filter(isAdPlatform).length > 1 && (
-          <div className="flex flex-wrap gap-1" role="group" aria-label={ar ? 'المنصات' : 'Platforms'}>
-            {payload.available.providers.filter(isAdPlatform).map((p) => (
-              <button
-                key={p}
-                type="button"
-                data-testid={`live-platform-${p}`}
-                aria-pressed={providers.includes(p)}
-                onClick={() => setProviders((list) => (list.includes(p) ? list.filter((v) => v !== p) : [...list, p]))}
-                className={`inline-flex items-center rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                  providers.includes(p)
-                    ? 'border-transparent text-white'
-                    : 'border-border text-text-secondary hover:bg-surface-hover'
-                }`}
-                style={providers.includes(p) ? { background: platformColor(p) } : undefined}
-              >
-                <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={16} />
-              </button>
-            ))}
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label={ar ? 'المنصات' : 'Platforms'}>
+            {/* PLATFORM-ORDER-002 — the product's order (سناب · تيك توك · ميتا · جوجل · إكس · لينكدإن · ChatGPT), and logos large enough to read on a phone. */}
+            {sortPlatforms(payload.available.providers.filter(isAdPlatform)).map((p) => {
+              const on = providers.includes(p)
+
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  data-testid={`live-platform-${p}`}
+                  aria-pressed={on}
+                  onClick={() => setProviders((list) => (list.includes(p) ? list.filter((v) => v !== p) : [...list, p]))}
+                  title={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
+                  aria-label={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
+                  className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl border-2 transition-colors sm:h-14 sm:w-14 ${
+                    on ? '' : 'border-border hover:bg-surface-hover'
+                  }`}
+                  style={on ? { borderColor: platformColor(p), background: `color-mix(in srgb, ${platformColor(p)} 14%, transparent)` } : undefined}
+                >
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface-hover sm:h-11 sm:w-11">
+                    <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={28} logoOnly />
+                  </span>
+                </button>
+              )
+            })}
           </div>
         )}
 
@@ -297,7 +310,7 @@ export function LiveSharedReport({
             className="inline-flex items-center gap-1.5 rounded-xl border border-border px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-hover"
           >
             <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} aria-hidden />
-            {ar ? 'تحديث' : 'Refresh'}
+            <span className="sr-only sm:not-sr-only">{ar ? 'تحديث' : 'Refresh'}</span>
           </button>
         </div>
       </div>
@@ -364,8 +377,12 @@ export function LiveSharedReport({
       <ReportFooter
         locale={ar ? 'ar' : 'en'}
         facts={{
-          // The server's own computation moment; the reader's clock only when an older payload does not carry it.
-          updatedAt: payload.freshness_summary?.generated_at ?? computedAt.toISOString(),
+          /*
+           * REPORT-FRESHNESS-DATE-001 — Owner 2026-11-17: «إذا كان هناك تأخر لا تحدّث التاريخ بالأسفل». When a platform's figures are
+           * not confirmed fresh, the report's one date is the oldest platform confirmation, never the moment it was recomputed; the
+           * warning banner above the figures is gone, so this date is the only claim and it is a true one.
+           */
+          updatedAt: reportStamp(payload.freshness_summary) ?? computedAt.toISOString(),
           period: payload.period,
           currency: unit || null,
           timezone: 'Asia/Riyadh',

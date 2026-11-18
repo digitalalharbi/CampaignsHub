@@ -1,4 +1,6 @@
 import type { Proposal, ProposalStatus } from './api'
+import { withMark } from '@/lib/money/mark'
+import { formatConversion, formatOriginal, isConverted, pendingRateLabel } from '@/lib/money/fx'
 
 /**
  * The words for the gateway's codes. The server sends codes, never sentences, so the same refusal reads
@@ -10,9 +12,9 @@ const VIOLATIONS: Record<string, { ar: string; en: string }> = {
   account_not_bound_to_project: { ar: 'الحساب الإعلاني غير مربوط بهذا المشروع', en: 'The ad account is not bound to this project' },
   provider_mismatch: { ar: 'المنصة لا تطابق الحساب', en: 'The platform does not match the account' },
   target_type_unknown: { ar: 'نوع الهدف غير معروف', en: 'Unknown target type' },
-  target_not_found: { ar: 'الحملة أو المجموعة غير موجودة في هذا المشروع', en: 'The campaign or ad set is not in this project' },
+  target_not_found: { ar: 'الحملة أو المجموعة غير موجودة في هذا المشروع', en: 'The campaign or ad group is not in this project' },
   budget_invalid: { ar: 'الميزانية غير صالحة — للإيقاف اطلب إيقافًا', en: 'Invalid budget — to stop spending, ask for a pause' },
-  budget_target_not_supported: { ar: 'الميزانية تُعدَّل على الحملة أو المجموعة الإعلانية فقط', en: 'A budget is set on a campaign or ad set only' },
+  budget_target_not_supported: { ar: 'الميزانية تُعدَّل على الحملة أو المجموعة فقط', en: 'A budget is set on a campaign or ad group only' },
   increase_exceeds_cap: { ar: 'الزيادة أكبر من الحد المسموح لمرة واحدة', en: 'The raise is larger than the single-change cap' },
   above_daily_ceiling: { ar: 'الميزانية المقترحة فوق السقف اليومي لهذا المشروع', en: 'The proposed budget is above this project’s daily ceiling' },
   current_budget_unknown: { ar: 'الميزانية الحالية غير معروفة، فلا يمكن التحقق من الزيادة', en: 'The current budget is unknown, so a change cannot be checked' },
@@ -35,13 +37,36 @@ export const STATUS_WORDS: Record<ProposalStatus, { ar: string; en: string; tone
   expired: { ar: 'انتهت مهلته', en: 'Expired', tone: 'neutral' },
 }
 
-export function actionText(p: Pick<Proposal, 'action' | 'payload' | 'currency'>, ar: boolean): string {
+export function actionText(p: Pick<Proposal, 'action' | 'payload' | 'currency'> & { display?: Proposal['display'] }, ar: boolean): string {
   if (p.action === 'pause') return ar ? 'إيقاف' : 'Pause'
   if (p.action === 'resume') return ar ? 'تشغيل' : 'Resume'
-  if (p.action === 'set_daily_budget') {
-    const amount = p.payload?.daily_budget
-    const money = amount === undefined ? '' : ` ${amount}${p.currency ? ` ${p.currency}` : ''}`
-    return `${ar ? 'ميزانية يومية' : 'Daily budget'}${money}`
-  }
+  if (p.action === 'set_daily_budget') return `${ar ? 'ميزانية يومية' : 'Daily budget'}${budgetFigure(p, p.payload?.daily_budget, p.display?.daily_budget, ar)}`
   return p.action
+}
+
+/**
+ * CONS-I-APPROVAL — a budget figure in the currency the reader reads: «36 € → 39.5 $» was shown raw as «36 €». The converted
+ * figure leads and the platform's own follows in brackets; with no rate the platform figure is shown alone and says why.
+ */
+export function budgetFigure(p: Pick<Proposal, 'currency'> & { display?: Proposal['display'] }, raw: number | null | undefined, converted: number | null | undefined, ar: boolean): string {
+  if (raw === undefined || raw === null) return ''
+  const d = p.display
+  /*
+   * FX-APPLY-001 — through the ONE renderer. A withheld budget (no rate) was shown raw: «ميزانية يومية 36 €» on a USD workspace.
+   * Now: the converted figure and the platform's own in brackets, or «— ⚠ بانتظار سعر صرف (EUR)» — never the raw number alone.
+   */
+  const c = d?.conversion ?? null
+  if (c) {
+    const f = formatConversion(c, ar)
+    if (f.withheld) return ` — ⚠ ${f.text}`
+    return isConverted(c) ? ` ${f.text} (${formatOriginal(c)})` : ` ${f.text}`
+  }
+  const own = withMark(String(raw), p.currency)
+  if (d && converted !== null && converted !== undefined) {
+    const shown = withMark(String(converted), d.currency)
+    return d.converted ? ` ${shown} (${own})` : ` ${shown}`
+  }
+  if (d && d.reason) return ` — ⚠ ${pendingRateLabel(p.currency, ar)}`
+
+  return ` ${own}`
 }

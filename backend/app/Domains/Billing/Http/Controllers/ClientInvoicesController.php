@@ -12,6 +12,7 @@ use App\Domains\Billing\Support\ImmutableInvoice;
 use App\Domains\Billing\Support\IncompleteFeeBasis;
 use App\Domains\Billing\Support\TaxTreatment;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
+use App\Domains\Projects\Models\Project;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -109,6 +110,30 @@ final class ClientInvoicesController extends Controller
         return ApiResponse::success($this->shape($invoice), 'Draft invoice.', status: 201);
     }
 
+    /** FIN-WALLET-001 — POST /billing/clients/{client}/invoices/wallet-top-up {project_id, amount}: a top-up invoice draft. */
+    public function walletTopUp(Request $request, string $client): JsonResponse
+    {
+        $workspace = $this->access->resolve($client);
+        $this->access->assert($request->user(), 'billing.manage', $workspace);
+
+        $data = $request->validate([
+            'project_id' => ['required', 'uuid'],
+            'amount' => ['required', 'numeric', 'gt:0', 'max:1000000000'],
+        ]);
+        $project = Project::query()->where('client_workspace_id', $workspace->getKey())->find($data['project_id']);
+        abort_if($project === null, 422, 'Choose one of this client\'s projects.');
+        $profile = ClientBillingProfile::query()->where('client_workspace_id', $workspace->getKey())->first();
+        abort_if($profile === null, 422, 'Set the client\'s billing profile first.');
+
+        try {
+            $invoice = $this->invoices->draftWalletTopUp($profile, $project, (float) $data['amount']);
+        } catch (InvalidArgumentException $e) {
+            return ApiResponse::error($e->getMessage(), status: 422);
+        }
+
+        return ApiResponse::success($this->shape($invoice), 'Top-up invoice draft.', status: 201);
+    }
+
     /** POST /billing/invoices/{invoice}/{action} — review, issue, send, payment, correct. */
     public function act(Request $request, Invoice $invoice, string $action): JsonResponse
     {
@@ -161,6 +186,7 @@ final class ClientInvoicesController extends Controller
             'amount_paid' => $invoice->amount_paid, 'period_start' => $invoice->period_start?->toDateString(), 'period_end' => $invoice->period_end?->toDateString(),
             'issued_at' => $invoice->issued_at?->toIso8601String(), 'due_date' => $invoice->due_date?->toDateString(), 'sent_at' => $invoice->sent_at?->toIso8601String(),
             'supersedes_id' => $invoice->supersedes_id,
+            'purpose' => $invoice->purpose, 'project_id' => $invoice->project_id,
         ];
     }
 }

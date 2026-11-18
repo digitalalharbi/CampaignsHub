@@ -27,6 +27,8 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
      * @var array<string, string>
      */
     private const SEES_EVERY_ROW = [
+        // PROJECT-LIFECYCLE-001 — the read-only before/after protection snapshot counts every stored row of ONE project; serves no reader.
+        'Domains/Projects/Lifecycle/ProjectSnapshot.php' => 'ops before/after snapshot of every stored row of one project; read-only, serves no reader',
         // The cleanup acts on the rows the rule HIDES, so it must see them all; it refuses a selected account itself.
         'Domains/Integrations/Console/ScopeCleanupCommand.php' => 'the cleanup, which acts on hidden rows and refuses selected ones',
         'Domains/Integrations/Console/AccountOwnershipAuditCommand.php' => 'audit and quarantine of every stored row, including hidden ones; serves no reader',
@@ -79,6 +81,15 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         // stored copy states what ran when it was made, and an account deselected since must not empty a document already sent.
         'Domains/Reports/Services/ReportSourceContainment.php' => 'narrows a stored report to its own ad accounts; removes rows only, reads no figure',
         // SEC-CLUSTER-4 — proves a Drive attachment target is a creative of this tenant inside the caller's client ceiling; reads the creative's project id only.
+        // CLIENT-CONTENT-APPROVAL-001 — the model's relation, and the service that checks a creative an agency operator NAMED belongs to
+        // the approval's own project and tenant, then hands the client that creative's format and https still. Never a figure.
+        'Domains/ClientWorkspaces/Models/ContentApproval.php' => 'relation',
+        'Domains/ClientWorkspaces/Services/ContentApprovals.php' => 'checks a named creative is inside the approval\'s own project and reads its format and still; reads no figure',
+        // FX-ENGINE-001 — platform-admin currency tooling: counts withheld rows per currency, re-converts stored rows from their
+        // originals, and scans stored rows for a converted figure with no rate. Every stored row, for no workspace reader.
+        'Domains/Metrics/Fx/CurrencyCoverage.php' => 'counts withheld figures per currency for the platform rates page; no workspace reader',
+        'Domains/Metrics/Fx/FxRecompute.php' => 're-converts every stored row of a period from its original; writer',
+        'Domains/Metrics/Fx/MoneyGuard.php' => 'counts stored rows converted without a rate; a count, for the platform log',
         'Domains/Drive/Services/DriveReach.php' => 'resolves which project a creative belongs to so an attach target can be checked against the caller\'s reach; returns no figure',
     ];
 

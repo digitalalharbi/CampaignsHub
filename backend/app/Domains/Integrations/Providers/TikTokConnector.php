@@ -7,6 +7,8 @@ namespace App\Domains\Integrations\Providers;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\AssetExpiry;
+use App\Domains\Integrations\Support\PlatformCreatedAt;
+use App\Domains\Integrations\Support\TikTokCampaignStatus;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -21,7 +23,7 @@ use RuntimeException;
  *
  * Awaiting credentials on this install.
  */
-final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights
+final class TikTokConnector extends ApiAdvertisingConnector implements ReportsAudienceBreakdowns, ReportsCreativeInsights
 {
     /**
      * A ceiling on paging, so a wrong `total_page` cannot become an unbounded loop.
@@ -374,10 +376,30 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 continue;
             }
 
+            // TIKTOK-CAMPAIGN-STATUS-001 — TikTok's own values, mapped; one it has not documented is logged by name, never guessed.
+            $state = TikTokCampaignStatus::resolve(
+                isset($c['operation_status']) ? (string) $c['operation_status'] : null,
+                isset($c['secondary_status']) ? (string) $c['secondary_status'] : null,
+            );
+            if ($state['unmapped'] !== null) {
+                Log::warning('TikTok campaign status not documented; kept as unknown where nothing else decides it', [
+                    'advertiser_id' => $adAccountId, 'campaign_id' => (string) $c['campaign_id'], 'unmapped' => $state['unmapped'], 'status' => $state['status'],
+                ]);
+            }
+
+            if ($state['signal'] === 'account_suspended') {
+                // Not a pause somebody chose: TikTok suspended the advertiser account. Named, so it is never read as a quiet «paused».
+                Log::warning('TikTok advertiser account suspended (ADVERTISER_ACCOUNT_PUNISH); its campaigns are not delivering', [
+                    'advertiser_id' => $adAccountId, 'campaign_id' => (string) $c['campaign_id'],
+                ]);
+            }
+
             $campaigns[] = [
                 'external_id' => (string) $c['campaign_id'],
                 'name' => (string) ($c['campaign_name'] ?? $c['campaign_id']),
-                'status' => strtolower((string) ($c['operation_status'] ?? 'unknown')),
+                'status' => $state['status'],
+                // Kept with the row (it lands in `external_campaigns.raw`): budget_exhausted / account_suspended, else null.
+                'delivery_signal' => $state['signal'],
                 'objective' => isset($c['objective_type']) ? (string) $c['objective_type'] : null,
                 'daily_budget' => ($c['budget_mode'] ?? null) === 'BUDGET_MODE_DAY' && isset($c['budget'])
                     ? (float) $c['budget']
@@ -386,6 +408,8 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                     ? (float) $c['budget']
                     : null,
                 'currency' => null,
+                // CONS-I-AGE — TikTok states the creation time in UTC; kept as the campaign's real age.
+                'platform_created_at' => PlatformCreatedAt::from($c['create_time'] ?? null),
                 'raw' => (array) $c,
             ];
         }
@@ -970,10 +994,20 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
             return null;
         }
 
+        /*
+         * CONTENT-TEXT-CTA-001 — the ad's text is the creative's copy. TikTok's `GET /ad/get/` states it in `ad_text`
+         * (and, for an automated creative, `ad_texts`), and the call to action in `call_to_action`. Production
+         * 2026-11-13: `raw.ad_text` on 129 of 284 active creatives and `body` on none — it was kept, never written.
+         */
+        $text = static fn (mixed $v): ?string => is_string($v) && trim($v) !== '' ? trim($v) : null;
+        $body = $text($ad['ad_text'] ?? null) ?? $text(((array) ($ad['ad_texts'] ?? []))[0] ?? null);
+
         return array_filter([
             'external_id' => $id,
             'name' => (string) ($ad['ad_name'] ?? $id),
             'format' => $media === 'image' ? 'image' : 'video',
+            'body' => $body,
+            'cta' => $text($ad['call_to_action'] ?? null),
             'destination_url' => isset($ad['landing_page_url']) && is_string($ad['landing_page_url']) ? $ad['landing_page_url'] : null,
             'raw' => array_filter([
                 'media' => $media,
@@ -1130,6 +1164,87 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsCr
                 ]);
             }
         }
+    }
+
+    /**
+     * AUDIENCE-001 slice 2 — paid delivery by age, gender and province, per ad group and day.
+     *
+     * The endpoint is the one this connector already reads for every figure, `report/integrated/get/`, with
+     * `report_type=AUDIENCE` and `data_level=AUCTION_ADGROUP`. The audience dimension names (`age`, `gender`,
+     * `province_id`) beside `adgroup_id` and `stat_time_day` come from the TikTok API for Business reporting docs as
+     * mirrored by connector documentation; the official page (business-api.tiktok.com/portal/docs) renders only in a
+     * browser and could not be read from here, so a combination TikTok refuses is recorded as that dimension's
+     * failure and stores nothing — never a guess. Delivery metrics only (spend, impressions, clicks): no conversion is
+     * attributed to an age, a gender or a province. A province is stored as TikTok's id, verbatim: its name is not
+     * resolved (the location-name endpoint could not be verified either).
+     */
+    private const AUDIENCE_DIMENSION = ['age' => 'age', 'gender' => 'gender', 'region' => 'province_id'];
+
+    public function audienceDimensions(): array
+    {
+        return array_keys(self::AUDIENCE_DIMENSION);
+    }
+
+    public function audienceMinimumImpressions(): int
+    {
+        return 1;
+    }
+
+    public function audienceSourceField(string $dimension): string
+    {
+        return 'tiktok:report/integrated/get report_type=AUDIENCE data_level=AUCTION_ADGROUP dimension='.(self::AUDIENCE_DIMENSION[$dimension] ?? $dimension);
+    }
+
+    public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to, array $delivering = []): SyncResult
+    {
+        $tiktok = self::AUDIENCE_DIMENSION[$dimension] ?? null;
+        if ($tiktok === null) {
+            return SyncResult::failed("TikTok audience dimension «{$dimension}» is not asked for by this product.");
+        }
+
+        try {
+            $reported = $this->readAll($this->tokens(), 'report/integrated/get/', "{$dimension} audience report", [
+                'advertiser_id' => $adAccountId,
+                'report_type' => 'AUDIENCE',
+                'data_level' => 'AUCTION_ADGROUP',
+                'dimensions' => json_encode(['adgroup_id', 'stat_time_day', $tiktok], JSON_THROW_ON_ERROR),
+                'metrics' => json_encode(['spend', 'impressions', 'clicks'], JSON_THROW_ON_ERROR),
+                'start_date' => $from,
+                'end_date' => $to,
+            ]);
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+
+        return SyncResult::of(self::mapAudienceRows($reported, $tiktok));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $reported
+     * @return list<array<string, mixed>>
+     */
+    public static function mapAudienceRows(array $reported, string $tiktokDimension): array
+    {
+        $rows = [];
+        foreach ($reported as $r) {
+            $dims = (array) ($r['dimensions'] ?? []);
+            $metrics = (array) ($r['metrics'] ?? []);
+            $entity = (string) ($dims['adgroup_id'] ?? '');
+            $date = substr((string) ($dims['stat_time_day'] ?? ''), 0, 10);
+            $value = trim((string) ($dims[$tiktokDimension] ?? ''));
+            if ($entity === '' || $date === '' || $value === '') {
+                continue;
+            }
+            $row = ['entity_id' => $entity, 'campaign_id' => null, 'date' => $date, 'value' => $value];
+            foreach (['impressions', 'clicks', 'spend'] as $m) {
+                if (isset($metrics[$m]) && is_numeric($metrics[$m])) {
+                    $row[$m] = (float) $metrics[$m];
+                }
+            }
+            $rows[] = $row;
+        }
+
+        return $rows;
     }
 
     public function syncCreativeInsights(string $adAccountId, string $from, string $to): SyncResult

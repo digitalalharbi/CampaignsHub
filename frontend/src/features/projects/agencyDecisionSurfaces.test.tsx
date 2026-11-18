@@ -4,7 +4,7 @@ import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
 import { RecommendationsPage } from '@/features/recommendations/RecommendationsPage'
 import { SpendLimitsPage } from '@/features/budget/SpendLimitsPage'
-import { agencyNavLeafPaths } from '@/layouts/agencyNav'
+import { agencyFoldedPaths, agencyNavLeafPaths } from '@/layouts/agencyNav'
 
 /**
  * AGENCY-DECISION-SURFACES-001 — Recommendations and Spend limits reach the agency operator.
@@ -51,8 +51,10 @@ describe('with no project chosen', () => {
 })
 
 describe('the agency rail', () => {
-  it('carries both decision surfaces', () => {
-    expect(agencyNavLeafPaths).toContain('/agency/recommendations')
-    expect(agencyNavLeafPaths).toContain('/agency/spend-limits')
+  it('reaches recommendations from the operations tabs and spend limits from the budget (OPS-TABS-001, ONE-BUDGET-UI-001)', () => {
+    expect(agencyNavLeafPaths).not.toContain('/agency/recommendations')
+    expect(agencyFoldedPaths).toContain('/agency/recommendations')
+    expect(agencyNavLeafPaths).not.toContain('/agency/spend-limits')
+    expect(agencyFoldedPaths).toContain('/agency/spend-limits')
   })
 })

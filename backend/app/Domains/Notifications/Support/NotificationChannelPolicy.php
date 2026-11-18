@@ -69,9 +69,12 @@ final class NotificationChannelPolicy
         'Domains/Alerts/Services/AlertEvaluator.php',
         'Domains/Automation/Services/RuleEvaluator.php',
         'Domains/ClientWorkspaces/Services/ClientManagementService.php',
+        'Domains/Funding/Services/FundingNotifier.php',
         'Domains/Messaging/Services/MessagingService.php',
+        'Domains/Projects/Lifecycle/LifecycleNotices.php',
         'Domains/Reports/Jobs/GenerateReportJob.php',
         'Domains/Requests/Services/RequestJourneyService.php',
+        'Domains/Requests/Services/ClientRequestManagerNotifier.php',
         'Domains/Requests/Services/RequestNotifier.php',
         'Domains/Settings/Http/Controllers/NotificationChannelTestController.php',
         'Domains/Subscriptions/Notifications/SubscriptionNotifier.php',
@@ -131,6 +134,8 @@ final class NotificationChannelPolicy
         'role_changed' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'planned', 'severity' => 'warning'],
         'member_welcome' => ['in_app' => false, 'via' => 'own_sender', 'whatsapp' => 'never', 'severity' => 'info'],
         'automation_rule' => ['in_app' => true, 'via' => 'dispatcher', 'whatsapp' => 'planned', 'severity' => 'warning', 'spend' => true],
+        // FIN-LOOP-001 — a project's approved budget: added, running low, over. Recipients are chosen by FundingNotifier.
+        'project_budget' => ['in_app' => true, 'via' => 'dispatcher', 'whatsapp' => 'planned', 'severity' => 'warning', 'spend' => true],
     ];
 
     /**
@@ -144,6 +149,10 @@ final class NotificationChannelPolicy
         // `sla_warning` is filed under `security` by the alert engine.
         'security' => ['category' => 'account', 'in_app' => true, 'email' => 'immediate', 'via' => 'alert_mailer', 'whatsapp' => 'never', 'severity' => 'critical', 'note' => 'alert-engine post of the SLA rule; AlertEventMailer mails it'],
         // The settings screen's own test button: a bell item for the signed-in person, nothing else.
+        // PROJECT-LIFECYCLE-001 (N2) — a project moved to the trash, and its permanent delete three days ahead: workspace owners only,
+        // in the bell. No email form exists, so none is sent (as before it was classified).
+        'project.deleted' => ['category' => 'account', 'in_app' => true, 'email' => 'off', 'via' => 'none', 'whatsapp' => 'never', 'severity' => 'warning', 'note' => 'LifecycleNotices posts it to workspace owners on a soft delete'],
+        'project.purge_soon' => ['category' => 'account', 'in_app' => true, 'email' => 'off', 'via' => 'none', 'whatsapp' => 'never', 'severity' => 'warning', 'note' => 'LifecycleNotices posts it to workspace owners three days before the purge'],
         'test_notification' => ['category' => 'account', 'in_app' => true, 'email' => 'off', 'via' => 'none', 'whatsapp' => 'planned', 'severity' => 'info', 'note' => 'the email test is sent by the settings controller as a marked test message, never through the dispatcher'],
     ];
 

@@ -594,7 +594,7 @@ final class ReportFiltersFunctionalTest extends TestCase
 
     // ---------------------------------------------------------------- objective and currency
 
-    public function test_the_objective_is_a_template_unless_asked_to_filter_and_the_currency_is_the_rows_own(): void
+    public function test_the_objective_is_always_a_template_and_the_currency_is_the_rows_own(): void
     {
         // The objective chooses the KPI template; it does not remove a campaign from the totals.
         $sales = $this->report(['campaign_objective' => 'sales']);
@@ -605,10 +605,11 @@ final class ReportFiltersFunctionalTest extends TestCase
         $this->assertEqualsWithDelta(4767.67, (float) $sales->data['kpis']['spend'], 0.001);
         $this->assertEqualsWithDelta(4767.67, (float) $leads->data['kpis']['spend'], 0.001);
 
-        // Asked to filter by objective, it does: only the sales campaign's rows remain, in the totals and in the content.
+        // OBJECTIVE-FILTERS-INCLUSIVE-001 — the old «filter by objective» switch no longer removes a riyal: a stored
+        // `objective_filter: true` is read as the KPI template, and every in-scope campaign stays in the totals.
         $filtered = $this->report(['scope' => ['account_ids' => [$this->snap, $this->meta], 'objectives' => ['sales'], 'objective_filter' => true]]);
-        $this->assertEqualsWithDelta(1333.33, (float) $filtered->data['kpis']['spend'], 0.001);
-        $this->assertSame(['snapchat'], array_column($filtered->data['platforms'], 'provider'));
+        $this->assertEqualsWithDelta(4767.67, (float) $filtered->data['kpis']['spend'], 0.001);
+        $this->assertSame('sales', $filtered->data['objective']);
 
         // The currency printed is the one the rows are held in, on the stored copy, the live payload and the files.
         DB::table('daily_metrics')->where('project_id', $this->project->getKey())->update(['project_currency' => 'USD', 'original_currency' => 'USD']);
@@ -618,7 +619,10 @@ final class ReportFiltersFunctionalTest extends TestCase
         $this->assertSame('USD', $this->live($raw)['currency']);
         $files = $this->surfaces($usd, $share, $raw);
         $this->assertStringContainsString('USD', $files['csv']);
-        $this->assertStringNotContainsString('SAR', $files['csv'], 'the file states a currency its rows are not held in');
+        // The «Reference» row is a random code (UC3CH-XXXXX) that can spell «SAR» by chance; it states no currency.
+        $withoutReference = preg_replace('/^"Reference \/ [^\n]*\n/mu', '', $files['csv']);
+        $this->assertStringNotContainsString('Reference /', $withoutReference, 'the reference row was not stripped');
+        $this->assertStringNotContainsString('SAR', $withoutReference, 'the file states a currency its rows are not held in');
 
         // Two currencies in one scope have no unit: none is stated, rather than one of them over the sum.
         DB::table('daily_metrics')->where('project_id', $this->project->getKey())->where('provider', 'meta')->update(['project_currency' => 'SAR']);
@@ -797,6 +801,9 @@ final class ReportFiltersFunctionalTest extends TestCase
     /** Every KPI of this world outside the list `clicks`, `impressions`; none may hold a figure on a served answer once the list stands. */
     private const UNCHOSEN_KEYS = ['spend', 'spend_original', 'revenue', 'revenue_original', 'conversions', 'cpa', 'cpc', 'cpm', 'ctr', 'roas', 'reach', 'cpl', 'aov', 'purchases', 'leads', 'results', 'cost_per_result', 'spend_share'];
 
+    /** The unchosen keys that stay cut in the content section: money, and every cost or return built on it. */
+    private const UNCHOSEN_MONEY_KEYS = ['spend', 'spend_original', 'revenue', 'revenue_original', 'cpa', 'cpc', 'cpm', 'roas', 'cpl', 'aov', 'cost_per_result', 'spend_share'];
+
     private const OPEN_CONTENT = ['creatives' => ['creatives' => true, 'spend' => true, 'revenue' => true, 'cpa' => true, 'roas' => true, 'insights' => true]];
 
     public function test_the_values_of_unchosen_kpis_leave_every_served_answer_and_the_stored_copy_is_not_written(): void
@@ -809,7 +816,9 @@ final class ReportFiltersFunctionalTest extends TestCase
             $surfaces = array_diff_key($this->surfaces($picked, $share, $raw), ['csv' => 1, 'xlsx' => 1]);
             $this->assertAbsent($surfaces, [...self::SPEND, ...self::REVENUE], "the {$kind} link chose clicks and impressions");
             foreach ($surfaces as $surface => $json) {
-                $this->assertSame([], self::figuresUnder($json, self::UNCHOSEN_KEYS), "the {$kind} link's «{$surface}» still carries an unchosen KPI");
+                // CONTENT-ANALYSIS-BY-OBJECTIVE-001 — the content section keeps each item's own funnel counts; money still leaves it.
+                $keys = str_starts_with($surface, 'creatives') ? self::UNCHOSEN_MONEY_KEYS : self::UNCHOSEN_KEYS;
+                $this->assertSame([], self::figuresUnder($json, $keys), "the {$kind} link's «{$surface}» still carries an unchosen KPI");
             }
             $main = $kind === 'live' ? $surfaces['live'] : $surfaces['page'];
             foreach ([$main, $surfaces['print']] as $answer) {
@@ -823,6 +832,25 @@ final class ReportFiltersFunctionalTest extends TestCase
         $internal = $this->report(['audience' => 'internal', 'scope' => ['account_ids' => [$this->snap, $this->meta], 'metrics' => ['clicks']]]);
         $preview = self::text($this->as()->getJson("/api/v1/projects/{$this->project->getKey()}/reports/{$internal->getKey()}")->assertOk()->json('data.data'));
         $this->assertStringContainsString('4767.67', $preview, 'the operator lost a figure of an internal report');
+    }
+
+    /**
+     * CONTENT-ANALYSIS-BY-OBJECTIVE-001 — a link that chose only clicks and impressions still judges each content item on its own path:
+     * the content library keeps the funnel counts its objective needs, while spend and revenue stay out.
+     */
+    public function test_the_content_section_keeps_each_items_funnel_counts_whatever_the_kpi_list(): void
+    {
+        $picked = $this->report(['scope' => ['account_ids' => [$this->snap, $this->meta], 'metrics' => ['clicks', 'impressions']]]);
+        [, $raw] = $this->liveLink($picked, ['settings' => self::OPEN_CONTENT], ['metrics' => ['clicks', 'impressions']]);
+        RateLimiter::clear('share:127.0.0.1');
+        $library = $this->getJson("/api/v1/reports/shared/{$raw}/creatives?from=".self::FROM.'&to='.self::TO)->assertOk()->json('data');
+        $json = self::text($library);
+
+        $this->assertNotSame([], $library['creatives'], 'the world has no content, so nothing below is proved');
+        $this->assertSame([], self::figuresUnder($json, self::UNCHOSEN_MONEY_KEYS), 'money the link did not choose reached the content section');
+        $metrics = (array) ($library['creatives'][0]['metrics'] ?? []);
+        $this->assertArrayHasKey('clicks', $metrics);
+        $this->assertNotSame([], array_intersect(array_keys($metrics), ['purchases', 'conversions', 'leads', 'add_to_cart', 'video_views']), 'the content item lost its own funnel counts');
     }
 
     public function test_the_values_of_unchosen_columns_leave_the_rows_they_sit_on(): void

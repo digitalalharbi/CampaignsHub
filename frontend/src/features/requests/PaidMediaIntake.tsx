@@ -25,6 +25,8 @@ import { toApiError } from '@/lib/api/client'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { withMark } from '@/lib/money/mark'
+import { uuid } from '@/lib/uuid'
 
 interface UploadFile {
   localId: string
@@ -161,7 +163,7 @@ export function PaidMediaIntake() {
     const token = await ensureSession()
     if (!token) return
     for (const file of selected) {
-      const localId = crypto.randomUUID()
+      const localId = uuid()
       setFiles((prev) => [...prev, { localId, name: file.name, size: file.size, status: 'uploading', pct: 0, file }])
       await uploadOne(token, localId, file)
     }
@@ -618,7 +620,7 @@ export function PaidMediaIntake() {
                   if (!val) return null
                   return <Row key={f.token} k={ar ? f.labelAr : f.labelEn} v={String(val)} />
                 })}
-                {answers.budget ? <Row k={ar ? 'الميزانية' : 'Budget'} v={`${answers.budget as string} ${currency}`} /> : null}
+                {answers.budget ? <Row k={ar ? 'الميزانية' : 'Budget'} v={withMark(String(answers.budget), currency)} /> : null}
                 <Row k={copy.attachments} v={files.filter((f) => f.status === 'done').length ? files.filter((f) => f.status === 'done').map((f) => f.name).join(ar ? '، ' : ', ') : copy.none} />
               </dl>
 

@@ -11,6 +11,7 @@ import { objectiveLabel } from '@/features/campaigns/labels'
 import { useT } from '@/lib/i18n'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
+import { labelUnit, withMark } from '@/lib/money/mark'
 
 /**
  * NUMBER-PRESENTATION-001 §58 — this surface had its own formatter, and it followed neither rule.
@@ -105,7 +106,8 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
     )
   }
   const a = q.data!
-  const cur = a.currency ? ` ${a.currency}` : ''
+  // FX-APPLY-001 — the unit beside a LABEL only; a figure takes its mark through withMark.
+  const cur = labelUnit(a.currency)
 
   return (
     <div className="grid gap-4">
@@ -174,7 +176,7 @@ export function TabAnalytics({ clientId }: { clientId: string }) {
                     ) : (
                       <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-secondary"><div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.round(p.spend_share * 100)}%` }} /></div>
                     )}
-                    <span className="tnum w-28 text-end text-text-secondary">{num(p.spend, 2)}{cur}</span>
+                    <span className="tnum w-28 text-end text-text-secondary">{withMark(num(p.spend, 2), a.currency)}</span>
                     <span className="tnum w-12 text-end text-xs text-text-muted">{pct(p.spend_share)}</span>
                   </li>
                 ))}
@@ -328,7 +330,8 @@ function ClientTrends({ a, t, ar }: { a: ClientAnalytics; t: ReturnType<typeof u
       >
         {drawMoney ? (
           <div data-testid="client-money-trend" className="min-w-0">
-            <SpendRevenueAreaChart data={points} currency={a.currency ?? 'SAR'} height={240} />
+            {/* FX-APPLY-001 — the series' own currency or none, never a guess. */}
+            <SpendRevenueAreaChart data={points} currency={a.currency ?? undefined} height={240} />
           </div>
         ) : (
           <p data-testid="client-money-trend-withheld" className="rounded-xl border border-dashed border-warning/40 bg-warning/5 px-4 py-5 text-center text-sm text-text-secondary">
@@ -340,7 +343,7 @@ function ClientTrends({ a, t, ar }: { a: ClientAnalytics; t: ReturnType<typeof u
       </ChartCard>
 
       <ChartCard
-        title={ar ? 'النتائج والنقرات والظهور' : 'Results, clicks and impressions'}
+        title={ar ? 'تحويلات المنصة والنقرات والظهور' : 'Platform conversions, clicks and impressions'}
         subtitle={ar ? 'أعداد — لا تتأثر بعملة الإنفاق.' : 'Counts — untouched by what the spend is priced in.'}
       >
         <div data-testid="client-count-trend" className="min-w-0">

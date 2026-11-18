@@ -57,10 +57,10 @@ final class AlertRuleCopy
             case 'ga4_tracking_loss':
                 $drop = (float) ($ctx['drop'] ?? 0) * 100;
 
-                return $line($ar ? 'زيارات الموقع نزلت '.$p($drop).' والمنصات مكمّلة صرف' : 'Website visits fell '.$p($drop).' while platforms keep spending', $ar ? 'غالبًا التتبع متوقف مو الطلب.' : 'Most likely tracking is broken, not demand.',
+                return $line($ar ? 'زيارات الموقع نزلت '.$p($drop).' والمنصات مكمّلة صرف' : 'Website visits fell '.$p($drop).' while platforms keep spending', $ar ? 'المقارنة بالفترة اللي قبلها.' : 'Against the previous period.',
                     isset($ctx['previous'], $ctx['sessions']) ? $ba($ctx['previous'], $ctx['sessions']) : '', $ar ? 'التتبع ← الوسم ← أصلحه قبل ما تصرف أكثر.' : 'Open tracking and fix the tag before spending more.', 'tracking');
             case 'ga4_unmatched_spend':
-                return $line($ar ? $p(((float) ($ctx['share'] ?? 0)) * 100).' من الصرف بدون زيارة مسجّلة' : $p(((float) ($ctx['share'] ?? 0)) * 100).' of spend has no measured visit', $ar ? 'نقرات ما وصلت للموقع: موافقة أو مانع إعلانات أو رابط بدون وسم.' : 'Clicks that never reached the site: consent, blockers or untagged links.',
+                return $line($ar ? $p(((float) ($ctx['share'] ?? 0)) * 100).' من الصرف بدون زيارة مسجّلة' : $p(((float) ($ctx['share'] ?? 0)) * 100).' of spend has no measured visit', $ar ? 'نقرات ما سُجّلت لها زيارة في الموقع.' : 'Clicks with no visit recorded on the website.',
                     isset($ctx['campaigns']) ? ($ar ? 'حملات: ' : 'Campaigns: ').$n($ctx['campaigns']) : '', $ar ? 'أضف وسوم الروابط ثم راجع إعداد الموافقة.' : 'Add link tags and review the consent setup.', 'tracking');
             case 'lead_unassigned':
                 $mins = (int) ($ctx['minutes'] ?? 60);

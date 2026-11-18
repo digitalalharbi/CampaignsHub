@@ -160,10 +160,14 @@ test('export → download → the XLSX and CSV a person receives are real files 
   // REPORT-KPI-CONTRACT-001 — a client file's metric columns are the report's visible-KPI allowlist (the Sales template here:
   // spend, impressions, clicks, add to cart, purchases, revenue, ROAS), so the cost-per and CTR columns are absent.
   // RESULT-EVENTS-001 — a platform's generic `conversions` is no client column: it is never a Lead or a Result unless configured.
-  expect(cells(lines[headerAt])).toEqual(['Platforms', 'spend', 'revenue', 'roas', 'share'])
+  // FX-APPLY-001 (builder G, by Owner spec) — every platform row also names the currency its platform reported in, as the
+  // LAST column, so the file reconciles with the screen. The metric columns before it are exactly the allowlist above.
+  expect(cells(lines[headerAt])).toEqual(['Platforms', 'spend', 'revenue', 'roas', 'share', 'Original currency / العملة الأصلية'])
 
   const platformRows: string[][] = []
   for (let i = headerAt + 1; i < lines.length && lines[i].trim() !== ''; i++) platformRows.push(cells(lines[i]))
+  // «Codes only — never an amount, never a name» (ReportExporter::withOriginalCurrency).
+  for (const r of platformRows) expect(r[5] ?? '', `the original-currency cell of ${r[0]}`).toMatch(/^([A-Z]{3}(, [A-Z]{3})*)?$/)
 
   /*
    * The figures in the file are the figures the product reports.

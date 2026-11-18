@@ -35,7 +35,12 @@ final class ConnectionFacts
             exists: true,
             status: $c->status,
             tokenExpiresAt: $c->token_expires_at,
-            scopes: $c->scopes,
+            /*
+             * LINKEDIN-SCOPES-001 — `scopes` is now only a RETURNED grant (empty = unknown). This fact feeds one question,
+             * «can this grant read insights?», which answers «no» only when no read scope is named; a consent that never
+             * REQUESTED a read scope cannot have been granted one, so the request still answers it when the grant is unknown.
+             */
+            scopes: $c->scopes ?: $c->requested_scopes,
             insightsDeniedAt: $c->insights_denied_at,
             hasError: $c->last_error !== null && $c->last_error !== '',
             discoveryBlockedReason: $c->discovery_blocked_reason,

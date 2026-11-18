@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Enums\LeadDestination;
 use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Delivery\Services\PackNotes;
 use App\Domains\Disclaimers\Services\DisclaimerResolver;
+use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Metrics\Services\DataFreshnessService;
@@ -16,6 +17,7 @@ use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsInput;
 use App\Domains\Reports\Analytics\ObjectiveAnalyticsSection;
+use App\Domains\Reports\Measurement\AudienceReportSections;
 use App\Domains\Reports\Measurement\Ga4ReportSections;
 use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
@@ -28,6 +30,7 @@ use App\Domains\Reports\Services\Attention\ObjectivePerformanceFigures;
 use App\Domains\Reports\Services\Attention\ReportAttention;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ReportComposition;
+use App\Domains\Reports\Support\ReportObjectives;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ResultEvents;
@@ -73,6 +76,28 @@ final class ReportGenerator
         }
     }
 
+    /**
+     * REPORT-MULTI-OBJECTIVE-001 — the objectives a report is measured against: the operator's list, else its one objective.
+     *
+     * @return list<string>
+     */
+    private function objectivesOf(Report $report, string $objective): array
+    {
+        $chosen = ReportObjectives::of($report);
+
+        return $chosen !== [] ? $chosen : ($objective === ReportObjectives::MIXED ? [] : [$objective]);
+    }
+
+    /** @return list<string> */
+    private function objectiveKpis(Report $report, string $objective, ?string $destination): array
+    {
+        $objectives = $this->objectivesOf($report, $objective);
+
+        return count($objectives) >= 2
+            ? $this->template->metricSetForMany($objectives, $destination)
+            : $this->template->metricSet($objective, $destination);
+    }
+
     /** @return array<string, mixed> */
     private function snapshot(Report $report): array
     {
@@ -98,7 +123,16 @@ final class ReportGenerator
         // Historical reports stored the objective choice inside the scope. It is the report's measurement template, never a data bound:
         // moved to the report, the stored scope loses it, and an explicit «filter campaigns by objective» (flagged) is left exactly as chosen.
         if (($template = $scope->objectiveTemplate()) !== null) {
-            $report->forceFill(['campaign_objective' => $report->campaign_objective ?: $template, 'scope' => ($scope->toArray() ?: null)])->saveQuietly();
+            /*
+             * REPORT-MULTI-OBJECTIVE-001 — and EVERY objective it names, not the first. «زيارات + مبيعات» used to be folded into whichever
+             * template matched first; several are stored as the mixed lens plus the list (see ReportObjectives). One stays exactly as before.
+             */
+            $chosen = ReportObjectives::toStore(ReportObjectiveLens::templatesOf($scope->objectives));
+            $many = $report->campaign_objective ? [] : $chosen['objectives'];
+            $report->forceFill([
+                'campaign_objective' => $report->campaign_objective ?: ($chosen['campaign_objective'] ?? $template),
+                'scope' => ($scope->toArray() ?: null),
+            ] + ($many === [] ? [] : ['config' => [...(array) ($report->config ?? []), ReportObjectives::CONFIG_KEY => $many]]))->saveQuietly();
         }
         $agg = $scope->applyTo($this->agg);
 
@@ -219,6 +253,12 @@ final class ReportGenerator
              * The layout's own keys still win; every other key stays as saved.
              */
             $config = $this->template->defaultConfig($objective, $providerList, (string) $report->form) + (array) $config;
+            /*
+             * REPORT-MULTI-OBJECTIVE-001 — a report nobody chose an objective for stays the inferred lens. A mixed estate is NOT turned
+             * into the union of its campaigns' presets here: that would put a ROAS over traffic spend on a report the operator never
+             * asked to judge on sales (ReportObjectiveLayoutTest). Several objectives are the operator's choice, made in the editor or
+             * the link builder.
+             */
             $report->forceFill(['config' => $config, 'campaign_objective' => $objective])->saveQuietly();
         } else {
             /*
@@ -295,7 +335,9 @@ final class ReportGenerator
                 ? $scope->metrics
                 : (isset($config['metric_set']) && is_array($config['metric_set']) && ! $this->template->isPreset($config['metric_set'])
                     ? $config['metric_set']
-                    : $this->template->metricSet($objective, $leadDestination?->value)),
+                    : $this->objectiveKpis($report, $objective, $leadDestination?->value)),
+            // REPORT-MULTI-OBJECTIVE-001 — the objectives the KPIs above were taken from (one, several, or the campaigns' own when none was chosen).
+            'objectives' => $this->objectivesOf($report, $objective),
             'lead_destination' => $leadDestination?->value,
             // RESULT-EVENTS-001 — Results exist only where a result event is configured (project, over-ridden by this report); never inferred.
             'results' => $this->resultsFor($report, $campaigns, $destinations),
@@ -506,6 +548,8 @@ final class ReportGenerator
              * platform rows; a client-facing report never receives the campaigns table.
              */
             ...$this->ga4Sections($report, $from, $to, $platforms, $currency),
+            // AUDIENCE-001 — FROZEN with the snapshot, cut for the report's audience before it is stored.
+            ...$this->audienceSections($report, $scope, $from, $to),
             /*
              * REPORT-WEBSITE-TAB-001 — the layout this snapshot was frozen under. A snapshot WITHOUT this stamp was saved before the
              * website tab existed and renders its pages exactly as then (its store-pulse page included); one with it renders the website
@@ -910,8 +954,8 @@ final class ReportGenerator
             $burning = ClientEntityBoundary::spendWithoutResults($campaigns);
             if ($burning !== null) {
                 $where = implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers']));
-                $out[] = ['severity' => 'critical', 'title' => 'إنفاق دون تحويلات على '.$where, 'platform' => $burning['providers'][0] ?? null,
-                    'kpi' => 'الإنفاق', 'value' => number_format($burning['spend']).' '.$currency, 'detail' => 'يستدعي المراجعة: إمّا إيقاف ما لا يُنتج أو التحقق من التتبع.', 'reveals' => ['spend']];
+                $out[] = ['severity' => 'critical', 'title' => 'إنفاق دون نتائج على '.$where, 'platform' => $burning['providers'][0] ?? null,
+                    'kpi' => 'الإنفاق', 'value' => FundingMoney::withMark(number_format($burning['spend']), $currency), 'detail' => 'يستدعي المراجعة: إمّا إيقاف ما لا يُنتج أو التحقق من التتبع.', 'reveals' => ['spend']];
             }
         }
 
@@ -962,7 +1006,7 @@ final class ReportGenerator
             if ($burning !== null) {
                 $where = implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers']));
                 $out[] = ['severity' => 'critical', 'title' => 'مراجعة الإنفاق غير المُنتج على '.$where, 'platform' => $burning['providers'][0] ?? null,
-                    'action' => 'pause', 'detail' => number_format($burning['spend']).' '.$currency.' دون تحويلات — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق', 'reveals' => ['spend']];
+                    'action' => 'pause', 'detail' => FundingMoney::withMark(number_format($burning['spend']), $currency).' دون نتائج — تحقق من التتبع قبل الاستمرار.', 'kpi' => 'الإنفاق', 'reveals' => ['spend']];
             }
             /*
              * «Expand what works» named the top-converting CAMPAIGN. The platform carrying the most
@@ -1125,8 +1169,8 @@ final class ReportGenerator
          */
         $headline = $t[$metric['key']] ?? null;
         $out[] = $headline !== null
-            ? sprintf('إجمالي الإنفاق %s %s خلال الفترة، ومتوسط %s %s.', number_format((float) ($t['spend'] ?? 0)), $currency, $metric['label_ar'], $lens->formatRanking((float) $headline, $currency))
-            : sprintf('إجمالي الإنفاق %s %s خلال الفترة.', number_format((float) ($t['spend'] ?? 0)), $currency);
+            ? sprintf('إجمالي الإنفاق %s خلال الفترة، ومتوسط %s %s.', FundingMoney::withMark(number_format((float) ($t['spend'] ?? 0)), $currency), $metric['label_ar'], $lens->formatRanking((float) $headline, $currency))
+            : sprintf('إجمالي الإنفاق %s خلال الفترة.', FundingMoney::withMark(number_format((float) ($t['spend'] ?? 0)), $currency));
 
         $rated = collect($platforms)->filter(fn ($p) => ($p[$metric['key']] ?? null) !== null && (float) ($p['spend'] ?? 0) > 0);
         if ($rated->isNotEmpty()) {
@@ -1141,9 +1185,8 @@ final class ReportGenerator
             $burning = ClientEntityBoundary::spendWithoutResults($campaigns);
             if ($burning !== null) {
                 $out[] = sprintf(
-                    'تنبيه: %s %s من الإنفاق على %s لم تُنتج تحويلات تُذكر — يُنصح بمراجعتها.',
-                    number_format($burning['spend']),
-                    $currency,
+                    'تنبيه: %s من الإنفاق على %s لم تُنتج نتائج تُذكر — يُنصح بمراجعتها.',
+                    FundingMoney::withMark(number_format($burning['spend']), $currency),
                     implode('، ', array_map(ProviderDisplayName::short(...), $burning['providers'])),
                 );
             }
@@ -1202,6 +1245,30 @@ final class ReportGenerator
         ], static fn ($v): bool => $v !== []) ?: null, drillRows: ContentFormatComparison::REPORT_DRILL_ROWS);
 
         return ContentFormatComparison::forAudience($block, $audience !== 'internal', false, false);
+    }
+
+    /**
+     * AUDIENCE-001 — the audience parts of a saved report: a client snapshot never holds money or campaign names.
+     *
+     * @return array<string, array<string, mixed>|null>
+     */
+    private function audienceSections(Report $report, ReportScope $scope, Carbon $from, Carbon $to): array
+    {
+        $audience = (string) ($report->audience ?? 'client');
+        $registry = app(ReportSectionRegistry::class);
+        $settings = $report->sectionSettings();
+
+        return app(AudienceReportSections::class)->build(
+            (string) $report->tenant_id, (string) $report->project_id, $from, $to,
+            $audience !== 'internal',
+            static fn (string $key): bool => $settings->enabled($registry->get($key), $audience),
+            $scope->providers === [] ? null : array_values($scope->providers),
+            // Axes the audience rows cannot follow: withheld, never widened.
+            ($scope->objectiveFilter && $scope->objectives !== []) || $scope->paths !== [] || $scope->destinations !== []
+                || $scope->creativeIds !== [] || $scope->adSetIds !== [] || $scope->adIds !== [],
+            $scope->accountIds === [] ? null : array_values($scope->accountIds),
+            campaignIds: ($c = $scope->resolvedCampaignIds()) === null ? null : array_values($c),
+        );
     }
 
     /**

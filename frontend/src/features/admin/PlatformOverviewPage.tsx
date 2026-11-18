@@ -168,7 +168,7 @@ export function PlatformOverviewPage() {
       */}
       <section data-testid="attention" className="mb-4 rounded-2xl border border-border bg-surface p-5">
         <h2 className="font-heading text-base font-bold text-text-primary">
-          {ar ? 'يحتاج انتباهك' : 'Needs your attention'}
+          {ar ? 'تنبيهات' : 'Needs your attention'}
         </h2>
         {open.length === 0 ? (
           <p className="mt-3 flex items-center gap-2 text-sm text-text-secondary">

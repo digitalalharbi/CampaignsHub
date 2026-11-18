@@ -74,4 +74,28 @@ return [
 
     // The most tool round-trips one turn may take before it stops and says so.
     'max_tool_rounds' => 8,
+
+    /*
+     * AGENTS-ASSISTANT-001 — «المساعد», the one chat in front of the specialists.
+     *
+     * The workspace chooses the model from `models` (Settings drawer); Sonnet is the default for everyday chat. Each limit below is
+     * enforced in code before a model is called, never left to a prompt: the per-person daily token cap (the workspace may change
+     * it), the tool rounds of one turn, the longest conversation replayed, the message size, and the provider timeout.
+     */
+    /*
+     * AGENTS-SANDBOX-001 — `sandbox` answers with a local script that reads the real tools and never calls a provider: for the
+     * E2E gate and local walk-throughs. Ignored in production (`ModelClientFactory`). Anything else = the workspace's provider.
+     */
+    'model_driver' => env('AGENTS_MODEL_DRIVER', 'provider'),
+
+    'assistant' => [
+        'default_model' => env('AGENTS_ASSISTANT_MODEL', 'claude-sonnet-5-5'),
+        'models' => ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5'],
+        'daily_token_cap' => (int) env('AGENTS_DAILY_TOKEN_CAP', 200000),
+        'max_tool_rounds' => 6,
+        'max_thread_messages' => 80,
+        'max_message_chars' => 4000,
+        'max_output_tokens' => 8000,
+        'timeout_seconds' => 120,
+    ],
 ];

@@ -135,7 +135,8 @@ final class AutomationAgentToolsTest extends TestCase
             $this->assertContains('list_automation_rules', AgentRoles::get($agent)['tools']);
             $this->assertContains('explain_rule_run', AgentRoles::get($agent)['tools']);
         }
-        $this->assertSame(['campaign'], array_keys(array_filter(AgentRoles::all(), static fn (array $r): bool => in_array('draft_automation_rule', $r['tools'], true))));
+        // AGENTS-ASSISTANT-001 — the Builder («المنشئ») drafts rules too; both save switched-off drafts only.
+        $this->assertSame(['campaign', 'builder'], array_keys(array_filter(AgentRoles::all(), static fn (array $r): bool => in_array('draft_automation_rule', $r['tools'], true))));
     }
 
     public function test_listing_and_explaining_stay_inside_the_project(): void

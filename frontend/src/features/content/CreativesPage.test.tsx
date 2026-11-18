@@ -334,13 +334,13 @@ describe('CreativesPage', () => {
     const article = await screen.findByRole('article')
 
     // Measured, and really nothing: revenue was reported and it was zero.
-    expect(within(article).getByText('0 SAR')).toBeInTheDocument()
+    expect(within(article).getByText('0 ر.س')).toBeInTheDocument()
     // Raw, and never sent: this platform reports no video views for a still image.
     expect(within(article).getByText('Not provided')).toBeInTheDocument()
     // Derived, and not computable: a completion rate over no views is not a rate of zero.
     expect(within(article).getByText('No data')).toBeInTheDocument()
     // And the figure that IS measured still reads as a figure.
-    expect(within(article).getByText('900 SAR')).toBeInTheDocument()
+    expect(within(article).getByText('900 ر.س')).toBeInTheDocument()
   })
 
   /**

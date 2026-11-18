@@ -87,7 +87,7 @@ const DIMENSION_SINGULAR: Record<string, { ar: string; en: string }> = {
   account: { ar: 'حساب', en: 'account' },
   campaign: { ar: 'حملة', en: 'campaign' },
   objective: { ar: 'هدف', en: 'objective' },
-  ad_set: { ar: 'مجموعة إعلانية', en: 'ad set' },
+  ad_set: { ar: 'مجموعة', en: 'ad group' },
 }
 
 /**
@@ -155,7 +155,7 @@ function driverName(d: DriverRow, by: string, ar: boolean): string {
    * in front of a reader is the raw-identifier defect the portal audit has an E2E against.
    */
   if (by === 'ad_set' && !d.name) {
-    return ar ? 'مجموعة إعلانية لم يعد اسمها محفوظًا' : 'An ad set whose name is no longer held'
+    return ar ? 'مجموعة لم يعد اسمها محفوظًا' : 'An ad group whose name is no longer held'
   }
 
   if (by === 'objective') {
@@ -181,7 +181,7 @@ const OBJECTIVE_LABEL: Record<string, { ar: string; en: string }> = {
 
 const METRIC_LABEL: Record<string, { ar: string; en: string }> = {
   spend: { ar: 'الإنفاق', en: 'Spend' },
-  conversions: { ar: 'النتائج', en: 'Results' },
+  conversions: { ar: 'تحويلات المنصة', en: 'Platform conversions' },
   clicks: { ar: 'النقرات', en: 'Clicks' },
   impressions: { ar: 'الظهور', en: 'Impressions' },
   revenue: { ar: 'الإيرادات', en: 'Revenue' },
@@ -201,7 +201,7 @@ const DIMENSION_PLURAL: Record<string, { ar: string; en: string }> = {
   account: { ar: 'كل الحسابات', en: 'Every account' },
   objective: { ar: 'كل الأهداف', en: 'Every objective' },
   campaign: { ar: 'كل الحملات', en: 'Every campaign' },
-  ad_set: { ar: 'كل المجموعات الإعلانية', en: 'Every ad set' },
+  ad_set: { ar: 'كل المجموعات', en: 'Every ad group' },
 }
 
 const everythingMovedTogether = (by: string, ar: boolean): string => {
@@ -502,7 +502,7 @@ export function ChangeDiagnosis({
       <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-2">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-base font-bold text-text-primary">
-            {title ?? (ar ? 'ما الذي تغيّر — ومن حرّكه' : 'What changed — and who moved it')}
+            {title ?? (ar ? 'أسباب التغيّر' : 'What changed — and who moved it')}
           </h3>
           <span className="text-xs text-text-muted">
             {ar ? 'مقابل ' : 'vs '}
@@ -622,7 +622,7 @@ export function ChangeDiagnosis({
       */}
       <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-3">
         <h3 className="mb-1 text-base font-bold text-text-primary">
-          {ar ? 'الأيام التي خرجت عن سلوك الفترة' : 'The days that departed from the period’s behaviour'}
+          {ar ? 'أيام غير معتادة' : 'The days that departed from the period’s behaviour'}
         </h3>
         {/*
           VISUAL-FIRST-001 — «I do not want any text details at all, except in a few simple places.»

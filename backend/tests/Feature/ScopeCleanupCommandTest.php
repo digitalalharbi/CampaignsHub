@@ -143,6 +143,10 @@ final class ScopeCleanupCommandTest extends TestCase
         $this->assertSame($this->otherProject->id, $campaign->project_id);
         $unified = UnifiedCampaign::withoutGlobalScopes()->findOrFail($campaign->unified_campaign_id);
         $this->assertSame($this->otherProject->id, $unified->project_id);
+        // OBJECTIVE-RESULT-001 — adopted with WHERE its objective came from, not just the objective.
+        $this->assertSame('conversions', $unified->objective);
+        $this->assertSame('platform', $unified->objective_source);
+        $this->assertSame('WEB_CONVERSION', $unified->objective_platform_value);
 
         foreach (['external_ad_sets', 'external_ads', 'external_creatives'] as $table) {
             $this->assertSame(1, DB::table($table)->where('external_campaign_id', $campaign->id)->where('project_id', $this->otherProject->id)->count(), "{$table} did not follow");

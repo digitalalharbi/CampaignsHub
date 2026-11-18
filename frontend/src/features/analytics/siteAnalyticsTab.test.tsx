@@ -41,8 +41,8 @@ describe('the site analytics tab', () => {
 
     expect(await screen.findByTestId('ga4-tile-sessions')).toHaveTextContent('1,000')
     // Money reads in USD; the property's own currency stays beside it.
-    expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('1.38K USD')
-    expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('5.5K SAR')
+    expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('1.38K $')
+    expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('5.5K ر.س')
     // REPORT-WEBSITE-TAB-001 — the match below replaces the older comparison card.
     expect(screen.queryByTestId('ga4-gap-chip-meta')).toBeNull()
     expect(screen.getByTestId('site-not-summed')).toBeInTheDocument()
@@ -83,7 +83,7 @@ describe('the site analytics tab', () => {
     expect(screen.getByTestId('ga4-delta-bounce_rate')).toHaveTextContent('50.0%')
     // A falling bounce rate is the good direction, and is coloured as one.
     expect(screen.getByTestId('ga4-delta-bounce_rate')).toHaveAttribute('data-good', 'yes')
-    expect(screen.getByTestId('ga4-tile-aov')).toHaveTextContent('200 SAR')
+    expect(screen.getByTestId('ga4-tile-aov')).toHaveTextContent('200 ر.س')
     const absent = screen.getByTestId('site-kpi-items_per_order')
     expect(absent).toHaveTextContent('—')
     expect(absent).not.toHaveTextContent('0.00')

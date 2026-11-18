@@ -54,7 +54,7 @@ final class PrepareWeeklyPacks extends Command
         foreach ($workspaces as $workspace) {
             $tenants->setTenantId((string) $workspace->tenant_id);
 
-            $projects = Project::query()->where('client_workspace_id', $workspace->getKey())->where('status', 'active')->get();
+            $projects = Project::query()->where('client_workspace_id', $workspace->getKey())->running()->get(); // PROJECT-LIFECYCLE-001
             foreach ($projects as $project) {
                 $packs->prepare($project, $anchor);
                 $prepared++;

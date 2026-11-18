@@ -69,6 +69,10 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::get('/overview', [ClientPortalController::class, 'overview'])->name('overview.show')
         ->middleware('throttle:60,1');
 
+    // AUDIENCE-001 — the audience under the performance dashboard: no money, no campaign or ad-set names.
+    Route::get('/audience', [ClientPortalController::class, 'audience'])->name('audience.show')
+        ->middleware('throttle:60,1');
+
     // CP-VISIBILITY-001: what the agency lets this client see and do, per space.
     Route::get('/visibility', [ClientPortalController::class, 'visibility'])->name('visibility.show')
         ->middleware('throttle:120,1');
@@ -126,6 +130,13 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::post('/quotes/{quote}/approve', [ClientPortalController::class, 'approveQuote'])->name('quotes.approve')
         ->middleware('throttle:30,1');
     Route::post('/quotes/{quote}/reject', [ClientPortalController::class, 'rejectQuote'])->name('quotes.reject')
+        ->middleware('throttle:30,1');
+    // CLIENT-CONTENT-APPROVAL-001 — «بانتظار اعتمادك».
+    Route::get('/approvals', [ClientPortalController::class, 'contentApprovals'])->name('approvals.index')
+        ->middleware('throttle:120,1');
+    Route::post('/approvals/{approval}/approve', [ClientPortalController::class, 'approveContent'])->name('approvals.approve')
+        ->middleware('throttle:30,1');
+    Route::post('/approvals/{approval}/request-changes', [ClientPortalController::class, 'requestContentChanges'])->name('approvals.changes')
         ->middleware('throttle:30,1');
     Route::get('/invoices', [ClientPortalController::class, 'invoices'])->name('invoices.index')
         ->middleware('throttle:120,1');

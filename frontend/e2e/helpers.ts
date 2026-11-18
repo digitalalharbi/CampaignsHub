@@ -65,6 +65,25 @@ export async function openFilters(page: Page, id: string) {
   }
 }
 
+/**
+ * NOV-SIDEBAR-001 — open the agency rail, if it is the 64px icon strip.
+ *
+ * The rail starts collapsed, and in the strip a section's name is a tooltip and its link sits in a flyout that is not
+ * in the accessibility tree until it opens. A spec that reads names from the rail, or clicks a rail link by its name,
+ * opens it first, exactly as a reader does. Safe to call when it is already open.
+ */
+export async function openRail(page: Page, options: { optional?: boolean } = {}): Promise<void> {
+  const toggle = page.getByTestId('rail-toggle')
+  if (options.optional) {
+    // A portal whose rail is not this one (the advertiser's is always open) has no toggle — nothing to do there.
+    await page.locator('main').first().waitFor({ state: 'visible', timeout: 30_000 })
+    if ((await toggle.count()) === 0) return
+  }
+  await toggle.waitFor({ state: 'visible', timeout: 30_000 })
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+}
+
 /** Flip the app to English for stable selectors (default locale is Arabic). */
 /**
  * Put the page into English, and FAIL if it did not go.
@@ -236,10 +255,24 @@ export async function seedExternals(request: APIRequestContext, projectId: strin
   await request.post(`/api/v1/projects/${projectId}/integrations/bindings/${bindingId}/sync`, { headers })
 }
 
-export async function createCampaign(page: Page, name: string) {
+/**
+ * Open the campaign DRAFT builder (the modal) the way the product reaches it now.
+ *
+ * NAV-HOME-PLANS-001 — «حملة جديدة» on the campaigns page opens the launch page (`/launch`), which publishes on the
+ * platforms' APIs and is therefore not something a spec can drive. The internal draft builder these specs create
+ * campaigns through is still there, opened by the campaigns page's own address (`?launch=1`), so that is the path
+ * walked here: same page, same modal, same permission check. `launch.spec.ts` covers the button's own destination.
+ */
+export async function openCampaignBuilder(page: Page) {
   // The campaigns page opens on the chart-heavy overview; wait for it to be interactive first.
   await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
-  await page.getByRole('button', { name: /New campaign|حملة جديدة/ }).click()
+  const here = new URL(page.url())
+  await page.goto(`${here.pathname}?launch=1`)
+  await expect(page.getByLabel(/Campaign name|اسم الحملة/), 'the draft builder did not open').toBeVisible({ timeout: 20000 })
+}
+
+export async function createCampaign(page: Page, name: string) {
+  await openCampaignBuilder(page)
 
   /*
    * Assert the field actually HOLDS the name before saving.
@@ -386,7 +419,8 @@ export async function untranslatedChrome(page: Page): Promise<string[]> {
         .map((n) => n.textContent ?? '')
         .join(' ')
 
-      const arabic = own.match(/[؀-ۿ]+/g)
+      // «ر.س» is the SAR currency mark, the same in both languages (MONEY-MARKS-001) — not untranslated copy.
+      const arabic = own.replace(/ر\.س/g, '').match(/[؀-ۿ]+/g)
       if (arabic) out.push(arabic.join(' '))
     }
 

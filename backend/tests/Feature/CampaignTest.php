@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -140,6 +141,39 @@ final class CampaignTest extends TestCase
             ->getJson("/api/v1/projects/{$this->projectA->id}/external-campaigns")
             ->assertOk()
             ->assertJsonCount(2, 'data');
+    }
+
+    /**
+     * TIKTOK-CAMPAIGN-STATUS-001 review — a status a person set is theirs. The sync follows the platform's status on an
+     * adopted campaign, and it reverted «paused» / «completed» / «active» set here on the next sweep, with no trace.
+     */
+    public function test_a_status_a_person_set_is_not_reverted_by_the_next_sync(): void
+    {
+        $bindingId = $this->bindSandboxAccount($this->projectA);
+        $this->runSync($this->projectA, $bindingId);
+        $unified = fn (string $ext): string => (string) ExternalCampaign::withoutGlobalScopes()->where('external_id', $ext)->value('unified_campaign_id');
+        $base = "/api/v1/projects/{$this->projectA->id}/campaigns";
+
+        // sbx-cmp-1 is ACTIVE on the platform, sbx-cmp-2 PAUSED.
+        $this->actingAs($this->owner, 'sanctum')->postJson("{$base}/{$unified('sbx-cmp-1')}/pause")->assertOk();
+        $this->actingAs($this->owner, 'sanctum')->postJson("{$base}/{$unified('sbx-cmp-2')}/activate")->assertOk();
+
+        $this->travel(3)->minutes();
+        $this->runSync($this->projectA, $bindingId);
+
+        $first = UnifiedCampaign::withoutGlobalScopes()->findOrFail($unified('sbx-cmp-1'));
+        $this->assertSame('paused', $first->status);
+        $this->assertSame('manual', $first->meta['status_source'] ?? null);
+        $this->assertNotNull($first->meta['status_set_at'] ?? null);
+        $this->assertSame('active', UnifiedCampaign::withoutGlobalScopes()->findOrFail($unified('sbx-cmp-2'))->status);
+
+        // An edit that sets the status is a person's choice too.
+        $this->actingAs($this->owner, 'sanctum')->patchJson("{$base}/{$unified('sbx-cmp-1')}", ['status' => 'completed'])->assertOk();
+        $this->travel(3)->minutes();
+        $this->runSync($this->projectA, $bindingId);
+        $this->travelBack();
+
+        $this->assertSame('completed', UnifiedCampaign::withoutGlobalScopes()->findOrFail($unified('sbx-cmp-1'))->status);
     }
 
     // ---- Linking -------------------------------------------------------------------------------

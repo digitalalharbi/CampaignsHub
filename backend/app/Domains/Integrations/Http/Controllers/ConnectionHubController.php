@@ -12,6 +12,7 @@ use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\OAuth\GrantedScopes;
 use App\Domains\Integrations\Services\ConnectionRemoval;
 use App\Domains\Integrations\Services\IntegrationStatusResolver;
 use App\Domains\Integrations\Status\ConnectionFacts;
@@ -358,6 +359,13 @@ final class ConnectionHubController extends Controller
                 'needs_attention' => $discovered->contains(
                     fn (ExternalAccount $a): bool => $a->last_sync_error_category !== null,
                 ),
+                /*
+                 * SOURCE-FAILURE-REASON-001 — ADDITIVE. Why the newest failing account did not sync, as the sync recorded it (a closed
+                 * category, never a provider sentence): the page puts it in plain words and invents no other cause.
+                 */
+                'last_error_category' => $discovered->first(
+                    fn (ExternalAccount $a): bool => $a->last_sync_error_category !== null,
+                )?->last_sync_error_category,
                 'last_success_at' => $lastSuccess === null ? null : Carbon::parse($lastSuccess)->toIso8601String(),
                 'next_sync_at' => NextScheduledSync::at(
                     $connectionState === IntegrationTruth::CONNECTED && $chosenIds !== [],
@@ -367,6 +375,11 @@ final class ConnectionHubController extends Controller
                 'has_parent' => ProviderHierarchy::hasParent((string) $connection->provider),
                 'discovery_blocked_reason' => $connection->discovery_blocked_reason,
                 'token_expires_at' => $connection->token_expires_at?->toIso8601String(),
+                /*
+                 * LINKEDIN-SCOPES-001 — scopes this product asks for that the recorded grant lacks. Non-empty is a
+                 * reconnect the row must ask for: a token keeps the scopes of its own consent, so nothing else helps.
+                 */
+                'missing_scopes' => GrantedScopes::missing($connection),
                 /*
                  * INTEG-STATUS-MODEL-001 §1.13 — ADDITIVE. Five independent statuses; every field above is unchanged.
                  * `connection_state` / `sync_state` stay the legacy two words; `statuses` is the honest object.

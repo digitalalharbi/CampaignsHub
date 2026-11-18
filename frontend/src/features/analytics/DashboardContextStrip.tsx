@@ -57,7 +57,7 @@ export function DashboardContextStrip() {
     */
     <span data-testid="dashboard-context-strip" className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="flex items-center gap-1.5 text-[11px] font-bold text-text-muted">
-        <Plug size={13} aria-hidden /> {ar ? 'يغذّي هذه الصفحة' : 'Feeding this page'}
+        <Plug size={13} aria-hidden /> {ar ? 'المنصات المربوطة' : 'Feeding this page'}
       </span>
 
       <ul className="flex flex-wrap items-center gap-1.5">
@@ -84,7 +84,7 @@ export function DashboardContextStrip() {
           className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-[var(--warning-background)] px-2.5 py-0.5 text-xs font-bold text-text-primary hover:border-warning"
         >
           <AlertTriangle size={12} aria-hidden />
-          {ar ? 'يحتاج انتباه' : 'Needs attention'} <Num>{attention}</Num>
+          {ar ? 'تنبيهات' : 'Needs attention'} <Num>{attention}</Num>
         </Link>
       )}
     </span>

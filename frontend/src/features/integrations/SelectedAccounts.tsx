@@ -222,7 +222,7 @@ function SelectedAccountItem({ account, ar, onLogs, onBackfill, onManage }: {
   const qc = useQueryClient()
   const projectId = account.assigned_project_id
 
-  const sync = useMutation({
+  const sync = useMutation({ meta: { feedback: 'none' },
     mutationFn: () => syncAccountNow(projectId!, account.id),
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['integration-accounts'] })

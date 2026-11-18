@@ -29,7 +29,10 @@ const WIDTHS = [
 
 /** Route → the testids of blocks that must be at least partly inside the first viewport (desktop). */
 const SURFACES: Array<{ path: string; project?: boolean; projectPath?: boolean; firstScreen: string[] }> = [
-  { path: '/agency/dashboard', firstScreen: ['agency-intro', 'agency-headline', 'agency-attention'] },
+  // AGENCY-FIT-001 — the analytics board is a fitted page of tabs: the title, the four counts, the tab strip and the tab it opens on (what needs attention).
+  { path: '/agency/dashboard', firstScreen: ['agency-intro', 'agency-counts', 'agency-tabs', 'agency-attention'] },
+  // AGENCY-FIT-001 — «كل العملاء» (the four figures and a card per client, NAV-HOME-PLANS-001) is the board's clients tab.
+  { path: '/agency/dashboard?tab=clients', firstScreen: ['agency-intro', 'overview-all-clients'] },
   { path: '/agency/portfolio', firstScreen: ['portfolio-intro-kpis', 'portfolio-trend'] },
   /* Named from the live review (LIVE_ROUTE_CHECKLIST.md, 2026-10-09): the KPI row or summary that
      answers each page's question, and the filter block that scopes it. */
@@ -119,10 +122,8 @@ test.describe('the first viewport, on every operator surface', () => {
             let path = surface.path
             if (surface.project || surface.projectPath) {
               const projectId = await seededProject(request, PROJECT)
-              if (surface.project) {
-                await page.goto('/agency/dashboard')
-                await selectProject(page, projectId)
-              }
+              // NAV-ABORT-001 (see first-viewport-detail.spec.ts) — chosen by init script, no throwaway dashboard first.
+              if (surface.project) await selectProject(page, projectId)
               path = path.replace(':projectId', projectId)
             }
             await page.goto(path)

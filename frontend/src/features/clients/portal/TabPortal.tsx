@@ -16,7 +16,7 @@ import { useUi } from '@/stores/ui'
  * (grant an existing account or invite a new address, with a role and, if wanted, a project ceiling).
  * The server enforces every one of these; this screen only edits them.
  */
-const VISIBILITY = ['dashboard', 'projects', 'campaigns', 'content', 'reports', 'recommendations', 'spend', 'revenue', 'platform_evidence', 'requests', 'invoices', 'messages', 'files', 'campaign_names', 'ad_account_names'] as const
+const VISIBILITY = ['dashboard', 'projects', 'campaigns', 'content', 'reports', 'recommendations', 'spend', 'revenue', 'platform_evidence', 'requests', 'invoices', 'messages', 'files', 'campaign_names', 'ad_account_names', 'audience'] as const
 
 /** Powers an agency may hand to a client. The rest (integrations, writes, pause, budget, notes, margin, identifiers) are not offered. */
 const GRANTABLE = ['create_requests', 'approve_content', 'team_admin'] as const
@@ -29,7 +29,7 @@ const COPY = {
     save: 'حفظ', saved: 'تم الحفظ', none: 'لا أحد بعد.', granted: 'مُنح الوصول لحساب موجود.', invited: 'أُرسلت الدعوة.',
     roles: { client_viewer: 'مطّلع', client_approver: 'معتمِد', client_admin: 'مسؤول العميل' } as Record<string, string>,
     states: { active: 'نشط', invited: 'مدعو' } as Record<string, string>,
-    v: { dashboard: 'لوحة الأداء', projects: 'المشاريع', campaigns: 'الحملات', content: 'المحتوى', reports: 'التقارير', recommendations: 'التوصيات المعتمدة', spend: 'الإنفاق', revenue: 'الإيرادات', platform_evidence: 'لقطات المنصات', requests: 'الطلبات', invoices: 'الفواتير', messages: 'الرسائل', files: 'الملفات', campaign_names: 'أسماء الحملات', ad_account_names: 'أسماء الحسابات الإعلانية' } as Record<string, string>,
+    v: { dashboard: 'لوحة الأداء', projects: 'المشاريع', campaigns: 'الحملات', content: 'المحتوى', reports: 'التقارير', recommendations: 'التوصيات المعتمدة', spend: 'الإنفاق', revenue: 'الإيرادات', platform_evidence: 'لقطات المنصات', requests: 'الطلبات', invoices: 'الفواتير', messages: 'الرسائل', files: 'الملفات', campaign_names: 'أسماء الحملات', ad_account_names: 'أسماء الحسابات الإعلانية', audience: 'الجمهور (ضمن الأداء)' } as Record<string, string>,
     c: { create_requests: 'فتح طلبات جديدة', approve_content: 'اعتماد المحتوى', team_admin: 'إدارة من يدخل البوابة' } as Record<string, string>,
     revoke: 'إزالة',
   },
@@ -40,7 +40,7 @@ const COPY = {
     save: 'Save', saved: 'Saved', none: 'Nobody yet.', granted: 'Access granted to an existing account.', invited: 'Invitation sent.',
     roles: { client_viewer: 'Viewer', client_approver: 'Approver', client_admin: 'Client admin' } as Record<string, string>,
     states: { active: 'Active', invited: 'Invited' } as Record<string, string>,
-    v: { dashboard: 'Performance dashboard', projects: 'Projects', campaigns: 'Campaigns', content: 'Content', reports: 'Reports', recommendations: 'Approved recommendations', spend: 'Spend', revenue: 'Revenue', platform_evidence: 'Platform screenshots', requests: 'Requests', invoices: 'Invoices', messages: 'Messages', files: 'Files', campaign_names: 'Campaign names', ad_account_names: 'Ad account names' } as Record<string, string>,
+    v: { dashboard: 'Performance dashboard', projects: 'Projects', campaigns: 'Campaigns', content: 'Content', reports: 'Reports', recommendations: 'Approved recommendations', spend: 'Spend', revenue: 'Revenue', platform_evidence: 'Platform screenshots', requests: 'Requests', invoices: 'Invoices', messages: 'Messages', files: 'Files', campaign_names: 'Campaign names', ad_account_names: 'Ad account names', audience: 'Audience (under performance)' } as Record<string, string>,
     c: { create_requests: 'Open new requests', approve_content: 'Approve content', team_admin: 'Manage who can open the portal' } as Record<string, string>,
     revoke: 'Remove',
   },

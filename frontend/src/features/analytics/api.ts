@@ -1,5 +1,7 @@
+import type { FxCoverage, SpendReading } from '@/lib/money/fx'
+import type { ObjectivePathsBlock } from './ObjectivePathCards'
 import type { BudgetExplanationPayload } from './BudgetReading'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'
 import { getEnvelope, getData, putData } from '@/lib/api/client'
 import type { FilterScope } from './filterScope'
 
@@ -121,6 +123,10 @@ export interface MoneyProvenance {
 export interface Summary {
   current: MetricTotals
   previous: MetricTotals
+  /** FX-APPLY-001 — what these totals were converted from («يشمل عملات محوّلة»), stale rates and withheld rows. */
+  fx?: FxCoverage
+  /** PROJECT-LIFECYCLE-001 §7 — the project's spend from the ONE shared aggregation (null under a platform/campaign filter). */
+  spend_reading?: SpendReading | null
   delta: Partial<Record<keyof MetricTotals, number | null>>
   /**
    * UX-METRICS-001 — which of `current`'s zeros are measurements.
@@ -944,6 +950,25 @@ export const useDrivers = (
 export const useSummary = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Summary>('summary', p, r, 'summary', f)
 export const useTimeseries = (p: string | null, r: Range, f?: MetricFilters) => useMetric<TimePoint[]>('timeseries', p, r, 'timeseries', f)
 export const usePlatforms = (p: string | null, r: Range, f?: MetricFilters) => useMetric<PlatformRow[]>('platforms', p, r, 'platforms', f)
+
+/**
+ * ANALYTICS-DAILY-MEASURE-001 — one daily line per platform, for the stacked «القياس اليومي» chart. The same
+ * timeseries endpoint and the same cache key `useTimeseries` writes, narrowed to one platform each, so a platform's
+ * line here and its line anywhere else are one request.
+ */
+export function usePlatformTimeseries(p: string | null, r: Range, providers: string[], f?: MetricFilters) {
+  return useQueries({
+    queries: providers.map((provider) => {
+      const narrowed: MetricFilters = { ...f, provider: [provider] }
+
+      return {
+        queryKey: ['metrics', 'timeseries', p, r.from, r.to, ...filterKeyParts(narrowed)],
+        queryFn: () => getData<TimePoint[]>(`${base(p!)}/timeseries?${q(r)}${qf(narrowed)}`),
+        enabled: Boolean(p),
+      }
+    }),
+  })
+}
 export interface AccountRow extends MetricTotals {
   account_id: string | null
   provider: string
@@ -1224,6 +1249,10 @@ export interface PathTrend {
  */
 export const useObjectiveTrend = (p: string | null, r: Range, f?: MetricFilters) =>
   useScopedMetric<{ paths: PathTrend[] }>('objective-trend', p, r, 'objective-trend', f)
+
+/** OBJECTIVE-PATHS-001 — one total spend, its split by objective path, one card per objective. */
+export const useObjectivePaths = (p: string | null, r: Range, f?: MetricFilters) =>
+  useScopedMetric<ObjectivePathsBlock>('objective-paths', p, r, 'objective-paths', f)
 
 export const useObjectiveExplanations = (p: string | null, r: Range, f?: MetricFilters) =>
   useScopedMetric<{ paths: PathExplanation[] }>('objective-explanations', p, r, 'objective-explanations', f)

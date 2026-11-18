@@ -11,8 +11,10 @@ use App\Domains\Legal\Models\SupportTicket;
 use App\Domains\Legal\Services\ConnectionRevocations;
 use App\Domains\Legal\Services\DeletionBlockers;
 use App\Domains\Legal\Services\DeletionVerification;
+use App\Domains\Legal\Services\PlatformInboxReplies;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -31,11 +33,104 @@ use Illuminate\Validation\Rule;
  */
 final class LegalInboxController extends Controller
 {
+    /** Everything not yet concluded — the number that matters against a statutory clock. */
+    private const DATA_OUTSTANDING = ['pending', 'verifying', 'in_review', 'blocked'];
+
     public function __construct(
         private readonly DeletionBlockers $blockers,
         private readonly DeletionVerification $verification,
         private readonly ConnectionRevocations $revocations,
+        private readonly PlatformInboxReplies $replies,
     ) {}
+
+    /**
+     * GET /admin/inbox/summary — PLATFORM-INBOX-ATTENTION-001: the three queues' counters in one answer.
+     *
+     * `unread` is a row no administrator has opened (`read_at` is null); the second figure is each queue's own
+     * «still needs something» — new enquiries, open tickets, data requests not yet concluded.
+     */
+    public function summary(): JsonResponse
+    {
+        $contact = ['unread' => ContactMessage::query()->whereNull('read_at')->count(), 'open' => ContactMessage::query()->where('status', 'new')->count()];
+        $support = ['unread' => SupportTicket::query()->whereNull('read_at')->count(), 'open' => SupportTicket::query()->whereIn('status', ['open', 'in_progress'])->count()];
+        $data = ['unread' => DataRequest::query()->whereNull('read_at')->count(), 'open' => DataRequest::query()->whereIn('status', self::DATA_OUTSTANDING)->count()];
+
+        return ApiResponse::success([
+            'contact' => $contact,
+            'support' => $support,
+            'data' => $data,
+            'unread' => $contact['unread'] + $support['unread'] + $data['unread'],
+        ], 'Platform inbox.');
+    }
+
+    /** GET /admin/legal/contact-messages/{message} — opens it, which marks it read. */
+    public function showContactMessage(Request $request, ContactMessage $message): JsonResponse
+    {
+        $this->markRead($message, $request);
+        if ($message->status === 'new') {
+            $message->forceFill(['status' => 'read'])->save();
+        }
+
+        return ApiResponse::success([
+            'message' => $message->fresh(),
+            'replies' => $this->replies->thread('contact_message', (string) $message->getKey()),
+        ], 'Contact message.');
+    }
+
+    /** GET /admin/legal/support-tickets/{ticket} */
+    public function showSupportTicket(Request $request, SupportTicket $ticket): JsonResponse
+    {
+        $this->markRead($ticket, $request);
+
+        return ApiResponse::success([
+            'ticket' => $ticket->fresh(),
+            'replies' => $this->replies->thread('support_ticket', (string) $ticket->getKey()),
+        ], 'Support ticket.');
+    }
+
+    /** GET /admin/legal/data-requests/{dataRequest} */
+    public function showDataRequest(Request $request, DataRequest $dataRequest): JsonResponse
+    {
+        $this->markRead($dataRequest, $request);
+
+        return ApiResponse::success(['request' => $dataRequest->fresh()], 'Data request.');
+    }
+
+    /** POST /admin/legal/contact-messages/{message}/reply — by email, to the address the visitor gave. */
+    public function replyContactMessage(Request $request, ContactMessage $message): JsonResponse
+    {
+        $data = $request->validate(['body' => ['required', 'string', 'min:2', 'max:5000']]);
+        $reply = $this->replies->reply($message, $request->user(), $data['body']);
+
+        return ApiResponse::success([
+            'reply' => ['id' => $reply->id, 'delivery_status' => $reply->delivery_status],
+            'message' => $message->fresh(),
+            'replies' => $this->replies->thread('contact_message', (string) $message->getKey()),
+        ], 'Reply recorded.');
+    }
+
+    /** POST /admin/legal/support-tickets/{ticket}/reply */
+    public function replySupportTicket(Request $request, SupportTicket $ticket): JsonResponse
+    {
+        $data = $request->validate(['body' => ['required', 'string', 'min:2', 'max:5000']]);
+        $reply = $this->replies->reply($ticket, $request->user(), $data['body']);
+
+        return ApiResponse::success([
+            'reply' => ['id' => $reply->id, 'delivery_status' => $reply->delivery_status],
+            'ticket' => $ticket->fresh(),
+            'replies' => $this->replies->thread('support_ticket', (string) $ticket->getKey()),
+        ], 'Reply recorded.');
+    }
+
+    /** The first administrator to open a row is recorded; opening it again changes nothing. */
+    private function markRead(Model $row, Request $request): void
+    {
+        if ($row->getAttribute('read_at') === null) {
+            // Conditional, so two administrators opening it at once leave the first one on the record.
+            $row->newQuery()->whereKey($row->getKey())->whereNull('read_at')
+                ->update(['read_at' => now(), 'read_by' => $request->user()?->id]);
+        }
+    }
 
     public function contactMessages(Request $request): JsonResponse
     {
@@ -49,6 +144,7 @@ final class LegalInboxController extends Controller
             'total' => $rows->total(),
             // The count that decides whether anyone needs to open this screen today.
             'unhandled' => ContactMessage::query()->where('status', 'new')->count(),
+            'unread' => ContactMessage::query()->whereNull('read_at')->count(),
         ], 'Contact messages.');
     }
 
@@ -79,6 +175,7 @@ final class LegalInboxController extends Controller
             'tickets' => $rows->items(),
             'total' => $rows->total(),
             'open' => SupportTicket::query()->whereIn('status', ['open', 'in_progress'])->count(),
+            'unread' => SupportTicket::query()->whereNull('read_at')->count(),
         ], 'Support tickets.');
     }
 
@@ -110,8 +207,8 @@ final class LegalInboxController extends Controller
             'requests' => $rows->items(),
             'total' => $rows->total(),
             // Everything not yet concluded — the number that matters against a statutory clock.
-            'outstanding' => DataRequest::query()
-                ->whereIn('status', ['pending', 'verifying', 'in_review', 'blocked'])->count(),
+            'outstanding' => DataRequest::query()->whereIn('status', self::DATA_OUTSTANDING)->count(),
+            'unread' => DataRequest::query()->whereNull('read_at')->count(),
         ], 'Data requests.');
     }
 

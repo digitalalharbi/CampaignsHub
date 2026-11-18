@@ -206,20 +206,20 @@ function PlatformCards({ payload, ar, source, selected, onSelect }: { payload: L
         // A flex column: a button centres shorter content vertically, which pushed a card's colour bar down from its top edge.
         className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-surface text-start transition-colors ${on ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-border hover:border-brand-400'}`}
       >
-        <span className="block h-1.5 w-full shrink-0" data-testid="exec-platform-card-bar" style={{ background: color }} aria-hidden />
-        <span className="flex w-full flex-1 flex-col gap-1 p-3">
+        <span className="block h-1 w-full shrink-0" data-testid="exec-platform-card-bar" style={{ background: color }} aria-hidden />
+        <span className="flex w-full flex-1 flex-col gap-0.5 p-2.5">
           {/* The platform's logo and name (Owner, 2026-10-19); «all platforms» is a word, not a platform. */}
-          <span className="flex min-w-0 text-sm font-bold text-text-primary">
-            {key === null ? <span className="truncate">{title}</span> : <ProviderName provider={key} locale={ar ? 'ar' : 'en'} size={20} />}
+          <span className="flex min-w-0 text-xs font-bold text-text-primary">
+            {key === null ? <span className="truncate">{title}</span> : <ProviderName provider={key} locale={ar ? 'ar' : 'en'} size={16} />}
           </span>
-          <span className="tnum truncate text-xl font-extrabold text-text-primary"><Num>{num(value)}</Num></span>
+          <span className="tnum truncate text-lg font-extrabold leading-tight text-text-primary"><Num>{num(value)}</Num></span>
           <span className="truncate text-[11px] font-semibold text-text-muted">{resultName}</span>
-          <span className="tnum mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-text-secondary">
+          <span className="tnum mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-text-secondary">
             {impressions !== null && <span>{ar ? 'الظهور' : 'Impr.'} <Num>{num(impressions)}</Num></span>}
             {rate !== null && <span>{ar ? 'نسبة النقر' : 'CTR'} <Num>{rate}</Num></span>}
           </span>
           {share !== null && (
-            <span className="mt-auto block h-1.5 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? `الحصة من ${resultName}` : `Share of ${resultName}`}>
+            <span className="mt-auto block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? `الحصة من ${resultName}` : `Share of ${resultName}`}>
               <span className="block h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, background: color }} />
             </span>
           )}
@@ -241,8 +241,9 @@ function PlatformCards({ payload, ar, source, selected, onSelect }: { payload: L
       <div
         role="tablist"
         data-cards={cards}
-        className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(var(--cards-md),minmax(0,1fr))] xl:grid-cols-[repeat(var(--cards),minmax(0,1fr))]"
-        style={{ '--cards': Math.min(cards, 6), '--cards-md': cards <= 4 ? cards : 3 } as React.CSSProperties}
+        // REPORT-COMPACT-001 — Owner 2026-11-17: one compact row of platforms from a laptop width up, three on a tablet, two on a phone.
+        className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-[repeat(var(--cards),minmax(0,1fr))]"
+        style={{ '--cards': Math.min(cards, 6) } as React.CSSProperties}
       >
         {rows.length > 1 && card(null, ar ? 'كل المنصات' : 'All platforms', source.total, count(payload.totals?.impressions), ctr(payload.totals ?? {}), total > 0 ? 1 : null, 'var(--brand-600)')}
         {rows.map((p) => {
@@ -273,6 +274,9 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
     // NASEL 2026-10-29 — no revenue reported anywhere (a lead purchase carries value 0): no revenue and no ROAS card.
     .filter((k) => revenueReported(payload) || (k !== 'revenue' && k !== 'roas'))
   const keys = [...selected, ...extras].slice(0, 8)
+  /* REPORT-COMPACT-001 — the small cards fill their row: the delivery rates (CPM, CPC, CTR, frequency) join them when the period has them. */
+  // A link whose operator chose its metrics shows ONLY those: an unchosen rate (and never a cost-per-click standing in for a hidden result) stays off.
+  const fill = ['ctr', 'cpm', 'cpc', 'frequency'].filter((k) => !keys.includes(k) && (chosenInSetup ? payload.metrics?.includes(k) === true : !SPEND_DERIVED.has(k)))
   const card = (key: string) => {
     const meta = reader.meta[key]
     if (!meta) return null
@@ -291,9 +295,9 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
     if (!cardHasFigure(key, read.text, payload)) return null
 
     return (
-      <div key={key} className="min-w-0" data-testid={`exec-kpi-compact-${key}`}>
-        <dt className="text-[11px] text-text-muted">{metricLabel(meta, key, payload, ar)}</dt>
-        <dd className="tnum text-sm font-bold text-text-primary" title={read.exact ?? undefined}><Num>{read.text}</Num></dd>
+      <div key={key} className="min-w-0 rounded-xl border border-border bg-surface px-3 py-2" data-testid={`exec-kpi-compact-${key}`}>
+        <dt className="truncate text-[11px] text-text-muted">{metricLabel(meta, key, payload, ar)}</dt>
+        <dd className="tnum truncate text-base font-extrabold text-text-primary" title={read.exact ?? undefined}><Num>{read.text}</Num></dd>
       </div>
     )
   }
@@ -307,8 +311,9 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
         figure, never a second row of equally large cards («never eight to ten equal cards»).
       */}
       {keys.length > 4 && (
-        <dl className="flex flex-wrap gap-x-5 gap-y-2 rounded-xl border border-border bg-surface px-3 py-2" data-testid="exec-kpis-secondary">
-          {keys.slice(4).map(compact)}
+        /* REPORT-COMPACT-001 — Owner 2026-11-17: «بطاقات صغيرة جنب الكبيرة» — the rest are small cards, not a line of text. */
+        <dl className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2" data-testid="exec-kpis-secondary">
+          {[...keys.slice(4), ...fill].slice(0, 8).map(compact)}
         </dl>
       )}
     </div>
@@ -586,6 +591,11 @@ function FunnelPanel({ payload, ar, narrow = false, wide = false }: { payload: L
  * needs no line: the order is the report's own objective.
  */
 export function basisLine(basis: LivePayload['ads_basis'], ar: boolean): string | null {
+  // The objective's result was not reported: say that, plainly, instead of naming a family the order does not rest on.
+  if (basis?.fallback && basis.metric) {
+    const note = ar ? basis.note_ar : basis.note_en
+    if (note) return note
+  }
   if (!basis || !basis.metric || !basis.family) return null
   const family = (ar ? basis.family_label_ar : basis.family_label_en) ?? basis.family
   return ar ? `مرتّبة على أداء ${family}` : `Ranked by ${family.toLowerCase()} performance`
@@ -638,7 +648,7 @@ function ContentBlock({ kind, half = false, payload, locale, currency, platform,
       ) : (
         <div className={`grid grid-cols-2 gap-3 ${half ? 'lg:grid-cols-2' : 'lg:grid-cols-4'}`}>
           {items.map((ad, i) => (
-            <ContentTile key={ad.content_key ?? `${ad.provider}-${i}`} content={ad} locale={locale} currency={currency || null} onOpen={onOpen} rank={kind === 'best' ? i + 1 : undefined} resultsOnly />
+            <ContentTile key={ad.content_key ?? `${ad.provider}-${i}`} content={ad} locale={locale} currency={currency || null} onOpen={onOpen} rank={kind === 'best' ? i + 1 : undefined} resultsOnly rankedBy={kind === 'best' ? payload.ads_basis : undefined} />
           ))}
         </div>
       )}

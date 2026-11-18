@@ -38,7 +38,22 @@ describe('ClientCampaignsPage', () => {
     // Objective + delivery-only metric labels are shown (client-safe shape carries no spend/ROAS/CPA figures).
     expect(screen.getAllByText('Traffic').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Impressions').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Results').length).toBeGreaterThan(0)
+    // OBJECTIVE-RESULT-001 — a payload without a result says what the number is: the platform's conversions.
+    expect(screen.getAllByText('Platform conversions').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Results')).not.toBeInTheDocument()
+  })
+
+  /** OBJECTIVE-RESULT-001 — the client sees a traffic campaign's visits, named, not «0 results». */
+  it('shows the campaign’s own result in its unit when the server sends one', async () => {
+    vi.mocked(listClientCampaigns).mockResolvedValue(page([{
+      ...campaign,
+      metrics: { ...campaign.metrics, conversions: 0, result_key: 'landing_page_views', result: 2881, result_label: { ar: 'زيارات الصفحة', en: 'Landing page views' } },
+    }]))
+    renderWithProviders(<ClientCampaignsPage />, { locale: 'en' })
+
+    expect(await screen.findByText('Landing page views')).toBeInTheDocument()
+    expect(screen.getByText('2,881')).toBeInTheDocument()
+    expect(screen.queryByText('Platform conversions')).not.toBeInTheDocument()
   })
 
   /**

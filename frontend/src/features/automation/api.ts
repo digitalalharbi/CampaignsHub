@@ -59,7 +59,18 @@ export interface Targets {
 
 export interface RuleRun { id: string; trigger: string; dry_run: boolean; status: string; evaluated: number; matched: number; acted: number; skipped: number; failed: number; error: string | null; started_at: string | null; finished_at: string | null }
 
-export interface DryRunResult { provider: string; name: string | null; external_id: string; level: string; matched: boolean; status: string; metrics: Record<string, number | string | null>; before: Record<string, unknown> | null; after: Record<string, unknown> | null }
+export interface DryRunResult { provider: string; name: string | null; external_id: string; level: string; matched: boolean; status: string; metrics: Record<string, number | string | null>; before: Record<string, unknown> | null; after: Record<string, unknown> | null
+  /** CONS-I-DRYRUN — each indicator by its Arabic name, the value in the display currency, and why there is none. Absent from an older server. */
+  readings?: DryRunReading[]
+  /** The exact «بيانات غير كافية» reason, when the object was not judged. */
+  reason?: { code: string; ar: string } | null
+}
+
+export interface DryRunReading {
+  metric: string; window_days: number; name_ar: string; name_en: string; kind: string
+  value: number | string | null; currency: string | null; text_ar: string
+  reason_code: string | null; reason_ar: string | null
+}
 
 export interface RuleActionRow {
   id: string; rule_id: string; rule: string | null; provider: string; level: string; target: string; external_id: string; action: string

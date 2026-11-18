@@ -15,10 +15,13 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Fx\FxDisplay;
+use App\Domains\Metrics\Services\SourceCurrency;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 /**
  * CAMPDET-010 — the ad-set and ad hierarchy beneath a unified campaign.
@@ -72,6 +75,20 @@ final class CampaignStructureController extends Controller
                 ->orderBy('name')
                 ->get();
 
+        /*
+         * FX-APPLY-001 — an ad set's budget is in its OWN currency: the row's, else its ad account's (Google states none on
+         * the ad set). The screen guessed «SAR» when the row was empty; now the currency is resolved here and the figure is
+         * also sent converted to the reader's display currency through FxEngine.
+         */
+        $accountCurrency = ExternalAccount::query()->whereIn('id', $externalCampaigns->pluck('external_account_id')->unique()->all())
+            ->pluck('currency', 'id')->all();
+        $campaignAccount = $externalCampaigns->pluck('external_account_id', 'id')->all();
+        $fx = FxDisplay::forRequest();
+        $display = $fx->currencyFor($model->tenant_id === null ? null : (string) $model->tenant_id);
+        $ownCurrency = static function (ExternalAdSet $s) use ($accountCurrency, $campaignAccount): ?string {
+            return SourceCurrency::clean($s->currency) ?? SourceCurrency::clean($accountCurrency[$campaignAccount[$s->external_campaign_id] ?? ''] ?? null);
+        };
+
         $providers = $externalCampaigns->pluck('provider')->unique();
         $awaiting = $providers->reject(fn (string $provider) => $this->settings->isConfigured($provider))->values();
 
@@ -90,6 +107,9 @@ final class CampaignStructureController extends Controller
                 'daily_budget' => $s->daily_budget !== null ? (float) $s->daily_budget : null,
                 'lifetime_budget' => $s->lifetime_budget !== null ? (float) $s->lifetime_budget : null,
                 'currency' => $s->currency,
+                'budget_currency' => $ownCurrency($s),
+                'daily_budget_fx' => $s->daily_budget === null ? null : $fx->one((float) $s->daily_budget, $ownCurrency($s), Carbon::today(), $display, 'campaign.structure.ad_set'),
+                'lifetime_budget_fx' => $s->lifetime_budget === null ? null : $fx->one((float) $s->lifetime_budget, $ownCurrency($s), Carbon::today(), $display, 'campaign.structure.ad_set'),
                 'targeting' => $s->targeting,
                 'is_demo' => (bool) $s->is_demo,
                 'source_type' => $s->source_type,

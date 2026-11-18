@@ -53,7 +53,7 @@ final class AgencyOverviewTest extends TestCase
         ]);
     }
 
-    private function campaign(ClientWorkspace $client): UnifiedCampaign
+    private function campaign(ClientWorkspace $client, string $objective = 'sales'): UnifiedCampaign
     {
         $project = Project::create([
             'tenant_id' => $this->agency->id, 'client_workspace_id' => $client->id,
@@ -62,7 +62,7 @@ final class AgencyOverviewTest extends TestCase
 
         return UnifiedCampaign::create([
             'tenant_id' => $this->agency->id, 'client_workspace_id' => $client->id,
-            'project_id' => $project->id, 'name' => 'C '.uniqid(), 'objective' => 'sales', 'status' => 'active',
+            'project_id' => $project->id, 'name' => 'C '.uniqid(), 'objective' => $objective, 'status' => 'active',
         ]);
     }
 
@@ -77,6 +77,17 @@ final class AgencyOverviewTest extends TestCase
         app(UpsertDailyMetrics::class)->handle([
             $m('impressions', 1000), $m('clicks', 50), $m('conversions', $conversions), $m('spend', $spend), $m('revenue', $spend * 3),
         ]);
+    }
+
+    /** @param array<string, float> $figures metric key => value for one day */
+    private function figures(UnifiedCampaign $campaign, string $provider, string $date, array $figures): void
+    {
+        $uid = fn (string $s) => (string) Uuid::uuid5(Uuid::NAMESPACE_DNS, $s.$campaign->id.$provider);
+        app(UpsertDailyMetrics::class)->handle(array_map(fn (string $k, float $v) => new NormalizedMetric(
+            tenantId: $this->agency->id, projectId: $campaign->project_id, externalAccountId: $uid('acc'),
+            externalCampaignId: $uid('camp'), provider: $provider, metricKey: $k, metricDate: Carbon::parse($date),
+            value: $v, unifiedCampaignId: $campaign->id, projectCurrency: 'SAR',
+        ), array_keys($figures), array_values($figures)));
     }
 
     /** @param  list<string>  $permissions */
@@ -120,6 +131,27 @@ final class AgencyOverviewTest extends TestCase
             ->assertJsonPath('data.previous_period.to', '2026-05-31')
             ->assertJsonCount(2, 'data.by_provider')
             ->assertJsonCount(2, 'data.timeseries');
+    }
+
+    /** DATE-RANGE-001 — a comparison the reader chose (here: the same dates a year earlier) is what «previous» means. */
+    public function test_a_chosen_comparison_replaces_the_default_previous_window(): void
+    {
+        $a = $this->campaign($this->client('Alpha'));
+        $this->spend($a, 'meta', '2026-06-10', 1000, 10);
+        $this->spend($a, 'meta', '2025-06-10', 300, 3);   // same dates, a year earlier
+        $this->spend($a, 'meta', '2026-05-20', 200, 2);   // the default previous window
+
+        $user = $this->operator('cmp@test.dev', ['clients.view', ClientScopeResolver::ALL_CLIENTS]);
+
+        $this->actingAs($user, 'sanctum')->getJson($this->url().'&compare_from=2025-06-01&compare_to=2025-06-30')
+            ->assertOk()
+            ->assertJsonPath('data.previous.spend', 300)
+            ->assertJsonPath('data.previous_period.from', '2025-06-01')
+            ->assertJsonPath('data.previous_period.to', '2025-06-30');
+
+        // A malformed comparison is ignored, not obeyed: the default window stands.
+        $this->actingAs($user, 'sanctum')->getJson($this->url().'&compare_from=nope&compare_to=2025-06-30')
+            ->assertOk()->assertJsonPath('data.previous.spend', 200);
     }
 
     /** The money narrows with the scope — the same ceiling the counts use, not a wider one. */
@@ -173,5 +205,50 @@ final class AgencyOverviewTest extends TestCase
         $user = $this->operator('noperm@test.dev', ['campaigns.view']);
 
         $this->actingAs($user, 'sanctum')->getJson($this->url())->assertForbidden();
+    }
+
+    /**
+     * DASH-KPI-OBJECTIVE-001 — views, clicks, leads and orders are different things: the dashboard states each
+     * family's result and its own cost per result, and never a cost per result across them.
+     */
+    public function test_results_and_cost_per_result_are_split_by_objective_never_blended(): void
+    {
+        $client = $this->client('Mixed');
+        $sales = $this->campaign($client, 'sales');
+        $leads = $this->campaign($client, 'leads');
+        $traffic = $this->campaign($client, 'traffic');
+        $this->figures($sales, 'meta', '2026-06-10', ['spend' => 1000, 'conversions' => 10, 'revenue' => 4000, 'impressions' => 90000, 'clicks' => 900]);
+        $this->figures($leads, 'meta', '2026-06-10', ['spend' => 400, 'leads' => 20, 'impressions' => 40000, 'clicks' => 400]);
+        $this->figures($traffic, 'tiktok', '2026-06-10', ['spend' => 100, 'clicks' => 50, 'impressions' => 80000]);
+
+        $user = $this->operator('obj@test.dev', ['clients.view', ClientScopeResolver::ALL_CLIENTS]);
+        $by = collect($this->actingAs($user, 'sanctum')->getJson($this->url())->assertOk()->json('data.by_objective'))->keyBy('family');
+
+        $this->assertSame(10.0, (float) $by['sales']['result']);
+        $this->assertSame(100.0, (float) $by['sales']['cost_per_result']);   // 1000 / 10 orders — not 1500 / 80
+        $this->assertSame(20.0, (float) $by['leads']['result']);
+        $this->assertSame(20.0, (float) $by['leads']['cost_per_result']);    // 400 / 20 leads
+        $this->assertSame(50.0, (float) $by['traffic']['result']);
+        $this->assertSame(2.0, (float) $by['traffic']['cost_per_result']);   // 100 / 50 clicks
+        $this->assertSame('clicks', $by['traffic']['result_key']);
+    }
+
+    public function test_roas_covers_only_sales_campaigns_with_revenue_and_says_how_many_entered(): void
+    {
+        $client = $this->client('Roas');
+        $a = $this->campaign($client, 'sales');
+        $b = $this->campaign($client, 'sales');   // spends, reports no revenue: not in ROAS
+        $leads = $this->campaign($client, 'leads');
+        $this->figures($a, 'meta', '2026-06-10', ['spend' => 1000, 'conversions' => 10, 'revenue' => 4000]);
+        $this->figures($b, 'meta', '2026-06-10', ['spend' => 500, 'conversions' => 2]);
+        $this->figures($leads, 'meta', '2026-06-10', ['spend' => 300, 'leads' => 6, 'revenue' => 9999]);
+
+        $user = $this->operator('roas@test.dev', ['clients.view', ClientScopeResolver::ALL_CLIENTS]);
+        $by = collect($this->actingAs($user, 'sanctum')->getJson($this->url())->assertOk()->json('data.by_objective'))->keyBy('family');
+
+        $this->assertSame(4.0, (float) $by['sales']['roas']);   // 4000 / 1000: the leads revenue and the revenue-less campaign are out
+        $this->assertSame(1, $by['sales']['roas_campaigns']);
+        $this->assertSame(2, $by['sales']['sales_campaigns']);
+        $this->assertNull($by['leads']['roas']);
     }
 }

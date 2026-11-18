@@ -197,7 +197,17 @@ final class SnapchatCreativeMetricsTest extends TestCase
 
         $this->assertInstanceOf(ReportsCreativeInsights::class, $registry->get('snapchat'));
 
-        foreach (['google_ads', 'linkedin'] as $provider) {
+        /*
+         * X-LINKEDIN-CONTENT-001 — LinkedIn and X moved across this line on evidence, not by relaxing it. A LinkedIn creative IS
+         * the ad (`fetchAds` now writes one for every creative, sponsored posts included) and `adAnalytics` answers `pivot=CREATIVE`
+         * under the same `r_ads_reporting` grant; X answers stats for `entity=PROMOTED_TWEET`, summed per tweet. Without the
+         * capability neither platform's content ever had a figure, and the report dropped all of it. Google still sends no creative.
+         */
+        foreach (['x', 'linkedin'] as $provider) {
+            $this->assertInstanceOf(ReportsCreativeInsights::class, $registry->get($provider), "{$provider} reports per creative");
+        }
+
+        foreach (['google_ads'] as $provider) {
             $this->assertNotInstanceOf(
                 ReportsCreativeInsights::class,
                 $registry->get($provider),

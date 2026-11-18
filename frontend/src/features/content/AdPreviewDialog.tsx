@@ -438,7 +438,7 @@ export function AdPreviewDialog({
             {objectiveLabel !== null && <Fact label={ar ? 'الهدف' : 'Objective'} value={objectiveLabel} />}
             {/* An id is a poor label and the honest one — it is what a reader pastes into the platform. */}
             {creative.ad_set_id && (
-              <Fact label={ar ? 'المجموعة الإعلانية' : 'Ad set'} value={creative.ad_set_id} />
+              <Fact label={ar ? 'المجموعة' : 'Ad group'} value={creative.ad_set_id} />
             )}
             {/*
               `?? []` because the type says this is always an array and the payloads disagree. The

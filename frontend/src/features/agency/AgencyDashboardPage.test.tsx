@@ -61,7 +61,7 @@ describe('AgencyDashboardPage', () => {
         requests: { open: 0, awaiting_client: 0 },
       }),
     )
-    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard', locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=mix', locale: 'en' })
 
     await waitFor(() => expect(screen.getByText('Campaigns by objective')).toBeInTheDocument())
     expect(screen.getByText('No campaigns within your scope yet.')).toBeInTheDocument()
@@ -78,25 +78,29 @@ describe('AgencyDashboardPage', () => {
    * above the answer without this failing.
    */
   it('answers «what needs attention» before it draws the charts', async () => {
+    // AGENCY-FIT-001: the page is tabs now, so «before» is the tab order and the tab it opens on. The answer is the FIRST
+    // tab and is selected on arrival; the client-mix and objective charts are in tabs that come after it, not on the screen.
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(payload())
     renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard', locale: 'en' })
-    await waitFor(() => expect(screen.getByTestId('agency-objective-chart')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('agency-attention')).toBeInTheDocument())
 
     const precedes = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
-    const attention = screen.getByTestId('agency-attention')
-    const mix = screen.getByTestId('client-mix-bar')
-    const chart = screen.getByTestId('agency-objective-chart')
-
-    expect(precedes(screen.getByTestId('agency-intro'), attention), 'the context must still open the page').toBe(true)
-    expect(precedes(attention, mix), 'the client-mix chart is drawn before the attention block').toBe(true)
-    expect(precedes(attention, chart), 'the objective chart is drawn before the attention block').toBe(true)
+    const tabs = screen.getByTestId('agency-tabs')
+    const attentionTab = screen.getByTestId('agency-tabs-attention')
+    expect(attentionTab).toHaveAttribute('aria-selected', 'true')
+    expect(tabs.querySelector('[role="tab"]')).toBe(attentionTab)
+    expect(precedes(attentionTab, screen.getByTestId('agency-tabs-mix')), 'the charts tab comes before the attention tab').toBe(true)
+    expect(precedes(screen.getByTestId('agency-intro'), screen.getByTestId('agency-attention')), 'the context must still open the page').toBe(true)
+    // …and the charts are not drawn above it: they are not on this tab at all.
+    expect(screen.queryByTestId('client-mix-bar')).toBeNull()
+    expect(screen.queryByTestId('agency-objective-chart')).toBeNull()
   })
 
   it('breaks campaigns down by objective, largest first', async () => {
     vi.mocked(fetchAgencyDashboard).mockResolvedValue(
       payload({ campaigns: { total: 6, active: 6, paused: 0, by_objective: { awareness: 1, sales: 5 } } }),
     )
-    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard', locale: 'en' })
+    renderWithProviders(<AgencyDashboardPage />, { route: '/agency/dashboard?tab=mix', locale: 'en' })
 
     await waitFor(() => expect(screen.getByText('Sales')).toBeInTheDocument())
     const labels = screen.getAllByText(/^(Sales|Awareness)$/).map((n) => n.textContent)

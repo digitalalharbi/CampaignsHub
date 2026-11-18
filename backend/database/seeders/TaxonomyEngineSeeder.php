@@ -170,7 +170,7 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'existing_management', 'label_ar' => 'إدارة حملات قائمة', 'label_en' => 'Manage existing campaigns', 'description' => 'تولّي إدارة حملات إعلانية قائمة وتشغيلها ومتابعتها.', 'description_en' => 'Take over and run your existing live campaigns.', 'icon' => 'settings'],
                     ['key' => 'full_monthly_management', 'label_ar' => 'الإدارة الشهرية الكاملة', 'label_en' => 'Full monthly management', 'description' => 'إدارة شهرية شاملة لجميع الحملات والمنصات.', 'description_en' => 'Full monthly management across all campaigns and platforms.', 'icon' => 'calendar-check'],
                     ['key' => 'multi_platform_management', 'label_ar' => 'إدارة متعددة المنصات', 'label_en' => 'Multi-platform management', 'description' => 'إدارة موحّدة للحملات عبر عدة منصات إعلانية.', 'description_en' => 'Unified campaign management across several ad platforms.', 'icon' => 'layers'],
-                    ['key' => 'ad_account_restructure', 'label_ar' => 'إعادة هيكلة الحساب الإعلاني', 'label_en' => 'Ad account restructure', 'description' => 'إعادة تنظيم بنية الحساب والحملات والمجموعات الإعلانية.', 'description_en' => 'Reorganize account, campaign and ad-set structure.', 'icon' => 'network'],
+                    ['key' => 'ad_account_restructure', 'label_ar' => 'إعادة هيكلة الحساب الإعلاني', 'label_en' => 'Ad account restructure', 'description' => 'إعادة تنظيم بنية الحساب والحملات والمجموعات.', 'description_en' => 'Reorganize account, campaign and ad-group structure.', 'icon' => 'network'],
                     ['key' => 'budget_pacing', 'label_ar' => 'ضبط وتيرة الإنفاق', 'label_en' => 'Budget pacing', 'description' => 'ضبط توزيع الميزانية ووتيرة الإنفاق خلال فترة الحملة.', 'description_en' => 'Control budget distribution and spend pacing over time.', 'icon' => 'gauge'],
                     ['key' => 'seasonal_campaigns', 'label_ar' => 'الحملات الموسمية', 'label_en' => 'Seasonal campaigns', 'description' => 'تجهيز وإدارة حملات المواسم والعروض والمناسبات.', 'description_en' => 'Prepare and run seasonal, sale and event campaigns.', 'icon' => 'calendar-heart'],
                     ['key' => 'product_launch_campaigns', 'label_ar' => 'حملات إطلاق المنتجات', 'label_en' => 'Product launch campaigns', 'description' => 'حملات مخصصة لإطلاق منتج أو خدمة جديدة.', 'description_en' => 'Dedicated campaigns for launching a new product.', 'icon' => 'package-plus'],
@@ -613,7 +613,7 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'cpa_increase', 'label_ar' => 'ارتفاع CPA', 'label_en' => 'CPA increase', 'color' => '#ef4444', 'icon' => 'trending-up'],
                     ['key' => 'cpl_increase', 'label_ar' => 'ارتفاع CPL', 'label_en' => 'CPL increase', 'color' => '#ef4444', 'icon' => 'trending-up'],
                     ['key' => 'roas_drop', 'label_ar' => 'انخفاض ROAS', 'label_en' => 'ROAS drop', 'color' => '#ef4444', 'icon' => 'trending-down'],
-                    ['key' => 'no_results', 'label_ar' => 'إنفاق بلا نتائج', 'label_en' => 'No results', 'color' => '#f59e0b', 'icon' => 'circle-slash'],
+                    ['key' => 'no_results', 'label_ar' => 'صرف بدون نتائج', 'label_en' => 'No results', 'color' => '#f59e0b', 'icon' => 'circle-slash'],
                     ['key' => 'sync_failure', 'label_ar' => 'فشل المزامنة', 'label_en' => 'Sync failure', 'color' => '#dc2626', 'icon' => 'refresh-cw-off'],
                     ['key' => 'token_expiry', 'label_ar' => 'انتهاء التوكن', 'label_en' => 'Token expiry', 'color' => '#f59e0b', 'icon' => 'key-round'],
                     ['key' => 'report_failed', 'label_ar' => 'فشل التقرير', 'label_en' => 'Report failed', 'color' => '#dc2626', 'icon' => 'file-x'],
@@ -629,9 +629,9 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'metric_anomaly', 'label_ar' => 'يوم غير معتاد', 'label_en' => 'Unusual day', 'color' => '#8b5cf6', 'icon' => 'activity'],
                     // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — the feed's own alerts.
                     ['key' => 'sync_outage', 'label_ar' => 'انقطاع المزامنة', 'label_en' => 'Sync outage', 'color' => '#f97316', 'icon' => 'cloud-off'],
-                    ['key' => 'measurement_outage', 'label_ar' => 'انقطاع القياس (GA4)', 'label_en' => 'Measurement outage (GA4)', 'color' => '#f97316', 'icon' => 'bar-chart-off'],
+                    ['key' => 'measurement_outage', 'label_ar' => 'توقف قياس الموقع (GA4)', 'label_en' => 'Measurement outage (GA4)', 'color' => '#f97316', 'icon' => 'bar-chart-off'],
                     // TRACKING-HEALTH-001 — a broken form, a failing conversion delivery, a platform that reports more than the Leads Centre holds.
-                    ['key' => 'tracking_health', 'label_ar' => 'سلامة التتبع', 'label_en' => 'Tracking health', 'color' => '#f97316', 'icon' => 'radar'],
+                    ['key' => 'tracking_health', 'label_ar' => 'حالة التتبع', 'label_en' => 'Tracking health', 'color' => '#f97316', 'icon' => 'radar'],
                     // LAUNCH-ADVANCE-001 — a launched account that now earns a better stage; an opportunity, never an automatic change.
                     ['key' => 'launch_advance', 'label_ar' => 'مرحلة إطلاق أفضل متاحة', 'label_en' => 'Better launch stage available', 'color' => '#10b981', 'icon' => 'trending-up'],
                     // GA4-ALERTS-001 — the store as GA4 measured it; rules are created by people, so none exist until somebody makes one.

@@ -63,7 +63,7 @@ final class PortalLoginTest extends TestCase
             ->assertJsonPath('meta.portal_mismatch', true)
             ->assertJsonPath('meta.requested_portal', 'agency')
             // …and tells the form where this account SHOULD go, so it can offer a way through.
-            ->assertJsonPath('meta.destination', '/app/dashboard');
+            ->assertJsonPath('meta.destination', '/app/home');
 
         // The important half: NO session was created. A refusal that signs you in anyway is not a
         // refusal, it is a redirect with a message.

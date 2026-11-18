@@ -7,8 +7,8 @@ namespace App\Domains\Notifications\Services;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\OperationalDigestMail;
+use App\Domains\Notifications\Mail\SpendSummaryMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
-use App\Domains\Notifications\Support\AlertEventText;
 use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Notifications\Support\MessageCatalogue;
@@ -58,8 +58,11 @@ final class DigestDispatcher
     /** Ledger kind prefix of a send the person asked for, so it never competes with the scheduled one. */
     public const ON_DEMAND_PREFIX = 'now_';
 
-    /** The daily email reports a WEEK, compared with the week before — see {@see sendDaily()}. */
-    public const DAILY_WINDOW_DAYS = 7;
+    /**
+     * The daily email reports YESTERDAY, one whole day, compared with the day before — see {@see sendDaily()}.
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 (Owner, 2026-11-12) replaced EMAIL-DAILY-WINDOW-001's seven days.
+     */
+    public const DAILY_WINDOW_DAYS = 1;
 
     public function __construct(
         private readonly DigestScope $scope,
@@ -92,6 +95,11 @@ final class DigestDispatcher
      */
     public function sendDaily(User $user, string $tenantId, Carbon $day, string $locale = 'ar', string $audience = 'agency', ?string $onlyProject = null, bool $onDemand = false): string
     {
+        /*
+         * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the Owner's correction of the paragraph above: the daily mail is read every
+         * morning as «what happened YESTERDAY», so it reports that one whole day (the reader's calendar day) against the day
+         * before it, and says the date. A rolling week belongs to the weekly mail.
+         */
         $end = $day->copy()->endOfDay();
         $start = $end->copy()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay();
 
@@ -153,10 +161,12 @@ final class DigestDispatcher
         $audience = ($row->client_workspace_id ?? null) !== null ? 'client' : 'agency';
         $day = ($now ?? Carbon::now())->copy()->setTimezone($timezone)->subDay();
 
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the monthly is the last COMPLETE month, as the scheduled one; never the month in progress.
+        $month = DigestSchedule::previousMonth($day->copy()->addDay());
         [$periodKey, $from, $to] = match ($kind) {
             'daily' => [$day->toDateString(), $day->copy()->endOfDay()->subDays(self::DAILY_WINDOW_DAYS - 1)->startOfDay(), $day->copy()->endOfDay()],
             'weekly' => [$day->copy()->endOfDay()->format('o-\WW'), $day->copy()->endOfDay()->subDays(6)->startOfDay(), $day->copy()->endOfDay()],
-            default => [$day->copy()->startOfMonth()->format('Y-m'), $day->copy()->startOfMonth()->startOfDay(), $day->copy()->endOfMonth()->endOfDay()],
+            default => [$month['from']->format('Y-m'), $month['from']->copy()->startOfDay(), $month['to']->copy()->endOfDay()],
         };
 
         $state = $this->send($user, $tenantId, $kind, $periodKey, $from, $to, $locale, $audience, onDemand: true);
@@ -294,6 +304,16 @@ final class DigestDispatcher
             if ($onlyProject !== null) {
                 $projectIds = array_values(array_filter($projectIds, static fn ($id): bool => self::projectKey((string) $id) === $onlyProject));
             }
+            /*
+             * FINANCE-DIGEST-001 — Owner 2026-11-17: «المحاسب يحتاج تفاصيل الميزانيات لا الأداء».
+             *
+             * A reader who may open the budgets of every project in scope and neither its analytics nor its campaigns is the finance
+             * role. The performance digest is not for them: it carried operational blocks, links back into the product and spend in the
+             * reporting currency. They receive the spend summary instead — the approved budgets, in their own currency, no links.
+             */
+            if ($onlyProject === null && $this->readsBudgetsOnly($user, $projectIds)) {
+                return $this->sendBudgetsOnly($user, $tenantId, $kind, $from, $to, $locale, $ledgerKind, $ledgerKey, $scope, $projectIds);
+            }
             // MEMBER-VISIBILITY-001 — a reader whose membership withholds the money on any project in scope receives
             // the digest without spend, cost or spend charts. Decided per recipient, from the one authorisation engine.
             if ($audience === 'agency' && ProjectCapability::exists('money.view')) {
@@ -319,7 +339,14 @@ final class DigestDispatcher
              */
             $digest['narrowing'] = $this->scope->narrowing($user, $tenantId);
 
-            if (($digest['sendable'] ?? false) !== true) {
+            /*
+             * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the per-project daily is an INVENTORY: every active project gets its own
+             * mail every morning, and a project with nothing to report says «لا بيانات» with the reason the data proves
+             * (no platform linked, the sync stopped, figures late, or no spend), instead of silently not arriving.
+             */
+            $inventory = $onlyProject !== null && $kind === 'daily' && ($digest['reason'] ?? null) === 'no_activity'
+                && $audience === 'agency' && (bool) config('mail.operational_digests');
+            if (($digest['sendable'] ?? false) !== true && ! $inventory) {
                 return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', (string) ($digest['reason'] ?? 'not_sendable'));
             }
 
@@ -360,7 +387,7 @@ final class DigestDispatcher
              * payload, so the scope, the permissions and the figures were already decided above.
              */
             $mailable = $audience === 'agency' && (bool) config('mail.operational_digests')
-                ? $this->operationalMail($digest, $locale, (string) $user->name, $kind, $onlyProject !== null)
+                ? $this->operationalMail($digest, $locale, (string) $user->name, $kind, $onlyProject !== null, $this->readsPerformanceOnly($user, $projectIds))
                 : new DailyDigestMail(
                     $digest,
                     $locale,
@@ -394,18 +421,79 @@ final class DigestDispatcher
         }
     }
 
+    /** @param list<string> $projectIds */
+    private function readsBudgetsOnly(User $user, array $projectIds): bool
+    {
+        if ($projectIds === []) {
+            return false;
+        }
+        foreach ($projectIds as $projectId) {
+            $id = (string) $projectId;
+            if (! $this->abilities->allows($user, $id, ProjectCapability::BUDGET_VIEW)
+                || $this->abilities->allows($user, $id, ProjectCapability::ANALYTICS_VIEW)
+                || $this->abilities->allows($user, $id, ProjectCapability::CAMPAIGNS_VIEW)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * PM-DIGEST-READONLY-001 — Owner 2026-11-17: the project manager's summary is performance and what is left, nothing operational.
+     * A reader who may read the analytics of every project in scope and may run none of its campaigns gets the same digest with the
+     * decision list, the buttons back into the product, the follow-up and the connections block removed.
+     *
+     * @param  list<string>  $projectIds
+     */
+    private function readsPerformanceOnly(User $user, array $projectIds): bool
+    {
+        if ($projectIds === []) {
+            return false;
+        }
+        foreach ($projectIds as $projectId) {
+            $id = (string) $projectId;
+            if (! $this->abilities->allows($user, $id, ProjectCapability::ANALYTICS_VIEW)
+                || $this->abilities->allows($user, $id, ProjectCapability::CAMPAIGNS_MANAGE)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** @param list<string> $projectIds */
+    private function sendBudgetsOnly(User $user, string $tenantId, string $kind, Carbon $from, Carbon $to, string $locale, string $ledgerKind, string $ledgerKey, ?string $scope, array $projectIds): string
+    {
+        if (! $this->providers->isConfigured('email')) {
+            return $this->finish($user, $ledgerKind, $ledgerKey, 'awaiting_credentials', 'no_email_provider');
+        }
+        $refusal = $this->gate->refusal($tenantId, (string) $user->email, $scope, reserve: (int) config('mail.alert_reserve_per_tenant', 200));
+        if ($refusal !== null) {
+            return $this->finish($user, $ledgerKind, $ledgerKey, $refusal, $refusal);
+        }
+
+        // The daily window carries the day before for comparison; the spend summary reports the one day.
+        $start = $kind === 'daily' ? $to->copy()->startOfDay() : $from;
+        $data = app(ProjectSpendSummary::class)->build($tenantId, array_map('strval', $projectIds), $start, $to, Carbon::today('Asia/Riyadh'));
+        $mail = new SpendSummaryMail($data, $locale, $kind, recipientName: (string) $user->name);
+        $sent = Mail::to($user->email)->send($mail->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, $scope, (int) $user->getKey())));
+
+        return $this->finish($user, $ledgerKind, $ledgerKey, 'sent', null, sentAt: Carbon::now(), messageId: TransactionalMailer::messageId($sent));
+    }
+
     /**
      * @param  array<string,mixed>  $digest  the payload of `DailyDigest::buildRange()`
      */
-    private function operationalMail(array $digest, string $locale, string $name, string $kind, bool $perProject = false): OperationalDigestMail
+    private function operationalMail(array $digest, string $locale, string $name, string $kind, bool $perProject = false, bool $readOnly = false): OperationalDigestMail
     {
         $projects = array_values((array) ($digest['projects'] ?? []));
 
         if (count($projects) === 1 || ($perProject && $projects !== [])) {
-            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 7), $kind), $locale, $name, $kind, 'project', self::periodLabel($digest));
+            return new OperationalDigestMail(OperationalDigestModel::project($projects[0], $locale, (int) ($digest['days'] ?? 1), $kind), $locale, $name, $kind, 'project', self::periodLabel($digest, $kind, $locale), readOnly: $readOnly);
         }
 
-        return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio', self::periodLabel($digest));
+        return new OperationalDigestMail(OperationalDigestModel::portfolio($digest, $locale, $kind), $locale, $name, $kind, 'portfolio', self::periodLabel($digest, $kind, $locale), readOnly: $readOnly);
     }
 
     /** The twelve hex characters that name a project inside a ledger period key (the column is 24 wide). */
@@ -419,14 +507,14 @@ final class DigestDispatcher
         return $onlyProject === null ? '' : '~'.$onlyProject;
     }
 
-    /** «2026-11-03 – 2026-11-09», each date isolated left-to-right so an Arabic line does not print it backwards. */
-    private static function periodLabel(array $digest): ?string
+    /** DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the period in words with its dates: «أمس الأربعاء 11 نوفمبر», «5–11 نوفمبر», «أكتوبر 2026». */
+    public static function periodLabel(array $digest, string $kind = 'daily', string $locale = 'ar'): ?string
     {
         if (! isset($digest['date'], $digest['to_date'])) {
             return null;
         }
 
-        return AlertEventText::ltr((string) $digest['date']).' – '.AlertEventText::ltr((string) $digest['to_date']);
+        return DigestSchedule::periodLabel($kind, (string) $digest['date'], (string) $digest['to_date'], $locale === 'ar');
     }
 
     /**

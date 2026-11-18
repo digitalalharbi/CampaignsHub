@@ -13,7 +13,13 @@ import { AUTH, switchToEnglish } from './helpers'
  */
 test.use({ storageState: AUTH.owner })
 
-const URL = '/agency/settings/workspace?tab=notifications'
+/*
+ * NOTIF-V2-SETTINGS-UI-001 moved this screen. The workspace tab `?tab=notifications` is now the shared workspace
+ * notification page (internal / external sections); the person's OWN preferences — this matrix, its chips and its test
+ * buttons, unchanged — live at `/account/notifications`, the page every email's «إدارة التفضيلات» link opens
+ * (`PersonalNotificationsPage` mounts the same `NotificationsTab`). Same component, same assertions, new address.
+ */
+const URL = '/agency/account/notifications'
 
 async function open(page: Page, theme: 'dark' | 'light' = 'dark'): Promise<void> {
   await page.addInitScript((t) => { try { localStorage.setItem('campaign-hub-theme', t) } catch { /* private window */ } }, theme)

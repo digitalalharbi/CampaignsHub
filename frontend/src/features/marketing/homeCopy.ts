@@ -172,7 +172,7 @@ const ar: HomeCopy = {
   dir: 'rtl',
   nav: {
     features: 'المميزات', how: 'كيف يعمل', services: 'الخدمات', integrations: 'التكاملات والتقارير',
-    login: 'تسجيل الدخول', start: 'إنشاء حساب', request: 'اطلب خدمة', clientLogin: 'متابعة طلباتي', dashboard: 'لوحة التحكم',
+    login: 'تسجيل الدخول', start: 'إنشاء حساب', request: 'اطلب خدمة', clientLogin: 'متابعة طلباتي', dashboard: 'الرئيسية',
   },
   /*
    * PRODUCT-IDENTITY-001 — the first screen says what the product IS.
@@ -233,7 +233,7 @@ const ar: HomeCopy = {
     ],
   },
   dashboard: {
-    estate: { projects: '4 عملاء · 11 حسابًا إعلانيًا', freshness: 'آخر مزامنة قبل 12 دقيقة', attention: 'حساب واحد يحتاج انتباه' },
+    estate: { projects: '4 عملاء · 11 حسابًا إعلانيًا', freshness: 'آخر مزامنة قبل 12 دقيقة', attention: 'حساب واحد فيه تنبيه' },
     dateRange: '1 أبريل — 25 مايو 2026',
     objectiveLabel: 'هدف: المبيعات — تُقارن الحملات ضمن الهدف نفسه فقط',
     demoBadge: 'معاينة توضيحية ببيانات تجريبية',
@@ -287,7 +287,7 @@ const ar: HomeCopy = {
     question: 'ما الذي تريد فعله؟',
     demoNote: 'معاينة توضيحية للواجهة ببيانات تجريبية — لا تمثل نتائج عميل حقيقي.',
     activeLabel: 'حملة نشطة',
-    consumedLabel: 'المصروف من الميزانية',
+    consumedLabel: 'الإنفاق من الميزانية',
     trust: ['تسجيل آمن', 'تحقّق البريد والجوال', 'مساحة مستقلة لكل حساب', 'تنبيهات ومتابعة آلية'],
     paths: [
       {

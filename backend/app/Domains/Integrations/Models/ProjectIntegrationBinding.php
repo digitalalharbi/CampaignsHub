@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Models;
 
+use App\Domains\Funding\Services\FundingAccountGuard;
 use App\Domains\Projects\Concerns\BelongsToProject;
+use App\Domains\Projects\Lifecycle\ProjectLifecycle;
+use App\Domains\Projects\Lifecycle\ProjectStatus;
+use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
@@ -32,6 +36,43 @@ final class ProjectIntegrationBinding extends Model
         'tracking_enabled' => 'bool',
         'settings' => 'array',
     ];
+
+    /**
+     * FIN-LOOP-001 — selecting an account for a project that tracks a prepaid budget is refused while
+     * another budget-tracked project already holds it: one account feeds one budget, never two.
+     */
+    protected static function booted(): void
+    {
+        // `creating`, not `saving`: the project is filled by BelongsToProject's own `creating`, which runs first.
+        $guard = static function (self $binding): void {
+            $activating = ! $binding->exists || $binding->isDirty(['is_active', 'external_account_id', 'project_id', 'purpose']);
+            if (! $activating || ! $binding->is_active || $binding->purpose !== 'advertising' || (string) $binding->project_id === '') {
+                return;
+            }
+
+            $accounts = app(FundingAccountGuard::class);
+            if ($accounts->tracksBudget((string) $binding->project_id)) {
+                $accounts->assertFree((string) $binding->project_id, (string) $binding->external_account_id);
+            }
+        };
+        self::creating($guard);
+        self::updating($guard);
+
+        /*
+         * PROJECT-LIFECYCLE-001 — a draft project becomes active when its first account is linked (it starts to have
+         * data, and a draft is not live). Through the one transition function, actor = system. Never touches any other
+         * state: an archived or paused project stays as it is.
+         */
+        self::saved(static function (self $binding): void {
+            if (! $binding->is_active || (string) $binding->project_id === '') {
+                return;
+            }
+            $project = Project::withoutGlobalScopes()->find($binding->project_id);
+            if ($project !== null && $project->lifecycleStatus() === ProjectStatus::Draft) {
+                app(ProjectLifecycle::class)->transition($project, ProjectStatus::Active, null, 'account_linked');
+            }
+        });
+    }
 
     /** @return BelongsTo<ExternalAccount, $this> */
     public function externalAccount(): BelongsTo

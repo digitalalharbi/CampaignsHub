@@ -222,8 +222,8 @@ final class Ga4ReportSections
 
         if (is_array($sections['ga4_overview'] ?? null)) {
             $o = $sections['ga4_overview'];
-            $o['kpis'] = array_values(array_filter((array) $o['kpis'], static fn ($k): bool => is_array($k) && ! in_array($k['key'] ?? null, self::MONEY_TILES, true)));
-            $o['series'] = array_map($blank, (array) $o['series']);
+            $o['kpis'] = array_values(array_filter((array) ($o['kpis'] ?? []), static fn ($k): bool => is_array($k) && ! in_array($k['key'] ?? null, self::MONEY_TILES, true)));
+            $o['series'] = array_map($blank, array_filter((array) ($o['series'] ?? []), 'is_array'));
             $o['currency'] = null;
             $o['usd'] = ['available' => false, 'reason' => 'hidden'];
             $o['revenue_hidden'] = true;
@@ -246,8 +246,8 @@ final class Ga4ReportSections
                 $row['gap']['revenue_share'] = null;
 
                 return $row;
-            }, (array) $g['rows']);
-            $g['unpaid'] = array_map($blank, (array) $g['unpaid']);
+            }, array_filter((array) ($g['rows'] ?? []), 'is_array'));
+            $g['unpaid'] = array_map($blank, array_filter((array) ($g['unpaid'] ?? []), 'is_array'));
             $g['other_paid'] = $side($g['other_paid'] ?? null);
             $g['currency'] = null;
             $sections['ga4_platform_gap'] = $g;
@@ -279,7 +279,7 @@ final class Ga4ReportSections
                 }
 
                 return $p;
-            }, (array) $a['platforms']);
+            }, array_filter((array) ($a['platforms'] ?? []), 'is_array'));
             $a['unattributed']['classes'] = array_map(static function (array $c) use ($blank): array {
                 $c = $blank($c);
                 $c['aov_usd'] = null;
@@ -296,13 +296,13 @@ final class Ga4ReportSections
         }
         if (is_array($sections['ga4_pulse'] ?? null)) {
             $o = $sections['ga4_pulse'];
-            $o['kpis'] = array_values(array_filter((array) $o['kpis'], static fn ($k): bool => is_array($k) && ! in_array($k['key'] ?? null, self::MONEY_TILES, true)));
+            $o['kpis'] = array_values(array_filter((array) ($o['kpis'] ?? []), static fn ($k): bool => is_array($k) && ! in_array($k['key'] ?? null, self::MONEY_TILES, true)));
             $o['currency'] = null;
             $o['usd'] = ['available' => false, 'reason' => 'hidden'];
             $sections['ga4_pulse'] = $o;
         }
         if (is_array($sections['ga4_classification'] ?? null)) {
-            foreach ((array) $sections['ga4_classification']['groups'] as $g => $block) {
+            foreach ((array) ($sections['ga4_classification']['groups'] ?? []) as $g => $block) {
                 $sections['ga4_classification']['groups'][$g]['rows'] = array_map(static function (array $r): array {
                     foreach (['revenue', 'revenue_usd', 'aov_usd'] as $k) {
                         if (array_key_exists($k, $r)) {
@@ -311,7 +311,7 @@ final class Ga4ReportSections
                     }
 
                     return $r;
-                }, (array) $block['rows']);
+                }, array_filter((array) ($block['rows'] ?? []), 'is_array'));
             }
             $sections['ga4_classification']['currency'] = null;
         }
@@ -326,7 +326,7 @@ final class Ga4ReportSections
                 $r['value_usd'] = null;
 
                 return $r;
-            }, (array) $g['reasons']);
+            }, array_filter((array) ($g['reasons'] ?? []), 'is_array'));
             if (is_array($g['property'] ?? null)) {
                 $g['property']['currency'] = null;
             }

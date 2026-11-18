@@ -7,10 +7,13 @@ namespace App\Domains\Tenancy\Middleware;
 use App\Domains\Tenancy\Context\MembershipContext;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
+use App\Domains\Tenancy\Services\MembershipSelector;
 use App\Domains\Tenancy\Services\PortalResolver;
 use App\Domains\Tenancy\Support\ReviewAccess;
 use App\Domains\Tenancy\Support\WorkspaceAssertion;
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -43,6 +46,7 @@ final class EnsurePortal
         private readonly MembershipContext $memberships,
         private readonly PortalResolver $resolver,
         private readonly TenantContext $tenants,
+        private readonly MembershipSelector $selector,
     ) {}
 
     public function handle(Request $request, Closure $next, string ...$portals): Response
@@ -81,34 +85,59 @@ final class EnsurePortal
             return $next($request);
         }
 
+        /*
+         * CONS-ADMIN-SWITCH — a platform admin who CHOSE one of their own workspaces (POST /auth/memberships/switch).
+         *
+         * `ResolveMembership` keeps every platform-admin request in platform scope (the admin console needs it), so the
+         * session's choice never reached the context and every agency request — which names its workspace — was refused
+         * here. The choice is read through the selector, which re-verifies on THIS request that the membership is the
+         * person's own, active and usable; a tab naming any other workspace is still refused. It grants nothing the person
+         * does not hold, and it is never derived from anything the client sends.
+         */
+        if ($active === null && $user->is_platform_admin) {
+            $chosen = $this->selector->selected($request, $user);
+
+            if ($chosen !== null && in_array($chosen->portal, $allowed, true) && ! WorkspaceAssertion::refuses($request, $chosen)) {
+                return $this->serveFrom($chosen, $request, $next, $user, false);
+            }
+        }
+
         abort_if(WorkspaceAssertion::claimed($request), 403, 'You do not have access to this portal.');
 
         // Not the active portal — but the user may still hold it. Honour a membership they own, for this request.
         foreach ($allowed as $portal) {
             $held = $this->resolver->resolve($user, $portal);
             if ($held !== null && $held->portal === $portal) {
-                $this->memberships->set($held);
-                // The tenant scope must move with the membership. Leaving it on the previous tenant
-                // would run this request's queries against data the new membership cannot see.
-                $this->tenants->setTenantId($held->tenant_id);
-
-                /*
-                 * `ResolveMembership` applied SALLA-REVIEW-001 to the tenant it resolved, which is not this one. The next
-                 * request can no longer be relied on to catch it, because the session is staying where it is.
-                 */
-                $denied = app(ReviewAccess::class)->deny($request, $user, Tenant::query()->find($held->tenant_id));
-
-                if ($denied !== null) {
-                    return $denied;
-                }
-
-                $response = $next($request);
-                $response->headers->set('X-Portal-Context', 'request');
-
-                return $response;
+                return $this->serveFrom($held, $request, $next, $user, true);
             }
         }
 
         abort(403, 'You do not have access to this portal.');
+    }
+
+    /** Serve this request from a membership the person holds, with the tenant scope moved to it. */
+    private function serveFrom(Membership $held, Request $request, Closure $next, User $user, bool $perRequest): Response
+    {
+        $this->memberships->set($held);
+        // The tenant scope must move with the membership. Leaving it on the previous tenant
+        // would run this request's queries against data the new membership cannot see.
+        $this->tenants->setTenantId($held->tenant_id);
+
+        /*
+         * `ResolveMembership` applied SALLA-REVIEW-001 to the tenant it resolved, which is not this one. The next
+         * request can no longer be relied on to catch it, because the session is staying where it is.
+         */
+        $denied = app(ReviewAccess::class)->deny($request, $user, Tenant::query()->find($held->tenant_id));
+
+        if ($denied !== null) {
+            return $denied;
+        }
+
+        $response = $next($request);
+        if ($perRequest) {
+            $response->headers->set('X-Portal-Context', 'request');
+        }
+
+        return $response;
     }
 }

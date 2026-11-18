@@ -89,7 +89,7 @@ def audit_file(folder):
     except Exception:
         pass
 
-    page_size = "A4 landscape (297×210mm)" if rtype == "presentation" else "A4 portrait (210×297mm)"
+    page_size = "16:9 slide (338.67×190.5mm)" if rtype == "presentation" else "A4 portrait (210×297mm)"
     heading_note = (" (body + tables PASS; a few bold headings extract partially — Chromium Latin "
                     "subset ToUnicode quirk, present in the raw output, flagged for pre-production)"
                     if is_en else " (headings + ligature/hamza words all found)")

@@ -25,7 +25,7 @@ test.describe('a client opens their live report', () => {
     // A real figure, not a zero and not a placeholder: the seeded store has spend in every window.
     const spend = report.locator('.tnum').first()
     await expect(spend).not.toHaveText(/^0$|^—$/)
-    await expect(spend).toContainText(/SAR/)
+    await expect(spend).toContainText(/SAR|ر\.س/)
   })
 
   // REPORT-FOOTER-FRESHNESS-001 (#938) — one time, at the end: no sync clock above the figures, none beside the refresh button.
@@ -82,7 +82,9 @@ test.describe('a client opens their live report', () => {
     const before = await headline.innerText()
     await page.evaluate(() => { (window as unknown as { __kept: string }).__kept = 'survived' })
 
-    await page.getByTestId('live-range-7').click()
+    await page.getByTestId('live-range-picker-button').click()
+    await page.getByTestId('live-range-picker-preset-yesterday').click()
+    await page.getByTestId('live-range-picker-apply').click()
 
     await expect
       .poll(async () => headline.innerText(), { timeout: 20000 })

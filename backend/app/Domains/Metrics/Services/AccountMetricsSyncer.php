@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationRawPayload;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Providers\ReportsAudienceBreakdowns;
 use App\Domains\Integrations\Providers\ReportsCreativeInsights;
 use App\Domains\Integrations\Providers\ReportsEntityGrains;
 use App\Domains\Integrations\Providers\SnapchatConnector;
@@ -25,6 +26,7 @@ use App\Domains\Integrations\Support\ProviderSessionInvalidation;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\Actions\UpsertEntityDailyMetrics;
+use App\Domains\Metrics\Audience\AudienceBreakdownSync;
 use App\Domains\Metrics\Enums\SyncRunStatus;
 use App\Domains\Metrics\Models\EntityDailyMetric;
 use App\Domains\Metrics\Models\MetricSyncRun;
@@ -361,7 +363,7 @@ final class AccountMetricsSyncer
             /*
              * Never asked, and that is not a failure — it is a fact about the provider.
              *
-             * Only Snapchat implements `ReportsCreativeInsights`. A TikTok creative showing «no
+             * Snapchat, TikTok, Meta, X and LinkedIn implement `ReportsCreativeInsights`. A creative showing «no
              * data» implies numbers that failed to arrive; «هذه المنصة لا توفر بيانات أداء لكل
              * محتوى» is the truth, and it is a different sentence.
              */
@@ -403,6 +405,19 @@ final class AccountMetricsSyncer
         } elseif ($connector instanceof ReportsEntityGrains) {
             $entityFailure = $this->syncEntityGrains($connector, $account, $run, $from, $to);
             $unlabelled += (int) (($run->meta ?? [])['entity_currency_unknown_rows'] ?? 0);
+        }
+
+        /*
+         * AUDIENCE-001 — paid delivery by audience dimension, for the providers that declare it.
+         * Enrichment: contained, throttled, recorded on the run, never turns the run red.
+         */
+        if (! $unlinkedMidRun && $connector instanceof ReportsAudienceBreakdowns) {
+            try {
+                $audience = app(AudienceBreakdownSync::class)->sync($connector, $account, $run, $from, $to);
+            } catch (Throwable $e) {
+                $audience = ['state' => 'failed', 'reason' => Str::limit((string) ProviderErrorText::forStorage($e->getMessage()), 300)];
+            }
+            $run->forceFill(['meta' => [...(array) ($run->meta ?? []), 'audience' => $audience]])->save();
         }
 
         /*
@@ -611,7 +626,38 @@ final class AccountMetricsSyncer
             );
         }
 
+        /*
+         * X-NO-ACTIVITY-001 — a success whose every stored figure is zero says so, on the run, so the screens can read
+         * «ناجحة — لا نشاط». The status stays `success`: the platform answered in full and the zeros were stored.
+         */
+        if ($this->recordsAreAllZero($result->records)) {
+            $run->forceFill(['meta' => [...(array) ($run->meta ?? []), 'no_activity' => true]])->save();
+        }
+
         return $this->finish($run, SyncRunStatus::Success, $upserted, null, $account, $counts);
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $records
+     */
+    private function recordsAreAllZero(array $records): bool
+    {
+        if ($records === []) {
+            return false;
+        }
+
+        foreach ($records as $row) {
+            foreach ($row as $key => $value) {
+                if (in_array($key, ['date', 'campaign_id', 'currency'], true) || $value === null) {
+                    continue;
+                }
+                if (! is_numeric($value) || (float) $value !== 0.0) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**

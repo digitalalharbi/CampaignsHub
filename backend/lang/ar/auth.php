@@ -49,4 +49,16 @@ return [
     'code_switch_sms_only' => 'مرفوض: :count حساب بريدها غير مؤكد ولا تملك طريقة عودة ذاتية غير رمز SMS. أكّد بريدها أو ساعدها برابط تعيين كلمة مرور أولًا.',
     'code_switch_signup_unproven' => 'مرفوض: التسجيل يعمل دون تأكيد البريد، ولا طريقة عودة ذاتية لتلك الحسابات غير رمز SMS. لا يمكن إيقاف الاثنين معًا.',
     'code_switch_contacts' => 'مرفوض: :count من جهات اتصال العملاء لن تجد أي طريقة دخول، فهي لا تملك كلمة مرور ولا قناة أخرى تصلها.',
+    // TWO-STEP-001 — the second step. Short, plain, and the same sentence for every way of being wrong.
+    'two_factor_required' => 'يلزم التحقق بخطوتين.',
+    'two_factor_expired' => 'انتهت مهلة التحقق. سجّل الدخول مرة أخرى.',
+    'two_factor_locked' => 'محاولات كثيرة. حاول بعد قليل.',
+    'two_factor_enabled' => 'تم تفعيل التحقق بخطوتين.',
+    'two_factor_disabled' => 'تم إيقاف التحقق بخطوتين.',
+    'two_factor_already_active' => 'تطبيق المصادقة مفعّل مسبقًا.',
+    'two_factor_method_inactive' => 'هذه الطريقة غير مفعّلة.',
+    'two_factor_reconfirm_failed' => 'كلمة المرور أو الرمز غير صحيح.',
+    'two_factor_email_unverified' => 'أكّد بريدك أولًا.',
+    'two_factor_phone_unconfirmed' => 'أكّد رقم جوالك أولًا.',
+    'two_factor_sms_awaiting' => 'بانتظار ربط مزوّد الرسائل.',
 ];
