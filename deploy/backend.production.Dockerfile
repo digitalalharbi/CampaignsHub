@@ -64,6 +64,9 @@ RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --opti
 COPY backend/ ./
 # UPLOAD-LIMITS-001 — PHP's 2 MB per-file default rejected ordinary screenshots.
 COPY backend/docker/php-uploads.ini /usr/local/etc/php/conf.d/zz-uploads.ini
+# PERF-BOOTSTRAP-001 — production OPcache: no per-request timestamp checks (a release is a new container), a roomier cache.
+# This image only; the development image and CI are untouched. See the file for each value and the rollback.
+COPY deploy/php-opcache.production.ini /usr/local/etc/php/conf.d/zz-opcache.ini
 RUN composer dump-autoload --optimize \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
