@@ -28,7 +28,7 @@ on:
         default: ''
 
 concurrency:
-  group: production-diagnostics
+  group: production-deploy
   cancel-in-progress: false
 
 jobs:
