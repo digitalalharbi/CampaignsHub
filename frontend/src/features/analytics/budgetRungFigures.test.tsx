@@ -79,7 +79,7 @@ describe('the lower budget rungs show the plan figures', () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
-    const row = (await screen.findByText('Spring launch')).closest('tr') as HTMLElement
+    const row = (await within(await screen.findByTestId('budget-campaign-table')).findByText('Spring launch')).closest('tr') as HTMLElement
     expect(row.textContent).toContain('5K ر.س500 ر.س')
     expect(row.textContent).toContain('+4K ر.س')
     const table = row.closest('table') as HTMLElement
