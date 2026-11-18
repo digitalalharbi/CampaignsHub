@@ -20,15 +20,19 @@ test.describe('the campaigns workspace', () => {
   async function openCampaigns(page: Page, request: APIRequestContext) {
     await selectProject(page, await seededProject(request, 'Growth — Acquisition'))
     await page.goto('/app/campaigns')
+    /* CAMPAIGNS-TABLE-FIRST-001 — Owner 2026-11-18: the section lands on the management table; the overview is the
+       first mode, one click away. The landing is asserted here, then the overview is opened explicitly. */
+    await expect(page.getByTestId('view-table')).toHaveAttribute('aria-pressed', 'true', { timeout: 60000 })
+    await page.getByTestId('view-overview').click()
     await expect(page.getByTestId('campaigns-bands')).toBeVisible({ timeout: 60000 })
   }
 
-  test('opens on the overview, with the portfolio classified before any one campaign', async ({ page, request }) => {
+  test('lands on the table, and the overview one click away classifies the portfolio before any one campaign', async ({ page, request }) => {
     test.setTimeout(180_000)
 
     await openCampaigns(page, request)
 
-    /* The landing, not merely the presence of a tab. */
+    /* The overview, once chosen, is the mode that reads as chosen (the table landing is asserted in openCampaigns). */
     await expect(page.getByTestId('view-overview')).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByTestId('view-cards')).toHaveAttribute('aria-pressed', 'false')
 
