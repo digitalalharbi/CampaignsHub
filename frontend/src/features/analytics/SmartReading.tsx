@@ -108,7 +108,7 @@ export function buildFindings(rows: CampaignRow[], platforms: Array<{ provider: 
       figure: money(sum, cur),
       line: ar ? `على ${countedCampaigns(noResult.length, 'ar')} لم تسجّل نتيجة هدفها في الفترة` : `across ${countedCampaigns(noResult.length, 'en')} that recorded none of their objective's result`,
       evidence: noResult.slice(0, 8).map((x) => ({ label: name(x.r), value: money(x.amount as number, cur) })),
-      basis: ar ? 'صفر مُبلَّغ من المنصة، وليس قيمة ناقصة.' : 'A zero the platform reported, not a missing value.',
+      basis: ar ? 'المنصة أبلغت بصفر نتائج، وهذا ليس نقصًا في البيانات.' : 'A zero the platform reported, not a missing value.',
     })
   }
 
