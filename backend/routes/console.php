@@ -240,7 +240,7 @@ Schedule::command('webhooks:reconcile')->cron('40 */6 * * *')->withoutOverlappin
  */
 Schedule::command('measurement:sync')->cron('25 */4 * * *')->withoutOverlapping();
 
-// Retain raw platform payloads for ninety days — long enough to settle a dispute about a figure,
+// Retain raw platform payloads for thirty days (RAW-RETENTION-30-001, Owner 2026-11-19) — long enough to settle a dispute about a figure,
 // short enough that the audit trail does not become the largest table in the database.
 Schedule::command('integrations:prune-raw')->dailyAt('03:30');
 
