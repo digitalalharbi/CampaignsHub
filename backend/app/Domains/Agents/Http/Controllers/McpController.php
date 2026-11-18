@@ -51,7 +51,7 @@ final class McpController extends Controller
     ];
 
     /** MCP-DISCLAIMER-001 — the figures are live readings, not accounts: said with every answer, in both languages. */
-    private const DISCLAIMER = 'تنبيه: الأرقام لحظية من منصات الإعلان كما زامنها CampaignsHub، وقد تتغير أو تختلف عن فواتير المنصات وتقاريرها النهائية؛ ليست مستندًا محاسبيًا. Note: live figures from the ad platforms as synced by CampaignsHub; they may change and differ from platform invoices and final reports. Not an accounting document.';
+    private const DISCLAIMER = 'تنبيه: الأرقام لحظية من منصات الإعلان كما زامنها كامبينز هب، وقد تتغير أو تختلف عن فواتير المنصات وتقاريرها النهائية؛ ليست مستندًا محاسبيًا. Note: live figures from the ad platforms as synced; they may change and differ from platform invoices and final reports. Not an accounting document.';
 
     public function __construct(private readonly AgentToolbox $toolbox, private readonly ProjectAbilities $abilities) {}
 
@@ -152,7 +152,7 @@ final class McpController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $arguments
+     * @param  array<string, mixed>  $arguments
      * @return array{content: list<array{type: string, text: string}>, isError: bool}
      */
     private function call(User $user, string $name, array $arguments): array
