@@ -23,7 +23,8 @@ test('the first load sends one bootstrap and none of the seven endpoints it repl
   })
 
   await page.goto('/agency/dashboard')
-  await expect(page.getByTestId('client-budgets')).toBeVisible({ timeout: 30000 })
+  // The page's own heading: the agency dashboard has drawn, signed in, from the bootstrap alone.
+  await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible({ timeout: 30000 })
   await page.waitForLoadState('networkidle')
 
   // Recorded in the report, so the before/after of the dashboard's request count is read off a run and not off a memory.
