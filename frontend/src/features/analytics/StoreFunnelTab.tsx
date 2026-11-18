@@ -1,4 +1,7 @@
-import { AlertTriangle, HelpCircle, Store, TrendingDown } from 'lucide-react'
+import { AlertTriangle, Store, TrendingDown } from 'lucide-react'
+import { RankingBarChart } from './charts'
+import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel } from './components'
 import { compact, money, moneyExact, num, ratio } from './format'
@@ -207,69 +210,65 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       */}
       {q.data.reading && <FunnelReadingBlock reading={q.data.reading} ar={ar} />}
 
+      {/*
+        ANALYTICS-REPORT-LAYOUT-001 — Owner 2026-11-18: the store tab rebuilt as a store report (Salla / Zid style):
+        the headline figures first and large, the funnel as a row of stage cards, comparisons as charts, and the
+        long provenance sentences moved into each card's tooltip. Every figure is the same payload as before.
+      */}
+      <div data-testid="store-hero" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {(() => {
+          const revenue = stages.find((x) => x.key === 'revenue')?.value ?? null
+          const orders = [...stages].reverse().find((x) => x.key === 'orders' && x.value !== null)?.value ?? null
+          return [
+            { k: 'revenue', label: ar ? 'الإيراد' : 'Revenue', value: revenue === null ? null : money(revenue, cur), tone: 'text-brand-600' },
+            { k: 'orders', label: ar ? 'الطلبات' : 'Orders', value: orders === null ? null : compact(orders), tone: 'text-text-primary' },
+            { k: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order', value: derived.aov === null ? null : money(derived.aov, cur), tone: 'text-text-primary' },
+            { k: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: derived.roas === null ? null : ratio(derived.roas), tone: 'text-success' },
+          ].map((t) => (
+            <div key={t.k} data-testid={`store-hero-${t.k}`} className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
+              <div className="text-xs font-semibold text-text-muted">{t.label}</div>
+              <div className={`tnum mt-1 text-2xl font-extrabold ${t.tone}`} dir="ltr">{t.value ?? '—'}</div>
+            </div>
+          ))
+        })()}
+      </div>
+
       <Panel title={ar ? 'الفانل: من الظهور إلى الإيراد' : 'Funnel: impression to revenue'}>
-        <ol data-testid="funnel-stages" className="space-y-2">
+        <ol data-testid="funnel-stages" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {stages.map((stage) => {
             const source = SOURCE_LABEL[stage.source.kind]
             const step = stepFrom.get(stage.key)
-            const width = stage.value === null ? 0 : Math.max(2, (stage.value / widest) * 100)
+            const width = stage.value === null ? 0 : Math.max(4, (stage.value / widest) * 100)
 
             return (
-              <li key={stage.key} data-testid={`funnel-stage-${stage.key}`} className="rounded-xl border border-border bg-surface p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="flex items-center gap-2">
-                    <span className="font-semibold text-text-primary">{ar ? stage.label_ar : stage.label_en}</span>
-                    <Badge tone={source.tone}>{ar ? source.ar : source.en}</Badge>
-                    {stage.state === 'partial' && <Badge tone="warning">{ar ? 'ناقص' : 'Undercount'}</Badge>}
-                  </span>
-                  {/*
-                    NUMBER-PRESENTATION-001 — a store funnel stage is a headline figure, so it
-                    compacts. `num` is the EXACT formatter and this is the largest count on the tab:
-                    «2,790,380» beside «2.79M» on the card above is one number written twice.
-                  */}
-                  <span
-                    className="tnum text-lg font-extrabold text-text-primary"
-                    title={stage.value !== null && stage.key !== 'revenue' ? num(stage.value) : undefined}
-                  >
-                    {stage.value === null
-                      ? <span data-testid={`funnel-unmeasured-${stage.key}`} className="text-sm font-semibold text-text-muted">{ar ? 'لا يُقاس' : 'Not measured'}</span>
-                      : stage.key === 'revenue' ? money(stage.value, cur) : compact(stage.value)}
-                  </span>
+              <li key={stage.key} data-testid={`funnel-stage-${stage.key}`} title={ar ? stage.source.ar : stage.source.en} className="flex flex-col gap-2 rounded-xl bg-surface-secondary/60 p-3">
+                <span className="flex flex-wrap items-center justify-between gap-1.5">
+                  <span className="text-sm font-semibold text-text-primary">{ar ? stage.label_ar : stage.label_en}</span>
+                  <Badge tone={source.tone}>{ar ? source.ar : source.en}</Badge>
+                </span>
+                <span className="tnum text-xl font-extrabold text-text-primary" title={stage.value !== null && stage.key !== 'revenue' ? num(stage.value) : undefined}>
+                  {stage.value === null
+                    ? <span data-testid={`funnel-unmeasured-${stage.key}`} className="text-sm font-semibold text-text-muted">{ar ? 'لا يُقاس' : 'Not measured'}</span>
+                    : stage.key === 'revenue' ? money(stage.value, cur) : compact(stage.value)}
+                </span>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-surface">
+                  <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${width}%` }} />
                 </div>
-
-                {stage.value !== null && (
-                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-secondary">
-                    <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${width}%` }} />
-                  </div>
-                )}
-
-                {/* The provenance, said in words rather than implied by a colour. */}
-                <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-text-muted">
-                  <HelpCircle size={12} className="mt-0.5 shrink-0" />
-                  {ar ? stage.source.ar : stage.source.en}
-                </p>
-
-                {(stage.note_ar || stage.note_en) && (
-                  <p data-testid={`funnel-note-${stage.key}`} className="mt-1 flex items-start gap-1.5 text-[11px] text-warning">
-                    <AlertTriangle size={12} className="mt-0.5 shrink-0" />
-                    {ar ? stage.note_ar : stage.note_en}
-                  </p>
-                )}
-
                 {step && step.conversion_rate !== null && (
-                  <p className="mt-1.5 flex flex-wrap items-center gap-x-3 text-[11px] text-text-secondary">
-                    <span className="inline-flex items-center gap-1">
-                      <TrendingDown size={12} className="text-danger" />
-                      {ar ? 'التسرّب' : 'Drop-off'} <span className="tnum font-semibold">{rate(step.drop_off)}</span>
-                    </span>
-                    <span>
-                      {ar ? 'معدل التحويل' : 'Conversion'} <span className="tnum font-semibold">{rate(step.conversion_rate)}</span>
-                    </span>
+                  <span className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <span className="tnum rounded-full bg-success/10 px-2 py-0.5 font-semibold text-success">{ar ? 'تحويل' : 'Conv.'} {rate(step.conversion_rate)}</span>
+                    <span className="tnum inline-flex items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 font-semibold text-danger"><TrendingDown size={11} />{rate(step.drop_off)}</span>
                     {step.spans_unmeasured_stages && (
-                      <span data-testid={`funnel-span-${stage.key}`} className="text-text-muted">
-                        {ar ? '— يتخطّى مراحل غير مقيسة' : '— spans unmeasured stages'}
-                      </span>
+                      <span data-testid={`funnel-span-${stage.key}`} className="text-text-muted">{ar ? 'يتخطّى مراحل غير مقيسة' : 'spans unmeasured stages'}</span>
                     )}
+                  </span>
+                )}
+                {stage.value === null && <p className="text-[10px] leading-snug text-text-muted">{ar ? stage.source.ar : stage.source.en}</p>}
+                {stage.state === 'partial' && <Badge tone="warning">{ar ? 'ناقص' : 'Undercount'}</Badge>}
+                {(stage.note_ar || stage.note_en) && (
+                  <p data-testid={`funnel-note-${stage.key}`} className="flex items-start gap-1 text-[10px] leading-snug text-warning">
+                    <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+                    {ar ? stage.note_ar : stage.note_en}
                   </p>
                 )}
               </li>
@@ -278,19 +277,14 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         </ol>
       </Panel>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Metric label={ar ? 'العائد على الإنفاق' : 'ROAS'} value={derived.roas === null ? null : ratio(derived.roas)} hint={ar ? 'على الإيراد الصافي بعد الاسترداد' : 'On net revenue, after refunds'} />
-        <Metric label={ar ? 'ROAS المُسند' : 'Attributed ROAS'} value={derived.attributed_roas === null ? null : ratio(derived.attributed_roas)} hint={ar ? 'الطلبات التي أمكن ربطها بحملة فقط' : 'Only orders traceable to a campaign'} />
-        <Metric label={ar ? 'متوسط قيمة الطلب' : 'AOV'} value={derived.aov === null ? null : money(derived.aov, cur)} />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric label={ar ? 'ROAS المُسند' : 'Attributed ROAS'} value={derived.attributed_roas === null ? null : ratio(derived.attributed_roas)} hint={ar ? 'الطلبات المربوطة بحملة' : 'Orders traced to a campaign'} />
         <Metric label={ar ? 'تكلفة الطلب' : 'CPA'} value={derived.cpa === null ? null : moneyExact(derived.cpa, cur ?? null)} hint={ar ? 'الإنفاق ÷ الطلبات' : 'Spend ÷ orders'} />
-        <Metric
-          label={ar ? 'تكلفة اكتساب العميل' : 'CAC'}
-          value={derived.cac === null ? null : money(derived.cac, cur)}
-          hint={ar ? 'الإنفاق ÷ العملاء الجدد — وليس كل الطلبات' : 'Spend ÷ NEW customers — not all orders'}
-        />
+        <Metric label={ar ? 'تكلفة اكتساب العميل' : 'CAC'} value={derived.cac === null ? null : money(derived.cac, cur)} hint={ar ? 'الإنفاق ÷ العملاء الجدد' : 'Spend ÷ new customers'} />
         <Metric label={ar ? 'من النقرة إلى الطلب' : 'Click → order'} value={rate(derived.conversion_rate)} />
       </div>
 
+      <div className="grid gap-4 lg:grid-cols-2">
       {/*
         Gross → refunded → net, because the page already subtracts and never says how much.
         
@@ -392,18 +386,30 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         </Explainer>
       </Panel>
 
+      </div>
+
       {comparisons.platforms.length > 0 && (
         <Panel title={ar ? 'المقارنة بين المنصات' : 'Across platforms'}>
+          <RankingBarChart
+            colorByPlatform={false}
+            currency={cur ?? ''}
+            data={comparisons.platforms.map((p) => ({ label: providerLabel(canonicalPlatform(p.platform), ar ? 'ar' : 'en'), spend: p.spend, revenue: p.revenue }))}
+            bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }, { key: 'revenue', name: ar ? 'الإيراد' : 'Revenue', kind: 'money' }]}
+            height={240}
+          />
+          <details className="mt-2 text-xs"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
           <Table
             head={[ar ? 'المنصة' : 'Platform', ar ? 'الإنفاق' : 'Spend', ar ? 'الطلبات' : 'Orders', ar ? 'الإيراد' : 'Revenue', 'ROAS']}
             rows={comparisons.platforms.map((p) => [p.platform, money(p.spend, cur), num(p.orders), money(p.revenue, cur), ratio(p.roas)])}
             values={comparisons.platforms.map((p) => [p.platform, p.spend, p.orders, p.revenue, p.roas])}
           />
+          </details>
         </Panel>
       )}
 
       {comparisons.campaigns.length > 0 && (
         <Panel title={ar ? 'المقارنة بين الحملات' : 'Across campaigns'}>
+          <details className="text-xs" open={comparisons.campaigns.length <= 5}><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? `${comparisons.campaigns.length} حملة` : `${comparisons.campaigns.length} campaigns`}</summary>
           <Table
             head={[ar ? 'الحملة' : 'Campaign', ar ? 'الطلبات' : 'Orders', ar ? 'الإيراد' : 'Revenue', ar ? 'طريقة الإسناد' : 'How it was traced']}
             rows={comparisons.campaigns.map((c) => [
@@ -416,16 +422,26 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
               c.external_campaign_id, c.orders, c.revenue, c.attribution_method ?? null,
             ])}
           />
+          </details>
         </Panel>
       )}
 
       {comparisons.products.length > 0 && (
         <Panel title={ar ? 'المنتجات الأكثر مبيعًا' : 'Best sellers'}>
+          <RankingBarChart
+            horizontal
+            currency={cur ?? ''}
+            data={comparisons.products.slice(0, 8).map((p) => ({ label: p.name.slice(0, 26), revenue: p.revenue }))}
+            bars={[{ key: 'revenue', name: ar ? 'الإيراد' : 'Revenue', kind: 'money' }]}
+            height={Math.max(160, Math.min(8, comparisons.products.length) * 34)}
+          />
+          <details className="mt-2 text-xs"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
           <Table
             head={[ar ? 'المنتج' : 'Product', ar ? 'الكمية' : 'Quantity', ar ? 'الإيراد' : 'Revenue']}
             rows={comparisons.products.map((p) => [p.name, num(p.quantity), money(p.revenue, cur)])}
             values={comparisons.products.map((p) => [p.name, p.quantity, p.revenue])}
           />
+          </details>
         </Panel>
       )}
 

@@ -121,6 +121,18 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
           <p data-testid="site-events-absent" className="text-sm text-text-muted">{ar ? 'لم تُرجع الخاصية الأحداث لهذه الفترة.' : 'The property returned no events for this period.'}</p>
         ) : (
           <div data-testid="site-events" className="min-w-0">
+            {/* ANALYTICS-REPORT-LAYOUT-001 — the ten largest events as bars, key events in green; the full table folds away. */}
+            <RowBars
+              rows={[...d.events.rows].sort((a, b) => (b.event_count ?? 0) - (a.event_count ?? 0)).slice(0, 10).map((e) => ({
+                key: e.event,
+                name: e.event,
+                value: e.event_count ?? 0,
+                text: num(e.event_count),
+                tone: e.is_key_event ? 'bg-success' : 'bg-brand-500',
+                chips: e.is_key_event ? [ar ? 'رئيسي' : 'Key'] : [],
+              }))}
+            />
+            <details className="mt-2 text-xs"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
             <MetricTable
               head={ar ? ['الحدث', 'العدد', 'كحدث رئيسي'] : ['Event', 'Count', 'As key event']}
               rows={d.events.rows.map((e) => [
@@ -131,6 +143,7 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
               values={d.events.rows.map((e): SortValues => [e.event, e.event_count, e.key_events])}
               initialSort={{ column: 1, dir: 'desc' }}
             />
+            </details>
           </div>
         )}
       </ChartCard>
@@ -145,6 +158,21 @@ function BreakdownCard({ testId, title, table, ar, cur, name, sub }: { testId: s
         <p data-testid={`${testId}-absent`} className="text-sm text-text-muted">{ar ? 'لم تُرجع الخاصية هذا التقسيم لهذه الفترة.' : 'The property returned no breakdown of this kind for the period.'}</p>
       ) : (
         <div data-testid={testId} className="min-w-0">
+          <RowBars
+            rows={table.rows.slice(0, 8).map((r, i) => ({
+              key: `${name(r)}-${i}`,
+              name: name(r),
+              value: r.sessions ?? 0,
+              text: `${num(r.sessions)} ${ar ? 'جلسة' : 'sessions'}`,
+              tone: 'bg-brand-500',
+              chips: [
+                ...(r.purchases ? [`${num(r.purchases)} ${ar ? 'طلب' : 'orders'}`] : []),
+                ...(r.conversion_rate != null ? [percent(r.conversion_rate, 2)] : []),
+                ...(r.revenue != null ? [money(r.revenue, cur)] : []),
+              ],
+            }))}
+          />
+          <details className="mt-2 text-xs"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
           <MetricTable
             head={ar ? ['', 'الجلسات', 'التفاعل', 'الطلبات', 'التحويل', 'الإيراد'] : ['', 'Sessions', 'Engagement', 'Purchases', 'Conversion', 'Revenue']}
             rows={table.rows.map((r) => [
@@ -160,6 +188,7 @@ function BreakdownCard({ testId, title, table, ar, cur, name, sub }: { testId: s
             values={table.rows.map((r): SortValues => [name(r), r.sessions ?? null, r.engagement_rate, r.purchases ?? null, r.conversion_rate, r.revenue ?? null])}
             initialSort={{ column: 1, dir: 'desc' }}
           />
+          </details>
           {table.more > 0 && <p className="mt-2 text-[11px] text-text-muted">{ar ? `و${num(table.more)} صفًا آخر أقل.` : `And ${num(table.more)} smaller rows.`}</p>}
         </div>
       )}
@@ -184,5 +213,33 @@ function SiteSkeleton({ ar }: { ar: boolean }) {
         </ChartCard>
       </div>
     </div>
+  )
+}
+
+/**
+ * ANALYTICS-REPORT-LAYOUT-001 — a ranked list drawn as bars: the name, a bar to the largest row, the figure, and
+ * a few chips. The report's way of showing a breakdown, in place of a six-column table.
+ */
+function RowBars({ rows }: { rows: Array<{ key: string; name: string; value: number; text: string; tone: string; chips: string[] }> }) {
+  const top = Math.max(1, ...rows.map((r) => r.value))
+  return (
+    <ul className="space-y-2.5">
+      {rows.map((r) => (
+        <li key={r.key}>
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="truncate font-semibold text-text-primary" dir="auto" title={r.name}>{r.name}</span>
+            <span className="tnum shrink-0 text-xs font-bold text-text-secondary" dir="ltr">{r.text}</span>
+          </div>
+          <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-surface-secondary">
+            <div className={`h-full rounded-full ${r.tone}`} style={{ width: `${(r.value / top) * 100}%` }} />
+          </div>
+          {r.chips.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {r.chips.map((c) => <span key={c} className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] text-text-secondary" dir="ltr">{c}</span>)}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }
