@@ -438,4 +438,47 @@ final class AccessCenterTest extends TestCase
         $this->deleteJson("/api/v1/settings/team/{$buyer->uuid}")->assertOk();
         $this->assertSame(0, DB::table('member_access_overrides')->where('user_id', $buyer->id)->count());
     }
+
+    // ── OWNER-DOWNGRADE-001: a mistaken promotion is reversible ───────────────────────────────────────────────
+
+    public function test_a_workspace_manager_moves_another_one_back_to_finance_and_it_is_audited(): void
+    {
+        $ownerRole = Role::query()->where('tenant_id', $this->tenant->id)->where('slug', 'tenant-owner')->firstOrFail();
+        $accountant = $this->member('accounting@a.test', $ownerRole);
+        Sanctum::actingAs($this->owner);
+
+        // Still a workspace manager: never narrowed in place.
+        $this->putJson("/api/v1/settings/access/members/{$accountant->uuid}", ['areas' => ['finance' => 'none']])->assertStatus(422);
+
+        $this->putJson("/api/v1/settings/access/members/{$accountant->uuid}", ['category' => 'finance', 'reason' => 'promoted by mistake'])
+            ->assertOk()->assertJsonPath('data.category', 'finance');
+
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $this->assertFalse($accountant->fresh()->hasRole('tenant-owner'));
+        $this->assertTrue($accountant->fresh()->hasRole('finance'));
+        $this->assertNotContains('settings.manage', $this->keysIn($accountant));
+        $this->assertDatabaseHas('audit_logs', ['tenant_id' => $this->tenant->id, 'action' => 'access.member_updated', 'user_id' => $this->owner->id]);
+
+        // Now an ordinary member: their sections can be chosen from the same screen.
+        $this->putJson("/api/v1/settings/access/members/{$accountant->uuid}", ['areas' => ['finance' => 'view']])->assertOk();
+    }
+
+    public function test_only_a_workspace_manager_moves_another_and_never_the_last_one(): void
+    {
+        $ownerRole = Role::query()->where('tenant_id', $this->tenant->id)->where('slug', 'tenant-owner')->firstOrFail();
+        $other = $this->member('second@a.test', $ownerRole);
+        $admin = $this->member('admin@a.test', $this->role('team-admin', ['settings.manage', 'users.view', 'users.update', 'projects.view']));
+
+        Sanctum::actingAs($admin);
+        $this->putJson("/api/v1/settings/access/members/{$other->uuid}", ['category' => 'finance'])->assertForbidden();
+
+        // Only one manager left: not even the platform operator moves them out.
+        $this->owner->roles()->detach($ownerRole->id);
+        $admin->forceFill(['is_platform_admin' => true])->save();
+        Sanctum::actingAs($admin->fresh());
+        $this->putJson("/api/v1/settings/access/members/{$other->uuid}", ['category' => 'finance'])->assertStatus(422);
+
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        $this->assertTrue($other->fresh()->hasRole('tenant-owner'));
+    }
 }

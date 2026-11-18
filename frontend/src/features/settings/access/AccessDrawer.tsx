@@ -31,7 +31,11 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
   const team = row.audience === 'team'
   const isMember = subject.kind === 'member'
   const member = isMember ? subject.row : null
+  // OWNER-DOWNGRADE-001 — another workspace manager may move an owner to a different category (a mistaken promotion is
+  // reversible). An owner is still never narrowed in place: only the category picker is offered, with a confirmation.
+  const ownerMovable = member !== null && member.is_owner && !member.is_self && data.me.is_owner && team
   const locked = member !== null && (member.is_owner || member.is_self)
+  const [confirmDowngrade, setConfirmDowngrade] = useState(false)
 
   const [category, setCategory] = useState(row.category ?? '')
   const cat = data.categories.find((c) => c.slug === category)
@@ -90,6 +94,25 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
           <div className="font-semibold text-text-primary">{ar ? 'بوابة العميل' : 'Client portal'} · {ar ? (PORTAL_ROLE_LABEL[row.category ?? '']?.ar ?? row.category) : (PORTAL_ROLE_LABEL[row.category ?? '']?.en ?? row.category)}</div>
           <div className="mt-1 text-xs text-text-muted">{row.scope.clients.map((c) => c.name).join('، ')}</div>
           <p className="mt-2 text-xs text-text-muted">{ar ? 'صلاحيات البوابة لا تتغيّر من هنا؛ تُدار من صفحة العميل.' : 'Portal access is not changed here; manage it on the client page.'}</p>
+        </section>
+      ) : ownerMovable ? (
+        <section className="space-y-3 rounded-xl border border-border p-3" data-testid="drawer-owner-move">
+          <AreaChips areas={data.areas} levels={levelsOf(row.areas)} ar={ar} />
+          <div>
+            <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'غيّر الفئة' : 'Change category'}</h3>
+            <ChipPicker testId="drawer-owner-category" label={ar ? 'الفئة' : 'Category'} value={category} onChange={(s) => { setCategory(s); setConfirmDowngrade(false) }}
+              options={data.categories.map((c) => ({ value: c.slug, label: ar ? c.name_ar : c.name_en }))} />
+          </div>
+          {changedCategory && (
+            <Alert severity="warning" title={ar ? 'سيفقد صلاحية مدير المساحة' : 'They will lose workspace-manager access'}>
+              {ar ? 'بعد الحفظ تقدر تحدد الأقسام والعملاء اللي يظهرون له من نفس النافذة.' : 'After saving you can choose the sections and clients they see from this same window.'}
+            </Alert>
+          )}
+          <div className="flex justify-end">
+            {!confirmDowngrade
+              ? <Button disabled={!changedCategory} onClick={() => setConfirmDowngrade(true)} data-testid="drawer-owner-move-save"><Save size={14} aria-hidden /> {ar ? 'حفظ' : 'Save'}</Button>
+              : <Button variant="danger" onClick={() => run(a.updateMember.mutateAsync({ id: row.id, category }).then(onClose), '')} data-testid="drawer-owner-move-confirm">{ar ? 'تأكيد تغيير الفئة' : 'Confirm category change'}</Button>}
+          </div>
         </section>
       ) : locked ? (
         <section className="rounded-xl border border-border p-3" data-testid="drawer-locked">

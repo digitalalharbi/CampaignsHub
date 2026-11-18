@@ -182,6 +182,27 @@ describe('AccessCenter', () => {
     expect(screen.queryByTestId('drawer-remove')).toBeNull()
   })
 
+  it('lets one workspace manager move another to a different category, after a confirmation', async () => {
+    data.members.push({ ...data.members[0], id: 'u-owner2', email: 'owner2@a.test', name: 'Owner 2', is_self: false })
+    renderWithProviders(<AccessCenter />, { locale: 'ar' })
+    fireEvent.click(screen.getByTestId('access-row-member-owner2@a.test'))
+    expect(screen.queryByTestId('drawer-locked')).toBeNull()
+    expect(screen.getByTestId('drawer-owner-move-save')).toBeDisabled()
+    fireEvent.click(screen.getByTestId('drawer-owner-category-finance'))
+    fireEvent.click(screen.getByTestId('drawer-owner-move-save'))
+    expect(actions.updateMember.mutateAsync).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('drawer-owner-move-confirm'))
+    await waitFor(() => expect(actions.updateMember.mutateAsync).toHaveBeenCalledWith({ id: 'u-owner2', category: 'finance' }))
+  })
+
+  it('keeps another workspace manager locked for a reader who is not one', () => {
+    data.members.push({ ...data.members[0], id: 'u-owner2', email: 'owner2@a.test', name: 'Owner 2', is_self: false })
+    data.me = { ...data.me, is_owner: false }
+    renderWithProviders(<AccessCenter />, { locale: 'ar' })
+    fireEvent.click(screen.getByTestId('access-row-member-owner2@a.test'))
+    expect(screen.getByTestId('drawer-locked')).toBeInTheDocument()
+  })
+
   it('resends and withdraws an invitation from its drawer; removal needs a second click', async () => {
     renderWithProviders(<AccessCenter />, { locale: 'ar' })
     fireEvent.click(screen.getByTestId('access-row-invitation-late@a.test'))
