@@ -24,7 +24,23 @@ git reset --hard "origin/$BRANCH"
 # here before, and existence is what the PDF renderer passed while being switched off.
 bash scripts/env-contract.sh deploy/backend.production.env.example "$ENV_FILE"
 
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build --remove-orphans
+# PERF-BUILD-OFF-VPS-001 — this host has ONE CPU and 4 GB shared with four other products. Building
+# here (npm ci + vite build + composer + chromium layers) held the CPU and pushed Postgres into swap
+# for 5–20 minutes per deploy; on 2026-11-18 that was 24 deploys and every route's p95 hit 10–60 s.
+# When the workflow hands us prebuilt images (CH_BACKEND_IMAGE / CH_FRONTEND_IMAGE) we only pull
+# them. Without them — a manual run on the box — we fall back to the old local build.
+if [ -n "${CH_BACKEND_IMAGE:-}" ] && [ -n "${CH_FRONTEND_IMAGE:-}" ]; then
+  export CH_BACKEND_IMAGE CH_FRONTEND_IMAGE
+  if [ -n "${GHCR_TOKEN:-}" ]; then
+    printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${GHCR_USER:-github-actions}" --password-stdin >/dev/null
+    trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+  fi
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull backend queue scheduler frontend
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --no-build --remove-orphans
+else
+  echo "No prebuilt images given: building on this host (slow, loads the CPU)." >&2
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build --remove-orphans
+fi
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan migrate --force
 
 # PROD-PROVISION-001 — the reference data the product is built out of: the permission catalogue, the
@@ -65,3 +81,8 @@ docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T queue php artis
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan horizon:terminate
 
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
+# Keep the three newest prebuilt tags of each image for rollback; drop older ones so the 80%-full
+# disk does not fill with a 1 GB backend image per deploy. Only OUR repository's images are touched.
+for repo in ghcr.io/digitalalharbi/campaignshub-backend ghcr.io/digitalalharbi/campaignshub-frontend; do
+  docker image ls "$repo" --format '{{.ID}}' | awk '!seen[$0]++' | tail -n +4 | xargs -r docker image rm >/dev/null 2>&1 || true
+done
