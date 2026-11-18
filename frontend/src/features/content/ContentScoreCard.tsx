@@ -1,4 +1,4 @@
-import { Eye, MousePointerClick, PlaySquare, ShoppingCart, TrendingUp, Zap, type LucideIcon } from 'lucide-react'
+import { Eye, Heart, MousePointerClick, PlaySquare, ShoppingCart, TrendingUp, UserPlus, Zap, type LucideIcon } from 'lucide-react'
 import { Num } from '@/components/ui/Num'
 import { diagnosis, scoreContent, type Criterion, type Grade } from './contentScore'
 
@@ -13,6 +13,8 @@ const ICONS: Record<Criterion['key'], LucideIcon> = {
   ctr: MousePointerClick,
   cart_order: ShoppingCart,
   roas: TrendingUp,
+  click_lead: UserPlus,
+  engagement: Heart,
 }
 
 const TONE: Record<Grade, string> = {
