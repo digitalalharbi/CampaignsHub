@@ -1072,23 +1072,23 @@ function PlatformPaths({
                     </span>
                     <span className="flex items-end justify-between gap-2">
                       <span data-testid={`path-efficiency-${path.path}-${row.provider}`} className="flex flex-col">
-                        <span className="text-[11px] text-text-muted">{ar ? efficiency.labelAr : efficiency.labelEn}</span>
+                        <span className="text-xs text-text-muted">{ar ? efficiency.labelAr : efficiency.labelEn}</span>
                         <span className="tnum text-lg font-extrabold text-text-primary" dir="ltr">
                           {efficiency.value === null ? '—' : moneyExact(efficiency.value, currency)}
                         </span>
                       </span>
                       <span className="flex flex-col items-end">
-                        <span className="text-[11px] text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
+                        <span className="text-xs text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
                         <span className="tnum text-sm font-bold text-text-secondary" dir="ltr">{money(row.spend, currency)}</span>
                       </span>
                     </span>
                     {(returned.value !== null || (gap !== undefined && (gap.missing > 0 || gap.status !== null))) && (
                       <span className="flex flex-wrap items-center justify-between gap-2">
                         {returned.value !== null
-                          ? <span className="tnum rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success" dir="ltr">ROAS {ratio(returned.value)}</span>
+                          ? <span className="tnum rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success" dir="ltr">ROAS {ratio(returned.value)}</span>
                           : <span />}
                         {gap !== undefined && (gap.missing > 0 || gap.status !== null) && (
-                          <span data-testid={`path-gap-${path.path}-${row.provider}`} className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
+                          <span data-testid={`path-gap-${path.path}-${row.provider}`} className="rounded-full bg-warning/10 px-2 py-0.5 text-xs text-warning">
                             {gap.missing > 0
                               ? (ar ? `ناقص ${countedDays(gap.missing, 'ar')}` : `${countedDays(gap.missing, 'en')} missing`)
                               : (ar ? 'آخر مزامنة لم تنجح' : 'last sync did not succeed')}
@@ -2297,7 +2297,7 @@ function AttributionFindings({
                   {g.provider === null ? (ar ? 'عبر المنصات' : 'Across platforms') : providerLabel(g.provider, ar ? 'ar' : 'en')}
                 </span>
               ))}
-              <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+              <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-semibold text-text-secondary">
                 {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
               </span>
             </div>
@@ -3895,7 +3895,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
 
                     return (
                       <div key={k} className="flex flex-col rounded-lg bg-surface-secondary/60 p-2.5">
-                        <dt className="text-[11px] text-text-muted">
+                        <dt className="text-xs text-text-muted">
                           {spec ? (ar ? spec.label.ar : spec.label.en) : k}
                         </dt>
                         {/*

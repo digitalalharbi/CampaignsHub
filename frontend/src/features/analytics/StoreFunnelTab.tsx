@@ -1,3 +1,4 @@
+import { StatCard } from '@/components/ui/StatCard'
 import { AlertTriangle, Store, TrendingDown } from 'lucide-react'
 import { RankingBarChart } from './charts'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -220,15 +221,12 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
           const revenue = stages.find((x) => x.key === 'revenue')?.value ?? null
           const orders = [...stages].reverse().find((x) => x.key === 'orders' && x.value !== null)?.value ?? null
           return [
-            { k: 'revenue', label: ar ? 'الإيراد' : 'Revenue', value: revenue === null ? null : money(revenue, cur), tone: 'text-brand-600' },
-            { k: 'orders', label: ar ? 'الطلبات' : 'Orders', value: orders === null ? null : compact(orders), tone: 'text-text-primary' },
-            { k: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order', value: derived.aov === null ? null : money(derived.aov, cur), tone: 'text-text-primary' },
-            { k: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: derived.roas === null ? null : ratio(derived.roas), tone: 'text-success' },
+            { k: 'revenue', label: ar ? 'الإيراد' : 'Revenue', value: revenue === null ? null : money(revenue, cur) },
+            { k: 'orders', label: ar ? 'الطلبات' : 'Orders', value: orders === null ? null : compact(orders) },
+            { k: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order', value: derived.aov === null ? null : money(derived.aov, cur) },
+            { k: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: derived.roas === null ? null : ratio(derived.roas) },
           ].map((t) => (
-            <div key={t.k} data-testid={`store-hero-${t.k}`} className="rounded-2xl border border-border bg-surface p-4 shadow-[var(--shadow-small)]">
-              <div className="text-xs font-semibold text-text-muted">{t.label}</div>
-              <div className={`tnum mt-1 text-2xl font-extrabold ${t.tone}`} dir="ltr">{t.value ?? '—'}</div>
-            </div>
+            <StatCard key={t.k} testid={`store-hero-${t.k}`} label={t.label} value={t.value ?? '—'} />
           ))
         })()}
       </div>
@@ -255,7 +253,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
                   <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${width}%` }} />
                 </div>
                 {step && step.conversion_rate !== null && (
-                  <span className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="flex flex-wrap items-center gap-1.5 text-xs">
                     <span className="tnum rounded-full bg-success/10 px-2 py-0.5 font-semibold text-success">{ar ? 'تحويل' : 'Conv.'} {rate(step.conversion_rate)}</span>
                     <span className="tnum inline-flex items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 font-semibold text-danger"><TrendingDown size={11} />{rate(step.drop_off)}</span>
                     {step.spans_unmeasured_stages && (
@@ -263,10 +261,10 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
                     )}
                   </span>
                 )}
-                {stage.value === null && <p className="text-[10px] leading-snug text-text-muted">{ar ? stage.source.ar : stage.source.en}</p>}
+                {stage.value === null && <p className="text-xs leading-snug text-text-muted">{ar ? stage.source.ar : stage.source.en}</p>}
                 {stage.state === 'partial' && <Badge tone="warning">{ar ? 'ناقص' : 'Undercount'}</Badge>}
                 {(stage.note_ar || stage.note_en) && (
-                  <p data-testid={`funnel-note-${stage.key}`} className="flex items-start gap-1 text-[10px] leading-snug text-warning">
+                  <p data-testid={`funnel-note-${stage.key}`} className="flex items-start gap-1 text-xs leading-snug text-warning">
                     <AlertTriangle size={11} className="mt-0.5 shrink-0" />
                     {ar ? stage.note_ar : stage.note_en}
                   </p>

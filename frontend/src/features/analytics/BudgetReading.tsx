@@ -106,9 +106,9 @@ export function BudgetReading({ reading, locale }: { reading: BudgetExplanationP
               const fill = row.value > 1.05 ? 'bg-danger' : row.value >= 0.8 ? 'bg-success' : 'bg-warning'
               return (
                 <div key={key} className="flex flex-col gap-1.5 rounded-xl bg-surface p-3" data-testid={`budget-pace-${key}`}>
-                  <span className="text-[11px] font-semibold text-text-muted">{label}</span>
+                  <span className="text-xs font-semibold text-text-muted">{label}</span>
                   <span className="truncate text-sm font-semibold text-text-primary" title={row.campaign}>{row.campaign}</span>
-                  <span dir="ltr" className={`tnum text-2xl font-extrabold ${tone}`}>{pace(row.value)}</span>
+                  <span dir="ltr" className={`tnum text-xl font-extrabold ${tone}`}>{pace(row.value)}</span>
                   <span className="relative h-2 overflow-hidden rounded-full bg-surface-secondary">
                     <span className={`block h-full rounded-full ${fill}`} style={{ width: `${Math.min(100, Math.max(2, (row.value / paceCeiling) * 100))}%` }} />
                     <span aria-hidden className="absolute inset-y-0 w-0.5 bg-text-primary/60" style={{ insetInlineStart: `${(1 / paceCeiling) * 100}%` }} />
@@ -117,7 +117,7 @@ export function BudgetReading({ reading, locale }: { reading: BudgetExplanationP
               )
             })}
           </div>
-          <p className="text-[11px] text-text-muted">{ar ? 'الخط = على الخطة (1.00×)' : 'The tick = on plan (1.00×)'}</p>
+          <p className="text-xs text-text-muted">{ar ? 'الخط = على الخطة (1.00×)' : 'The tick = on plan (1.00×)'}</p>
 
           {reading.action && (
             <p data-testid="budget-reading-action" className="rounded-lg bg-brand-600/10 px-3 py-2 text-sm font-semibold text-text-primary">

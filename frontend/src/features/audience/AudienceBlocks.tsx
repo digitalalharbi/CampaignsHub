@@ -89,7 +89,7 @@ export function DeliveryGroupCard({ group, locale }: { group: DeliveryGroup; loc
                   <span className="block h-full rounded-full" style={{ width: r.share ? `${Math.max(2, Math.round(r.share.ratio * 100))}%` : '0%', background: color }} />
                 </span>
                 {r.spend && r.spend.length > 0 && (
-                  <span className="tnum mt-1 inline-block rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-secondary">
+                  <span className="tnum mt-1 inline-block rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-secondary">
                     {t(locale, 'الإنفاق ', 'Spend ')}{r.spend.map((x) => withMark(x.amount.toLocaleString('en-US'), x.currency)).join(' · ')}
                   </span>
                 )}
@@ -108,7 +108,7 @@ export function DeliveryGroupCard({ group, locale }: { group: DeliveryGroup; loc
           {t(locale, 'تغطية جزئية', 'Partial coverage')}: <Num>{group.coverage.ad_sets_with_rows}</Num>/<Num>{group.coverage.ad_sets_delivering}</Num> {t(locale, 'مجموعة', 'ad groups')}
         </p>
       )}
-      <details className="mt-2 text-[11px] text-text-muted">
+      <details className="mt-2 text-xs text-text-muted">
         <summary className="cursor-pointer select-none font-semibold">{t(locale, 'التفاصيل', 'Details')}</summary>
         <p className="mt-1 break-words leading-5">
           {t(locale, 'المقياس: مرات الظهور · المصدر: ', 'Metric: impressions · Source: ')}<span dir="ltr">{group.source_field}</span>
@@ -117,7 +117,7 @@ export function DeliveryGroupCard({ group, locale }: { group: DeliveryGroup; loc
         </p>
         <ul className="mt-1 space-y-0.5">
           {group.rows.filter((r) => r.share).map((r) => (
-            <li key={r.value} className="tnum" dir="ltr">{r.value}: {Math.round(r.share!.numerator).toLocaleString('en-US')} / {Math.round(r.share!.denominator).toLocaleString('en-US')}</li>
+            <li key={r.value} className="tnum">{r.value}: <Num>{Math.round(r.share!.numerator).toLocaleString('en-US')} / {Math.round(r.share!.denominator).toLocaleString('en-US')}</Num></li>
           ))}
         </ul>
       </details>

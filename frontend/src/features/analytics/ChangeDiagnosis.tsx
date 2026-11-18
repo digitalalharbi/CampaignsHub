@@ -674,7 +674,7 @@ function AnomalyExplorer({ points, currency, ar }: { points: TimelinePoint[]; se
                 <span dir="ltr" className="tnum text-xl font-extrabold text-text-primary">{formatFor(p.metric, currency)(p.value)}</span>
                 <span dir="ltr" className={`tnum text-sm font-bold ${up ? 'text-success' : 'text-warning'}`}>{pct === null ? '—' : `${pct > 0 ? '+' : ''}${Math.round(pct * 100)}%`}</span>
               </div>
-              <div className="flex items-center justify-between gap-2 text-[11px] text-text-muted">
+              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
                 <span dir="ltr" className="tnum">{p.date}</span>
                 <span>{ar ? 'المعتاد' : 'Usual'} <span dir="ltr" className="tnum">{formatFor(p.metric, currency)(p.baseline)}</span></span>
               </div>

@@ -162,7 +162,7 @@ export function PathAnalysis({
                     <div key={kind} data-testid={`path-${path.path}-${kind}`} className="flex flex-col gap-1">
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="flex min-w-0 items-center gap-2">
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${kind === 'strongest' ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'}`}>{t(kind, ar)}</span>
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${kind === 'strongest' ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'}`}>{t(kind, ar)}</span>
                           <span className="truncate text-sm font-semibold text-text-primary">{campaign.name}</span>
                         </span>
                         <span className="tnum shrink-0 text-lg font-extrabold text-text-primary" dir="ltr">
@@ -172,7 +172,7 @@ export function PathAnalysis({
                       <div className="h-2.5 overflow-hidden rounded-full bg-surface-secondary">
                         <div className={`h-full rounded-full ${kind === 'strongest' ? 'bg-success' : 'bg-warning'}`} style={{ width: `${(Math.abs(campaign.value ?? 0) / top) * 100}%` }} />
                       </div>
-                      <span className="text-[11px] text-text-muted">{metricName(campaign.metric, ar)}</span>
+                      <span className="text-xs text-text-muted">{metricName(campaign.metric, ar)}</span>
                     </div>
                   ))}
                 </div>

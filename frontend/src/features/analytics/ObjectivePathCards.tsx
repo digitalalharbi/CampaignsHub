@@ -117,18 +117,18 @@ export function ObjectivePathCards({ block, locale, currency, showMoney = true }
               </div>
               <div className="mt-2 flex items-end justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="truncate text-[11px] text-text-muted">{p.result_label?.[l] ?? '—'}</div>
-                  <div className="tnum text-2xl font-extrabold text-text-primary" title={p.result_missing_label?.[l]}><Num>{p.result === null ? '—' : compact(p.result)}</Num></div>
+                  <div className="truncate text-xs text-text-muted">{p.result_label?.[l] ?? '—'}</div>
+                  <div className="tnum text-xl font-extrabold text-text-primary" title={p.result_missing_label?.[l]}><Num>{p.result === null ? '—' : compact(p.result)}</Num></div>
                 </div>
                 {money_ && p.cost_per_result_label && (
                   <div className="text-end">
-                    <div className="text-[11px] text-text-muted">{p.cost_per_result_label[l]}</div>
+                    <div className="text-xs text-text-muted">{p.cost_per_result_label[l]}</div>
                     <div className="tnum text-base font-bold text-text-secondary"><Num>{money(p.cost_per_result, currency)}</Num></div>
                   </div>
                 )}
               </div>
               {money_ && (
-                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                   <span className="rounded-full bg-surface px-2 py-0.5 text-text-secondary">{T.spend[l]} <Num>{money(p.spend, currency)}</Num></span>
                   {p.family === 'sales' && (
                     <>

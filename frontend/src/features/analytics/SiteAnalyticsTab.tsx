@@ -235,7 +235,7 @@ function RowBars({ rows }: { rows: Array<{ key: string; name: string; value: num
           </div>
           {r.chips.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
-              {r.chips.map((c) => <span key={c} className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] text-text-secondary" dir="ltr">{c}</span>)}
+              {r.chips.map((c) => <span key={c} className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-secondary" dir="ltr">{c}</span>)}
             </div>
           )}
         </li>
