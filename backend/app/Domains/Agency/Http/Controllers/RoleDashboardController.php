@@ -11,7 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * ROLE-DASHBOARD-001 — GET /api/v1/me/dashboard[?view=manager|pm|finance|marketer]
+ * ROLE-DASHBOARD-001 — GET /api/v1/me/dashboard[?view=manager|pm|finance|marketer][&client=<id>]
  *
  * The signed-in member's landing page, filtered on the server to what their role, sections and clients allow. `view` is
  * honoured only for the workspace manager (to preview another role's page); anybody else always gets their own.
@@ -26,6 +26,9 @@ final class RoleDashboardController extends Controller
         // DASH-PERIOD-001 — the window the performance figures are read over: 7, 14, 30 (default) or 90 days to today.
         $days = (int) $request->integer('days', RoleDashboardBuilder::DEFAULT_DAYS);
 
-        return ApiResponse::success($builder->build($user, $request->string('view')->toString() ?: null, $days), 'Dashboard.');
+        // DASH-CLIENT-FILTER-001 — the client chosen on the page; the builder ignores one outside the member's reach.
+        $client = $request->string('client')->toString() ?: null;
+
+        return ApiResponse::success($builder->build($user, $request->string('view')->toString() ?: null, $days, $client), 'Dashboard.');
     }
 }

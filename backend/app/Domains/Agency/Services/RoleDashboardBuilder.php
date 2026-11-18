@@ -82,7 +82,7 @@ final class RoleDashboardBuilder
 
     public const DEFAULT_DAYS = 30;
 
-    public function build(User $user, ?string $requested = null, int $days = self::DEFAULT_DAYS): array
+    public function build(User $user, ?string $requested = null, int $days = self::DEFAULT_DAYS, ?string $client = null): array
     {
         $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
         $role = $user->rolesInCurrentTenant()->sortBy('id')->first();
@@ -100,6 +100,12 @@ final class RoleDashboardBuilder
         $from = $to->copy()->subDays($days - 1);
 
         $scope = $this->scope($user);
+        // DASH-CLIENT-FILTER-001 — Owner 2026-11-18: every figure on the page follows the chosen client, the budget included.
+        // A client outside the member's reach is ignored: the page stays on what they may see, never wider.
+        if ($client !== null && array_key_exists($client, $scope['clients'])) {
+            $scope['clients'] = [$client => $scope['clients'][$client]];
+            $scope['projects'] = array_filter($scope['projects'], static fn (array $p): bool => $p['client_id'] === $client);
+        }
         $projectIds = array_keys($scope['projects']);
         $sections = $user->accessSections();
         $money = $user->hasPermission('budget.view') || $user->hasPermission('billing.view');
