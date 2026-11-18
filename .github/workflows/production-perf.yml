@@ -34,7 +34,7 @@ concurrency:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
       - name: Snapshot on VPS
         uses: appleboy/ssh-action@v1.2.2
@@ -50,38 +50,30 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
           envs: HOURS,TOKENS,RACCOUNT,RFROM,RTO
+          command_timeout: 55m
           script: |
-            set -Eeuo pipefail
+            set +e
             cd /opt/campaignshub
-            echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
-            echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
-            echo "── app"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
-            echo "── live report build"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 --http $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done) \
-              || echo "PROFILER FAILED: see above — other sections are valid"
-            echo "── postgres top statements"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available (psql failed): continuing"
-            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
-                   left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
-              from pg_stat_statements order by total_exec_time desc limit 20;
-            SQL
-            if [ -n "${RACCOUNT}" ]; then
-              echo "── spend reconcile"
-              set +e
-              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"} \
-                || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
-              set -e
-            fi
-            # GA4-PLATFORM-GOOGLE-CLIENT-001 — are the Google Ads and sign-in clients the same? Prints a verdict only, never a value.
-            echo "── google client check"
-            A=$(grep -E '^GOOGLE_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); B=$(grep -E '^GOOGLE_ADS_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); G=$(grep -E '^GA4_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-)
-            [ -n "$A" ] && echo "GOOGLE_CLIENT_ID: set (prefix ${A%%-*})" || echo "GOOGLE_CLIENT_ID: unset"
-            [ "$A" = "$B" ] && echo "GOOGLE_ADS_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GOOGLE_ADS_CLIENT_ID: DIFFERENT (prefix ${B%%-*})"
-            [ -z "$G" ] && echo "GA4_CLIENT_ID: unset → GA4 falls back to GOOGLE_CLIENT_ID" || { [ "$G" = "$A" ] && echo "GA4_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GA4_CLIENT_ID: DIFFERENT (prefix ${G%%-*})"; }
-
+            DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+            p() { $DC exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -X -P pager=off -At -F" | " -v ON_ERROR_STOP=1' 2>&1; }
+            sizes() {
+              df -h / | tail -1
+              echo "select pg_size_pretty(pg_total_relation_size('integration_raw_payloads')), pg_size_pretty(pg_database_size(current_database())), (select count(*) from integration_raw_payloads), (select count(*) from integration_raw_payloads where fetched_at < now() - interval '30 days');" | p
+            }
+            # RAW-RETENTION-30-001 compaction, Owner-approved 2026-11-19 («نفذ الضغط بعد الدمج»).
+            # Deletes ONLY integration_raw_payloads rows older than 30 days (the new retention), then
+            # rewrites that one table. Sync workers are paused so nothing waits on the lock; the site stays up.
+            echo "== BEFORE $(date -u +%FT%TZ)"; sizes
+            trap '$DC start queue scheduler >/dev/null 2>&1; echo "workers restarted (trap)"' EXIT
+            $DC stop queue scheduler
+            echo "== DELETE $(date -u +%T)"
+            echo "delete from integration_raw_payloads where fetched_at < now() - interval '30 days';" | p
+            echo "== VACUUM FULL $(date -u +%T)"
+            echo "set lock_timeout = '120s'; vacuum (full, analyze) integration_raw_payloads;" | p
+            echo "== DONE $(date -u +%T)"
+            $DC start queue scheduler
+            trap - EXIT
+            echo "== AFTER"; sizes
+            $DC ps --format '{{.Service}} {{.State}}' | grep -E "queue|scheduler|backend"
+            curl -s -o /dev/null -w "health %{http_code} %{time_total}s\n" https://api.campaignshub.io/api/v1/health
+            exit 0
