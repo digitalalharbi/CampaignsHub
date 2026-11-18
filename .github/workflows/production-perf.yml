@@ -64,7 +64,7 @@ jobs:
               foreach (["salla","zid"] as $k) {
                 $row = DB::table("provider_configurations")->where("provider",$k)->first();
                 $st = $svc->state($k);
-                echo $k." enabled=".var_export($svc->isEnabled($k),true)." state=".($st->value ?? json_encode($st))." row=".($row? "yes env=".$row->environment : "no")." creds_configured=".var_export(App\Domains\Commerce\Support\PlatformCredentials::for($k)->isConfigured(),true)." missing=".implode("|",$svc->missing($k)).PHP_EOL;
+                echo $k." enabled=".var_export($svc->isEnabled($k),true)." state=".($st->value ?? json_encode($st))." row=".($row? "yes env=".$row->environment : "no")." creds_configured=".var_export(App\Domains\Integrations\OAuth\PlatformCredentials::for($k)->isConfigured(),true)." missing=".implode("|",$svc->missing($k)).PHP_EOL;
                 echo "  connections: ".DB::table("provider_connections")->where("provider",$k)->selectRaw("status, count(*) n")->groupBy("status")->get()->map(fn($r)=>$r->status."=".$r->n)->implode(" ").PHP_EOL;
                 echo "  stores: ".DB::table("external_accounts")->where("provider",$k)->where("account_type","store")->count().PHP_EOL;
               }
