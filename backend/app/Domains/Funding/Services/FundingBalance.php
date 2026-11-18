@@ -6,6 +6,7 @@ namespace App\Domains\Funding\Services;
 
 use App\Domains\Funding\Models\ProjectFunding;
 use App\Domains\Funding\Support\BudgetFx;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Spend\SpendLedger;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -148,22 +149,7 @@ final class FundingBalance
         $daysLeft = ($remaining !== null && $pace !== null && $pace > 0 && $remaining > 0)
             ? (int) floor($remaining / $pace) : null;
 
-        $status = match (true) {
-            $funding->payment_method === 'unset' => 'unset',
-            $funding->voided_at !== null => 'void',
-            $funding->payment_method === 'direct' => 'direct',
-            $credit && $withoutRate > 0 => 'incomplete',
-            $credit && $ceiling !== null && $spent > $ceiling => 'credit_over',
-            $credit && $ceilingRatio !== null && $ceilingRatio >= FundingPlan::NEAR => 'credit_near',
-            $credit => 'credit',
-            $approved <= 0 => 'no_budget',
-            $remaining < 0 => 'over',
-            // Spend with no dated rate is not in `spent`, so the remaining is better than the truth: never «ok».
-            $withoutRate > 0 => 'incomplete',
-            // Nothing spent is never «low»: a small budget under the alert floor has lost nothing yet.
-            $spent > 0 && $remaining < (float) $funding->alert_floor => 'low',
-            default => 'ok',
-        };
+        $status = $this->statusOf($funding, $approved, $spent, $withoutRate, $credit, $remaining, $ceiling, $ceilingRatio);
 
         /*
          * PROJECT-LIFECYCLE-001 §7 — what the budget's spend could NOT include, and why, in the one reading every page shares
@@ -215,5 +201,169 @@ final class FundingBalance
             'status' => $status,
             'fx' => $fx,
         ];
+    }
+
+    /**
+     * The budget's status word. ONE definition, read by {@see of()} and by {@see summaries()}, so the batched reading can never
+     * name a different status than the full one.
+     */
+    private function statusOf(ProjectFunding $funding, float $approved, float $spent, int $withoutRate, bool $credit, ?float $remaining, ?float $ceiling, ?float $ceilingRatio): string
+    {
+        return match (true) {
+            $funding->payment_method === 'unset' => 'unset',
+            $funding->voided_at !== null => 'void',
+            $funding->payment_method === 'direct' => 'direct',
+            $credit && $withoutRate > 0 => 'incomplete',
+            $credit && $ceiling !== null && $spent > $ceiling => 'credit_over',
+            $credit && $ceilingRatio !== null && $ceilingRatio >= FundingPlan::NEAR => 'credit_near',
+            $credit => 'credit',
+            $approved <= 0 => 'no_budget',
+            $remaining < 0 => 'over',
+            // Spend with no dated rate is not in `spent`, so the remaining is better than the truth: never «ok».
+            $withoutRate > 0 => 'incomplete',
+            // Nothing spent is never «low»: a small budget under the alert floor has lost nothing yet.
+            $spent > 0 && $remaining < (float) $funding->alert_floor => 'low',
+            default => 'ok',
+        };
+    }
+
+    /**
+     * PERF-BOOTSTRAP-001 — {@see of()} for MANY budgets, restricted to the figures {@see ProjectBudgetReader::summarise()} draws.
+     *
+     * `of()` is a dozen statements per budget (period start, payments, six spend aggregates, the FX reading), and the agency
+     * dashboard reads one per project: 120 projects was 1,440 statements and most of a second. This asks the same questions for
+     * every budget at once — one per table — and answers per project exactly what `of()` answers for the keys it returns:
+     * approved, spent, remaining, used ratio, the 3-day pace, the run-out day, status, period, last spend day and the FX reading
+     * (still `SpendLedger`, still through FxEngine — {@see SpendLedger::readEach()}). The platform split, the plan comparison, the
+     * freshness and the invoice months are not part of a summary and are not computed here.
+     *
+     * `FundingBalanceSummariesTest` holds it equal to `of()` on every payment method and mode.
+     *
+     * @param  iterable<ProjectFunding>  $fundings
+     * @return array<string, array<string, mixed>> project id => the subset of `of()`
+     */
+    public function summaries(iterable $fundings, ?Carbon $today = null): array
+    {
+        $today ??= Carbon::today('Asia/Riyadh');
+        $list = [];
+        foreach ($fundings as $funding) {
+            $list[(string) $funding->project_id] = $funding;
+        }
+        if ($list === []) {
+            return [];
+        }
+        $ids = array_keys($list);
+
+        // Payments: the approved total, the count of deposits, and the first approved day — one grouped statement.
+        $paid = DB::table('funding_payments')->whereIn('project_id', $ids)
+            ->selectRaw("project_id, COALESCE(SUM(amount_sar), 0) AS approved, COUNT(*) FILTER (WHERE kind IN ('initial', 'top_up')) AS payments, MIN(paid_on) AS first_paid")
+            ->groupBy('project_id')->get()->keyBy(static fn (object $r): string => (string) $r->project_id)->all();
+
+        // The first day of REAL spend, only for the budgets with no stated start — `countsFrom()`'s query, grouped by project.
+        $open = array_keys(array_filter($list, static fn (ProjectFunding $f): bool => $f->starts_on === null));
+        $firstSpend = [];
+        if ($open !== []) {
+            $spend = DB::table('daily_metrics')
+                ->whereIn('daily_metrics.project_id', $open)
+                ->where('daily_metrics.metric_key', 'spend')
+                ->whereNotIn('daily_metrics.source_type', ['estimated', 'modeled'])
+                ->whereRaw('COALESCE(daily_metrics.original_amount, daily_metrics.value) > 0');
+            BoundAccountVisibility::apply($spend, 'daily_metrics');
+            $firstSpend = $spend->selectRaw('daily_metrics.project_id, MIN(daily_metrics.metric_date) AS d')
+                ->groupBy('daily_metrics.project_id')->pluck('d', 'daily_metrics.project_id')->all();
+        }
+
+        /** @var array<string, array{0: ?Carbon, 1: ?Carbon}> $windows */
+        $windows = [];
+        foreach ($list as $id => $funding) {
+            if ($funding->starts_on !== null) {
+                $from = Carbon::parse($funding->starts_on->toDateString());
+            } else {
+                $days = array_filter([$firstSpend[$id] ?? null, $paid[$id]->first_paid ?? null], static fn ($d): bool => $d !== null);
+                $from = $days === [] ? null : Carbon::parse((string) min(array_map(static fn ($d): string => Carbon::parse((string) $d)->toDateString(), $days)));
+            }
+            $windows[$id] = [$from, $this->refresher->countsTo($funding)];
+        }
+
+        // The spend rows inside each budget's own window, aggregated per project in one statement.
+        $weekStart = $today->copy()->subDays(7)->toDateString();
+        $weekEnd = $today->copy()->subDay()->toDateString();
+        $threeStart = $today->copy()->subDays(3)->toDateString();
+        $bounded = array_filter($windows, static fn (array $w): bool => $w[0] !== null);
+        $spend = [];
+        if ($bounded !== []) {
+            $values = implode(', ', array_fill(0, count($bounded), '(?::uuid, ?::date, ?::date)'));
+            $bindings = [$weekStart, $weekEnd, $weekStart, $weekEnd, $threeStart, $weekEnd];
+            foreach ($bounded as $id => [$from, $to]) {
+                array_push($bindings, $id, $from->toDateString(), $to?->toDateString());
+            }
+            $rows = DB::select(
+                'select s.project_id, COALESCE(SUM(s.amount_sar), 0) AS spent,'
+                .' COUNT(*) FILTER (WHERE s.amount_sar IS NULL AND s.original_amount > 0) AS without_rate,'
+                .' MAX(s.spend_date) AS last_day,'
+                .' COUNT(*) FILTER (WHERE s.spend_date BETWEEN ? AND ?) AS week_days,'
+                .' COALESCE(SUM(s.amount_sar) FILTER (WHERE s.spend_date BETWEEN ? AND ?), 0) AS week_sum,'
+                .' COALESCE(SUM(s.amount_sar) FILTER (WHERE s.spend_date BETWEEN ? AND ?), 0) AS three_sum'
+                .' from funding_spend_days s'
+                ." join (values {$values}) AS b(project_id, f, t) on b.project_id = s.project_id"
+                .' where s.spend_date >= b.f and (b.t is null or s.spend_date <= b.t)'
+                .' group by s.project_id',
+                $bindings,
+            );
+            foreach ($rows as $r) {
+                $spend[(string) $r->project_id] = $r;
+            }
+        }
+
+        // The FX reading of every budget's own period, through SpendLedger (FxEngine) — one account-days query for all of them.
+        $readings = $this->ledger->readEach(
+            array_map(static fn (array $w): array => [$w[0], $w[1]], array_filter($windows, static fn (array $w): bool => $w[0] !== null)),
+            'SAR',
+            liveOnly: false,
+        );
+
+        $out = [];
+        foreach ($list as $id => $funding) {
+            [$from, $to] = $windows[$id];
+            $approved = (float) ($paid[$id]->approved ?? 0);
+            $s = $spend[$id] ?? null;
+            $spent = (float) ($s->spent ?? 0);
+            $withoutRate = (int) ($s->without_rate ?? 0);
+            $weekDays = (int) ($s->week_days ?? 0);
+            $pace3 = round((float) ($s->three_sum ?? 0) / 3, 2);
+
+            $tracked = $funding->payment_method === 'prepaid';
+            $credit = $tracked && $funding->payment_mode === 'credit';
+            $prepaid = $tracked && ! $credit;
+            $remaining = $prepaid ? round($approved - $spent, 2) : null;
+            $ceiling = ($credit && $approved > 0) ? round($approved, 2) : null;
+            $ceilingRatio = $ceiling !== null ? round($spent / $ceiling, 4) : null;
+            $runOutDate = ($remaining !== null && $remaining > 0 && $pace3 > 0)
+                ? Carbon::parse($today->toDateString())->addDays((int) floor($remaining / $pace3))->toDateString() : null;
+            $reading = $readings[$id] ?? null;
+
+            $out[$id] = [
+                'project_id' => $funding->project_id,
+                'client_workspace_id' => $funding->client_workspace_id,
+                'payment_method' => $funding->payment_method,
+                'payment_mode' => $funding->payment_mode,
+                'period_start' => $from?->toDateString(),
+                'period_end' => $to?->toDateString(),
+                'approved' => round($approved, 2),
+                'spent' => round($spent, 2),
+                'remaining' => $remaining,
+                'used_ratio' => (($prepaid || $credit) && $approved > 0) ? round($spent / $approved, 4) : null,
+                'pace_per_day' => $weekDays > 0 ? round((float) ($s->week_sum ?? 0) / 7, 2) : null,
+                'pace_3d' => $pace3 > 0 ? $pace3 : null,
+                'run_out_date' => $runOutDate,
+                'spend_without_rate' => $withoutRate,
+                'complete' => $withoutRate === 0,
+                'last_spend_day' => $s->last_day ?? null,
+                'status' => $this->statusOf($funding, $approved, $spent, $withoutRate, $credit, $remaining, $ceiling, $ceilingRatio),
+                'fx' => $reading === null ? null : array_intersect_key($reading, array_flip(['amount', 'complete', 'partial', 'excluded', 'excluded_label', 'statement', 'statement_en', 'stale', 'stale_label', 'rates_page', 'currencies', 'includes_converted'])),
+            ];
+        }
+
+        return $out;
     }
 }
