@@ -380,6 +380,11 @@ final class ReportShareController extends Controller
             'paths.*' => ['string', 'max:40'],
             'creatives' => ['array'],
             'creatives.*' => ['boolean'],
+            // REPORT-LINK-EDIT-ADS-001 — which ads the link lists, editable on a published link like the switches above.
+            'creative_display' => ['sometimes', 'array'],
+            'creative_display.policy' => ['sometimes', 'in:activity,all,selected'],
+            'creative_display.include_zero_activity' => ['sometimes', 'boolean'],
+            'creative_display.auto_refresh' => ['sometimes', 'boolean'],
             'sections' => ['array'],
             'sections.*' => ['boolean'],
             // REPORT-TABLES-OWNER-COLUMNS-001 — the published link's columns may be changed after creation.
@@ -408,6 +413,10 @@ final class ReportShareController extends Controller
         $settings = (array) ($link->settings ?? []);
         if (array_key_exists('creatives', $opts)) {
             $settings['creatives'] = CreativeVisibility::fromArray($opts['creatives'])->toArray();
+        }
+        if (array_key_exists('creative_display', $opts)) {
+            // REPORT-LINK-EDIT-ADS-001 — resolved the same way as at creation, so an edit cannot store a policy creation would refuse.
+            $settings['creative_display'] = (CreativeDisplay::fromArray((array) $opts['creative_display']) ?? new CreativeDisplay)->toArray();
         }
         if (array_key_exists('sections', $opts)) {
             // Merged over what the link already has: naming one switch must not reset the others to their default.
@@ -725,6 +734,8 @@ final class ReportShareController extends Controller
             // the report's own, which is what every link made before §15.12 does.
             'form' => $s->form,
             'creatives' => $s->creativeVisibility()->toArray(),
+            // REPORT-LINK-EDIT-ADS-001 — so the edit dialog starts from the link's own listing policy (null: none was ever chosen).
+            'creative_display' => $s->creativeDisplay()?->toArray(),
             'sections' => $s->sectionVisibility()->toArray(),
             // REPORT-TABLES-OWNER-COLUMNS-001 — what the link publishes per table, so the edit dialog starts from it.
             'columns' => ReportColumns::forShare($s)->toArray(),

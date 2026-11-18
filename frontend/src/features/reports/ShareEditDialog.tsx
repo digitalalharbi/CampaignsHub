@@ -7,6 +7,7 @@ import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { updateShare, type ShareEdit, type ShareRow } from './api'
 import { ColumnPicker } from './ColumnPicker'
+import { ShareCreativeControls, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
  * REPORT-LINK-EDIT-IN-PLACE-001 — change a published client link without changing its URL.
@@ -14,6 +15,9 @@ import { ColumnPicker } from './ColumnPicker'
  * A link already sent to a client is a promise that the address keeps working. So changing what it shows is
  * an EDIT, not a new link: the same URL, the same token, the new setting from the next time it is opened.
  * Only what the Owner actually touched is sent, so saving never quietly resets a setting they did not look at.
+ *
+ * REPORT-LINK-EDIT-ADS-001 — the ad section (the fifteen switches and which ads are listed) is edited here too, so a link
+ * already with a client can gain or lose its ads without a new address. It starts from what the link publishes now.
  */
 const COPY = {
   ar: {
@@ -40,6 +44,15 @@ export function ShareEditDialog({ projectId, reportId, share, onClose, onSaved }
   const [edit, setEdit] = useState<ShareEdit>({})
   const [password, setPassword] = useState('')
   const [expiry, setExpiry] = useState('')
+  const [creatives, setCreatives] = useState<CreativeSharing>(() => ({
+    ...emptyCreativeSharing(),
+    permissions: { ...(share.creatives ?? {}) },
+    display: {
+      policy: share.creative_display?.policy ?? 'activity',
+      includeZeroActivity: share.creative_display?.include_zero_activity ?? false,
+    },
+  }))
+  const [creativesTouched, setCreativesTouched] = useState(false)
 
   const value = <K extends 'allow_download' | 'watermark' | 'hide_spend' | 'hide_revenue' | 'hide_campaign_names'>(k: K): boolean => (edit[k] ?? share[k]) as boolean
   const toggle = (k: 'allow_download' | 'watermark' | 'hide_spend' | 'hide_revenue' | 'hide_campaign_names') => setEdit((e) => ({ ...e, [k]: !value(k) }))
@@ -49,6 +62,14 @@ export function ShareEditDialog({ projectId, reportId, share, onClose, onSaved }
       ...edit,
       ...(password !== '' ? { password } : {}),
       ...(expiry !== '' ? { expires_at: expiry } : {}),
+      ...(creativesTouched
+        ? {
+            creatives: creatives.permissions,
+            ...(creatives.permissions.creatives === true
+              ? { creative_display: { policy: creatives.display.policy, include_zero_activity: creatives.display.includeZeroActivity, auto_refresh: true } }
+              : {}),
+          }
+        : {}),
     }),
     onSuccess: () => { onSaved(); onClose() },
   })
@@ -71,6 +92,12 @@ export function ShareEditDialog({ projectId, reportId, share, onClose, onSaved }
           <Row k="hide_revenue" label={t.revenue} />
           <Row k="hide_campaign_names" label={t.names} />
         </div>
+        <ShareCreativeControls
+          projectId={projectId}
+          value={creatives}
+          onChange={(next) => { setCreatives(next); setCreativesTouched(true) }}
+          hideCeiling
+        />
         <ShareWidgetsPanel projectId={projectId} reportId={reportId} shareId={share.id} />
         {/* REPORT-CLIENT-ACCOUNT-NAMES-OFF-001 — technical ad-account names are off for a client unless the Owner says so. */}
         <label className="flex cursor-pointer items-center justify-between rounded-xl border border-border px-3 py-2 text-sm">
