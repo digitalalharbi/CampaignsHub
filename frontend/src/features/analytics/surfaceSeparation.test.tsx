@@ -51,30 +51,21 @@ describe('the dashboard and the analysis are different surfaces', () => {
   afterEach(() => signOut())
 
   /* The depth is the tabs. A dashboard that offers all twelve is the analysis wearing another name. */
-  it('the dashboard offers no analysis tab bar', async () => {
+  // OWNER 2026-11-19 — the dashboard and the analysis are ONE board named «التحليلات».
+  it('the dashboard route carries the same section bar as the analysis', async () => {
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
 
-    expect(await screen.findByTestId('dashboard-intro')).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /Platforms/i })).toBeNull()
-    expect(screen.queryByRole('tab', { name: /Budget/i })).toBeNull()
+    expect(await screen.findByRole('button', { name: 'Platforms & audience' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Budget/i })).toBeInTheDocument()
   })
 
   it('analytics keeps the whole tab bar', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
 
-    expect(await screen.findByRole('tab', { name: /Platforms/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Platforms & audience' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Budget/i })).toBeInTheDocument()
   })
 
-  /* «What should I open next» is a door, not a dead end. */
-  it('the dashboard points at the analysis for the depth it does not carry', async () => {
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
-
-    const link = await screen.findByTestId('dashboard-to-analytics')
-    expect(link).toHaveAttribute('href', expect.stringContaining('/app/analytics'))
-  })
-
-  /* Both surfaces keep their filters — «what is happening now» still has to be scoped. */
   it('the dashboard keeps its own filters', async () => {
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
 

@@ -68,6 +68,7 @@ function route(scope: { applied: string[]; unapplied: string[] } | undefined) {
 
 async function open(tab: RegExp) {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+  if (/Platforms/i.test(String(tab))) fireEvent.click(await screen.findByRole('button', { name: 'Platforms & audience' }))
   fireEvent.click(await screen.findByRole('tab', { name: tab }))
 }
 

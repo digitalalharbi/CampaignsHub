@@ -42,6 +42,7 @@ function route(accounts: unknown[]) {
 
 async function openAccounts() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Platforms & audience' }))
   fireEvent.click(await screen.findByRole('tab', { name: 'Accounts' }))
 }
 

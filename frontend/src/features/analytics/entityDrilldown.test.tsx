@@ -59,6 +59,7 @@ describe('drilling from an ad set into its ads', () => {
 
   async function openAdSets() {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Campaigns' }))
     fireEvent.click(await screen.findByRole('tab', { name: 'Ad groups' }))
   }
 
@@ -156,6 +157,7 @@ describe('drilling from an ad set into its ads', () => {
     await screen.findByTestId('drill-crumb-ad_set')
 
     urls.length = 0
+    fireEvent.click(await screen.findByRole('button', { name: 'Campaigns' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Ad groups' }))
 
     await waitFor(() => {

@@ -64,6 +64,7 @@ function route(entities: unknown[]) {
  */
 async function openAdSets() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Campaigns' }))
   fireEvent.click(await screen.findByRole('tab', { name: 'Ad groups' }))
 }
 
@@ -325,22 +326,24 @@ describe('ads and content are named for what they are', () => {
     route([ROW])
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Campaigns' }))
     await screen.findByRole('tab', { name: 'Ads' })
 
     /* «Ads» and «Ad» differ by a plural, and nothing in this bar may read that way again. */
     expect(screen.queryByRole('tab', { name: 'Ad' }), 'the ambiguous singular is back').toBeNull()
     expect(screen.getAllByRole('tab', { name: /^Ads?$/ })).toHaveLength(1)
-    expect(screen.getByRole('tab', { name: /Content/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Content' })).toBeInTheDocument()
   })
 
   it('names them apart in Arabic too', async () => {
     route([ROW])
     renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
+    fireEvent.click(await screen.findByRole('button', { name: 'الحملات' }))
     await screen.findByRole('tab', { name: 'الإعلانات' })
 
     expect(screen.queryByRole('tab', { name: 'الإعلان' }), 'the ambiguous singular is back').toBeNull()
-    expect(screen.getByRole('tab', { name: /المحتويات/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'المحتوى' })).toBeInTheDocument()
   })
 
   /**
@@ -360,7 +363,7 @@ describe('ads and content are named for what they are', () => {
     const content = await screen.findByRole('tab', { name: /Content/ })
 
     expect(content.getAttribute('aria-selected'), 'a content link did not open content').toBe('true')
-    expect(screen.getByRole('tab', { name: 'Ads' }).getAttribute('aria-selected')).toBe('false')
+    expect(screen.queryByRole('tab', { name: 'Ads' }), 'ads live in the Campaigns section').toBeNull()
   })
 })
 
