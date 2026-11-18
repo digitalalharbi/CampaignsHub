@@ -83,6 +83,7 @@ import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
 import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { DistributionBars } from './DistributionBars'
+import { AccountVisualDeck, BudgetVisualDeck, CampaignVisualDeck, EntityVisualDeck } from './TabVisualDecks'
 import { SPECS, layoutFor, valueReading } from './metricCatalog'
 import { FilterBar, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
@@ -1380,6 +1381,9 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
         subtitle={windowsUnlikeNote(s.data, ar, (c) => providerLabel(c, ar ? 'ar' : 'en')) ?? undefined}
       />
 
+      {/* ANALYTICS-VISUAL-DECKS-001 — the shape of the period before its rows. */}
+      <CampaignVisualDeck rows={rows} currency={reportingCurrency} windowEnd={range.to} ar={ar} />
+
       {/*
         VISUAL-FIRST-001 / clause D — «CAMPAIGN DISTRIBUTION → contribution/distribution bars».
 
@@ -1826,6 +1830,8 @@ function AccountBudgets({ projectId, range, filters, provider, picked, onPick }:
 function BudgetTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const b = useBudget(projectId, range, filters)
+  /* Same query key as PlatformBudgets below, so react-query answers it from cache — no second request. */
+  const budgetPlatforms = useBudgetPlatforms(projectId, range, filters)
   const reading = useBudgetExplanation(projectId, range, filters)
   /*
    * BUDGET-HIERARCHY-001 — one drill from the project down to a campaign.
@@ -1879,6 +1885,8 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
       was a question a client could answer from their report while the operator responsible could
       not. It reads through the same table as the campaign rung because it returns the same shape.
     */}
+    {/* ANALYTICS-VISUAL-DECKS-001 — rings and pace bars over the same rows the tables below read. */}
+    <BudgetVisualDeck platforms={budgetPlatforms.data ?? []} campaigns={rows} ar={ar} />
     <PlatformBudgets projectId={projectId} range={range} filters={filters} picked={drill.provider} onPick={pickPlatform} />
     <AccountBudgets projectId={projectId} range={range} filters={filters} provider={drill.provider} picked={drill.account?.id ?? null} onPick={pickAccount} />
     {/*
@@ -1911,6 +1919,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
         Pacing is blank rather than wrong when the plan and the spend are denominated differently,
         and the row says which case it is instead of leaving a reader to guess at an empty cell.
       */}
+      <div data-testid="budget-campaign-table">
       <MetricTable
         head={ar
           ? ['الحملة', 'الميزانية', 'حدّ المنصة', 'الإنفاق', 'المتبقي', 'نسبة الإنفاق', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
@@ -1994,6 +2003,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
         /* Fastest-burning first: a campaign about to overrun is why somebody opens this table. */
         initialSort={{ column: 8, dir: 'desc' }}
       />
+      </div>
     </Panel>
     </div>
   )
@@ -3607,6 +3617,9 @@ export function EntityTab({ projectId, range, filters, level, workspace, part = 
         />
       )}
 
+      {/* ANALYTICS-VISUAL-DECKS-001 — on the analytics tab only; the operational Ad groups / Ads pages stay table-first. */}
+      {!workspace && <EntityVisualDeck rows={rows} currency={currency} level={level} ar={ar} />}
+
       {part !== 'diagnosis' && <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />}
       {part !== 'diagnosis' && <Panel
         title={heading}
@@ -4166,6 +4179,9 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
         comparable={comparableWindows(s.data)}
         subtitle={windowsUnlikeNote(s.data, ar, (c) => providerLabel(c, ar ? 'ar' : 'en')) ?? undefined}
       />
+
+      {/* ANALYTICS-VISUAL-DECKS-001 */}
+      <div className="my-4"><AccountVisualDeck rows={rows} currency={currency} ar={ar} /></div>
 
       <Panel
       title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}
