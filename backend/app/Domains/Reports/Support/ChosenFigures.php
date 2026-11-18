@@ -249,10 +249,31 @@ final class ChosenFigures
         }
 
         $payload = $this->cutPermissions($payload);
-        $payload = $this->walk($payload, $this->unchosen());
+        $payload = $this->walk($payload, array_diff_key($this->unchosen(), self::CONTENT_FUNNEL));
 
-        return isset($this->columns['content']) ? $this->walk($payload, $this->unchosenBy('content')) : $payload;
+        return isset($this->columns['content'])
+            ? $this->walk($payload, array_diff_key($this->unchosenBy('content'), self::CONTENT_FUNNEL))
+            : $payload;
     }
+
+    /**
+     * CONTENT-ANALYSIS-BY-OBJECTIVE-001 — Owner 2026-11-18: «تحليل كل محتوى افتراضي دائماً لكن وفق الأهداف وقمع التحويل».
+     *
+     * A content item is judged on its own objective's path: a lead ad on its leads, a sales ad on its carts and orders, a video
+     * on how much of it was watched. A link whose KPI list names only clicks and impressions cut all of that, so a lead ad was
+     * graded on click-through alone. These counts and rates therefore stay in the content section whatever the list says. Money
+     * does not: spend, revenue and every cost or return built on them still follow the link's choice and its hide switches.
+     */
+    private const CONTENT_FUNNEL = [
+        'impressions' => true, 'clicks' => true, 'ctr' => true, 'reach' => true, 'frequency' => true,
+        'engagements' => true, 'engagement_rate' => true,
+        'video_views' => true, 'video_views_2s' => true, 'video_views_3s' => true, 'video_views_6s' => true,
+        'video_p25' => true, 'video_p50' => true, 'video_p75' => true, 'video_p100' => true, 'video_completions' => true,
+        'video_completion_rate' => true, 'video_avg_watch_seconds' => true, 'hook_rate' => true, 'view_rate' => true, 'completion_rate' => true,
+        'landing_page_views' => true, 'page_views' => true, 'add_to_cart' => true, 'checkout' => true, 'purchases' => true, 'orders' => true,
+        'conversions' => true, 'conversion_rate' => true, 'leads' => true, 'form_leads' => true, 'qualified_leads' => true, 'sign_ups' => true,
+        'installs' => true, 'registrations' => true, 'app_opens' => true, 'in_app_events' => true, 'results' => true, 'outcome' => true, 'decay' => true,
+    ];
 
     /**
      * A section with its own address and its own vocabulary (widgets, attribution): only the KPI list reaches it.

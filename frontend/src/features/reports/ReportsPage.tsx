@@ -65,7 +65,7 @@ import { ReportSectionControls } from './ReportSectionControls'
 import {
   ShareCreativeControls,
   creativeSharingBody,
-  emptyCreativeSharing,
+  defaultCreativeSharing,
   type CreativeSharing,
 } from './ShareCreativeControls'
 import { ProvenanceBadge, type Provenance } from '@/features/analytics/components'
@@ -1745,7 +1745,8 @@ export function ShareManager({ projectId, reportId, onClose }: { projectId: stri
    * before this existed does.
    */
   const [form, setForm] = useState('')
-  const [creatives, setCreatives] = useState<CreativeSharing>(emptyCreativeSharing)
+  // REPORT-ADS-ALL-ON-001 — the report's own share dialog starts from the same default as the live-link builder.
+  const [creatives, setCreatives] = useState<CreativeSharing>(defaultCreativeSharing)
   /*
    * ATTRIB-VIS-001 — off unless the operator turns it on, for this link.
    *

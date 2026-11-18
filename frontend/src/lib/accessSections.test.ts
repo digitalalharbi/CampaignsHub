@@ -32,12 +32,26 @@ describe('permissionOfPath', () => {
     expect(permissionOfPath('/agency/agents/approvals')).toBe('ai.view')
     expect(permissionOfPath('/agency/automation')).toBe('automations.view')
     expect(permissionOfPath('/app/campaigns/123')).toBe('campaigns.view')
-    expect(permissionOfPath('/agency/dashboard')).toBeNull()
+    expect(permissionOfPath('/agency/dashboard')).toBe('analytics.view')
+    expect(permissionOfPath('/app/launch')).toBe('campaigns.launch')
+    expect(permissionOfPath('/agency/portfolio')).toBe('clients.view')
+    // NAV-PAGE-PERMISSION-002 — the projects list and the team page; a project's own pages answer to its capability.
+    expect(permissionOfPath('/app/projects')).toBe('projects.view')
+    expect(permissionOfPath('/app/projects/12/integrations')).toBeNull()
+    expect(permissionOfPath('/agency/team')).toBe('settings.manage')
+  })
+
+  it('FINANCE-ONLY-NAV-001 — a finance member is offered budgets, invoices and clients, and no marketing page', () => {
+    const finance = ['clients.view', 'clients.view_all', 'budget.view', 'budget.manage', 'billing.view', 'billing.manage', 'funding.view', 'funding.manage']
+    const leaves = [...agencyNavGroups, agencySettingsGroup].flatMap((g) => g.leaves)
+    const offered = leaves.filter((l) => { const p = permissionOfPath(l.to); return p === null || finance.includes(p) }).map((l) => l.to)
+    expect(offered).toEqual(expect.arrayContaining(['/agency/billing', '/agency/budgets', '/agency/clients', '/agency/home']))
+    for (const t of ['/agency/campaigns', '/agency/ads', '/agency/analytics', '/agency/dashboard', '/agency/content', '/agency/reports']) expect(offered).not.toContain(t)
   })
 
   it('gives every agency rail page except home a permission', () => {
     const leaves = [...agencyNavGroups, agencySettingsGroup].flatMap((g) => g.leaves)
     const open = leaves.filter((l) => permissionOfPath(l.to) === null).map((l) => l.to)
-    expect(open.sort()).toEqual(['/agency/dashboard', '/agency/home', '/agency/team'])
+    expect(open.sort()).toEqual(['/agency/home'])
   })
 })

@@ -6,13 +6,15 @@ import { X } from 'lucide-react'
  * Escape and the scrim close it; focus goes in on open and returns to the row on close. Opacity only, no slide:
  * a panel whose buttons move while it opens is a click that misses.
  */
-export function SlideOver({ open, onClose, title, closeLabel, children, testid }: {
+export function SlideOver({ open, onClose, title, closeLabel, children, testid, center = false }: {
   open: boolean
   onClose: () => void
   title: ReactNode
   closeLabel: string
   children: ReactNode
   testid?: string
+  /** BUDGET-POPUP-001 — a window in the middle of the page from tablet width up (a bottom sheet on a phone), closable by ✕, Escape and the scrim. */
+  center?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   // The page's own header (marked `data-slideover-avoid`) stays clickable: the panel and its scrim start BELOW it,
@@ -39,14 +41,16 @@ export function SlideOver({ open, onClose, title, closeLabel, children, testid }
   if (!open) return null
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 flex justify-end" style={{ top }} data-testid={testid}>
-      <div className="absolute inset-0 bg-black/30" onMouseDown={onClose} aria-hidden />
+    <div className={center ? 'fixed inset-0 z-[60] flex items-end justify-center md:items-center md:p-6' : 'fixed inset-x-0 bottom-0 z-40 flex justify-end'} style={center ? undefined : { top }} data-testid={testid}>
+      <div className={`absolute inset-0 ${center ? 'bg-black/50' : 'bg-black/30'}`} onMouseDown={onClose} aria-hidden />
       <aside
         ref={ref}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        className="relative flex h-full w-full max-w-[520px] min-w-0 flex-col gap-3 overflow-y-auto border-s border-border bg-surface p-3 shadow-[var(--shadow-large,0_8px_32px_rgba(0,0,0,.18))] focus:outline-none"
+        className={center
+          ? 'relative flex max-h-[92dvh] w-full min-w-0 flex-col gap-3 overflow-y-auto rounded-t-[20px] border border-border bg-surface p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[var(--shadow-large,0_8px_32px_rgba(0,0,0,.18))] focus:outline-none md:max-h-[88dvh] md:max-w-[820px] md:rounded-[20px]'
+          : 'relative flex h-full w-full max-w-[520px] min-w-0 flex-col gap-3 overflow-y-auto border-s border-border bg-surface p-3 shadow-[var(--shadow-large,0_8px_32px_rgba(0,0,0,.18))] focus:outline-none'}
       >
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="min-w-0 flex-1">{title}</div>

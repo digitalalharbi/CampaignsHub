@@ -49,7 +49,10 @@ const PAGE_PERMISSION: ReadonlyArray<readonly [RegExp, string]> = [
   [/^\/(campaigns|ad-groups|ads|short-links|recommendations)(\/|$)/, 'campaigns.view'],
   [/^\/content(\/|$)/, 'content.view'],
   [/^\/files(\/|$)/, 'drive.view'],
-  [/^\/analytics(\/|$)/, 'analytics.view'],
+  // FINANCE-ONLY-NAV-001 — the analytics board reads the same analytics; a finance member (budgets and invoices only) was offered it.
+  [/^\/(analytics|dashboard)(\/|$)/, 'analytics.view'],
+  [/^\/launch(\/|$)/, 'campaigns.launch'],
+  [/^\/portfolio(\/|$)/, 'clients.view'],
   [/^\/(reports|delivery)(\/|$)/, 'reports.view'],
   [/^\/forms(\/|$)/, 'leads.view'],
   [/^\/(budgets|spend-limits)(\/|$)/, 'budget.view'],
@@ -60,6 +63,9 @@ const PAGE_PERMISSION: ReadonlyArray<readonly [RegExp, string]> = [
   [/^\/automation(\/|$)/, 'automations.view'],
   [/^\/integrations(\/|$)/, 'integrations.view'],
   [/^\/subscriptions(\/|$)/, 'subscriptions.view'],
+  // NAV-PAGE-PERMISSION-002 — the projects list reads `projects.view`; the team page answers `settings.manage` (TeamController::index).
+  [/^\/projects\/?$/, 'projects.view'],
+  [/^\/team(\/|$)/, 'settings.manage'],
   [/^\/settings(\/|$)/, 'settings.manage'],
 ]
 

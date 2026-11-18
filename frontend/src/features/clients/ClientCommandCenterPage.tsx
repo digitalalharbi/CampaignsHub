@@ -138,11 +138,12 @@ export function ClientCommandCenterPage() {
         {d.classification.priority && d.classification.priority !== 'normal' && <span className="rounded-full bg-warning/15 px-2.5 py-1 font-semibold text-warning">{t('cc_priority')}: {labelOf(PRIORITY_LABELS, d.classification.priority, lang)}</span>}
         {d.classification.owner_name && <span className="rounded-full bg-surface-secondary px-2.5 py-1 font-semibold text-text-secondary">{t('cc_owner')}: {d.classification.owner_name}</span>}
       </div>
-      <div className="flex max-w-full flex-nowrap gap-1 overflow-x-auto border-b border-border" data-testid="client-tabs">
-        {TABS.map((tb) => (
-          <button key={tb.key} onClick={() => setTab(tb.key)} className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-semibold ${tab === tb.key ? 'border-brand-500 text-brand-700' : 'border-transparent text-text-secondary hover:text-text-primary'}`}>{tb.label}</button>
-        ))}
-      </div>
+      {/* CLIENT-TABS-001 — a steady segmented bar (the levels strip's look): the active tab is a filled pill, nothing slides. */}
+      <nav aria-label={ar ? 'أقسام العميل' : 'Client sections'} className="-mx-0.5 flex min-w-0 max-w-full flex-nowrap gap-1 overflow-x-auto rounded-2xl border border-border bg-surface-secondary p-1 [scrollbar-width:none]" data-testid="client-tabs">
+      {TABS.map((tb) => (
+      <button key={tb.key} type="button" aria-pressed={tab === tb.key} data-testid={`client-tab-${tb.key}`} onClick={() => setTab(tb.key)} className={`inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-xl px-3 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 ${tab === tb.key ? 'bg-brand-600 text-white shadow-[var(--shadow-small)]' : 'text-text-secondary hover:bg-surface hover:text-text-primary'}`}>{tb.label}</button>
+      ))}
+      </nav>
     </div>
   )
 

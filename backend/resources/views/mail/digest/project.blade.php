@@ -11,6 +11,7 @@
 @php($weekly = $kind === 'weekly')
 @php($monthly = $kind === 'monthly')
 @php($st = $m['status'])
+@php($lean = ($external ?? false) || ($readOnly ?? false))
 @php($h = $m['headline'])
 <div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
     @include('mail.digest._head', ['title' => \App\Domains\Notifications\Support\DigestSchedule::title('project', $kind, $ar), 'sub' => $periodLabel])
@@ -99,7 +100,7 @@
         @endforelse
     @endif
 
-@unless ($external ?? false)
+@unless ($lean)
     {{-- What needs a decision: ranked, the problem drawn, one button each. --}}
     @if ($m['issues'])
         <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:4px 0 8px;">{{ $ar ? 'يحتاج قرارك الآن' : 'Needs your decision now' }}</div>
@@ -154,12 +155,12 @@
                 </table>
             @endforeach
         @endforeach
-@unless ($external ?? false)
+@unless ($lean)
         <div style="text-align:center; margin:4px 0 10px;"><a href="{{ $m['links']['content'] }}" style="font-size:13px; font-weight:700; color:#0b7a62; text-decoration:underline;">{{ $t['open_content'] }}</a></div>
 @endunless
     @endif
 
-@unless ($external ?? false)
+@unless ($lean)
     @if (! empty($m['follow_up']))
         @php($f = $m['follow_up'])
         <div data-block="follow-up" style="font-size:13px; color:#3d4742; line-height:1.8; margin:10px 0;">
@@ -169,7 +170,7 @@
     @endif
 
 @endunless
-@unless ($external ?? false)
+@unless ($lean)
     @if ($m['linking'])
         {{-- DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «ملخص الربط»: linking health, apart from performance, short, at the end. --}}
         <div data-block="linking" style="border-top:1px solid #e4e0d6; margin-top:12px; padding-top:8px;">

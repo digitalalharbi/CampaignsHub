@@ -467,10 +467,16 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false, diffe
         const w = reported ? Math.max(8, ((s.count as number) / (top || 1)) * 100) : 0
         const fewer = reported && (s.providers?.length ?? 0) > 0 && (s.providers?.length ?? 0) < everyone.size
         return (
-          <div key={s.label} className="flex items-center gap-3" data-testid={`funnel-stage-${s.stage ?? i}`}>
+          /*
+           * FUNNEL-MOBILE-001 — Owner 2026-11-18: «الأرقام ما تظهر في تصفح الجوال، أول رقم يظهر والباقي مختفي».
+           *
+           * Below `sm` the row stacks — the label and the rate on one line, the bar the whole width under them — and a count
+           * whose bar is too short to hold it is written just after the bar, in the text colour, so every stage states its number.
+           */
+          <div key={s.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:flex sm:gap-3" data-testid={`funnel-stage-${s.stage ?? i}`} data-row="funnel">
             {/* UX-COPY-001 — the payload labels its stages in English only. */}
-            <span className="flex w-32 shrink-0 flex-col gap-0.5">
-              <span className="text-sm font-medium text-text-secondary">{funnelStageLabel(s.stage ?? '', s.label, ar)}</span>
+            <span className="flex min-w-0 flex-col gap-0.5 sm:w-32 sm:shrink-0">
+              <span className="truncate text-sm font-medium text-text-secondary">{funnelStageLabel(s.stage ?? '', s.label, ar)}</span>
               {fewer && (
                 <span className="inline-flex items-center gap-0.5" data-testid="funnel-stage-providers" title={ar ? 'المنصات التي ترسل هذه المرحلة' : 'Platforms that report this stage'}>
                   {(s.providers ?? []).map((p) => <ProviderMark key={p} provider={p} size={12} />)}
@@ -478,8 +484,8 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false, diffe
               )}
             </span>
             {reported ? (
-              <div className="h-9 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
-                <div className="flex h-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>
+              <div className="order-last col-span-2 flex h-9 min-w-0 items-center overflow-hidden rounded-xl bg-surface-secondary sm:order-none sm:flex-1">
+                <div className="flex h-full shrink-0 items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>
                   {/*
                     NUMBER-PRESENTATION-001 — the funnel wrote its counts at full width.
                     *
@@ -496,15 +502,16 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false, diffe
                     * legitimate: «6.6M» a reader cannot get back to 6,596,500 is a figure they
                     * cannot audit.
                   */}
-                  <span className="tnum" title={countRead(s.count).exact ?? undefined}>{countRead(s.count).text}</span>
+                  {w >= 40 && <span className="tnum" data-testid="funnel-count" title={countRead(s.count).exact ?? undefined}>{countRead(s.count).text}</span>}
                 </div>
+                {w < 40 && <span className="tnum ms-2 shrink-0 text-sm font-semibold text-text-primary" data-testid="funnel-count" data-outside="true" title={countRead(s.count).exact ?? undefined}>{countRead(s.count).text}</span>}
               </div>
             ) : (
-              <div className="flex h-9 flex-1 items-center rounded-xl border border-dashed border-border px-3 text-xs text-text-muted">
+              <div className="order-last col-span-2 flex h-9 items-center rounded-xl border border-dashed border-border px-3 text-xs text-text-muted sm:order-none sm:flex-1">
                 {ar ? 'لم ترسل المنصة هذه المرحلة' : 'This stage was never reported'}
               </div>
             )}
-            <div className="w-36 shrink-0 text-end text-xs text-text-muted">
+            <div className="text-end text-xs text-text-muted sm:w-36 sm:shrink-0">
               {/*
                 FUNNEL-NOT-NESTED-001 — «165%» is not a conversion rate, and this said it was.
                 *

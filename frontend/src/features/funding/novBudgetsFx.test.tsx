@@ -60,16 +60,15 @@ describe('budgets: default dollar rate', () => {
     expect(within(bar).getByTestId('fx-rate-value').textContent).not.toMatch(/\d/)
   })
 
-  it('the side panel starts below the page header, so «أضف ميزانية» is never covered', async () => {
+  it('BUDGET-POPUP-001: a budget opens as a window in the middle, closable by ✕', async () => {
     serve()
     renderWithProviders(<BudgetsPage />, { locale: 'ar' })
-    const header = (await screen.findByTestId('budgets-intro')).closest('[data-slideover-avoid]') as HTMLElement
-    header.getBoundingClientRect = () => ({ bottom: 80, top: 0, left: 0, right: 0, width: 0, height: 80, x: 0, y: 0, toJSON: () => ({}) })
 
     fireEvent.click(await screen.findByTestId('budget-row-p1'))
-    const panel = await screen.findByTestId('budget-drawer')
-    const overlay = panel.closest('div.fixed') as HTMLElement
-    expect(overlay.style.top).toBe('88px')
-    expect(overlay.contains(screen.getByTestId('budgets-add'))).toBe(false)
+    const overlay = await screen.findByTestId('budget-drawer')
+    expect(overlay.className).toContain('md:items-center')
+
+    fireEvent.click(within(overlay).getByTestId('slideover-close'))
+    expect(screen.queryByTestId('budget-drawer')).toBeNull()
   })
 })

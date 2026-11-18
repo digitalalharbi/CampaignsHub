@@ -538,7 +538,7 @@ function AdCard({
       <AdPoster preview={ad.preview ?? null} name={ad.name ?? ''} className="h-32 w-full" testid={testidPrefix} fit="cover" forClient />
 
       <div className="min-w-0">
-        <div className="truncate text-sm font-bold text-text-primary" title={ad.name ?? undefined}>
+        <div dir="auto" className="truncate text-start text-sm font-bold text-text-primary" title={ad.name ?? undefined}>
           {ad.name ?? '—'}
         </div>
         <div className="flex items-center gap-1 truncate text-[11px] text-text-muted">
@@ -740,7 +740,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
 
 /** REPORT-CARD-OBJECTIVE-001 — the count each objective is judged on, read from the ad's own reported figure. */
 const OBJECTIVE_COUNT: Record<string, { key: string; ar: string; en: string }> = {
-  sales: { key: 'purchases', ar: 'المشتريات', en: 'Purchases' },
+  sales: { key: 'purchases', ar: 'الطلبات', en: 'Purchases' },
   leads: { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads' },
   traffic: { key: 'clicks', ar: 'النقرات', en: 'Clicks' },
   app: { key: 'installs', ar: 'التثبيتات', en: 'Installs' },

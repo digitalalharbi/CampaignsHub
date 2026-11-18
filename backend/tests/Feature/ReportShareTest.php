@@ -417,6 +417,30 @@ final class ReportShareTest extends TestCase
         $this->patchJson($url, ['watermark' => true])->assertStatus(409);
     }
 
+    /** REPORT-LINK-EDIT-ADS-001 — a published link gains its ad section and listing policy in place, and the edit dialog reads both back. */
+    public function test_an_edit_turns_the_ad_section_on_with_its_listing_policy_on_the_same_link(): void
+    {
+        [$share] = app(ShareService::class)->create($this->report, [], null);
+        $url = "/api/v1/projects/{$this->report->project_id}/reports/{$this->report->id}/shares/{$share->id}";
+        $this->actingAs($this->owner, 'sanctum');
+
+        $data = $this->patchJson($url, [
+            'creatives' => ['creatives' => true, 'video' => true],
+            'creative_display' => ['policy' => 'activity', 'include_zero_activity' => false, 'auto_refresh' => true],
+        ])->assertOk()->json('data');
+
+        $this->assertSame($share->id, $data['id']);
+        $this->assertTrue($data['creatives']['creatives']);
+        $this->assertTrue($data['creatives']['video']);
+        $this->assertSame('activity', $data['creative_display']['policy']);
+
+        $stored = ReportShare::withoutGlobalScopes()->find($share->id);
+        $this->assertSame($share->token_hash ?? null, $stored->token_hash ?? null);
+        $this->assertSame('activity', $stored->settings['creative_display']['policy']);
+
+        $this->patchJson($url, ['creative_display' => ['policy' => 'everything']])->assertStatus(422);
+    }
+
     public function test_only_someone_who_may_share_can_edit_a_link(): void
     {
         [$share] = app(ShareService::class)->create($this->report, [], null);

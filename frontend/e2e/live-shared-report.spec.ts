@@ -82,7 +82,9 @@ test.describe('a client opens their live report', () => {
     const before = await headline.innerText()
     await page.evaluate(() => { (window as unknown as { __kept: string }).__kept = 'survived' })
 
-    await page.getByTestId('live-range-7').click()
+    await page.getByTestId('live-range-picker-button').click()
+    await page.getByTestId('live-range-picker-preset-yesterday').click()
+    await page.getByTestId('live-range-picker-apply').click()
 
     await expect
       .poll(async () => headline.innerText(), { timeout: 20000 })

@@ -24,6 +24,7 @@ const AnalyticsPage = lazyPage(() => import('@/features/analytics/AnalyticsPage'
 const RecommendationsPage = lazyPage(() => import('@/features/recommendations/RecommendationsPage'), 'RecommendationsPage')
 const AgentCenterPage = lazyPage(() => import('@/features/agents/AgentCenterPage'), 'AgentCenterPage')
 const AutomationPage = lazyPage(() => import('@/features/automation/AutomationPage'), 'AutomationPage')
+const AccountsWorkspacePage = lazyPage(() => import('@/features/campaigns/AccountsWorkspacePage'), 'AccountsWorkspacePage')
 const EntityWorkspacePage = lazyPage(() => import('@/features/campaigns/EntityWorkspacePage'), 'EntityWorkspacePage')
 const LaunchPage = lazyPage(() => import('@/features/launch/LaunchPage'), 'LaunchPage')
 const ApprovalsPage = lazyPage(() => import('@/features/agents/ApprovalsPage'), 'ApprovalsPage')
@@ -404,6 +405,7 @@ export const router = createBrowserRouter(withErrorBoundary([
           /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
           /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
           { path: 'launch', element: <LaunchPage /> },
+          { path: 'accounts', element: <AccountsWorkspacePage /> },
           { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
           { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
           { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
@@ -674,6 +676,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
             /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
             { path: 'launch', element: <LaunchPage /> },
+            { path: 'accounts', element: <AccountsWorkspacePage /> },
             { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
             { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },

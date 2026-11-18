@@ -69,7 +69,7 @@ final class StoreFunnelService
         ['key' => 'add_to_cart', 'ar' => 'الإضافة للسلة', 'en' => 'Add to cart', 'ad_keys' => ['add_to_cart'], 'store' => true],
         ['key' => 'checkout_started', 'ar' => 'بدء الدفع', 'en' => 'Checkout started', 'ad_keys' => ['checkout'], 'store' => false],
         ['key' => 'orders', 'ar' => 'الطلبات', 'en' => 'Orders', 'ad_keys' => [], 'store' => true],
-        ['key' => 'purchases', 'ar' => 'المشتريات', 'en' => 'Purchases', 'ad_keys' => ['purchases'], 'store' => true],
+        ['key' => 'purchases', 'ar' => 'الطلبات', 'en' => 'Purchases', 'ad_keys' => ['purchases'], 'store' => true],
         ['key' => 'revenue', 'ar' => 'الإيرادات', 'en' => 'Revenue', 'ad_keys' => ['revenue'], 'store' => true],
     ];
 

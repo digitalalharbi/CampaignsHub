@@ -123,6 +123,23 @@ final class DigestsVisualV2Test extends TestCase
         $this->assertSame($cellIssues, $bad);
     }
 
+    public function test_a_read_only_reader_gets_performance_and_the_remaining_budget_and_nothing_operational(): void
+    {
+        $d = DigestDemo::payload(30, 6);
+        $portfolio = (new OperationalDigestMail(OperationalDigestModel::portfolio($d, 'ar', 'daily'), 'ar', 'م', 'daily', 'portfolio', readOnly: true))->render();
+        $project = (new OperationalDigestMail(OperationalDigestModel::project($d['projects'][3], 'ar', 1), 'ar', 'م', 'daily', 'project', readOnly: true))->render();
+        foreach ([$portfolio, $project] as $html) {
+            $this->assertStringContainsString('data-block="kpis"', $html, 'performance stays');
+            $this->assertStringNotContainsString('يحتاج قرارك', $html, 'no decision list');
+            $this->assertStringNotContainsString('data-block="issue"', $html);
+            $this->assertStringNotContainsString('data-block="linking"', $html, 'no connections block');
+            $this->assertStringNotContainsString('افتح', $html, 'no button back into the product');
+        }
+        // The normal reader keeps all of it.
+        $normal = (new OperationalDigestMail(OperationalDigestModel::portfolio($d, 'ar', 'daily'), 'ar', 'م', 'daily', 'portfolio'))->render();
+        $this->assertStringContainsString('data-block="issue"', $normal);
+    }
+
     public function test_the_weekly_differs_from_the_daily_and_both_are_visual_not_prose(): void
     {
         $d = DigestDemo::payload(30, 6);

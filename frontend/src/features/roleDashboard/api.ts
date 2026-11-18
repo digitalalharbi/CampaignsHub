@@ -168,14 +168,16 @@ export function useDashboardPerformance(days: DashboardWindow, enabled = true) {
   })
 }
 
-export function useRoleDashboard(view: DashboardView | null, days: DashboardWindow = 30) {
+export function useRoleDashboard(view: DashboardView | null, days: DashboardWindow = 30, client: string | null = null) {
   const params = new URLSearchParams()
   if (view) params.set('view', view)
   if (days !== 30) params.set('days', String(days))
+  // DASH-CLIENT-FILTER-001 — the client chosen on the page narrows every figure; the server ignores one out of reach.
+  if (client) params.set('client', client)
   const qs = params.toString()
 
   return useQuery({
-    queryKey: ['me', 'dashboard', view, days],
+    queryKey: ['me', 'dashboard', view, days, client],
     queryFn: () => getData<RoleDashboard>(qs ? `/me/dashboard?${qs}` : '/me/dashboard'),
     // A new window keeps the figures on screen until the new ones land, the same view's page in another period.
     placeholderData: keepPreviousData,

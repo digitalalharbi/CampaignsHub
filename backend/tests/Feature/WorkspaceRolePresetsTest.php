@@ -133,6 +133,19 @@ final class WorkspaceRolePresetsTest extends TestCase
         $this->assertNotContains('funding.manage', $pm);
     }
 
+    /** PM-READ-ONLY-001 — a project manager reads the budget, the content, the performance and the analytics, and executes nothing. */
+    public function test_a_project_manager_reads_and_never_executes(): void
+    {
+        $pm = WorkspaceRolePresets::defaults(WorkspaceRolePresets::PROJECT_MANAGER);
+
+        foreach (['budget.view', 'content.view', 'campaigns.view', 'analytics.view', 'reports.view'] as $read) {
+            $this->assertContains($read, $pm);
+        }
+        foreach ($pm as $key) {
+            $this->assertDoesNotMatchRegularExpression('/\.(create|update|launch|pause|approve|reject|manage|export|share|change_status|comment_client|comment_internal|create_reports|share_reports)$/', $key, "a read-only role holds {$key}");
+        }
+    }
+
     public function test_a_project_manager_reaches_only_the_clients_chosen_for_them(): void
     {
         $mine = ClientWorkspace::create(['tenant_id' => $this->tenant->id, 'name' => 'Mine', 'slug' => 'mine', 'mode' => 'managed', 'status' => 'active', 'client_status' => 'active']);

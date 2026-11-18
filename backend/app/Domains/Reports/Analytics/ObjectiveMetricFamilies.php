@@ -135,7 +135,7 @@ final class ObjectiveMetricFamilies
         'cost_per_view' => ['ar' => 'تكلفة المشاهدة', 'en' => 'Cost per view'],
         'leads' => ['ar' => 'العملاء المحتملون', 'en' => 'Leads'],
         'cpl' => ['ar' => 'تكلفة العميل المحتمل', 'en' => 'CPL'],
-        'purchases' => ['ar' => 'المشتريات', 'en' => 'Purchases'],
+        'purchases' => ['ar' => 'الطلبات', 'en' => 'Purchases'],
         // REPORT-FORMAT-COMPARE-TABLE-001 — the three figures the report presets name that no family block does.
         'add_to_cart' => ['ar' => 'الإضافة للسلة', 'en' => 'Add to cart'],
         'conversion_rate' => ['ar' => 'معدل التحويل', 'en' => 'Conversion rate'],

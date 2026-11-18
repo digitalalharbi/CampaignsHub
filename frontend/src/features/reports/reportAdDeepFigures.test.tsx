@@ -30,8 +30,8 @@ describe('the content dialog goes deeper', () => {
     const rows = deepFigures(ad, 'USD', true)
 
     expect(value(rows, 'الإيرادات')).toBe('5,147 $')
-    expect(value(rows, 'المشتريات')).toBe('81')
-    expect(value(rows, 'أيام النشاط')).toBe('14')
+    expect(value(rows, 'الطلبات')).toBe('81')
+    expect(value(rows, 'مدة التشغيل')).toBe('14')
     expect(value(rows, 'تكلفة النقرة')).toBe('0.36 $')
   })
 
@@ -39,13 +39,13 @@ describe('the content dialog goes deeper', () => {
     const rows = deepFigures({ ...ad, spend_withheld_rows: 1, reported: { purchases: false } } as ReportAd, 'USD', true)
 
     expect(value(rows, 'تكلفة النقرة')).toBeUndefined()
-    expect(value(rows, 'المشتريات')).toBeUndefined()
+    expect(value(rows, 'الطلبات')).toBeUndefined()
   })
 
   it('draws the viewer journey and the video retention', () => {
     renderWithProviders(<ReportAdDeepFigures ad={ad} currency="USD" ar />)
 
-    expect(screen.getByTestId('report-ad-journey')).toHaveTextContent('رحلة المشاهد')
+    expect(screen.getByTestId('report-ad-journey')).toHaveTextContent('القمع التسويقي')
     expect(screen.getByTestId('report-ad-retention')).toHaveTextContent('50%')
   })
 })

@@ -2,6 +2,8 @@ import { Num } from '@/components/ui/Num'
 import { numberFormatter } from '@/lib/numerals'
 import { withMark } from '@/lib/money/mark'
 import type { ReportAd } from './ReportAdsSection'
+import { ContentScoreCard } from '@/features/content/ContentScoreCard'
+import { monotoneSteps } from '@/features/content/contentScore'
 
 /**
  * REPORT-CONTENT-DEEP-001 — Owner 2026-11-17: «احتاج إضافة تفاصيل كثيرة داخل تفاصيل كل محتوى».
@@ -24,13 +26,13 @@ const reported = (bag: Bag, key: string): number | null => {
 const fmt = (v: number, digits = 0) => numberFormatter('en-US', { maximumFractionDigits: digits }).format(v)
 
 const COUNTS: Array<{ key: string; ar: string; en: string }> = [
-  { key: 'purchases', ar: 'المشتريات', en: 'Purchases' },
+  { key: 'purchases', ar: 'الطلبات', en: 'Orders' },
   { key: 'add_to_cart', ar: 'الإضافة للسلة', en: 'Add to cart' },
   { key: 'checkout', ar: 'بدء الدفع', en: 'Checkouts' },
   { key: 'landing_page_views', ar: 'زيارات الصفحة', en: 'Page views' },
   { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads' },
   { key: 'video_views', ar: 'المشاهدات', en: 'Video views' },
-  { key: 'active_days', ar: 'أيام النشاط', en: 'Active days' },
+  { key: 'active_days', ar: 'مدة التشغيل', en: 'Days running' },
 ]
 
 const JOURNEY: Array<{ key: string; ar: string; en: string }> = [
@@ -38,7 +40,7 @@ const JOURNEY: Array<{ key: string; ar: string; en: string }> = [
   { key: 'clicks', ar: 'النقرات', en: 'Clicks' },
   { key: 'landing_page_views', ar: 'زيارات الصفحة', en: 'Page views' },
   { key: 'add_to_cart', ar: 'السلة', en: 'Cart' },
-  { key: 'purchases', ar: 'الشراء', en: 'Purchase' },
+  { key: 'purchases', ar: 'الطلب', en: 'Order' },
 ]
 
 const QUARTILES: Array<{ key: string; label: string }> = [
@@ -56,6 +58,9 @@ export function deepFigures(ad: ReportAd, currency: string | null, ar: boolean):
   const revenue = typeof bag.revenue_withheld_rows === 'number' && bag.revenue_withheld_rows > 0 ? null : reported(bag, 'revenue')
 
   if (revenue !== null && revenue > 0) out.push({ label: ar ? 'الإيرادات' : 'Revenue', value: withMark(fmt(revenue), currency) })
+  // CONTENT-SCORE-002 — where the purchase stage is not attributable the platform states orders; show them as «الطلبات».
+  const orders = reported(bag, 'purchases') === null ? reported(bag, 'orders') : null
+  if (orders !== null && orders > 0) out.push({ label: ar ? 'الطلبات' : 'Orders', value: fmt(orders) })
   for (const c of COUNTS) {
     const v = reported(bag, c.key)
     if (v !== null && v > 0) out.push({ label: ar ? c.ar : c.en, value: fmt(v) })
@@ -72,7 +77,8 @@ export function ReportAdDeepFigures({ ad, currency, ar }: { ad: ReportAd; curren
   const bag = ad as Bag
   const extra = deepFigures(ad, currency, ar)
 
-  const steps = JOURNEY.map((s) => ({ ...s, v: reported(bag, s.key) })).filter((s): s is typeof s & { v: number } => s.v !== null && s.v > 0)
+  // CONTENT-SCORE-001 — a later stage larger than the one before it is attribution, not the viewer's path: the chain stops there.
+  const steps = monotoneSteps(JOURNEY.map((s) => ({ ...s, v: reported(bag, s.key) })).filter((s): s is typeof s & { v: number } => s.v !== null && s.v > 0))
   const first = steps[0]?.v ?? 0
 
   const views = reported(bag, 'video_views')
@@ -84,6 +90,7 @@ export function ReportAdDeepFigures({ ad, currency, ar }: { ad: ReportAd; curren
 
   return (
     <div data-testid="report-ad-deep" className="grid gap-3">
+      <ContentScoreCard ad={bag} ar={ar} />
       {extra.length > 0 && (
         <dl data-testid="report-ad-deep-figures" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {extra.map((f) => (
@@ -97,7 +104,7 @@ export function ReportAdDeepFigures({ ad, currency, ar }: { ad: ReportAd; curren
 
       {steps.length >= 3 && (
         <section data-testid="report-ad-journey" className="rounded-xl border border-border p-3">
-          <h4 className="mb-2 text-sm font-bold text-text-primary">{ar ? 'رحلة المشاهد' : 'Viewer journey'}</h4>
+          <h4 className="mb-2 text-sm font-bold text-text-primary">{ar ? 'القمع التسويقي' : 'Funnel'}</h4>
           <ol className="grid gap-1.5">
             {steps.map((s, i) => {
               // Square root, so a purchase step is still a visible bar beside a million impressions.
