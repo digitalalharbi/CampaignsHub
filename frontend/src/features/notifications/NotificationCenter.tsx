@@ -114,8 +114,12 @@ export function NotificationCenter() {
    * unless told otherwise) and again the moment the tab regains focus. The 100-row list is fetched only while the panel is open.
    * That is the whole realtime mechanism: no socket, no per-second polling, and a pushed message from the service worker asks
    * for the same refetch (see `pushRefresh.ts`).
+   *
+   * PERF-BOOTSTRAP-001 — `staleTime` is five seconds, not zero: the page's first load files the summary from `/bootstrap`, and a
+   * zero would have this mount ask again at once for the answer that landed a moment earlier. The 30 s interval and the focus
+   * refetch are unchanged (both are far past five seconds).
    */
-  const summary = useQuery({ queryKey: ['notifications', 'summary'], queryFn: getNotificationSummary, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 0 })
+  const summary = useQuery({ queryKey: ['notifications', 'summary'], queryFn: getNotificationSummary, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 5_000 })
   useBellSound(summary.data)
   usePushRefresh()
   const q = useQuery({
