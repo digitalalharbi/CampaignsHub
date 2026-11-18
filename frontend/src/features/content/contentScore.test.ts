@@ -47,4 +47,15 @@ describe('the content scorecard', () => {
 
     expect(monotoneSteps(steps).map((s) => s.v)).toEqual([1000, 40, 12])
   })
+
+  /** CONTENT-SCORE-002 — a report row: figures under `metrics`, orders not purchases, no impressions in its settings. */
+  it('grades a report row on clicks and money when its settings show no impressions', () => {
+    const s = scoreContent({ provider: 'tiktok', metrics: { spend: 143.3, clicks: 553, revenue: 3425.25, purchases: null, orders: 49 } })
+
+    expect(s.sufficient).toBe(true)
+    expect(s.criteria.find((c) => c.key === 'roas')?.grade).toBe('good')
+    expect(s.criteria.find((c) => c.key === 'ctr')?.grade).toBe('na')
+    expect(s.criteria.find((c) => c.key === 'hook')?.grade).toBe('na')
+    expect(diagnosis(s, true)).toBe('متفوق')
+  })
 })

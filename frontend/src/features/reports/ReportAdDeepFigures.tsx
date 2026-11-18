@@ -58,6 +58,9 @@ export function deepFigures(ad: ReportAd, currency: string | null, ar: boolean):
   const revenue = typeof bag.revenue_withheld_rows === 'number' && bag.revenue_withheld_rows > 0 ? null : reported(bag, 'revenue')
 
   if (revenue !== null && revenue > 0) out.push({ label: ar ? 'الإيرادات' : 'Revenue', value: withMark(fmt(revenue), currency) })
+  // CONTENT-SCORE-002 — where the purchase stage is not attributable the platform states orders; show them as «الطلبات».
+  const orders = reported(bag, 'purchases') === null ? reported(bag, 'orders') : null
+  if (orders !== null && orders > 0) out.push({ label: ar ? 'الطلبات' : 'Orders', value: fmt(orders) })
   for (const c of COUNTS) {
     const v = reported(bag, c.key)
     if (v !== null && v > 0) out.push({ label: ar ? c.ar : c.en, value: fmt(v) })

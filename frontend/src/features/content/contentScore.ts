@@ -63,31 +63,36 @@ const LABELS: Record<Criterion['key'], { ar: string; en: string }> = {
   roas: { ar: 'العائد', en: 'ROAS' },
 }
 
-export function scoreContent(ad: Bag): ContentScore {
+export function scoreContent(input: Bag): ContentScore {
+  // A report's content rows carry their figures under `metrics`; the app's carry them flat. Either reads the same.
+  const ad: Bag = typeof input.metrics === 'object' && input.metrics !== null ? { ...input, ...(input.metrics as Bag) } : input
   const impressions = num(ad, 'impressions')
-  const sufficient = impressions !== null && impressions >= MIN_IMPRESSIONS
+  const clicksSeen = num(ad, 'clicks')
+  // A report that shows no impressions (its own settings) is judged on clicks: the click and money criteria only.
+  const sufficient = impressions !== null ? impressions >= MIN_IMPRESSIONS : clicksSeen !== null && clicksSeen >= MIN_CLICKS
   const make = (key: Criterion['key'], value: number | null, g: Grade): Criterion => ({ key, ...LABELS[key], value: g === 'na' ? null : value, grade: g })
 
   if (!sufficient) {
     return { score: null, sufficient: false, weakest: null, criteria: (Object.keys(LABELS) as Criterion['key'][]).map((k) => make(k, null, 'na')) }
   }
 
-  const imp = impressions as number
+  const imp = impressions
   const views = num(ad, 'video_views')
   const p50 = num(ad, 'video_p50')
   const p100 = num(ad, 'video_p100')
   const clicks = num(ad, 'clicks')
   const carts = num(ad, 'add_to_cart')
-  const orders = num(ad, 'purchases')
+  // TikTok and others state orders where the purchase stage is not attributable.
+  const orders = num(ad, 'purchases') ?? num(ad, 'orders')
   const spendWhole = !(typeof ad.spend_withheld_rows === 'number' && ad.spend_withheld_rows > 0)
   const revenueWhole = !(typeof ad.revenue_withheld_rows === 'number' && ad.revenue_withheld_rows > 0)
   const spend = spendWhole ? num(ad, 'spend') : null
   const revenue = revenueWhole ? num(ad, 'revenue') : null
 
-  const hook = views !== null && views > 0 && views <= imp ? views / imp : null
+  const hook = imp !== null && views !== null && views > 0 && views <= imp ? views / imp : null
   const hold = views !== null && views > 0 && p50 !== null && p50 <= views ? p50 / views : null
   const completion = views !== null && views > 0 && p100 !== null && p100 <= views ? p100 / views : null
-  const ctr = clicks !== null && clicks >= MIN_CLICKS && clicks <= imp ? clicks / imp : null
+  const ctr = imp !== null && clicks !== null && clicks >= MIN_CLICKS && clicks <= imp ? clicks / imp : null
   const cartOrder = carts !== null && carts >= MIN_CARTS && orders !== null && orders <= carts ? orders / carts : null
   const roas = spend !== null && spend > 0 && revenue !== null && orders !== null && orders >= MIN_ORDERS ? revenue / spend : null
   const [ctrGood, ctrOk] = ctrBands(typeof ad.provider === 'string' ? ad.provider : null)
@@ -111,7 +116,7 @@ export function scoreContent(ad: Bag): ContentScore {
 
 /** The one-line diagnosis — the weakest link, or «متفوق» when nothing graded is weak. */
 export function diagnosis(s: ContentScore, ar: boolean): string | null {
-  if (s.score === null) return null
+  if (!s.criteria.some((c) => c.grade !== 'na')) return null
   const lines: Record<Criterion['key'], { ar: string; en: string }> = {
     hook: { ar: 'بداية لا تشد الانتباه', en: 'The opening does not stop the scroll' },
     hold: { ar: 'يفقد المشاهد قبل الرسالة', en: 'Loses the viewer before the message' },
