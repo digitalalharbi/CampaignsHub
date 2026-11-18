@@ -69,6 +69,7 @@ import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
 import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
+import { DailyMeasurePanel } from './DailyMeasurePanel'
 import { useUrlList, useUrlState, useUrlWriter } from './filterUrlState'
 import { usePeriod } from '@/lib/period/usePeriod'
 import { DateRangePicker } from '@/components/ui/DateRangePicker'
@@ -557,7 +558,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       */}
       <PageIntro
         testid={`${surface}-intro`}
-        title={surface === 'dashboard' ? (ar ? 'لوحة التحكم' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
+        title={surface === 'dashboard' ? (ar ? 'الرئيسية' : 'Dashboard') : (ar ? 'التحليلات' : 'Analytics')}
         /*
           SURFACE-SEPARATION-001 — each surface says what it is FOR, and they are different things.
 
@@ -847,6 +848,9 @@ type OverviewTabProps = TabProps & { objective: string; surface: Surface }
  */
 function PerformanceTab({ projectId, range, filters, objective, surface }: OverviewTabProps) {
   const data = useOverviewData({ projectId, range, filters, objective })
+  const ar = useUi((s) => s.locale) === 'ar'
+  // ANALYTICS-DAILY-MEASURE-001 — both surfaces open on the report's daily chart: one analysis, one picture.
+  const daily = <DailyMeasurePanel projectId={projectId} range={range} filters={filters} ar={ar} />
 
   /*
    * WIDGET-REGISTRY-001 — the Dashboard's configurable widgets sit BELOW the overview it always had. A project where no
@@ -855,11 +859,17 @@ function PerformanceTab({ projectId, range, filters, objective, surface }: Overv
   return surface === 'dashboard'
     ? (
       <>
+        {daily}
         <DashboardOverview {...data} />
         <WidgetSurface projectId={projectId} surface="dashboard" range={range} />
       </>
     )
-    : <AnalyticsOverview {...data} />
+    : (
+      <>
+        {daily}
+        <AnalyticsOverview {...data} />
+      </>
+    )
 }
 
 

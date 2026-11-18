@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { FileText, Globe, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
-import { canonicalPlatform, isAdPlatform } from '@/lib/platforms'
+import { canonicalPlatform, isAdPlatform, sortPlatforms } from '@/lib/platforms'
 import { formatSpan } from '@/lib/period/periodMath'
 import { providerLabel } from '@/features/campaigns/labels'
 import { useUi } from '@/stores/ui'
@@ -222,9 +222,9 @@ export function LiveSharedReport({
      * `[&>*]:min-w-0` — without it this page scrolls sideways on a phone: a grid item's `min-width`
      * is `auto`, and a chart container's min-content is wider than a 375px screen.
      */
-    <div className="grid gap-3 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:gap-4 sm:pb-0 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
+    <div className="grid gap-3 sm:gap-4 [&>*]:min-w-0" data-testid="live-report" data-mode={mode}>
       {offeredHere.length > 1 && (
-        <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="fixed inset-x-0 bottom-0 z-30 flex gap-0.5 border-t border-border bg-surface/95 px-1 pb-[env(safe-area-inset-bottom)] pt-1 backdrop-blur sm:static sm:grid sm:max-w-full sm:gap-1 sm:rounded-2xl sm:border sm:p-1 sm:backdrop-blur-none" style={{ gridTemplateColumns: `repeat(${offeredHere.length}, minmax(0, 1fr))` }}>
+        <nav role="tablist" aria-label={ar ? 'طريقة العرض' : 'View'} data-testid="live-modes" className="grid w-full gap-0.5 rounded-2xl border border-border bg-surface p-1 sm:gap-1" style={{ gridTemplateColumns: `repeat(${offeredHere.length}, minmax(0, 1fr))` }}>
           {offeredHere.map((m) => {
             const Icon = MODE_ICONS[m]
             const selected = m === mode
@@ -237,11 +237,11 @@ export function LiveSharedReport({
                 aria-selected={selected}
                 data-testid={`live-mode-tab-${m}`}
                 onClick={() => navigate(m)}
-                className={`flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[11px] font-semibold leading-tight transition-colors active:scale-95 sm:min-h-0 sm:flex-none sm:flex-row sm:gap-1.5 sm:px-3.5 sm:py-2 sm:text-sm ${
+                className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 text-center text-[11px] font-semibold leading-tight transition-colors active:scale-95 sm:min-h-0 sm:flex-row sm:gap-1.5 sm:px-3.5 sm:py-2 sm:text-sm ${
                   selected ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover'
                 }`}
               >
-                <Icon size={20} aria-hidden />
+                <Icon size={20} className="shrink-0" aria-hidden />
                 {ar ? MODE_LABELS[m].ar : MODE_LABELS[m].en}
               </button>
             )
@@ -249,10 +249,10 @@ export function LiveSharedReport({
         </nav>
       )}
 
-      <div className="grid gap-2 rounded-2xl border border-border bg-surface p-2 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:p-3" data-testid="live-controls">
-        <div className="flex min-w-0 items-center gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
+      <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-border bg-surface p-2 sm:gap-2 sm:p-3" data-testid="live-controls">
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'}>
           {!fixed && (payload.period.kind ?? 'custom') === 'custom' && (
-            <div className="w-full sm:min-w-[14rem]">
+            <div className="min-w-[14rem] max-w-full">
               <Suspense fallback={<div className="min-h-11 w-full rounded-xl border border-border-strong bg-surface sm:min-h-10" aria-hidden />}>
                 <DateRangeField from={custom?.from ?? payload.period.from} to={custom?.to ?? payload.period.to} onChange={(from, to) => setCustom({ from, to })} testId="live-range-picker" />
               </Suspense>
@@ -274,8 +274,9 @@ export function LiveSharedReport({
         </div>
 
         {!ownsPlatformChoice(mode) && payload.available.providers.filter(isAdPlatform).length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden" role="group" aria-label={ar ? 'المنصات' : 'Platforms'}>
-            {payload.available.providers.filter(isAdPlatform).map((p) => {
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label={ar ? 'المنصات' : 'Platforms'}>
+            {/* PLATFORM-ORDER-002 — the product's order (سناب · تيك توك · ميتا · جوجل · إكس · لينكدإن · ChatGPT), and logos large enough to read on a phone. */}
+            {sortPlatforms(payload.available.providers.filter(isAdPlatform)).map((p) => {
               const on = providers.includes(p)
 
               return (
@@ -286,15 +287,15 @@ export function LiveSharedReport({
                   aria-pressed={on}
                   onClick={() => setProviders((list) => (list.includes(p) ? list.filter((v) => v !== p) : [...list, p]))}
                   title={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
-                  className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border ps-1.5 pe-3.5 text-sm font-semibold transition-colors active:scale-95 sm:min-h-10 ${
-                    on ? 'text-text-primary' : 'border-border text-text-secondary hover:bg-surface-hover'
+                  aria-label={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
+                  className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl border-2 transition-colors sm:h-14 sm:w-14 ${
+                    on ? '' : 'border-border hover:bg-surface-hover'
                   }`}
                   style={on ? { borderColor: platformColor(p), background: `color-mix(in srgb, ${platformColor(p)} 14%, transparent)` } : undefined}
                 >
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm">
-                    <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={20} logoOnly />
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface-hover sm:h-11 sm:w-11">
+                    <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={28} logoOnly />
                   </span>
-                  <span className="whitespace-nowrap">{providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}</span>
                 </button>
               )
             })}
@@ -306,7 +307,7 @@ export function LiveSharedReport({
             type="button"
             data-testid="live-refresh"
             onClick={main.reload}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-sm font-semibold text-text-secondary hover:bg-surface-hover sm:min-h-0 sm:min-w-0 sm:px-2.5 sm:text-xs"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-hover"
           >
             <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} aria-hidden />
             <span className="sr-only sm:not-sr-only">{ar ? 'تحديث' : 'Refresh'}</span>

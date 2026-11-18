@@ -172,7 +172,7 @@ const ar: HomeCopy = {
   dir: 'rtl',
   nav: {
     features: 'المميزات', how: 'كيف يعمل', services: 'الخدمات', integrations: 'التكاملات والتقارير',
-    login: 'تسجيل الدخول', start: 'إنشاء حساب', request: 'اطلب خدمة', clientLogin: 'متابعة طلباتي', dashboard: 'لوحة التحكم',
+    login: 'تسجيل الدخول', start: 'إنشاء حساب', request: 'اطلب خدمة', clientLogin: 'متابعة طلباتي', dashboard: 'الرئيسية',
   },
   /*
    * PRODUCT-IDENTITY-001 — the first screen says what the product IS.

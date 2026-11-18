@@ -9,7 +9,7 @@ import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { ChartCard, MetricLineChart, ProgressRing } from '@/features/analytics/charts'
 import { liveRowMoney } from '@/features/analytics/format'
-import { canonicalPlatform } from '@/lib/platforms'
+import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
 import { moneyParts, type MoneyTotals } from '@/lib/money/contract'
 import { PendingConversionChip } from '../PendingConversionChip'
 import { Num } from '@/components/ui/Num'
@@ -427,10 +427,12 @@ export function LoadGate({ load, ar, children }: { load: LiveLoad; ar: boolean; 
 
 /** The platforms a link actually carries figures for, largest spend first. */
 export function platformsOf(payload: LivePayload): string[] {
-  return [...(payload.platforms ?? [])]
+  const ordered = [...(payload.platforms ?? [])]
     .sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
     .map((p) => canonicalPlatform(p.provider))
     .filter((p, i, all) => all.indexOf(p) === i)
+  // PLATFORM-ORDER-002 — Owner 2026-11-18: the product's order always (سناب · تيك توك · ميتا · جوجل · إكس · لينكدإن · ChatGPT), not by spend.
+  return sortPlatforms(ordered)
 }
 
 /* ─────────────────────────────── C — Platform breakdown ─────────────────────────────── */

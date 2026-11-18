@@ -12,6 +12,7 @@
 @php($S = \App\Domains\Notifications\Support\DigestStatus::class)
 @php($weekly = $kind === 'weekly')
 @php($monthly = $kind === 'monthly')
+@php($lean = ($external ?? false) || ($readOnly ?? false))
 <div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
     {{-- DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «ملخص المشاريع • أمس» and the period with its dates. --}}
     @include('mail.digest._head', ['title' => \App\Domains\Notifications\Support\DigestSchedule::title('portfolio', $kind, $ar), 'sub' => $periodLabel])
@@ -53,6 +54,7 @@
         </table>
     @endif
 
+    @unless ($lean)
     {{-- 4. WHO needs a decision — performance of running campaigns only, one list in global priority order. Linking is in «ملخص الربط». --}}
     <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:4px 0 8px;">{{ $ar ? 'يحتاج قرارك الآن' : 'Needs your decision now' }}</div>
     @if ($m['issues_shown'])
@@ -66,6 +68,8 @@
     @else
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:10px;"><tr><td bgcolor="{{ $S::CELL['ok'] }}" style="background-color:{{ $S::CELL['ok'] }}; border-radius:10px; padding:10px 14px; font-size:13px; font-weight:700; color:{{ $S::INK['ok'] }};">✓ {{ $ar ? 'لا شيء يحتاج قرارك' : 'Nothing needs your decision' }}</td></tr></table>
     @endif
+
+    @endunless
 
     {{-- 5. DIGESTS-CADENCE-BUDGETS-001 — the month's budget, spend, remaining and pace per project, and the total. --}}
     @include('mail.digest._budgets', ['bud' => $m['budgets']])
@@ -104,7 +108,7 @@
         </tr>
         @foreach ($hm['rows'] as $row)
             <tr data-block="portfolio-row" data-state="{{ $row['state'] }}" data-project="{{ $row['id'] }}" height="20" style="height:20px; font-size:12px; line-height:20px; font-weight:800; text-align:center;">
-                <td style="font-weight:{{ in_array($row['state'], ['bad', 'watch'], true) ? 800 : 600 }}; color:{{ $row['state'] === 'none' ? '#8b9a97' : '#0b1a16' }}; text-align:{{ $startSide }}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><a href="{{ $row['url'] }}" style="color:{{ $row['state'] === 'none' ? '#8b9a97' : '#0b1a16' }}; text-decoration:none;">{{ \Illuminate\Support\Str::limit($row['name'], 18, '…') }}</a></td>
+                <td style="font-weight:{{ in_array($row['state'], ['bad', 'watch'], true) ? 800 : 600 }}; color:{{ $row['state'] === 'none' ? '#8b9a97' : '#0b1a16' }}; text-align:{{ $startSide }}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@if ($lean){{ \Illuminate\Support\Str::limit($row['name'], 18, '…') }}@else<a href="{{ $row['url'] }}" style="color:{{ $row['state'] === 'none' ? '#8b9a97' : '#0b1a16' }}; text-decoration:none;">{{ \Illuminate\Support\Str::limit($row['name'], 18, '…') }}</a>@endif</td>
                 @foreach ($row['cells'] as $cell)
                     @if ($cell === null)
                         <td align="center" style="font-size:11px; font-weight:400; color:#c9c4b6;">·</td>
@@ -122,6 +126,7 @@
         <td width="100%" style="font-size:1px; line-height:1px;">&nbsp;</td>
     </tr></table>
 
+    @unless ($lean)
     {{-- 7. DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «ملخص الربط»: linking and data freshness, apart from performance, short, at the end. --}}
     <div data-block="linking" style="border-top:1px solid #e4e0d6; margin-top:14px; padding-top:10px;">
     <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:0 0 6px;">{{ $ar ? 'ملخص الربط' : 'Connections summary' }}</div>
@@ -170,4 +175,5 @@
     </div>
 
     @include('mail.partials.button', ['href' => $m['links']['dashboard'], 'label' => $ar ? 'افتح لوحة المتابعة' : 'Open the dashboard'])
+    @endunless
 </div>

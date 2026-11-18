@@ -21,13 +21,13 @@ describe('a card in an objective group states that objective', () => {
   it('a sales card reads spend, purchases and return', () => {
     const figures = figuresFor(salesAd, true, 'USD', { family: 'sales' })
 
-    expect(figures.map((f) => f.label)).toEqual(['الإنفاق', 'المشتريات', 'العائد'])
-    expect(figures.find((f) => f.label === 'المشتريات')?.value).toBe('81')
+    expect(figures.map((f) => f.label)).toEqual(['الإنفاق', 'الطلبات', 'العائد'])
+    expect(figures.find((f) => f.label === 'الطلبات')?.value).toBe('81')
     expect(figures.find((f) => f.label === 'العائد')?.value).toBe('35.08×')
   })
 
   it('outside a group nothing is added', () => {
-    expect(figuresFor(salesAd, true, 'USD').map((f) => f.label)).not.toContain('المشتريات')
+    expect(figuresFor(salesAd, true, 'USD').map((f) => f.label)).not.toContain('الطلبات')
   })
 
   it('a count the platform did not report is never printed as a figure', () => {

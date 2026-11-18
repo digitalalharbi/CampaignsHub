@@ -162,7 +162,7 @@ describe('the report part — one comparison table (REPORT-FORMAT-COMPARE-TABLE-
       roas: { video: 4.2, image: 2.1, carousel: null },
     },
     better: { impressions: 'higher', clicks: 'higher', add_to_cart: 'higher', purchases: 'higher', revenue: 'higher', roas: 'higher' },
-    labels: { spend: { ar: 'الإنفاق', en: 'Spend' }, impressions: { ar: 'مرات الظهور', en: 'Impressions' }, clicks: { ar: 'النقرات', en: 'Clicks' }, add_to_cart: { ar: 'الإضافة للسلة', en: 'Add to cart' }, purchases: { ar: 'المشتريات', en: 'Purchases' }, revenue: { ar: 'الإيراد', en: 'Revenue' }, roas: { ar: 'العائد على الإنفاق', en: 'ROAS' } },
+    labels: { spend: { ar: 'الإنفاق', en: 'Spend' }, impressions: { ar: 'مرات الظهور', en: 'Impressions' }, clicks: { ar: 'النقرات', en: 'Clicks' }, add_to_cart: { ar: 'الإضافة للسلة', en: 'Add to cart' }, purchases: { ar: 'الطلبات', en: 'Purchases' }, revenue: { ar: 'الإيراد', en: 'Revenue' }, roas: { ar: 'العائد على الإنفاق', en: 'ROAS' } },
     kinds: { spend: 'money', impressions: 'count', clicks: 'count', add_to_cart: 'count', purchases: 'count', revenue: 'money', roas: 'multiplier' },
     verdict_order: ['roas', 'purchases', 'revenue', 'cpa'],
     ...over,
@@ -212,7 +212,7 @@ describe('the report part — one comparison table (REPORT-FORMAT-COMPARE-TABLE-
 
     for (const money of ['spend', 'revenue', 'roas']) expect(within(table).queryByTestId(`format-row-${money}`)).toBeNull()
     expect(within(table).getByTestId('format-row-purchases')).toBeInTheDocument()
-    expect(screen.getByTestId('format-table-verdict')).toHaveTextContent('المشتريات')
+    expect(screen.getByTestId('format-table-verdict')).toHaveTextContent('الطلبات')
     expect(screen.getByTestId('format-table-verdict').textContent).not.toMatch(/×|(?:SAR|ر\.س)/)
   })
 

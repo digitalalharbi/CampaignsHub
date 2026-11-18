@@ -113,7 +113,7 @@ export function StoreAnalyticsBlock({ data, ar }: { data: StoreAnalyticsPayload;
           <StatGrid columns="grid-cols-2 lg:grid-cols-4">
             <StatCard tone="brand" label={ar ? 'الجلسات' : 'Sessions'} value={<span dir="ltr">{num(site.totals.sessions)}</span>} />
             <StatCard tone="info" label={ar ? 'معدل التفاعل' : 'Engagement rate'} value={<span dir="ltr">{site.engagement_rate == null ? '—' : percent(site.engagement_rate, 1)}</span>} />
-            <StatCard tone="success" label={ar ? 'المشتريات' : 'Purchases'} value={<span dir="ltr">{num(site.totals.transactions)}</span>} />
+            <StatCard tone="success" label={ar ? 'الطلبات' : 'Purchases'} value={<span dir="ltr">{num(site.totals.transactions)}</span>} />
             <StatCard tone="neutral" label={ar ? 'إيراد الموقع' : 'Site revenue'} value={<span dir="ltr">{m(site.totals.revenue, site.currency)}</span>} />
           </StatGrid>
           {site.channels.length > 0 && (

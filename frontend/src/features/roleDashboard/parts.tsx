@@ -112,6 +112,10 @@ export function useBoxHeight(min = 80): { ref: RefObject<HTMLDivElement | null>;
   return { ref, height }
 }
 
+/* The hint row and its empty placeholder share one class string, so the placeholder reserves exactly the hint's height
+   (TYPOGRAPHY-PRODUCT-POLISH-001: one arbitrary size, written once). */
+const HINT_ROW = 'tnum min-h-4 truncate text-[11px] text-text-muted'
+
 /** A figure that opens its detail page. */
 export function Kpi({ label, value, hint, to, testId, status, children }: {
   label: string
@@ -130,15 +134,20 @@ export function Kpi({ label, value, hint, to, testId, status, children }: {
       to={to}
       data-testid={testId}
       data-status={s ?? undefined}
-      className="group relative flex min-w-0 flex-col justify-start gap-1 lg:justify-between overflow-hidden rounded-2xl border border-border bg-surface px-3.5 py-2.5 shadow-[var(--shadow-small)] transition hover:border-border-strong hover:shadow-[var(--shadow-medium)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+      className="group relative flex min-w-0 flex-col justify-start gap-1 overflow-hidden rounded-2xl border border-border bg-surface px-3.5 py-2.5 shadow-[var(--shadow-small)] transition hover:border-border-strong hover:shadow-[var(--shadow-medium)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
     >
-      {s && <span aria-hidden className="absolute inset-y-0 start-0 w-1" style={{ background: STATUS_COLOR[s] }} />}
+      {/* DASH-KPI-UNIFY-001 — one card shape for every figure: label, value, hint row always present (so values line up), the
+          status a soft dot and glow instead of a side bar. */}
+      {s && <span aria-hidden className="pointer-events-none absolute -top-8 end-0 h-16 w-24 rounded-full opacity-25 blur-2xl" style={{ background: STATUS_COLOR[s] }} />}
       <span className="flex items-center justify-between gap-2 text-xs font-semibold text-text-secondary">
-        <span className="truncate">{label}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          {s && <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: STATUS_COLOR[s] }} />}
+          <span className="truncate">{label}</span>
+        </span>
         {ar ? <ChevronLeft size={14} className="shrink-0 text-text-muted opacity-0 transition group-hover:opacity-100" aria-hidden /> : <ChevronRight size={14} className="shrink-0 text-text-muted opacity-0 transition group-hover:opacity-100" aria-hidden />}
       </span>
       <span className={`tnum truncate text-2xl font-extrabold leading-tight tracking-tight ${s ? STATUS_TEXT[s] : 'text-text-primary'}`} data-testid={`${testId}-value`}>{value}</span>
-      {hint ? <span className="tnum truncate text-[11px] text-text-muted">{hint}</span> : children}
+      {hint ? <span className={HINT_ROW}>{hint}</span> : (children ?? <span aria-hidden className={HINT_ROW}>{'\u00a0'}</span>)}
     </Link>
   )
 }

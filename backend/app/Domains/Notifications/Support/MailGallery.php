@@ -413,11 +413,11 @@ final class MailGallery
                 kind: 'member_welcome', severity: 'positive',
                 title: $ar ? 'أهلًا بك في وكالة العرض' : 'Welcome to Demo Agency',
                 detail: $ar
-                    ? 'انضممت بدور «محلل». تابع الحملات والتقارير من لوحة التحكم.'
+                    ? 'انضممت بدور «محلل». تابع الحملات والتقارير من الرئيسية.'
                     : 'You joined as «Analyst». Follow campaigns and reports from the dashboard.',
                 context: $ar ? 'وكالة العرض' : 'Demo Agency',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
-                path: '/app/dashboard', action: $ar ? 'فتح لوحة التحكم' : 'Open the dashboard',
+                path: '/app/dashboard', action: $ar ? 'فتح الرئيسية' : 'Open the dashboard',
                 why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
 

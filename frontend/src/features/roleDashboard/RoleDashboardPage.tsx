@@ -5,6 +5,7 @@ import { PageIntro } from '@/components/ui/PageIntro'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { useUi } from '@/stores/ui'
+import { useAgencyClient } from '@/stores/agencyClient'
 import { DASHBOARD_WINDOWS, useRoleDashboard, type DashboardView, type DashboardWindow, type RoleDashboard } from './api'
 import { FinanceView } from './FinanceView'
 import { ManagerView } from './ManagerView'
@@ -55,7 +56,9 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const [chosen, setChosen] = useState<DashboardView | null>(null)
   const [days, setDays] = useState<DashboardWindow>(30)
-  const q = useRoleDashboard(chosen, days)
+  // DASH-CLIENT-FILTER-001 — the client chosen in the watch board (one shared choice) narrows every figure above it too.
+  const client = useAgencyClient((s) => s.currentClientId)
+  const q = useRoleDashboard(chosen, days, portal === 'agency' ? client : null)
   const { ref } = useFitViewport()
   const d = q.data
 

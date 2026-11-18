@@ -63,6 +63,9 @@ const PAGE_PERMISSION: ReadonlyArray<readonly [RegExp, string]> = [
   [/^\/automation(\/|$)/, 'automations.view'],
   [/^\/integrations(\/|$)/, 'integrations.view'],
   [/^\/subscriptions(\/|$)/, 'subscriptions.view'],
+  // NAV-PAGE-PERMISSION-002 — the projects list reads `projects.view`; the team page answers `settings.manage` (TeamController::index).
+  [/^\/projects\/?$/, 'projects.view'],
+  [/^\/team(\/|$)/, 'settings.manage'],
   [/^\/settings(\/|$)/, 'settings.manage'],
 ]
 

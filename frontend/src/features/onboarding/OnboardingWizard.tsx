@@ -141,7 +141,7 @@ export function OnboardingWizard() {
       </div>
       <div className="mt-4 flex justify-center">
         <button onClick={() => finish.mutate()} disabled={finish.isPending} className="flex items-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
-          {finish.isPending ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} {ar ? 'الانتقال إلى لوحة التحكم' : 'Go to dashboard'}
+          {finish.isPending ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} {ar ? 'الانتقال إلى الرئيسية' : 'Go to dashboard'}
         </button>
       </div>
     </OnboardingShell>
