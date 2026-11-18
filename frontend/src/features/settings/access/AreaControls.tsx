@@ -42,7 +42,7 @@ export function AreaChips({ areas, levels, ar, changed = [], testId, total }: { 
  * One row per area, three buttons: مخفي / عرض / إدارة. A level the reader cannot give is drawn disabled, never
  * offered and then refused. `base` is the category's own level, so a changed row is marked.
  */
-export function AreaToggles({ areas, levels, base, grantable, onChange, ar, disabled = false }: {
+export function AreaToggles({ areas, levels, base, grantable, onChange, ar, disabled = false, partial = {}, touched = [] }: {
   areas: Area[]
   levels: Record<string, Level>
   base: Record<string, Level>
@@ -50,23 +50,39 @@ export function AreaToggles({ areas, levels, base, grantable, onChange, ar, disa
   onChange: (area: string, level: Level) => void
   ar: boolean
   disabled?: boolean
+  /** ACCESS-PARTIAL-LEVEL-001 — areas held only in part: shown as «جزئي x/y» until the reader picks a level. */
+  partial?: Record<string, { held: number; total: number }>
+  /** Areas the reader clicked: whatever level they chose is sent in full, even when its label matches. */
+  touched?: string[]
 }) {
   return (
     <ul className="grid gap-1.5 sm:grid-cols-2" data-testid="area-toggles">
       {areas.map((a) => {
         const current = levels[a.key] ?? 'none'
-        const changed = current !== (base[a.key] ?? 'none')
+        const isTouched = touched.includes(a.key)
+        const part = isTouched ? undefined : partial[a.key]
+        const changed = isTouched || current !== (base[a.key] ?? 'none')
         return (
           <li key={a.key} className={`flex min-w-0 items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 ${changed ? 'border-warning/60' : 'border-border'}`}>
-            <span className="min-w-0 truncate text-sm font-semibold text-text-primary">{ar ? a.ar : a.en}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="min-w-0 truncate text-sm font-semibold text-text-primary">{ar ? a.ar : a.en}</span>
+              {part && (
+                <span className="tnum shrink-0 rounded-full bg-warning/15 px-1.5 text-xs font-semibold text-warning" data-testid={`partial-${a.key}`}
+                  title={ar ? 'بعض الصلاحيات فقط — اضغط «إدارة» لمنح الكل بما فيها الإطلاق' : 'Only some actions — press Manage to grant all, launch included'}>
+                  {ar ? 'جزئي' : 'Partial'} {part.held}/{part.total}
+                </span>
+              )}
+            </span>
             <div role="radiogroup" aria-label={ar ? a.ar : a.en} className="flex shrink-0 overflow-hidden rounded-lg border border-border">
               {LEVELS.map((lv) => {
-                const allowed = !disabled && canGrant(grantable, a.key, lv, base[a.key] ?? 'none')
+                // A partly held level is raised by picking it again, so it is checked as a raise from the level below.
+                const from = part && lv === current ? (lv === 'manage' ? 'view' : 'none') : (base[a.key] ?? 'none')
+                const allowed = !disabled && canGrant(grantable, a.key, lv, from)
                 return (
-                  <button key={lv} type="button" role="radio" aria-checked={current === lv} disabled={!allowed}
+                  <button key={lv} type="button" role="radio" aria-checked={current === lv && !part} disabled={!allowed}
                     data-testid={`toggle-${a.key}-${lv}`}
                     onClick={() => onChange(a.key, lv)}
-                    className={`px-2 py-1 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${current === lv ? 'bg-brand-600 text-white' : 'bg-surface text-text-secondary hover:text-text-primary'}`}>
+                    className={`px-2 py-1 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-40 ${current === lv ? (part ? 'bg-warning/20 text-text-primary' : 'bg-brand-600 text-white') : 'bg-surface text-text-secondary hover:text-text-primary'}`}>
                     {ar ? LEVEL_LABEL[lv].ar : LEVEL_LABEL[lv].en}
                   </button>
                 )

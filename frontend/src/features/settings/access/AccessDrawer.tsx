@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { toApiError } from '@/lib/api/client'
 import { fmtDate } from '@/lib/datetime'
-import { canAssign, diffLevels, diffSections, levelsOf, useAccessActions, useAccessHistory, type AccessData, type AccessInvitation, type AccessMember, type Level, type SectionStates } from './accessApi'
+import { canAssign, diffLevels, diffSections, levelsOf, partialOf, useAccessActions, useAccessHistory, type AccessData, type AccessInvitation, type AccessMember, type Level, type SectionStates } from './accessApi'
 import { AreaChips, AreaToggles, ChipPicker } from './AreaControls'
 import { ACTION_LABEL, PORTAL_ROLE_LABEL } from './labels'
 import { SectionToggles } from './SectionToggles'
@@ -31,13 +31,19 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
   const team = row.audience === 'team'
   const isMember = subject.kind === 'member'
   const member = isMember ? subject.row : null
+  // OWNER-DOWNGRADE-001 — another workspace manager may move an owner to a different category (a mistaken promotion is
+  // reversible). An owner is still never narrowed in place: only the category picker is offered, with a confirmation.
+  const ownerMovable = member !== null && member.is_owner && !member.is_self && data.me.is_owner && team
   const locked = member !== null && (member.is_owner || member.is_self)
+  const [confirmDowngrade, setConfirmDowngrade] = useState(false)
 
   const [category, setCategory] = useState(row.category ?? '')
   const cat = data.categories.find((c) => c.slug === category)
   const base = useMemo(() => levelsOf(cat?.areas), [cat])
   // A person's current areas are their category plus their overrides; the toggles start from there.
   const [levels, setLevels] = useState<Record<string, Level>>(() => levelsOf(row.areas))
+  // ACCESS-PARTIAL-LEVEL-001 — every area the reader clicks is sent at the chosen level, in full.
+  const [touched, setTouched] = useState<string[]>([])
   const [clients, setClients] = useState<string[]>(row.scope.clients.map((c) => c.id))
   // ACCESS-SECTIONS-001 — layer three, pre-filled with the person's current sections; only changed ones are sent.
   const startSections: SectionStates = row.sections ?? {}
@@ -50,7 +56,8 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
 
   const changedCategory = category !== row.category
   const chosen = changedCategory ? { ...base, ...diffLevels(levelsOf(row.areas), levels) } : levels
-  const overrides = diffLevels(base, chosen)
+  const overrides: Record<string, Level> = { ...diffLevels(base, chosen), ...Object.fromEntries(touched.map((k) => [k, chosen[k] ?? 'none'])) }
+  const rowPartial = changedCategory ? partialOf(cat?.areas) : partialOf(row.areas)
 
   const run = async (p: Promise<unknown>, done: string) => {
     setErr(''); setOk('')
@@ -91,6 +98,25 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
           <div className="mt-1 text-xs text-text-muted">{row.scope.clients.map((c) => c.name).join('، ')}</div>
           <p className="mt-2 text-xs text-text-muted">{ar ? 'صلاحيات البوابة لا تتغيّر من هنا؛ تُدار من صفحة العميل.' : 'Portal access is not changed here; manage it on the client page.'}</p>
         </section>
+      ) : ownerMovable ? (
+        <section className="space-y-3 rounded-xl border border-border p-3" data-testid="drawer-owner-move">
+          <AreaChips areas={data.areas} levels={levelsOf(row.areas)} ar={ar} />
+          <div>
+            <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'غيّر الفئة' : 'Change category'}</h3>
+            <ChipPicker testId="drawer-owner-category" label={ar ? 'الفئة' : 'Category'} value={category} onChange={(s) => { setCategory(s); setConfirmDowngrade(false) }}
+              options={data.categories.map((c) => ({ value: c.slug, label: ar ? c.name_ar : c.name_en }))} />
+          </div>
+          {changedCategory && (
+            <Alert severity="warning" title={ar ? 'سيفقد صلاحية مدير المساحة' : 'They will lose workspace-manager access'}>
+              {ar ? 'بعد الحفظ تقدر تحدد الأقسام والعملاء اللي يظهرون له من نفس النافذة.' : 'After saving you can choose the sections and clients they see from this same window.'}
+            </Alert>
+          )}
+          <div className="flex justify-end">
+            {!confirmDowngrade
+              ? <Button disabled={!changedCategory} onClick={() => setConfirmDowngrade(true)} data-testid="drawer-owner-move-save"><Save size={14} aria-hidden /> {ar ? 'حفظ' : 'Save'}</Button>
+              : <Button variant="danger" onClick={() => run(a.updateMember.mutateAsync({ id: row.id, category }).then(onClose), '')} data-testid="drawer-owner-move-confirm">{ar ? 'تأكيد تغيير الفئة' : 'Confirm category change'}</Button>}
+          </div>
+        </section>
       ) : locked ? (
         <section className="rounded-xl border border-border p-3" data-testid="drawer-locked">
           <AreaChips areas={data.areas} levels={levelsOf(row.areas)} ar={ar} />
@@ -100,7 +126,7 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
         <>
           <section>
             <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'الفئة' : 'Category'}</h3>
-            <ChipPicker testId="drawer-category" label={ar ? 'الفئة' : 'Category'} value={category} onChange={(s) => { setCategory(s); setLevels(levelsOf(data.categories.find((c) => c.slug === s)?.areas)) }}
+            <ChipPicker testId="drawer-category" label={ar ? 'الفئة' : 'Category'} value={category} onChange={(s) => { setCategory(s); setTouched([]); setLevels(levelsOf(data.categories.find((c) => c.slug === s)?.areas)) }}
               options={data.categories.map((c) => ({ value: c.slug, label: ar ? c.name_ar : c.name_en, disabled: c.slug !== row.category && !canAssign(c, data.me) }))} />
           </section>
           {(data.sections ?? []).length > 0 && (
@@ -112,8 +138,8 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
           )}
           <section>
             <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'تخصيص له فقط' : 'For this person only'}</h3>
-            <AreaToggles areas={data.areas} levels={chosen} base={base} grantable={data.me.grantable} ar={ar}
-              onChange={(area, lv) => setLevels((l) => ({ ...l, [area]: lv }))} />
+            <AreaToggles areas={data.areas} levels={chosen} base={base} grantable={data.me.grantable} ar={ar} partial={rowPartial} touched={touched}
+              onChange={(area, lv) => { setLevels((l) => ({ ...l, [area]: lv })); setTouched((t) => (t.includes(area) ? t : [...t, area])) }} />
           </section>
           {data.agency && data.clients.length > 0 && (
             <section>

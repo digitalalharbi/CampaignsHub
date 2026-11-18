@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { Alert } from '@/components/ui/Alert'
 import { toApiError } from '@/lib/api/client'
 import { clients as countedClients } from '@/lib/counted'
-import { canAssign, diffLevels, levelsOf, useAccessActions, type AccessData, type Level, type SectionStates } from './accessApi'
+import { canAssign, diffLevels, levelsOf, partialOf, useAccessActions, type AccessData, type Level, type SectionStates } from './accessApi'
 import { AreaChips, AreaToggles, ChipPicker } from './AreaControls'
 import { PORTAL_ROLE_LABEL } from './labels'
 import { SectionToggles } from './SectionToggles'
@@ -39,7 +39,8 @@ export function InviteDialog({ open, onClose, data, ar }: { open: boolean; onClo
   const cat = data.categories.find((c) => c.slug === category)
   const base = useMemo(() => levelsOf(cat?.areas), [cat])
   const chosen = { ...base, ...levels }
-  const overrides = diffLevels(base, chosen)
+  // ACCESS-PARTIAL-LEVEL-001 — an area the inviter clicked is sent at its level in full, even when the label matches.
+  const overrides: Record<string, Level> = { ...diffLevels(base, chosen), ...levels }
 
   const pickCategory = (slug: string) => { setCategory(slug); setLevels({}) }
   const reset = () => { setEmail(''); setLevels({}); setCustom(false); setClients([]); setSectionsOff({}); setErr(''); setSent(null) }
@@ -96,7 +97,7 @@ export function InviteDialog({ open, onClose, data, ar }: { open: boolean; onClo
                       states={Object.fromEntries((data.sections ?? []).map((x) => [x.key, sectionsOff[x.key] ?? true]))}
                       onChange={(k, on) => setSectionsOff((x) => { const next = { ...x }; if (on) delete next[k]; else next[k] = false; return next })} />
                   )}
-                  <AreaToggles areas={data.areas} levels={chosen} base={base} grantable={data.me.grantable} ar={ar}
+                  <AreaToggles areas={data.areas} levels={chosen} base={base} grantable={data.me.grantable} ar={ar} partial={partialOf(cat?.areas)} touched={Object.keys(levels)}
                     onChange={(area, lv) => setLevels((l) => ({ ...l, [area]: lv }))} />
                 </div>
               )}

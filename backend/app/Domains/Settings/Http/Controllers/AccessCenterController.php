@@ -327,7 +327,17 @@ final class AccessCenterController extends Controller
         $target = User::query()->whereHas('memberships', fn ($q) => $q->where('tenant_id', $tenantId)->where('status', 'active'))->where('uuid', $user)->first();
         abort_if($target === null, 404);
         abort_if($target->id === $actor->id, 403, 'You cannot change your own access.');
-        abort_if($target->hasRole(WorkspaceRolePresets::OWNER), 422, 'The workspace owner holds everything and cannot be narrowed.');
+        /*
+         * OWNER-DOWNGRADE-001 — a workspace manager is never NARROWED (areas, sections or clients while they stay one), but
+         * another workspace manager may MOVE them to a different category: a mistaken promotion must be reversible from
+         * the screen. Only an owner (or the platform operator) may do it, and never to the last owner of the workspace.
+         */
+        if ($target->hasRole(WorkspaceRolePresets::OWNER)) {
+            $leavingOwner = isset($data['category']) && $data['category'] !== WorkspaceRolePresets::OWNER;
+            abort_unless($leavingOwner, 422, 'The workspace owner holds everything and cannot be narrowed.');
+            abort_unless($this->access->isOwner($actor), 403, 'Only a workspace manager can change another workspace manager.');
+            abort_if($this->ownerCount($tenantId) <= 1, 422, 'Cannot change the role of the last workspace manager.');
+        }
 
         $membership = Membership::query()->where('tenant_id', $tenantId)->where('user_id', $target->id)->where('status', 'active')
             ->where('portal', '!=', Portal::ClientPortal->value)->first();
@@ -734,6 +744,21 @@ final class AccessCenterController extends Controller
         abort_unless($actor !== null && $actor->hasPermission('settings.manage'), 403);
 
         return $actor;
+    }
+
+    /** Distinct active workspace managers of THIS tenant (same count as the team screen's last-owner guard). */
+    private function ownerCount(string $tenantId): int
+    {
+        return DB::table('users')
+            ->join('role_user', 'role_user.user_id', '=', 'users.id')
+            ->join('roles', 'roles.id', '=', 'role_user.role_id')
+            ->join('memberships', 'memberships.user_id', '=', 'users.id')
+            ->where('memberships.tenant_id', $tenantId)
+            ->where('memberships.status', 'active')
+            ->where('roles.slug', WorkspaceRolePresets::OWNER)
+            ->where('roles.tenant_id', $tenantId)
+            ->distinct('users.id')
+            ->count('users.id');
     }
 
     private function tenantId(): string
