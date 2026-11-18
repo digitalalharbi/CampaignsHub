@@ -65,6 +65,7 @@ import {
 import { PathAnalysis } from './PathAnalysis'
 import { ObjectivePathCards } from './ObjectivePathCards'
 import { PathTrends } from './PathTrends'
+import { ContentWhy } from './ContentWhy'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
@@ -295,7 +296,7 @@ const MEMBER_TITLE: Record<string, { ar: string; en: string }> = {
   budget: { ar: 'الميزانية', en: 'Budget' },
   audience: { ar: 'الجمهور', en: 'Audience' },
   accounts: { ar: 'الحسابات', en: 'Accounts' },
-  ad_sets: { ar: 'المجموعات الإعلانية', en: 'Ad groups' },
+  ad_sets: { ar: 'المجموعات', en: 'Ad groups' },
   ads: { ar: 'الإعلانات', en: 'Ads' },
   store: { ar: 'المتجر', en: 'Store' },
   site: { ar: 'الموقع', en: 'Website' },
@@ -3120,6 +3121,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
               : 'No content was reported under the selected ad or ad set in this period. That is not «no content» for the project.'}
           </p>
         )}
+        {!q.isLoading && !q.isError && <ContentWhy rows={rows} ar={ar} onOpen={setOpenCreative} />}
         {/*
           ANALYTICS-TABLES-001 — the canonical table, last of the four hand-rolled ones.
           Numeric columns were `text-start`, so under RTL the figures and their headings sat against
