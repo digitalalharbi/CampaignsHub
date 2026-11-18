@@ -5,7 +5,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeftRight, Eye } from 'lucide-react'
+import { Activity, ArrowLeftRight, BarChart3, Eye, Filter, Globe, Image as ImageIcon, Layers, LayoutDashboard, Megaphone, RadioTower, ShieldCheck, ShoppingBag, Target, Users, Wallet, Boxes, type LucideIcon } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -70,6 +70,7 @@ import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, 
 import { funnelStageLabel } from './metricLabels'
 import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
 import { DailyMeasurePanel } from './DailyMeasurePanel'
+import { SmartReading } from './SmartReading'
 import { useUrlList, useUrlState, useUrlWriter } from './filterUrlState'
 import { usePeriod } from '@/lib/period/usePeriod'
 import { DateRangePicker } from '@/components/ui/DateRangePicker'
@@ -249,7 +250,7 @@ const TAB_GROUPS = [
       { id: 'funnel', ar: 'القمع', en: 'Funnel' },
       { id: 'store', ar: 'المتجر', en: 'Store' },
       // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platforms.
-      { id: 'site', ar: 'الموقع (الموقع)', en: 'Site (Website)' },
+      { id: 'site', ar: 'الموقع', en: 'Website' },
     ],
   },
   {
@@ -273,6 +274,12 @@ const TAB_GROUPS = [
  * type on its own.
  */
 type AnalyticsTab = { readonly id: string; readonly ar: string; readonly en: string }
+
+const TAB_ICONS: Record<string, LucideIcon> = {
+  performance: LayoutDashboard, objective: Target, budget: Wallet, platforms: Layers, audience: Users, accounts: Boxes,
+  campaigns: Megaphone, ad_sets: BarChart3, ads: Activity, creative: ImageIcon, funnel: Filter, store: ShoppingBag,
+  site: Globe, quality: ShieldCheck, live: RadioTower,
+}
 
 const TABS: readonly AnalyticsTab[] = TAB_GROUPS.flatMap((g) => g.tabs as readonly AnalyticsTab[])
 
@@ -754,27 +761,32 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
          * a phone eleven tabs became three stacked lines and the last one still sat under the edge.
          * One row that scrolls below `sm`, the wrap restored from `sm` up where the row fits.
          */
-        className="flex snap-x snap-mandatory items-end gap-x-1 gap-y-1.5 overflow-x-auto border-b border-border pb-px [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:snap-none [&::-webkit-scrollbar]:hidden"
+        data-testid="analytics-tabs"
+        className="flex snap-x snap-mandatory items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:snap-none [&::-webkit-scrollbar]:hidden"
       >
+        {/* ANALYTICS-REPORT-LAYOUT-001 — the same pill bar the live report uses for its views: an icon, a word, the chosen one filled. */}
         {tabGroups.map((group, index) => (
-          <div key={group.key} className="flex items-end">
-            {index > 0 && <span aria-hidden className="mx-2 mb-2 h-4 w-px shrink-0 bg-border" />}
-            <div className="flex items-end gap-0.5">
-              {group.tabs.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`relative shrink-0 snap-start whitespace-nowrap rounded-t-lg px-3 py-3 text-sm font-semibold transition-colors sm:px-2.5 sm:py-2 ${
-                    tab === t.id ? 'text-brand-600' : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  {ar ? t.ar : t.en}
-                  {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-600" />}
-                </button>
-              ))}
+          <div key={group.key} className="flex items-center">
+            {index > 0 && <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />}
+            <div className="flex items-center gap-0.5">
+              {group.tabs.map((t) => {
+                const Icon = TAB_ICONS[t.id]
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`inline-flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition-colors active:scale-95 ${
+                      tab === t.id ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+                    }`}
+                  >
+                    {Icon && <Icon size={15} className="shrink-0" aria-hidden />}
+                    {ar ? t.ar : t.en}
+                  </button>
+                )
+              })}
             </div>
           </div>
         ))}
@@ -866,7 +878,13 @@ function PerformanceTab({ projectId, range, filters, objective, surface }: Overv
   const data = useOverviewData({ projectId, range, filters, objective })
   const ar = useUi((s) => s.locale) === 'ar'
   // ANALYTICS-DAILY-MEASURE-001 — both surfaces open on the report's daily chart: one analysis, one picture.
-  const daily = <DailyMeasurePanel projectId={projectId} range={range} filters={filters} ar={ar} />
+  // ANALYTICS-SMART-READING-001 — on the analysis surface the findings lead, each opening its evidence in a popup.
+  const daily = (
+    <>
+      {surface === 'analytics' && <SmartReading projectId={projectId} range={range} filters={filters} ar={ar} />}
+      <DailyMeasurePanel projectId={projectId} range={range} filters={filters} ar={ar} />
+    </>
+  )
 
   /*
    * WIDGET-REGISTRY-001 — the Dashboard's configurable widgets sit BELOW the overview it always had. A project where no
