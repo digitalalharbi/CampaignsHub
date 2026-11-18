@@ -2275,29 +2275,41 @@ function AttributionFindings({
     watch: 'border-border bg-surface-secondary',
   }
 
+  /*
+   * ANALYTICS-REPORT-LAYOUT-001 — the same finding about four platforms is one card naming four platforms, not four
+   * identical cards. Grouped by what it says and who clears it; each platform keeps its own test id inside the card.
+   */
+  const groups = new Map<string, AttributionFinding[]>()
+  for (const f of findings) {
+    const k = `${f.severity}|${f.owner}|${f.what.en}|${f.affects.en}`
+    groups.set(k, [...(groups.get(k) ?? []), f])
+  }
+
   return (
-    <ul data-testid="attribution-findings" className="mb-4 flex flex-col gap-2">
-      {findings.map((finding) => (
-        <li
-          key={finding.key}
-          data-testid={`attribution-finding-${finding.key}`}
-          className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-bold text-text-primary">
-              {finding.provider === null
-                ? (ar ? 'عبر المنصات' : 'Across platforms')
-                : providerLabel(finding.provider, ar ? 'ar' : 'en')}
-            </span>
-            <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-              {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
-            </span>
-          </div>
-          <p className="mt-1 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
-          <p className="mt-0.5 text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
-          <p className="mt-0.5 text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
-        </li>
-      ))}
+    <ul data-testid="attribution-findings" className="mb-4 grid gap-2 lg:grid-cols-2">
+      {[...groups.values()].map((group) => {
+        const finding = group[0]
+        return (
+          <li key={finding.key} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {group.map((g) => (
+                <span key={g.key} data-testid={`attribution-finding-${g.key}`} className="rounded-full bg-surface px-2 py-0.5 text-xs font-bold text-text-primary">
+                  {g.provider === null ? (ar ? 'عبر المنصات' : 'Across platforms') : providerLabel(g.provider, ar ? 'ar' : 'en')}
+                </span>
+              ))}
+              <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
+              </span>
+            </div>
+            <p className="mt-1.5 text-sm font-semibold text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+            <details className="mt-1 text-xs">
+              <summary className="cursor-pointer select-none font-semibold text-brand-600">{ar ? 'ما الذي يتأثر' : 'What this affects'}</summary>
+              <p className="mt-1 text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
+              <p className="mt-0.5 text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+            </details>
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -2336,7 +2348,7 @@ function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]
   }
 
   return (
-    <ul data-testid="quality-findings" className="mb-4 flex flex-col gap-2">
+    <ul data-testid="quality-findings" className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {findings.map((finding) => (
         <QualityFindingRow key={finding.key} finding={finding} ar={ar} />
       ))}
@@ -3828,9 +3840,9 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
           {grouped.map((f) => {
 
             return (
-              <div key={f.key} className="rounded-xl border border-border p-3" data-testid={`objective-family-${f.key}`}>
+              <div key={f.key} className="rounded-xl border border-border border-t-4 border-t-brand-500 p-3.5" data-testid={`objective-family-${f.key}`}>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="font-semibold text-text-primary">{ar ? f.ar : f.en}</h3>
+                  <h3 className="text-base font-bold text-text-primary">{ar ? f.ar : f.en}</h3>
                   <span className="text-xs text-text-secondary">
                     {f.campaigns.length} {ar ? 'حملة' : f.campaigns.length === 1 ? 'campaign' : 'campaigns'}
                     {' · '}
@@ -3869,7 +3881,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                   whose money awaits a rate would have shown a confident zero next to a revenue the
                   KPI strip states correctly.
                 */}
-                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+                <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {f.kpis.map((k: string) => {
                     const rows = f.campaigns as unknown as FamilyRow[]
                     const spec = SPECS[k]
@@ -3882,8 +3894,8 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                       : ''
 
                     return (
-                      <div key={k} className="flex flex-col">
-                        <dt className="text-text-secondary">
+                      <div key={k} className="flex flex-col rounded-lg bg-surface-secondary/60 p-2.5">
+                        <dt className="text-[11px] text-text-muted">
                           {spec ? (ar ? spec.label.ar : spec.label.en) : k}
                         </dt>
                         {/*
@@ -3905,7 +3917,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                         {(() => {
                           if (total === null) {
                             /* Null stays «—»: an unavailable figure is not a figure of zero. */
-                            return <dd className="tnum text-text-primary"><Num>—</Num></dd>
+                            return <dd className="tnum text-lg font-extrabold text-text-primary"><Num>—</Num></dd>
                           }
 
                           /*
@@ -3933,7 +3945,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                           const exact = 'exact' in read ? read.exact : (read.exact ?? undefined)
 
                           return (
-                            <dd className="tnum text-text-primary" title={exact ?? undefined}>
+                            <dd className="tnum text-lg font-extrabold text-text-primary" title={exact ?? undefined}>
                               <Num>{read.text}</Num>
                             </dd>
                           )
@@ -4069,7 +4081,7 @@ function FamilySpend({
 
   return (
     <div className="mt-2 flex flex-col gap-1.5" data-testid={`family-distribution-${family}`}>
-      <div className="flex h-2 overflow-hidden rounded-full bg-surface-secondary">
+      <div className="flex h-3 overflow-hidden rounded-full bg-surface-secondary">
         {slices.map((slice, i) => (
           <span
             key={slice.name}
@@ -4080,7 +4092,7 @@ function FamilySpend({
         ))}
       </div>
 
-      <ul className="space-y-0.5 text-xs text-text-secondary">
+      <ul className="grid gap-x-4 gap-y-0.5 text-xs text-text-secondary sm:grid-cols-2">
         {slices.map((slice) => (
           <li key={slice.name} className="flex items-center justify-between gap-2">
             <span className="truncate">

@@ -1,3 +1,4 @@
+import { PlatformDonutChart } from '@/features/analytics/charts'
 import { useState } from 'react'
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/platformColor'
@@ -54,41 +55,72 @@ export function DeliveryGroupCard({ group, locale }: { group: DeliveryGroup; loc
         </span>
         <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-semibold text-text-secondary">{t(locale, 'تسليم مدفوع', 'Paid delivery')}</span>
       </header>
-      <ul className="flex flex-col gap-1.5">
-        {rows.map((r) => (
-          <li key={r.value} className="min-w-0">
-            <div className="flex min-w-0 items-baseline justify-between gap-2 text-xs">
-              <span className="min-w-0 truncate text-text-primary" title={r.value}>{r.value}</span>
-              <span className="tnum shrink-0 text-text-secondary">
-                {r.share ? (
-                  <><Num>{pct(r.share.ratio)}</Num> <span className="opacity-70">(<Num>{Math.round(r.share.numerator).toLocaleString('en-US')}</Num>/<Num>{Math.round(r.share.denominator).toLocaleString('en-US')}</Num>)</span></>
-                ) : t(locale, 'غير متاح', 'Not available')}
-              </span>
-            </div>
-            <span className="mt-0.5 block h-1.5 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
-              <span className="block h-full rounded-full" style={{ width: r.share ? `${Math.max(2, Math.round(r.share.ratio * 100))}%` : '0%', background: color }} />
-            </span>
-            {r.spend && r.spend.length > 0 && (
-              <span className="tnum mt-0.5 block text-xs text-text-secondary">
-                {t(locale, 'الإنفاق: ', 'Spend: ')}{r.spend.map((s) => withMark(s.amount.toLocaleString('en-US'), s.currency)).join(' · ')}
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
-      {group.rows.length > ROWS && (
+      {/*
+        ANALYTICS-REPORT-LAYOUT-001 — Owner 2026-11-18: «الجمهور غير مناسبة». Gender and age are a composition, so they
+        are a donut; regions are a ranking, so they are bars with the share set large. Raw fractions, the source field and
+        the coverage arithmetic fold under «التفاصيل». A region code prefix («sa/Riyadh») is dropped from the label.
+      */}
+      {(() => {
+        const shareRows = group.rows.filter((r) => r.share !== null)
+        const label = (v: string) => v.includes('/') ? v.split('/').pop() ?? v : v
+        if ((group.dimension === 'gender' || group.dimension === 'age') && shareRows.length > 0 && shareRows.length <= 7) {
+          return (
+            <PlatformDonutChart
+              colorBy="series"
+              valueKind="num"
+              height={220}
+              data={shareRows.map((r) => ({ name: label(r.value), value: Math.round((r.share as NonNullable<typeof r.share>).numerator) }))}
+              centerLabel={t(locale, dim.ar, dim.en)}
+              centerValue={pct(shareRows[0].share!.ratio)}
+            />
+          )
+        }
+        return (
+          <ul className="flex flex-col gap-2.5">
+            {rows.map((r) => (
+              <li key={r.value} className="min-w-0">
+                <div className="flex min-w-0 items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate text-sm font-semibold text-text-primary" title={r.value}>{label(r.value)}</span>
+                  <span className="tnum shrink-0 text-base font-extrabold text-text-primary">
+                    {r.share ? <Num>{pct(r.share.ratio)}</Num> : <span className="text-xs font-normal text-text-muted">{t(locale, 'غير متاح', 'Not available')}</span>}
+                  </span>
+                </div>
+                <span className="mt-1 block h-2.5 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+                  <span className="block h-full rounded-full" style={{ width: r.share ? `${Math.max(2, Math.round(r.share.ratio * 100))}%` : '0%', background: color }} />
+                </span>
+                {r.spend && r.spend.length > 0 && (
+                  <span className="tnum mt-1 inline-block rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-secondary">
+                    {t(locale, 'الإنفاق ', 'Spend ')}{r.spend.map((x) => withMark(x.amount.toLocaleString('en-US'), x.currency)).join(' · ')}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )
+      })()}
+      {group.rows.length > ROWS && group.dimension !== 'gender' && group.dimension !== 'age' && (
         <button type="button" className="mt-2 text-xs font-semibold text-brand-600" onClick={() => setOpen((v) => !v)}>
           {open ? t(locale, 'أقل', 'Less') : t(locale, `الكل (${group.rows.length})`, `All (${group.rows.length})`)}
         </button>
       )}
-      <p className="mt-2 break-words text-xs leading-5 text-text-secondary">
-        {t(locale, 'المقياس: مرات الظهور · المصدر: ', 'Metric: impressions · Source: ')}<span dir="ltr">{group.source_field}</span>
-        {' · '}{t(locale, 'التغطية', 'Coverage')}: <Num>{group.coverage.days_with_rows}</Num>/<Num>{group.coverage.days_in_period}</Num> {t(locale, 'يوم', 'days')}
-        {group.coverage.ad_sets_delivering > group.coverage.ad_sets_with_rows && (
-          <> · <span data-testid="audience-partial-coverage" className="font-semibold text-warning-700 dark:text-warning-300">{t(locale, 'تغطية جزئية', 'Partial coverage')}: <Num>{group.coverage.ad_sets_with_rows}</Num>/<Num>{group.coverage.ad_sets_delivering}</Num> {t(locale, 'مجموعة', 'ad groups')}</span></>
-        )}
-        {group.reach_note && <> · {t(locale, 'الوصول الفريد لا يُجمع', 'Unique reach is never added')}</>}
-      </p>
+      {group.coverage.ad_sets_delivering > group.coverage.ad_sets_with_rows && (
+        <p data-testid="audience-partial-coverage" className="mt-2 text-xs font-semibold text-warning-700 dark:text-warning-300">
+          {t(locale, 'تغطية جزئية', 'Partial coverage')}: <Num>{group.coverage.ad_sets_with_rows}</Num>/<Num>{group.coverage.ad_sets_delivering}</Num> {t(locale, 'مجموعة', 'ad groups')}
+        </p>
+      )}
+      <details className="mt-2 text-[11px] text-text-muted">
+        <summary className="cursor-pointer select-none font-semibold">{t(locale, 'التفاصيل', 'Details')}</summary>
+        <p className="mt-1 break-words leading-5">
+          {t(locale, 'المقياس: مرات الظهور · المصدر: ', 'Metric: impressions · Source: ')}<span dir="ltr">{group.source_field}</span>
+          {' · '}{t(locale, 'التغطية', 'Coverage')}: <Num>{group.coverage.days_with_rows}</Num>/<Num>{group.coverage.days_in_period}</Num> {t(locale, 'يوم', 'days')}
+          {group.reach_note && <> · {t(locale, 'الوصول الفريد لا يُجمع', 'Unique reach is never added')}</>}
+        </p>
+        <ul className="mt-1 space-y-0.5">
+          {group.rows.filter((r) => r.share).map((r) => (
+            <li key={r.value} className="tnum" dir="ltr">{r.value}: {Math.round(r.share!.numerator).toLocaleString('en-US')} / {Math.round(r.share!.denominator).toLocaleString('en-US')}</li>
+          ))}
+        </ul>
+      </details>
     </section>
   )
 }
