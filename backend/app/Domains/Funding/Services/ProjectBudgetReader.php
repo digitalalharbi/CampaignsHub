@@ -41,11 +41,14 @@ final class ProjectBudgetReader
         $deposits = DB::table('funding_payments')->whereIn('project_id', $fundings->keys()->all())->whereIn('kind', ['initial', 'top_up'])
             ->selectRaw('project_id, SUM(amount_sar) AS d')->groupBy('project_id')->pluck('d', 'project_id');
 
+        // PERF-BOOTSTRAP-001 — every budget's figures in one pass (a handful of statements), not a dozen per budget.
+        $figures = $this->balance->summaries($fundings->values(), $today);
+
         $out = [];
         foreach ($ids as $id) {
             $funding = $fundings->get($id);
             $out[$id] = $funding instanceof ProjectFunding
-                ? $this->summarise($funding, $this->balance->of($funding, $today), (float) ($deposits[$id] ?? 0), $today)
+                ? $this->summarise($funding, $figures[$id], (float) ($deposits[$id] ?? 0), $today)
                 : self::none();
         }
 

@@ -54,8 +54,11 @@ docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php art
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan platform:provision
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan config:clear
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan route:clear
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan event:clear
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan config:cache
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan route:cache
+# PERF-BOOTSTRAP-001 — the event/listener map, built once instead of discovered on every request.
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan event:cache
 
 # SNAP-STRUCTURE-RETRY-001 — the queue's timeout contract, verified before the worker is restarted.
 #

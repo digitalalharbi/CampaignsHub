@@ -87,7 +87,7 @@ final class SpendLedger
                 projectId: (string) $r->project_id,
                 accountId: (string) $r->external_account_id,
                 provider: (string) $r->provider,
-                date: Carbon::parse((string) $r->metric_date)->toDateString(),
+                date: substr((string) $r->metric_date, 0, 10),
                 currency: $r->currency === null || $r->currency === '' ? null : (string) $r->currency,
                 amount: (float) $r->amount,
             ))
@@ -112,6 +112,73 @@ final class SpendLedger
         $ids = array_values(array_unique(array_map('strval', $projectIds)));
         $ids = $liveOnly ? LiveProjects::filter($ids) : $ids;
 
+        return $this->readRows(self::accountDays($ids, $from, $to), $currency, $from, $to);
+    }
+
+    /**
+     * PERF-BOOTSTRAP-001 — one reading PER PROJECT, each over its own window, from ONE `accountDays()` query.
+     *
+     * A page that reads many budgets (the agency dashboard, one budget per project, each over its own period) used to call
+     * {@see read()} once per project: one aggregation query each. The rows are the same ones, so they are fetched once over the
+     * widest window and split per project by that project's own dates; each project's reading is then built by the same
+     * {@see readRows()} that `read()` ends in, so it is identical to `read([$id], $from, $to, $currency, $liveOnly)`.
+     *
+     * @param  array<string, array{0: Carbon, 1: ?Carbon}>  $windows  project id => [from, to] (`to` null while open)
+     * @return array<string, array<string, mixed>> project id => see {@see shape()}
+     */
+    public function readEach(array $windows, string $currency, bool $liveOnly = true): array
+    {
+        $currency = strtoupper(trim($currency));
+        if (preg_match('/^[A-Z]{3}$/', $currency) !== 1) {
+            throw new InvalidArgumentException('Not a currency code: '.$currency);
+        }
+        if ($windows === []) {
+            return [];
+        }
+
+        $ids = array_map('strval', array_keys($windows));
+        $live = $liveOnly ? array_flip(LiveProjects::filter($ids)) : array_flip($ids);
+
+        $reading = array_values(array_filter($ids, static fn (string $id): bool => isset($live[$id])));
+        $minFrom = null;
+        $maxTo = null;
+        $open = false;
+        foreach ($reading as $id) {
+            [$from, $to] = $windows[$id];
+            $minFrom = $minFrom === null || $from->lt($minFrom) ? $from : $minFrom;
+            if ($to === null) {
+                $open = true;
+            } elseif ($maxTo === null || $to->gt($maxTo)) {
+                $maxTo = $to;
+            }
+        }
+
+        $byProject = [];
+        foreach ($reading === [] ? [] : self::accountDays($reading, $minFrom, $open ? null : $maxTo) as $row) {
+            $byProject[$row->projectId][] = $row;
+        }
+
+        $out = [];
+        foreach ($ids as $id) {
+            [$from, $to] = $windows[$id];
+            $rows = array_values(array_filter(
+                $byProject[$id] ?? [],
+                static fn (SpendDay $r): bool => $r->date >= $from->toDateString() && ($to === null || $r->date <= $to->toDateString()),
+            ));
+            $out[$id] = $this->readRows($rows, $currency, $from, $to);
+        }
+
+        return $out;
+    }
+
+    /**
+     * The conversion and the shape of one reading, from the account-days it covers.
+     *
+     * @param  list<SpendDay>  $days
+     * @return array<string, mixed> see {@see shape()}
+     */
+    private function readRows(array $days, string $currency, ?Carbon $from, ?Carbon $to): array
+    {
         $total = 0.0;
         $converted = 0;
         $byProject = [];
@@ -119,7 +186,7 @@ final class SpendLedger
         $excluded = [];
         $stale = [];
 
-        foreach (self::accountDays($ids, $from, $to) as $row) {
+        foreach ($days as $row) {
             if ($row->amount == 0.0) {
                 continue; // nothing to convert, nothing withheld
             }
