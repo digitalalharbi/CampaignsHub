@@ -1,3 +1,4 @@
+import { campaigns as countedCampaigns } from '@/lib/counted'
 import { StatCard } from '@/components/ui/StatCard'
 import { AlertTriangle, Store, TrendingDown } from 'lucide-react'
 import { RankingBarChart } from './charts'
@@ -407,7 +408,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
 
       {comparisons.campaigns.length > 0 && (
         <Panel title={ar ? 'المقارنة بين الحملات' : 'Across campaigns'}>
-          <details className="text-xs" open={comparisons.campaigns.length <= 5}><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? `${comparisons.campaigns.length} حملة` : `${comparisons.campaigns.length} campaigns`}</summary>
+          <details className="text-xs" open={comparisons.campaigns.length <= 5}><summary className="cursor-pointer select-none font-semibold text-text-muted">{countedCampaigns(comparisons.campaigns.length, ar ? 'ar' : 'en')}</summary>
           <Table
             head={[ar ? 'الحملة' : 'Campaign', ar ? 'الطلبات' : 'Orders', ar ? 'الإيراد' : 'Revenue', ar ? 'طريقة الإسناد' : 'How it was traced']}
             rows={comparisons.campaigns.map((c) => [

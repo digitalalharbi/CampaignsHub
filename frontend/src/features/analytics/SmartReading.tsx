@@ -1,3 +1,4 @@
+import { campaigns as countedCampaigns } from '@/lib/counted'
 import { useMemo, useState } from 'react'
 import { AlertTriangle, Gauge, PieChart, Sparkles, TrendingUp, Trophy, type LucideIcon } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -60,7 +61,7 @@ export function buildFindings(rows: CampaignRow[], platforms: Array<{ provider: 
       figure: percent(share, 0),
       line: ar ? `من الإنفاق على حملة واحدة: ${name(spent[0].r)}` : `of spend sits on one campaign: ${name(spent[0].r)}`,
       evidence: spent.slice(0, 6).map((x) => ({ label: name(x.r), value: `${money(x.amount as number, cur)} · ${percent((x.amount as number) / total, 0)}` })),
-      basis: ar ? `محسوب على ${spent.length} حملة أنفقت في الفترة.` : `Computed over ${spent.length} campaigns that spent in the period.`,
+      basis: ar ? `محسوب على ${countedCampaigns(spent.length, 'ar')} أنفقت في الفترة.` : `Computed over ${countedCampaigns(spent.length, 'en')} that spent in the period.`,
     })
   }
 
@@ -105,9 +106,9 @@ export function buildFindings(rows: CampaignRow[], platforms: Array<{ provider: 
       key: 'no-result', icon: AlertTriangle, tone: 'warn',
       title: ar ? 'إنفاق بلا نتيجة' : 'Spend with no result',
       figure: money(sum, cur),
-      line: ar ? `على ${noResult.length} حملة لم تسجّل نتيجة هدفها في الفترة` : `across ${noResult.length} campaign(s) that recorded none of their objective's result`,
+      line: ar ? `على ${countedCampaigns(noResult.length, 'ar')} لم تسجّل نتيجة هدفها في الفترة` : `across ${countedCampaigns(noResult.length, 'en')} that recorded none of their objective's result`,
       evidence: noResult.slice(0, 8).map((x) => ({ label: name(x.r), value: money(x.amount as number, cur) })),
-      basis: ar ? 'صفر مُبلَّغ من المنصة، وليس قيمة ناقصة.' : 'A zero the platform reported, not a missing value.',
+      basis: ar ? 'المنصة أبلغت بصفر نتائج، وهذا ليس نقصًا في البيانات.' : 'A zero the platform reported, not a missing value.',
     })
   }
 
