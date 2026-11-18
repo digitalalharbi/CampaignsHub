@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { AgencyFit, FitPanel, useBoxHeight } from '@/components/fit/AgencyFit'
 import { TabStrip } from '@/components/fit/TabStrip'
 import { CampaignViewsBar } from './CampaignViewsBar'
+import { useUrlState } from '@/features/analytics/filterUrlState'
 import { LevelTabs } from './LevelTabs'
 import type { SavedView } from '@/features/dashboard/savedViews'
 import { useQuery } from '@tanstack/react-query'
@@ -63,7 +64,8 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
   const box = useBoxHeight(fit)
   // DATE-RANGE-001 — the system's one period, shared with every page; rolling presets end yesterday.
   const { days, setDays, range } = usePeriod()
-  const [platform, setPlatform] = useState('all')
+  // CAMPAIGN-LEVELS-003 — the platform travels in the address, so moving between levels keeps it chosen.
+  const [platform, setPlatform] = useUrlState('platform', 'all')
   const [status, setStatus] = useState<'all' | CampaignRelevance>('all')
   const [search, setSearch] = useState('')
   const [hidden, setHidden] = useState<string[]>(() => readHidden(level))
