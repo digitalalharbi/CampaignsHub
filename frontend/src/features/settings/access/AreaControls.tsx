@@ -67,7 +67,7 @@ export function AreaToggles({ areas, levels, base, grantable, onChange, ar, disa
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="min-w-0 truncate text-sm font-semibold text-text-primary">{ar ? a.ar : a.en}</span>
               {part && (
-                <span className="tnum shrink-0 rounded-full bg-warning/15 px-1.5 text-[11px] font-semibold text-warning" data-testid={`partial-${a.key}`}
+                <span className="tnum shrink-0 rounded-full bg-warning/15 px-1.5 text-xs font-semibold text-warning" data-testid={`partial-${a.key}`}
                   title={ar ? 'بعض الصلاحيات فقط — اضغط «إدارة» لمنح الكل بما فيها الإطلاق' : 'Only some actions — press Manage to grant all, launch included'}>
                   {ar ? 'جزئي' : 'Partial'} {part.held}/{part.total}
                 </span>
