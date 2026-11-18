@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { FileText, Globe, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
-import { canonicalPlatform, isAdPlatform } from '@/lib/platforms'
+import { canonicalPlatform, isAdPlatform, sortPlatforms } from '@/lib/platforms'
 import { formatSpan } from '@/lib/period/periodMath'
 import { providerLabel } from '@/features/campaigns/labels'
 import { useUi } from '@/stores/ui'
@@ -275,7 +275,8 @@ export function LiveSharedReport({
 
         {!ownsPlatformChoice(mode) && payload.available.providers.filter(isAdPlatform).length > 1 && (
           <div className="flex flex-wrap gap-1.5" role="group" aria-label={ar ? 'المنصات' : 'Platforms'}>
-            {payload.available.providers.filter(isAdPlatform).map((p) => {
+            {/* PLATFORM-ORDER-002 — the product's order (سناب · تيك توك · ميتا · جوجل · إكس · لينكدإن · ChatGPT), and logos large enough to read on a phone. */}
+            {sortPlatforms(payload.available.providers.filter(isAdPlatform)).map((p) => {
               const on = providers.includes(p)
 
               return (
@@ -287,13 +288,13 @@ export function LiveSharedReport({
                   onClick={() => setProviders((list) => (list.includes(p) ? list.filter((v) => v !== p) : [...list, p]))}
                   title={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
                   aria-label={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
-                  className={`inline-flex h-11 w-11 items-center justify-center rounded-xl border-2 transition-colors ${
+                  className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl border-2 transition-colors sm:h-14 sm:w-14 ${
                     on ? '' : 'border-border hover:bg-surface-hover'
                   }`}
                   style={on ? { borderColor: platformColor(p), background: `color-mix(in srgb, ${platformColor(p)} 14%, transparent)` } : undefined}
                 >
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-hover">
-                    <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={20} logoOnly />
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface-hover sm:h-11 sm:w-11">
+                    <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={28} logoOnly />
                   </span>
                 </button>
               )
