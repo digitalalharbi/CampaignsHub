@@ -108,4 +108,39 @@ final class McpServerTest extends TestCase
 
         $this->actingAs($this->owner, 'sanctum')->deleteJson('/api/v1/me/mcp-tokens/'.$list[0]['id'])->assertOk()->assertJsonCount(0, 'data.tokens');
     }
+
+    /**
+     * MCP-SCOPE-002 — a member's assistant offers only what their role opens: finance gets the budget, not the campaigns.
+     */
+    public function test_a_finance_member_is_offered_the_budget_and_not_the_campaigns(): void
+    {
+        $role = Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Finance', 'slug' => 'finance-'.uniqid()]);
+        $role->givePermissionTo('budget.view', 'clients.view');
+        $finance = User::create(['name' => 'f', 'email' => 'f@mcp.test', 'password' => 'secret123', 'email_verified_at' => now()]);
+        $this->grantMembership($finance, $this->tenant, Portal::Agency, 'member');
+        $finance->roles()->syncWithoutDetaching([$role->id]);
+
+        $token = $this->actingAs($finance, 'sanctum')->postJson('/api/v1/me/mcp-tokens', ['name' => 'ChatGPT'])->assertCreated()->json('data.token');
+        $names = collect($this->rpc($token, 'tools/list')->assertOk()->json('result.tools'))->pluck('name')->all();
+
+        $this->assertContains('list_projects', $names);
+        $this->assertContains('get_budget', $names);
+        $this->assertNotContains('list_campaigns', $names);
+        $this->assertNotContains('list_creatives', $names);
+        $this->assertNotContains('propose_change', $names);
+
+        // Called anyway, a tool the role does not open is refused, never answered.
+        $this->rpc($token, 'tools/call', ['name' => 'list_campaigns', 'arguments' => ['project_id' => (string) $this->project->id]])
+            ->assertOk()->assertJsonPath('result.isError', true);
+    }
+
+    /** MCP-DISCLAIMER-001 — every answer carries the live-figures notice. */
+    public function test_every_answer_carries_the_live_figures_notice(): void
+    {
+        $token = $this->token();
+        $notice = $this->rpc($token, 'tools/call', ['name' => 'list_projects', 'arguments' => []])->assertOk()->json('result.content.1.text');
+
+        $this->assertStringContainsString('ليست مستندًا محاسبيًا', (string) $notice);
+        $this->assertStringContainsString('Not an accounting document', (string) $notice);
+    }
 }
