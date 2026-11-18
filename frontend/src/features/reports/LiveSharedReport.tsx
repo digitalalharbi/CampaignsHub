@@ -288,11 +288,11 @@ export function LiveSharedReport({
                   title={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
                   aria-label={providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')}
                   className={`inline-flex h-11 w-11 items-center justify-center rounded-xl border-2 transition-colors ${
-                    on ? '' : 'border-border opacity-60 hover:opacity-100'
+                    on ? '' : 'border-border hover:bg-surface-hover'
                   }`}
                   style={on ? { borderColor: platformColor(p), background: `color-mix(in srgb, ${platformColor(p)} 14%, transparent)` } : undefined}
                 >
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-hover">
                     <ProviderName provider={p} locale={ar ? 'ar' : 'en'} size={20} logoOnly />
                   </span>
                 </button>
