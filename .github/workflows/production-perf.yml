@@ -51,37 +51,22 @@ jobs:
           port: ${{ secrets.VPS_PORT || 22 }}
           envs: HOURS,TOKENS,RACCOUNT,RFROM,RTO
           script: |
-            set -Eeuo pipefail
+            set +e
             cd /opt/campaignshub
-            echo "── host"; uptime; nproc; free -m; df -h / | tail -1
-            echo "── containers"; docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} net={{.NetIO}} io={{.BlockIO}} pids={{.PIDs}}'
-            echo "── top"; top -b -n 1 -o %CPU | sed -n 7,17p
-            echo "── app"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:perf-snapshot --hours="${HOURS}"
-            echo "── live report build"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T backend php artisan ops:profile-live-report --links=3 --top=20 --explain=3 --http $(for t in $(echo "${TOKENS}" | tr ',' ' '); do printf -- '--token=%s ' "$t"; done) \
-              || echo "PROFILER FAILED: see above — other sections are valid"
-            echo "── postgres top statements"
-            docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-              exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' || echo "pg_stat_statements not available (psql failed): continuing"
-            select calls, round(total_exec_time::numeric) as total_ms, round(mean_exec_time::numeric,1) as mean_ms, rows, left(md5(query),8) as finger,
-                   left(regexp_replace(query, '\s+', ' ', 'g'), 200) as q
-              from pg_stat_statements order by total_exec_time desc limit 20;
-            SQL
-            if [ -n "${RACCOUNT}" ]; then
-              echo "── spend reconcile"
-              set +e
-              docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml \
-                exec -T backend php artisan integrations:spend-reconcile "${RACCOUNT}" ${RFROM:+--from="${RFROM}"} ${RTO:+--to="${RTO}"} \
-                || echo "RECONCILE FAILED (provider refused or unreachable): see above — other sections are valid"
-              set -e
-            fi
-            # GA4-PLATFORM-GOOGLE-CLIENT-001 — are the Google Ads and sign-in clients the same? Prints a verdict only, never a value.
-            echo "── google client check"
-            A=$(grep -E '^GOOGLE_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); B=$(grep -E '^GOOGLE_ADS_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-); G=$(grep -E '^GA4_CLIENT_ID=' deploy/backend.production.env | cut -d= -f2-)
-            [ -n "$A" ] && echo "GOOGLE_CLIENT_ID: set (prefix ${A%%-*})" || echo "GOOGLE_CLIENT_ID: unset"
-            [ "$A" = "$B" ] && echo "GOOGLE_ADS_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GOOGLE_ADS_CLIENT_ID: DIFFERENT (prefix ${B%%-*})"
-            [ -z "$G" ] && echo "GA4_CLIENT_ID: unset → GA4 falls back to GOOGLE_CLIENT_ID" || { [ "$G" = "$A" ] && echo "GA4_CLIENT_ID: SAME as GOOGLE_CLIENT_ID" || echo "GA4_CLIENT_ID: DIFFERENT (prefix ${G%%-*})"; }
-
+            DC="docker compose --env-file deploy/backend.production.env -f deploy/docker-compose.production.yml"
+            # STORES-VISIBILITY facts — read-only: states and counts only, never keys or store names.
+            echo "== STORES $(date -u +%FT%TZ)"
+            for k in SALLA_CLIENT_ID SALLA_CLIENT_SECRET SALLA_WEBHOOK_SECRET ZID_CLIENT_ID ZID_CLIENT_SECRET; do v=$(grep -E "^$k=" deploy/backend.production.env | cut -d= -f2-); [ -n "$v" ] && echo "$k: set" || echo "$k: unset"; done
+            $DC exec -T backend php artisan tinker --execute='
+              $svc = app(App\Domains\Integrations\Configuration\ProviderConfigurationService::class);
+              $reg = app(App\Domains\Commerce\Registry\CommerceConnectorRegistry::class);
+              echo "registry: ".implode(",", array_keys($reg->all())).PHP_EOL;
+              foreach (["salla","zid"] as $k) {
+                $row = DB::table("provider_configurations")->where("provider",$k)->first();
+                $st = $svc->state($k);
+                echo $k." enabled=".var_export($svc->isEnabled($k),true)." state=".($st->value ?? json_encode($st))." row=".($row? "yes env=".$row->environment : "no")." creds_configured=".var_export(App\Domains\Commerce\Support\PlatformCredentials::for($k)->isConfigured(),true)." missing=".implode("|",$svc->missing($k)).PHP_EOL;
+                echo "  connections: ".DB::table("provider_connections")->where("provider",$k)->selectRaw("status, count(*) n")->groupBy("status")->get()->map(fn($r)=>$r->status."=".$r->n)->implode(" ").PHP_EOL;
+                echo "  stores: ".DB::table("external_accounts")->where("provider",$k)->where("account_type","store")->count().PHP_EOL;
+              }
+            ' 2>&1 | tail -20
+            exit 0
