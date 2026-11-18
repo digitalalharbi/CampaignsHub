@@ -3,7 +3,7 @@ import { InfoTip } from '@/components/fit/InfoTip'
 import { ConsumptionBar } from './ConsumptionBar'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeftRight, Eye } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
@@ -100,7 +100,20 @@ import {
   rawObjectivesFor,
   type CanonicalObjectiveKey,
 } from '@/features/campaigns/canonicalObjectives'
-import { CampaignLink } from '@/features/campaigns/CampaignLink'
+import { CampaignLink as CampaignDetailLink } from '@/features/campaigns/CampaignLink'
+
+/*
+ * ANALYTICS-READ-ONLY-001 — Owner 2026-11-18: «التحليلات رسوم بيانية وتقارير فقط». Project managers and clients
+ * read this page, so on the analytics surface a campaign name is the name, not a door into the campaign's
+ * management screen and its platform controls. The quick preview stays: it answers in place. The dashboard
+ * surface keeps its links.
+ */
+const AnalysisOnly = createContext(false)
+function CampaignLink(props: React.ComponentProps<typeof CampaignDetailLink>) {
+  const readOnly = useContext(AnalysisOnly)
+  if (!readOnly) return <CampaignDetailLink {...props} />
+  return <span className={props.className} data-testid={props.testid ?? 'campaign-name-readonly'}>{props.name ?? '—'}</span>
+}
 import { CampaignQuickPreview } from './CampaignQuickPreview'
 import { bestByRoas, worstByRoas } from './campaignRoasPanels'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -549,6 +562,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   )
 
   return (
+    <AnalysisOnly.Provider value={isAnalysis}>
     <div className="space-y-4">
       {/*
         The page names the surface the reader arrived at, not the file it lives in.
@@ -818,6 +832,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       <FinancialDisclaimer />
       <LivePerformanceNotice variant="compact" />
     </div>
+    </AnalysisOnly.Provider>
   )
 }
 
@@ -1327,6 +1342,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
    * row, two questions, and neither blocks the other.
    */
   const [previewing, setPreviewing] = useState<string | null>(null)
+  const analysisOnlySurface = useContext(AnalysisOnly)
   const c = useCampaigns(projectId, range, filters)
   const s = useSummary(projectId, range, filters)
   /*
@@ -1523,7 +1539,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
 
           return row === undefined ? null : (
             <div className="mt-3">
-              <CampaignQuickPreview row={row} projectId={projectId} range={range} filters={filters} onClose={() => setPreviewing(null)} />
+              <CampaignQuickPreview row={row} projectId={projectId} range={range} filters={filters} onClose={() => setPreviewing(null)} analysisOnly={analysisOnlySurface} />
             </div>
           )
         })()}

@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { QueryFailure } from '@/components/ui/QueryFailure'
@@ -9,7 +8,6 @@ import { ChartBodySkeleton, KpiRowSkeleton } from '@/components/ui/Skeletons'
 import { useSwrQuery } from '@/lib/query/swr'
 import { ChartCard } from './charts'
 import { money, num, percent } from './format'
-import { usePortalBase } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 import { SiteKpis, type SiteKpi } from './SiteKpis'
 import { ThreeSourcesPanel } from './ThreeSourcesPanel'
@@ -54,7 +52,6 @@ const USER_TYPE: Record<string, { ar: string; en: string }> = {
 export function SiteAnalyticsTab({ projectId, range }: { projectId: string | null; range: { from: string; to: string } }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const locale = ar ? 'ar' : 'en'
-  const portal = usePortalBase()
   // PERF-INSTANT-DATA-001 — scope = the project; the period is the only thing an old answer may bridge.
   const q = useSwrQuery({
     name: 'site-analytics',
@@ -86,7 +83,8 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
       <div data-testid={`site-state-${d.state}`} className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-border bg-surface p-5">
         <Badge tone={d.state === 'empty' ? 'info' : 'warning'}>{chip}</Badge>
         {d.state !== 'empty' && (
-          <Link to={`${portal}/integrations`} data-testid="site-connect" className="rounded-[10px] bg-brand-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-700">{ar ? 'ربط' : 'Connect'}</Link>
+          /* ANALYTICS-READ-ONLY-001 — the connection is set up from the integrations screen, not from an analysis page. */
+          <span data-testid="site-connect-note" className="text-xs text-text-muted">{ar ? 'يُربط من قسم الربط والتكاملات.' : 'Connected from the integrations section.'}</span>
         )}
         {note}
       </div>
