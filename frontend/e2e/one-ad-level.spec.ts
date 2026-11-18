@@ -34,7 +34,8 @@ test.describe('ads and content are named for what they are', () => {
 
     await selectProject(page, await seededProject(request, STORE_PROJECT))
 
-    await page.goto('/agency/analytics')
+    // ANALYTICS-SIX-SECTIONS-001 — «Ads» is a view inside the Campaigns section.
+    await page.goto('/agency/analytics?tab=ads')
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
 
     await expect(page.getByRole('tab', { name: ADS })).toHaveCount(1)
@@ -62,6 +63,7 @@ test.describe('ads and content are named for what they are', () => {
       page.getByRole('tab', { name: CONTENT }),
       'a link that has always meant content did not open content',
     ).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByRole('tab', { name: ADS })).toHaveAttribute('aria-selected', 'false')
+    // The Campaigns section (which holds «Ads») is not the one open.
+    await expect(page.getByTestId('analytics-section-campaigns')).toHaveAttribute('aria-selected', 'false')
   })
 })

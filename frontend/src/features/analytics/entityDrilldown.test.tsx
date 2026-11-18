@@ -59,6 +59,7 @@ describe('drilling from an ad set into its ads', () => {
 
   async function openAdSets() {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('tab', { name: 'Campaigns' }))
     fireEvent.click(await screen.findByRole('tab', { name: 'Ad groups' }))
   }
 

@@ -66,6 +66,7 @@ describe('the conversion funnel tells silence from zero', () => {
     route()
 
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
+    fireEvent.click(screen.getByRole('tab', { name: 'Conversion' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Funnel' }))
 
     // The two nobody sent: named as unreported, and carrying no figure at all.
@@ -86,6 +87,7 @@ describe('the conversion funnel tells silence from zero', () => {
     route()
 
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
+    fireEvent.click(screen.getByRole('tab', { name: 'Conversion' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Funnel' }))
 
     const row = await screen.findByTestId('ad-funnel-stage-add_to_cart')
@@ -100,6 +102,7 @@ describe('the conversion funnel tells silence from zero', () => {
     route(FUNNEL.filter((s) => s.reported))
 
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
+    fireEvent.click(screen.getByRole('tab', { name: 'Conversion' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Funnel' }))
 
     await screen.findByTestId('ad-funnel-stage-impressions')

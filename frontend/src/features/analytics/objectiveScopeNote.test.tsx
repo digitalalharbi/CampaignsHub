@@ -68,6 +68,8 @@ function route(scope: { applied: string[]; unapplied: string[] } | undefined) {
 
 async function open(tab: RegExp) {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+  // ANALYTICS-SIX-SECTIONS-001 — Platforms lives in the Channels section.
+  if (tab.test('Platforms')) fireEvent.click(await screen.findByRole('tab', { name: 'Channels' }))
   fireEvent.click(await screen.findByRole('tab', { name: tab }))
 }
 

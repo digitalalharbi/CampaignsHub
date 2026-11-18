@@ -32,7 +32,12 @@ const COPY = {
   en: { all: 'All clients', summary: 'Projects summary', trail: 'Home trail' },
 }
 
-export function OverviewDashboard({ portal }: { portal: 'agency' | 'app' }) {
+/**
+ * ANALYTICS-ONE-BOARD-001 (Owner 2026-11-19) — the agency's «لوحة التحليلات» and «التحليلات» are ONE page.
+ * `analysis` mounts this wrapper at `/agency/analytics`: every client first, then — once a client or
+ * a project is chosen — the six analysis sections for it. `/agency/dashboard` redirects here.
+ */
+export function OverviewDashboard({ portal, analysis = false }: { portal: 'agency' | 'app'; analysis?: boolean }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const t = ar ? COPY.ar : COPY.en
   const [params, setParams] = useSearchParams()
@@ -40,6 +45,7 @@ export function OverviewDashboard({ portal }: { portal: 'agency' | 'app' }) {
   const setClient = useAgencyClient((s) => s.setCurrentClientId)
   const nav = useAuth((s) => s.user?.account?.nav)
   const setProject = useProject((s) => s.setCurrentProjectId)
+  const currentProjectId = useProject((s) => s.currentProjectId)
   const clientId = portal === 'agency' ? params.get('client') : null
 
   // Shared cache with the cards — the breadcrumb reads the name, it does not ask again.
@@ -118,7 +124,12 @@ export function OverviewDashboard({ portal }: { portal: 'agency' | 'app' }) {
     </Link>
   ) : null
   // AGENCY-FIT-001 — the all-clients level is a fitted page: the summary link rides in its title row, and the wrapper hands it the screen.
-  const fitted = portal === 'agency' && clientId === null
+  /*
+   * On the one board: `?view=clients` (where the old dashboard address lands) or no project chosen shows every client;
+   * a project chosen in the sidebar opens its analysis.
+   */
+  const allClients = portal === 'agency' && clientId === null && (!analysis || currentProjectId === null || params.get('view') === 'clients')
+  const fitted = allClients
 
   return (
     <div className={fitted ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'grid min-w-0 grid-cols-1 gap-2'} data-testid="overview-dashboard">
@@ -129,13 +140,17 @@ export function OverviewDashboard({ portal }: { portal: 'agency' | 'app' }) {
             <Chevron size={14} className="shrink-0 text-text-muted" aria-hidden />
             <span className="truncate text-text-primary" aria-current="page">{clientName ?? '…'}</span>
           </nav>
+        ) : portal === 'agency' && analysis ? (
+          <button type="button" onClick={() => setParams({ view: 'clients' })} data-testid="analytics-all-clients" className="text-sm font-semibold text-brand-600 hover:text-brand-700">
+            {t.all}
+          </button>
         ) : (
           <span />
         )}
         {summaryLink}
       </div>}
 
-      {portal === 'agency' && clientId === null ? <AgencyDashboardPage onOpenClient={open} extraActions={summaryLink} /> : settled ? <AnalyticsPage surface="dashboard" /> : <Skeleton className="h-64" />}
+      {allClients ? <AgencyDashboardPage onOpenClient={open} extraActions={summaryLink} /> : settled ? <AnalyticsPage surface={analysis ? 'analytics' : 'dashboard'} /> : <Skeleton className="h-64" />}
     </div>
   )
 }

@@ -64,6 +64,7 @@ function route(entities: unknown[]) {
  */
 async function openAdSets() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+  fireEvent.click(await screen.findByRole('tab', { name: 'Campaigns' }))
   fireEvent.click(await screen.findByRole('tab', { name: 'Ad groups' }))
 }
 
@@ -323,7 +324,7 @@ describe('ads and content are named for what they are', () => {
 
   it('names the content surface for content, not as a singular Ad', async () => {
     route([ROW])
-    renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/agency/analytics?tab=ads' })
 
     await screen.findByRole('tab', { name: 'Ads' })
 
@@ -335,7 +336,7 @@ describe('ads and content are named for what they are', () => {
 
   it('names them apart in Arabic too', async () => {
     route([ROW])
-    renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
+    renderWithProviders(<AnalyticsPage />, { locale: 'ar', route: '/agency/analytics?tab=ads' })
 
     await screen.findByRole('tab', { name: 'الإعلانات' })
 
@@ -360,7 +361,8 @@ describe('ads and content are named for what they are', () => {
     const content = await screen.findByRole('tab', { name: /Content/ })
 
     expect(content.getAttribute('aria-selected'), 'a content link did not open content').toBe('true')
-    expect(screen.getByRole('tab', { name: 'Ads' }).getAttribute('aria-selected')).toBe('false')
+    // The campaigns section, which holds «Ads», is not the one open.
+    expect(screen.getByRole('tab', { name: 'Campaigns' }).getAttribute('aria-selected')).toBe('false')
   })
 })
 

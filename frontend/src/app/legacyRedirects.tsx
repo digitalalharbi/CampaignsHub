@@ -277,3 +277,12 @@ export function AgencyProjectsIndexRedirect() {
 
   return <Navigate to={`/agency/clients${search}${hash}`} replace />
 }
+
+/** ANALYTICS-ONE-BOARD-001 — a moved page keeps its filters: the query and hash travel with the redirect. */
+export function KeepQueryRedirect({ to, add = {} }: { to: string; add?: Record<string, string> }) {
+  const { search, hash } = useLocation()
+  const params = new URLSearchParams(search)
+  for (const [k, v] of Object.entries(add)) if (!params.has(k)) params.set(k, v)
+  const q = params.toString()
+  return <Navigate to={`${to}${q ? `?${q}` : ''}${hash}`} replace />
+}

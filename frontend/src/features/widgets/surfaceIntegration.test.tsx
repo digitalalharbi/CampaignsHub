@@ -45,6 +45,8 @@ describe('widgets on the Dashboard and Analytics', () => {
     vi.mocked(useWidgetLayout).mockReturnValue(layout([null, 'module_off']) as never)
     renderWithProviders(<AnalyticsPage surface="analytics" />, { locale: 'en' })
 
+    // ANALYTICS-SIX-SECTIONS-001 — Insights is a view in the Conversion section.
+    fireEvent.click(await screen.findByRole('tab', { name: 'Conversion' }))
     const tab = await screen.findByRole('tab', { name: 'Insights' })
     fireEvent.click(tab)
     expect(await screen.findByTestId('stub-surface-analytics')).toBeTruthy()

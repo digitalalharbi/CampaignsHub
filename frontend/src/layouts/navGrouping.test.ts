@@ -36,7 +36,8 @@ const APP_BEFORE = [
  * second — which is the distinction, rather than "the agency has no plan".
  */
 const AGENCY_BEFORE = [
-  '/agency/home', '/agency/dashboard', '/agency/clients', '/agency/requests',
+  // ANALYTICS-ONE-BOARD-001 — «لوحة التحليلات» merged INTO «التحليلات» (Owner 2026-11-19); `/agency/dashboard` redirects there.
+  '/agency/home', '/agency/clients', '/agency/requests',
   '/agency/campaigns', '/agency/content', '/agency/reports', '/agency/tasks',
   '/agency/files', '/agency/alerts', '/agency/messages', '/agency/billing',
   '/agency/subscriptions', '/agency/team', '/agency/settings',

@@ -62,7 +62,7 @@ describe('the dashboard and the analysis are different surfaces', () => {
   it('analytics keeps the whole tab bar', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
 
-    expect(await screen.findByRole('tab', { name: /Platforms/i })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /Channels/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Budget/i })).toBeInTheDocument()
   })
 

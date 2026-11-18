@@ -22,7 +22,8 @@ test.describe('the analytics page explains its own figures', () => {
 
   /** Open Analytics and switch to the tab that carries the provenance. */
   async function openQualityTab(page: import('@playwright/test').Page) {
-    await page.goto('/app/analytics')
+    // ANALYTICS-SIX-SECTIONS-001 — data quality left the bar (operations, not analysis); its link still opens it.
+    await page.goto('/app/analytics?tab=quality')
     await expect(page.locator('main')).toBeVisible()
     /*
      * `role="tab"`, not `button` — UX-ANALYTICS-TABS-001.
@@ -31,8 +32,7 @@ test.describe('the analytics page explains its own figures', () => {
      * question they answer, and each carries `aria-selected`. Querying by role is what this should
      * always have done — it survives a label being shortened, which is exactly what happened here.
      */
-    const tab = page.getByRole('tab', { name: /جودة البيانات والإسناد|Data quality & attribution/ })
-    await tab.click()
+    await expect(page).toHaveURL(/tab=quality/)
     /*
      * The tab's own statement that the click landed, checked before anything is read from the panel.
      *
@@ -166,15 +166,13 @@ test.describe('the analytics page explains its own figures', () => {
    * product has had to fix more than once.
    */
   test('states it in Arabic too, in an RTL page', async ({ page }) => {
-    await page.goto('/app/analytics')
+    await page.goto('/app/analytics?tab=quality')
     await expect(page.locator('main')).toBeVisible()
 
     /* The demo session opens in Arabic; assert the direction rather than assuming it. */
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
 
-    const tab = page.getByRole('tab', { name: /جودة البيانات والإسناد/ })
-    await tab.click()
-    await expect(tab).toHaveAttribute('aria-selected', 'true')
+    await expect(page).toHaveURL(/tab=quality/)
 
     const clear = page.getByTestId('attribution-findings-clear')
     await expect(clear).toBeVisible({ timeout: 30000 })

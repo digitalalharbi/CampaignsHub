@@ -6,7 +6,7 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { features } from '@/lib/features'
-import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectsIndexRedirect } from './legacyRedirects'
+import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectsIndexRedirect, KeepQueryRedirect } from './legacyRedirects'
 import { lazyPage } from './lazyPage'
 
 // PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
@@ -636,7 +636,8 @@ export const router = createBrowserRouter(withErrorBoundary([
             // The landing is the role dashboard (see the `/app` index above).
             { index: true, element: <Navigate to="/agency/home" replace /> },
             { path: 'home', element: <RoleDashboardPage portal="agency" /> },
-            { path: 'dashboard', element: <OverviewDashboard portal="agency" /> },
+            // ANALYTICS-ONE-BOARD-001 — one board: the old dashboard address lands on «التحليلات», query kept.
+            { path: 'dashboard', element: <KeepQueryRedirect to="/agency/analytics" add={{ view: 'clients' }} /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },
             { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
             { path: 'requests', element: <RequestsDashboardPage /> },
@@ -671,7 +672,7 @@ export const router = createBrowserRouter(withErrorBoundary([
              * MOUNTED, not copied — same component as `/app/analytics`, per ADR 0002. A second copy is
              * how two portals start disagreeing about what a figure means.
              */
-            { path: 'analytics', element: <AnalyticsPage /> },
+            { path: 'analytics', element: <OverviewDashboard portal="agency" analysis /> },
             { path: 'campaigns', element: <CampaignsPage /> },
             /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
             /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */

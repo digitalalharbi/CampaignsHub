@@ -5,7 +5,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, ArrowLeftRight, BarChart3, Eye, Filter, Globe, Image as ImageIcon, Layers, LayoutDashboard, Megaphone, RadioTower, ShieldCheck, ShoppingBag, Target, Users, Wallet, Boxes, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRight, Eye, Filter, Image as ImageIcon, Layers, LayoutDashboard, Megaphone, Users, type LucideIcon } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -201,6 +201,14 @@ import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
  * hierarchy (platform → account → campaign → ad set → ad → creative), and a flat row gave a reader
  * no way to see that the thing they wanted was one level up from where they were looking.
  */
+/*
+ * ANALYTICS-SIX-SECTIONS-001 (Owner 2026-11-19) — one analytics board, six sections, for the client
+ * and the project manager. Operations (source health, data quality) are NOT a reader's question and
+ * leave the bar; their ids still open from a link someone holds (`?tab=quality`, `?tab=live`).
+ *
+ * A section with several views shows them as a second, quieter row; a section with one view has no
+ * second row. Ids are unchanged, so every `?tab=` link keeps landing where it did.
+ */
 const TAB_GROUPS = [
   {
     key: 'overview',
@@ -212,36 +220,33 @@ const TAB_GROUPS = [
     ],
   },
   {
-    // The drill-down, in the order the platforms themselves nest it.
-    key: 'breakdown',
-    ar: 'التفصيل', en: 'Breakdown',
+    key: 'channels',
+    ar: 'القنوات', en: 'Channels',
     tabs: [
       { id: 'platforms', ar: 'المنصات', en: 'Platforms' },
-      // AUDIENCE-001 — targeting, paid delivery, site visitors and unpaid, kept apart, per platform.
-      { id: 'audience', ar: 'الجمهور', en: 'Audience' },
       { id: 'accounts', ar: 'الحسابات', en: 'Accounts' },
-      { id: 'campaigns', ar: 'الحملات', en: 'Campaigns' },
-      { id: 'ad_sets', ar: 'المجموعات', en: 'Ad groups' },
-      /*
-       * ADS-TERMINOLOGY-001 — the DUPLICATION was in the name, not in the surface.
-       *
-       * These two tabs read «الإعلانات» and «الإعلان» — «Ads» and «Ad» — a pair that differs by a
-       * plural, so a reader could not tell which one answered their question. But they are not two
-       * views of one thing: the first lists AD entities, and the second is the last rung of
-       * campaign → ad set → ad → CONTENT, with a grain of its own.
-       *
-       * A content item is not an ad. One creative can be carried by several ads — that relation is
-       * why `creative.ads` is a list — and its figures come from `creative_daily_metrics` rather
-       * than from an ad's row. Collapsing it into the ads table would have to pick one ad per
-       * creative or double-count, and both are wrong.
-       *
-       * So the second tab keeps its capability and loses its misleading name. `?tab=creative`
-       * still opens it — the id is untouched, because links people hold point at a surface that is
-       * still here.
-       */
-      { id: 'ads', ar: 'الإعلانات', en: 'Ads' },
-      { id: 'creative', ar: 'أداء المحتويات', en: 'Content performance' },
     ],
+  },
+  {
+    key: 'campaigns',
+    ar: 'الحملات', en: 'Campaigns',
+    tabs: [
+      { id: 'campaigns', ar: 'كل الحملات', en: 'All campaigns' },
+      { id: 'ad_sets', ar: 'المجموعات', en: 'Ad groups' },
+      // ADS-TERMINOLOGY-001 — ads are entities; content is the creative grain, in its own section.
+      { id: 'ads', ar: 'الإعلانات', en: 'Ads' },
+    ],
+  },
+  {
+    key: 'content',
+    ar: 'المحتويات', en: 'Content',
+    tabs: [{ id: 'creative', ar: 'أداء المحتويات', en: 'Content performance' }],
+  },
+  {
+    // AUDIENCE-001 — targeting, paid delivery, site visitors and unpaid, kept apart, per platform.
+    key: 'audience',
+    ar: 'الجمهور', en: 'Audience',
+    tabs: [{ id: 'audience', ar: 'الجمهور', en: 'Audience' }],
   },
   {
     key: 'conversion',
@@ -253,18 +258,17 @@ const TAB_GROUPS = [
       { id: 'site', ar: 'الموقع', en: 'Website' },
     ],
   },
-  {
-    key: 'trust',
-    ar: 'الجودة', en: 'Quality',
-    tabs: [{ id: 'quality', ar: 'جودة البيانات والإسناد', en: 'Data quality & attribution' }],
-  },
-  {
-    // LIVE-OPERATING-VIEW-001 — one screen per source: latest success · source timestamp · next sync · state.
-    key: 'live',
-    ar: 'التشغيل', en: 'Operations',
-    tabs: [{ id: 'live', ar: 'العرض الحي للمصادر', en: 'Live source view' }],
-  },
 ] as const
+
+/** Out of the bar (operations, not analysis) but still opened by a link: LIVE-OPERATING-VIEW-001, data quality. */
+const LINK_ONLY_TABS = [
+  { id: 'quality', ar: 'جودة البيانات والإسناد', en: 'Data quality & attribution' },
+  { id: 'live', ar: 'العرض الحي للمصادر', en: 'Live source view' },
+] as const
+
+const SECTION_ICONS: Record<string, LucideIcon> = {
+  overview: LayoutDashboard, channels: Layers, campaigns: Megaphone, content: ImageIcon, audience: Users, conversion: Filter,
+}
 
 /**
  * Flattened, so nothing that had a tab before has lost one — asserted in the test.
@@ -275,13 +279,8 @@ const TAB_GROUPS = [
  */
 type AnalyticsTab = { readonly id: string; readonly ar: string; readonly en: string }
 
-const TAB_ICONS: Record<string, LucideIcon> = {
-  performance: LayoutDashboard, objective: Target, budget: Wallet, platforms: Layers, audience: Users, accounts: Boxes,
-  campaigns: Megaphone, ad_sets: BarChart3, ads: Activity, creative: ImageIcon, funnel: Filter, store: ShoppingBag,
-  site: Globe, quality: ShieldCheck, live: RadioTower,
-}
 
-const TABS: readonly AnalyticsTab[] = TAB_GROUPS.flatMap((g) => g.tabs as readonly AnalyticsTab[])
+const TABS: readonly AnalyticsTab[] = [...TAB_GROUPS.flatMap((g) => g.tabs as readonly AnalyticsTab[]), ...LINK_ONLY_TABS]
 
 const axis = { stroke: 'var(--text-muted)', fontSize: 12 }
 
@@ -762,36 +761,53 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
          * One row that scrolls below `sm`, the wrap restored from `sm` up where the row fits.
          */
         data-testid="analytics-tabs"
-        className="flex snap-x snap-mandatory items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:snap-none [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x snap-mandatory items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:snap-none [&::-webkit-scrollbar]:hidden"
       >
-        {/* ANALYTICS-REPORT-LAYOUT-001 — the same pill bar the live report uses for its views: an icon, a word, the chosen one filled. */}
-        {tabGroups.map((group, index) => (
-          <div key={group.key} className="flex items-center">
-            {index > 0 && <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />}
-            <div className="flex items-center gap-0.5">
-              {group.tabs.map((t) => {
-                const Icon = TAB_ICONS[t.id]
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === t.id}
-                    onClick={() => setTab(t.id)}
-                    className={`inline-flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition-colors active:scale-95 ${
-                      tab === t.id ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
-                    }`}
-                  >
-                    {Icon && <Icon size={15} className="shrink-0" aria-hidden />}
-                    {ar ? t.ar : t.en}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        ))}
+        {/* ANALYTICS-SIX-SECTIONS-001 — six sections, one row, equal weight: an icon and a word. */}
+        {tabGroups.map((group) => {
+          const Icon = SECTION_ICONS[group.key]
+          const active = group.tabs.some((t) => t.id === tab)
+          return (
+            <button
+              key={group.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              data-testid={`analytics-section-${group.key}`}
+              onClick={() => { if (!active) setTab(group.tabs[0]!.id) }}
+              className={`inline-flex min-w-0 flex-1 shrink-0 snap-start items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition-colors active:scale-95 ${
+                active ? 'bg-brand-600 text-white shadow-sm' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+              }`}
+            >
+              {Icon && <Icon size={16} className="shrink-0" aria-hidden />}
+              {ar ? group.ar : group.en}
+            </button>
+          )
+        })}
       </div>
       )}
+      {isAnalysis && (() => {
+        const group = tabGroups.find((g) => g.tabs.some((t) => t.id === tab))
+        if (!group || group.tabs.length < 2) return null
+        return (
+          <div role="tablist" aria-label={ar ? group.ar : group.en} data-testid="analytics-subtabs" className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {group.tabs.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.id}
+                onClick={() => setTab(t.id)}
+                className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                  tab === t.id ? 'border-brand-600 bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-200' : 'border-border text-text-secondary hover:bg-surface-hover'
+                }`}
+              >
+                {ar ? t.ar : t.en}
+              </button>
+            ))}
+          </div>
+        )
+      })()}
 
       {/*
         Say WHY it is empty, and say the true reason.

@@ -83,7 +83,8 @@ function route(overrides: Record<string, { data: unknown; meta?: unknown }> = {}
 
 async function openPlatforms() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByRole('tab', { name: /Platforms/i }))
+  fireEvent.click(await screen.findByRole('tab', { name: 'Channels' }))
+    fireEvent.click(await screen.findByRole('tab', { name: /Platforms/i }))
 }
 
 describe('platform contribution, inside each path', () => {

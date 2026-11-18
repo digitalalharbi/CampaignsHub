@@ -72,8 +72,9 @@ test.describe('signed in', () => {
     await page.goto('/agency')
     await expect(page).toHaveURL(/\/agency\/home/)
 
+    // ANALYTICS-ONE-BOARD-001 — the old board address opens the one analytics board on every client.
     await page.goto('/agency/dashboard')
-    await expect(page).toHaveURL(/\/agency\/dashboard/)
+    await expect(page).toHaveURL(/\/agency\/analytics\?view=clients/)
   })
 
   test('the worker takes control, and its caches never hold an API or auth response', async ({ page }) => {

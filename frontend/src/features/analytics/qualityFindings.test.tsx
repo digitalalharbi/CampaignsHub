@@ -82,8 +82,8 @@ function route(rows: unknown[]) {
 }
 
 async function openQuality() {
-  renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByRole('tab', { name: /Data quality/i }))
+  // ANALYTICS-SIX-SECTIONS-001 — data quality left the bar (operations); its link still opens it.
+  renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/agency/analytics?tab=quality' })
 }
 
 describe('the data quality tab answers the operator’s questions', () => {
@@ -202,8 +202,7 @@ describe('the data quality tab answers the operator’s questions', () => {
   it('says the panel covers the whole project when an axis was declined', async () => {
     route(FRESHNESS)
 
-    renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('tab', { name: /Data quality/i }))
+    renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/agency/analytics?tab=quality' })
 
     expect(await screen.findByTestId('freshness-scope')).toHaveTextContent(/whole project/i)
   })
