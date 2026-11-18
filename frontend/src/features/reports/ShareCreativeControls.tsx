@@ -117,10 +117,16 @@ export function ShareCreativeControls({
   projectId,
   value,
   onChange,
+  hideCeiling = false,
 }: {
   projectId: string
   value: CreativeSharing
   onChange: (next: CreativeSharing) => void
+  /**
+   * REPORT-LINK-EDIT-ADS-001 — the include/exclude ceiling is part of a published link's scope, which the edit dialog does not
+   * read back; drawing it there would show an empty list over a link that may already narrow its ads, and a save would widen it.
+   */
+  hideCeiling?: boolean
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const [open, setOpen] = useState(false)
@@ -150,7 +156,7 @@ export function ShareCreativeControls({
     queryFn: () => listCreatives({ per_page: 48 }, projectId),
     // Only fetched once the operator opens the section: a share modal that always loaded a project's
     // whole creative library would pay for a list most links never narrow.
-    enabled: open && on('creatives'),
+    enabled: open && on('creatives') && !hideCeiling,
   })
 
   const rows = useMemo(() => creatives.data?.creatives ?? [], [creatives.data])
@@ -240,6 +246,7 @@ export function ShareCreativeControls({
               </div>
 
               {/* The ceiling first: it decides what exists, before anything decides what is shown. */}
+              {!hideCeiling && (
               <div className="grid gap-2 rounded-xl border border-border p-3">
                 <span className="text-xs font-bold text-text-muted">
                   {ar ? 'أي إعلان يستطيع هذا الرابط الوصول إليه؟' : 'Which ads may this link reach?'}
@@ -304,6 +311,7 @@ export function ShareCreativeControls({
                     : 'Leave the selection empty to cover every ad in the link’s scope. An excluded ad cannot be opened by any address or id.'}
                 </p>
               </div>
+              )}
 
               {GROUPS.map((group) => (
                 <div key={group.title[1]} className="grid gap-1.5">
