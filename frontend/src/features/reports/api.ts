@@ -146,6 +146,9 @@ export interface ShareRow {
   /** How much of the report this link is; null means the report's own. */
   form?: 'executive_summary' | 'detailed' | null
   sections?: { previous_comparison?: boolean } & Record<string, boolean | undefined>
+  /** REPORT-LINK-EDIT-ADS-001 — the ad section as the link publishes it now (resolved), and its listing policy (null: never chosen). */
+  creatives?: Record<string, boolean>
+  creative_display?: { policy: 'activity' | 'all' | 'selected'; include_zero_activity: boolean; auto_refresh: boolean } | null
   scope: {
     project_id?: string
     campaign_ids?: string[]
@@ -436,6 +439,10 @@ export interface ShareEdit {
   sections?: Record<string, boolean>
   /** REPORT-TABLES-OWNER-COLUMNS-001 — the whole column choice per table; a table absent means every column. */
   columns?: Record<string, string[]>
+  /** REPORT-LINK-EDIT-ADS-001 — the ad section's fifteen switches, sent whole; the server resolves the dependencies. */
+  creatives?: Record<string, boolean>
+  /** REPORT-LINK-EDIT-ADS-001 — which ads the link lists. */
+  creative_display?: { policy: 'activity' | 'all' | 'selected'; include_zero_activity: boolean; auto_refresh: boolean }
 }
 
 export const updateShare = (p: string, reportId: string, shareId: string, body: ShareEdit) =>
