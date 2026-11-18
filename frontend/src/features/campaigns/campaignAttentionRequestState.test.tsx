@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
@@ -98,7 +98,9 @@ describe('what the workspace says while its metrics request has not answered', (
     expect(screen.getByTestId('campaigns-attention')).toHaveTextContent('—')
     expect(attentionCount()).toBeUndefined()
     expect(screen.getByTestId('campaigns-attention')).toHaveTextContent(/Waiting for the campaign figures/i)
-    expect(screen.queryByTestId('campaigns-band-attention')).toHaveAttribute('data-count', '0')
+    // CAMPAIGNS-TABLE-FIRST-001 — the bands are drawn by the overview, one click from the table.
+    fireEvent.click(screen.getByTestId('view-overview'))
+    expect(await screen.findByTestId('campaigns-band-attention')).toHaveAttribute('data-count', '0')
     /* The banner is the loudest form of the claim, so it is asserted by its absence. */
     expect(screen.queryByText(/need attention — open them/i)).toBeNull()
   })
