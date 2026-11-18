@@ -10,14 +10,69 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # PERF-BUILD-OFF-VPS-001 — build here, on GitHub's runner, never on the 1-CPU production host.
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/backend.production.Dockerfile
+          push: true
+          tags: |
+            ghcr.io/digitalalharbi/campaignshub-backend:${{ github.sha }}
+            ghcr.io/digitalalharbi/campaignshub-backend:main
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/frontend.production.Dockerfile
+          push: true
+          # Same values as the compose file's build args; keep the two in step.
+          build-args: |
+            VITE_API_URL=https://api.campaignshub.io/api/v1
+            VITE_BRAND_NAME=CampaignsHub
+            VITE_BRAND_DOMAIN=campaignshub.io
+            VITE_INFLUENCERS_UGC=false
+          tags: |
+            ghcr.io/digitalalharbi/campaignshub-frontend:${{ github.sha }}
+            ghcr.io/digitalalharbi/campaignshub-frontend:main
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - name: Deploy on VPS
         uses: appleboy/ssh-action@v1.2.2
+        env:
+          CH_BACKEND_IMAGE: ghcr.io/digitalalharbi/campaignshub-backend:${{ github.sha }}
+          CH_FRONTEND_IMAGE: ghcr.io/digitalalharbi/campaignshub-frontend:${{ github.sha }}
+          GHCR_USER: ${{ github.actor }}
+          # Short-lived job token, read-only on packages; the script logs out when it finishes.
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          envs: CH_BACKEND_IMAGE,CH_FRONTEND_IMAGE,GHCR_USER,GHCR_TOKEN
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
@@ -40,6 +95,7 @@ jobs:
             git fetch origin main
             git checkout main
             git reset --hard origin/main
+            export CH_BACKEND_IMAGE CH_FRONTEND_IMAGE GHCR_USER GHCR_TOKEN
             bash scripts/deploy-production.sh
 
       # DEPLOY-VERIFY-001 — the deploy says what production now SERVES, or it is not a verification.

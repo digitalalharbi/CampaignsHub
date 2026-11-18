@@ -65,6 +65,7 @@ export function ThreeSourcesPanel({ projectId, range, ar }: { projectId: string;
                 { key: 'ga4', name: label('ga4_measured'), kind: 'num' },
               ]}
             />
+            <details className="text-xs"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
             <MetricTable
               head={[ar ? 'المنصة' : 'Platform', `${label('platform_reported')} · ${ar ? 'طلبات' : 'orders'}`, `${label('platform_reported')} · ${ar ? 'إيراد' : 'revenue'}`, `${label('store_confirmed')} · ${ar ? 'طلبات' : 'orders'}`, `${label('store_confirmed')} · ${ar ? 'إيراد' : 'revenue'}`, `${label('ga4_measured')} · ${ar ? 'جلسات' : 'sessions'}`, `${label('ga4_measured')} · ${ar ? 'مشتريات' : 'purchases'}`, `${label('ga4_measured')} · ${ar ? 'إيراد' : 'revenue'}`]}
               rows={d.rows.map((r) => [
@@ -79,6 +80,7 @@ export function ThreeSourcesPanel({ projectId, range, ar }: { projectId: string;
               ])}
               values={d.rows.map((r): SortValues => [r.platform, r.platform_reported?.orders ?? null, r.platform_reported?.revenue ?? null, r.store_confirmed?.orders ?? null, r.store_confirmed?.revenue ?? null, r.ga4_measured?.sessions ?? null, r.ga4_measured?.orders ?? null, r.ga4_measured?.revenue ?? null])}
             />
+            </details>
           </>
         )}
         {material.length > 0 && (

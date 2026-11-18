@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { probeSession } from '@/features/auth/api'
-import { fetchMemberships } from '@/features/auth/memberships'
+import { bootSession } from '@/features/bootstrap/bootstrap'
 import { listenForWorkspaceSwitch } from '@/features/auth/workspaceSwitch'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
@@ -178,15 +178,17 @@ export function Providers({ children }: { children: ReactNode }) {
     }
 
     /*
-     * Asked beside the probe, not after it: both read the same session, so the second round trip was
-     * pure waiting. Same key and function as every portal guard, so they find it already in flight.
-     * A failure is swallowed here and left for the guard's own query to report.
+     * PERF-BOOTSTRAP-001 — on a surface that reads memberships the probe IS the bootstrap: one request answers who you are, your
+     * memberships, your access, the subscription, the branding, the bell and the disclaimer, and files each under the key its hook
+     * reads BEFORE the store leaves `loading` — so nothing below mounts and asks again. It replaces the two requests this used to
+     * send side by side (`/auth/me` and `/auth/memberships`) and the five the page would have sent once it rendered.
+     *
+     * Anywhere else (the marketing pages, sign-in) there is nothing to file and the plain probe runs, as it always did. If the
+     * bootstrap does not answer, `bootSession` falls back to the plain probe and the memberships prefetch — the previous behaviour.
      */
-    if (readsMemberships(window.location.pathname)) {
-      void queryClient.prefetchQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
-    }
+    const probe = readsMemberships(window.location.pathname) ? bootSession(queryClient) : probeSession()
 
-    void probeSession().then(({ user, unreachable }) => {
+    void probe.then(({ user, unreachable }) => {
       if (useAuth.getState().status !== 'loading') return
       if (unreachable) useAuth.getState().setStatus('unreachable')
       else setUser(user)

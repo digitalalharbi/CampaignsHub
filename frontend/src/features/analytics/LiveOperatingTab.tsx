@@ -1,5 +1,6 @@
 import { Activity, Clock, RefreshCw, Webhook } from 'lucide-react'
 import { MetricTable } from '@/components/ui/MetricTable'
+import { Num } from '@/components/ui/Num'
 import { SyncStatusPill } from '@/components/ui/SyncStatusPill'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
@@ -103,33 +104,62 @@ export function LiveOperatingTab({ projectId }: { projectId: string | null }) {
           description={ar ? 'اربط حساباً إعلانياً أو متجراً ليظهر هنا بحالته ومواعيد مزامنته.' : 'Bind an ad account or a store and it appears here with its state and sync times.'}
         />
       ) : (
+        <>
+        {/* ANALYTICS-REPORT-LAYOUT-001 — one card per source: its state, how fresh it is set large, the next sync and how it
+            moves as chips. The full table stays under «الجدول». */}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {v.sources.map((s) => (
+            <div key={`${s.provider}-${s.name ?? ''}`} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <span data-testid={`live-source-${s.provider}`} className="truncate text-sm font-bold text-text-primary">{sourceName(s, ar)}</span>
+                <SyncStatusPill status={s.state} ar={ar} />
+              </div>
+              <div>
+                <div className="text-xs text-text-muted">{ar ? 'آخر مزامنة ناجحة' : 'Last successful sync'}</div>
+                <div className="tnum text-base font-extrabold text-text-primary" data-testid={`live-success-${s.provider}`}><Num>{when(s.latest_successful_sync_at, ar)}</Num></div>
+              </div>
+              <div className="text-xs text-text-secondary">
+                {ar ? 'التالية: ' : 'Next: '}
+                <span data-testid={`live-next-sync-${s.provider}`}>{s.next_sync_at
+                  ? <Num className="tnum">{fmtDateTime(s.next_sync_at)}</Num>
+                  : <span className="text-text-muted">{s.next_sync_reason === 'not_connected' ? (ar ? 'لا مزامنة — غير متصل' : 'No sync — not connected') : '—'}</span>}</span>
+              </div>
+              {s.missing_grain && <span className="w-fit rounded-full bg-warning/10 px-2 py-0.5 text-xs text-warning">{ar ? `ناقص: ${s.missing_grain}` : `missing: ${s.missing_grain}`}</span>}
+              <div className="flex flex-wrap gap-1" data-testid={`live-mechanisms-${s.provider}`}>
+                {mechanisms(s, ar).split(' · ').map((m, i) => (
+                  <span key={m} className="contents">
+                    {i > 0 && <span className="sr-only"> · </span>}
+                    <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-secondary">{m}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <details className="text-xs">
+          <summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
         <MetricTable
           head={ar
-            ? ['المصدر', 'الحالة', 'آخر مزامنة ناجحة', 'آخر طابع زمني من المصدر', 'المزامنة التالية', 'كيف تتحرك الأرقام']
-            : ['Source', 'State', 'Latest successful sync', 'Latest source timestamp', 'Next sync', 'How the figures move']}
+            ? ['المصدر', 'الحالة', 'آخر مزامنة ناجحة', 'آخر طابع زمني من المصدر', 'المزامنة التالية']
+            : ['Source', 'State', 'Latest successful sync', 'Latest source timestamp', 'Next sync']}
           rows={v.sources.map((s) => [
-            <span key="n" data-testid={`live-source-${s.provider}`} className="font-semibold text-text-primary">{sourceName(s, ar)}</span>,
-            <span key="s" className="inline-flex flex-wrap items-center gap-1">
-              <SyncStatusPill status={s.state} ar={ar} />
-              {s.missing_grain && <span className="text-[11px] text-text-muted">{ar ? `ناقص: ${s.missing_grain}` : `missing: ${s.missing_grain}`}</span>}
-            </span>,
-            <span key="ok" dir="ltr" className="tabular-nums" data-testid={`live-success-${s.provider}`}>{when(s.latest_successful_sync_at, ar)}</span>,
-            <span key="ts" dir="ltr" className="tabular-nums">{when(s.latest_source_timestamp, ar)}</span>,
-            <span key="nx" data-testid={`live-next-sync-${s.provider}`}>
-              {s.next_sync_at
-                ? <span dir="ltr" className="tabular-nums">{fmtDateTime(s.next_sync_at)}</span>
-                : <span className="text-text-muted">{s.next_sync_reason === 'not_connected' ? (ar ? 'لا مزامنة — غير متصل' : 'No sync — not connected') : '—'}</span>}
-            </span>,
-            <span key="m" className="text-xs text-text-secondary" data-testid={`live-mechanisms-${s.provider}`}>{mechanisms(s, ar)}</span>,
+            <span key="n" className="font-semibold text-text-primary">{sourceName(s, ar)}</span>,
+            <SyncStatusPill key="s" status={s.state} ar={ar} />,
+            <Num key="ok" className="tabular-nums">{when(s.latest_successful_sync_at, ar)}</Num>,
+            <Num key="ts" className="tabular-nums">{when(s.latest_source_timestamp, ar)}</Num>,
+            <span key="nx">{s.next_sync_at ? <Num className="tabular-nums">{fmtDateTime(s.next_sync_at)}</Num> : '—'}</span>,
           ])}
           values={v.sources.map((s) => [
-            sourceName(s, ar), s.state, s.latest_successful_sync_at ?? '', s.latest_source_timestamp ?? '', s.next_sync_at ?? '', mechanisms(s, ar),
+            sourceName(s, ar), s.state, s.latest_successful_sync_at ?? '', s.latest_source_timestamp ?? '', s.next_sync_at ?? '',
           ])}
         />
+        </details>
+        </>
       )}
 
-      <div data-testid="live-scheduler" className="rounded-xl border border-border bg-surface p-3.5">
-        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-text-primary"><Clock size={14} /> {ar ? 'المجدوِل' : 'Scheduler'}</h3>
+      <details data-testid="live-scheduler" className="rounded-xl border border-border bg-surface p-3.5">
+        <summary className="flex cursor-pointer select-none items-center gap-1.5 text-sm font-bold text-text-primary"><Clock size={14} /> {ar ? 'تفاصيل تقنية: المجدوِل' : 'Technical details: scheduler'}</summary>
+        <div className="mt-2">
         {v.scheduler.length === 0 ? (
           <p className="text-xs text-text-muted">{ar ? 'لم يسجّل المجدوِل أي تشغيل بعد.' : 'The scheduler has not recorded a run yet.'}</p>
         ) : (
@@ -150,7 +180,8 @@ export function LiveOperatingTab({ projectId }: { projectId: string | null }) {
           </ul>
         )}
         <p className="mt-2 text-[11px] text-text-muted"><Webhook size={11} className="me-1 inline-block align-[-1px]" />{ar ? 'الـ Webhooks تُسرّع المزامنة حيث ينشرها المزوّد؛ وإلا فالاستطلاع المجدوَل هو الطريق.' : 'Webhooks hasten a sync where the provider publishes them; otherwise the scheduled poll is the path.'}</p>
-      </div>
+        </div>
+      </details>
     </section>
   )
 }

@@ -3,9 +3,9 @@ import { InfoTip } from '@/components/fit/InfoTip'
 import { ConsumptionBar } from './ConsumptionBar'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
-import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeftRight, Eye } from 'lucide-react'
+import { Activity, ArrowLeftRight, BarChart3, Eye, Filter, Globe, Image as ImageIcon, Layers, LayoutDashboard, Megaphone, RadioTower, ShieldCheck, ShoppingBag, Target, Users, Wallet, Boxes, type LucideIcon } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -70,6 +70,7 @@ import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, 
 import { funnelStageLabel } from './metricLabels'
 import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
 import { DailyMeasurePanel } from './DailyMeasurePanel'
+import { SmartReading } from './SmartReading'
 import { useUrlList, useUrlState, useUrlWriter } from './filterUrlState'
 import { usePeriod } from '@/lib/period/usePeriod'
 import { DateRangePicker } from '@/components/ui/DateRangePicker'
@@ -83,6 +84,7 @@ import { useSavedViews, type SavedView } from '@/features/dashboard/savedViews'
 import { Explainer } from '@/components/ui/Explainer'
 import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { DistributionBars } from './DistributionBars'
+import { AccountVisualDeck, BudgetVisualDeck, CampaignVisualDeck, EntityVisualDeck } from './TabVisualDecks'
 import { SPECS, layoutFor, valueReading } from './metricCatalog'
 import { FilterBar, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
@@ -99,7 +101,20 @@ import {
   rawObjectivesFor,
   type CanonicalObjectiveKey,
 } from '@/features/campaigns/canonicalObjectives'
-import { CampaignLink } from '@/features/campaigns/CampaignLink'
+import { CampaignLink as CampaignDetailLink } from '@/features/campaigns/CampaignLink'
+
+/*
+ * ANALYTICS-READ-ONLY-001 — Owner 2026-11-18: «التحليلات رسوم بيانية وتقارير فقط». Project managers and clients
+ * read this page, so on the analytics surface a campaign name is the name, not a door into the campaign's
+ * management screen and its platform controls. The quick preview stays: it answers in place. The dashboard
+ * surface keeps its links.
+ */
+const AnalysisOnly = createContext(false)
+function CampaignLink(props: React.ComponentProps<typeof CampaignDetailLink>) {
+  const readOnly = useContext(AnalysisOnly)
+  if (!readOnly) return <CampaignDetailLink {...props} />
+  return <span className={props.className} data-testid={props.testid ?? 'campaign-name-readonly'}>{props.name ?? '—'}</span>
+}
 import { CampaignQuickPreview } from './CampaignQuickPreview'
 import { bestByRoas, worstByRoas } from './campaignRoasPanels'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -235,7 +250,7 @@ const TAB_GROUPS = [
       { id: 'funnel', ar: 'القمع', en: 'Funnel' },
       { id: 'store', ar: 'المتجر', en: 'Store' },
       // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platforms.
-      { id: 'site', ar: 'الموقع (الموقع)', en: 'Site (Website)' },
+      { id: 'site', ar: 'الموقع', en: 'Website' },
     ],
   },
   {
@@ -259,6 +274,12 @@ const TAB_GROUPS = [
  * type on its own.
  */
 type AnalyticsTab = { readonly id: string; readonly ar: string; readonly en: string }
+
+const TAB_ICONS: Record<string, LucideIcon> = {
+  performance: LayoutDashboard, objective: Target, budget: Wallet, platforms: Layers, audience: Users, accounts: Boxes,
+  campaigns: Megaphone, ad_sets: BarChart3, ads: Activity, creative: ImageIcon, funnel: Filter, store: ShoppingBag,
+  site: Globe, quality: ShieldCheck, live: RadioTower,
+}
 
 const TABS: readonly AnalyticsTab[] = TAB_GROUPS.flatMap((g) => g.tabs as readonly AnalyticsTab[])
 
@@ -548,6 +569,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   )
 
   return (
+    <AnalysisOnly.Provider value={isAnalysis}>
     <div className="space-y-4">
       {/*
         The page names the surface the reader arrived at, not the file it lives in.
@@ -739,27 +761,32 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
          * a phone eleven tabs became three stacked lines and the last one still sat under the edge.
          * One row that scrolls below `sm`, the wrap restored from `sm` up where the row fits.
          */
-        className="flex snap-x snap-mandatory items-end gap-x-1 gap-y-1.5 overflow-x-auto border-b border-border pb-px [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:snap-none [&::-webkit-scrollbar]:hidden"
+        data-testid="analytics-tabs"
+        className="flex snap-x snap-mandatory items-center gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-1 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:snap-none [&::-webkit-scrollbar]:hidden"
       >
+        {/* ANALYTICS-REPORT-LAYOUT-001 — the same pill bar the live report uses for its views: an icon, a word, the chosen one filled. */}
         {tabGroups.map((group, index) => (
-          <div key={group.key} className="flex items-end">
-            {index > 0 && <span aria-hidden className="mx-2 mb-2 h-4 w-px shrink-0 bg-border" />}
-            <div className="flex items-end gap-0.5">
-              {group.tabs.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`relative shrink-0 snap-start whitespace-nowrap rounded-t-lg px-3 py-3 text-sm font-semibold transition-colors sm:px-2.5 sm:py-2 ${
-                    tab === t.id ? 'text-brand-600' : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                >
-                  {ar ? t.ar : t.en}
-                  {tab === t.id && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-brand-600" />}
-                </button>
-              ))}
+          <div key={group.key} className="flex items-center">
+            {index > 0 && <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />}
+            <div className="flex items-center gap-0.5">
+              {group.tabs.map((t) => {
+                const Icon = TAB_ICONS[t.id]
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === t.id}
+                    onClick={() => setTab(t.id)}
+                    className={`inline-flex shrink-0 snap-start items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition-colors active:scale-95 ${
+                      tab === t.id ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+                    }`}
+                  >
+                    {Icon && <Icon size={15} className="shrink-0" aria-hidden />}
+                    {ar ? t.ar : t.en}
+                  </button>
+                )
+              })}
             </div>
           </div>
         ))}
@@ -817,6 +844,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
       <FinancialDisclaimer />
       <LivePerformanceNotice variant="compact" />
     </div>
+    </AnalysisOnly.Provider>
   )
 }
 
@@ -850,7 +878,13 @@ function PerformanceTab({ projectId, range, filters, objective, surface }: Overv
   const data = useOverviewData({ projectId, range, filters, objective })
   const ar = useUi((s) => s.locale) === 'ar'
   // ANALYTICS-DAILY-MEASURE-001 — both surfaces open on the report's daily chart: one analysis, one picture.
-  const daily = <DailyMeasurePanel projectId={projectId} range={range} filters={filters} ar={ar} />
+  // ANALYTICS-SMART-READING-001 — on the analysis surface the findings lead, each opening its evidence in a popup.
+  const daily = (
+    <>
+      {surface === 'analytics' && <SmartReading projectId={projectId} range={range} filters={filters} ar={ar} />}
+      <DailyMeasurePanel projectId={projectId} range={range} filters={filters} ar={ar} />
+    </>
+  )
 
   /*
    * WIDGET-REGISTRY-001 — the Dashboard's configurable widgets sit BELOW the overview it always had. A project where no
@@ -1028,67 +1062,58 @@ function PlatformPaths({
               )
             })()}
 
-            <ul className="flex flex-col gap-1">
+            {/*
+              ANALYTICS-REPORT-LAYOUT-001 — the path drawn the way the live report draws a split: one bar of
+              shares in each platform's colour, then a tile per platform with the figure the path is judged
+              on set large. The sync gaps stay beside their platform, as a small chip, not as the headline.
+            */}
+            <div data-testid={`platform-path-${path.path}-share-bar`} className="mb-3 flex h-3 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+              {path.platforms
+                .filter((row) => (row.spend_share ?? 0) > 0)
+                .map((row) => (
+                  <span key={row.provider} style={{ width: `${(row.spend_share ?? 0) * 100}%`, background: platformColor(canonicalPlatform(row.provider)) }} />
+                ))}
+            </div>
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {path.platforms.map((row) => {
                 const efficiency = efficiencyFor(path.path, row)
                 const returned = returnFor(path.path, row)
                 const gap = gaps.get(canonicalPlatform(row.provider))
 
                 return (
-                  <li key={row.provider} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
-                    <span className="flex items-center gap-2">
+                  <li key={row.provider} className="flex flex-col gap-2 rounded-xl bg-surface-secondary/60 p-3" style={{ borderInlineStart: `3px solid ${platformColor(canonicalPlatform(row.provider))}` }}>
+                    <span className="flex items-center justify-between gap-2">
                       <PlatformCell provider={row.provider} />
-                      {/*
-                        The gap, beside the platform it belongs to. A platform three days short in
-                        this window is not a platform that performed worse, and the share above says
-                        nothing about which of the two it is.
-                      */}
-                      {gap !== undefined && (gap.missing > 0 || gap.status !== null) && (
-                        <span
-                          data-testid={`path-gap-${path.path}-${row.provider}`}
-                          className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] text-warning"
-                        >
-                          {gap.missing > 0
-                            ? (ar ? `ناقص ${countedDays(gap.missing, 'ar')}` : `${countedDays(gap.missing, 'en')} missing`)
-                            : (ar ? 'آخر مزامنة لم تنجح' : 'last sync did not succeed')}
-                        </span>
-                      )}
-                    </span>
-
-                    <span className="flex flex-wrap items-center gap-3">
-                      <span className="tnum text-text-secondary" dir="ltr">{money(row.spend, currency)}</span>
-                      {/* Share of the PATH. «40% of awareness» is a decision somebody made; «40% of
-                          everything» is the mix, and reading the second as performance is the defect. */}
-                      <span className="tnum text-text-muted" dir="ltr">
+                      <span className="tnum text-xs font-semibold text-text-secondary" dir="ltr">
                         {row.spend_share === null ? '—' : percent(row.spend_share, 0)}
                       </span>
-
-                      {/*
-                        The cost that names what this path was BUYING — never a fixed four columns
-                        with two of them empty, which is the cross-objective comparison this section
-                        exists to refuse, printed one column at a time.
-                      */}
-                      <span
-                        data-testid={`path-efficiency-${path.path}-${row.provider}`}
-                        className="tnum text-[11px] text-text-muted"
-                        dir="ltr"
-                      >
-                        {(ar ? efficiency.labelAr : efficiency.labelEn)}
-                        {' '}
-                        {/*
-                          `moneyExact`, not `money`: a per-unit cost is where rounding lies. `money`
-                          compacts, and a cost per thousand of 6.67 printed «7 SAR» — a seven per cent
-                          error in the figure the comparison is actually about.
-                        */}
-                        {efficiency.value === null ? '—' : moneyExact(efficiency.value, currency)}
-                      </span>
-
-                      {returned.value !== null && (
-                        <span className="tnum text-[11px] text-text-muted" dir="ltr">
-                          {ratio(returned.value)}
-                        </span>
-                      )}
                     </span>
+                    <span className="flex items-end justify-between gap-2">
+                      <span data-testid={`path-efficiency-${path.path}-${row.provider}`} className="flex flex-col">
+                        <span className="text-xs text-text-muted">{ar ? efficiency.labelAr : efficiency.labelEn}</span>
+                        <span className="tnum text-lg font-extrabold text-text-primary" dir="ltr">
+                          {efficiency.value === null ? '—' : moneyExact(efficiency.value, currency)}
+                        </span>
+                      </span>
+                      <span className="flex flex-col items-end">
+                        <span className="text-xs text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
+                        <span className="tnum text-sm font-bold text-text-secondary" dir="ltr">{money(row.spend, currency)}</span>
+                      </span>
+                    </span>
+                    {(returned.value !== null || (gap !== undefined && (gap.missing > 0 || gap.status !== null))) && (
+                      <span className="flex flex-wrap items-center justify-between gap-2">
+                        {returned.value !== null
+                          ? <span className="tnum rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success" dir="ltr">ROAS {ratio(returned.value)}</span>
+                          : <span />}
+                        {gap !== undefined && (gap.missing > 0 || gap.status !== null) && (
+                          <span data-testid={`path-gap-${path.path}-${row.provider}`} className="rounded-full bg-warning/10 px-2 py-0.5 text-xs text-warning">
+                            {gap.missing > 0
+                              ? (ar ? `ناقص ${countedDays(gap.missing, 'ar')}` : `${countedDays(gap.missing, 'en')} missing`)
+                              : (ar ? 'آخر مزامنة لم تنجح' : 'last sync did not succeed')}
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </li>
                 )
               })}
@@ -1326,6 +1351,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
    * row, two questions, and neither blocks the other.
    */
   const [previewing, setPreviewing] = useState<string | null>(null)
+  const analysisOnlySurface = useContext(AnalysisOnly)
   const c = useCampaigns(projectId, range, filters)
   const s = useSummary(projectId, range, filters)
   /*
@@ -1379,6 +1405,9 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
         comparable={comparableWindows(s.data)}
         subtitle={windowsUnlikeNote(s.data, ar, (c) => providerLabel(c, ar ? 'ar' : 'en')) ?? undefined}
       />
+
+      {/* ANALYTICS-VISUAL-DECKS-001 — the shape of the period before its rows. */}
+      <CampaignVisualDeck rows={rows} currency={reportingCurrency} windowEnd={range.to} ar={ar} />
 
       {/*
         VISUAL-FIRST-001 / clause D — «CAMPAIGN DISTRIBUTION → contribution/distribution bars».
@@ -1519,7 +1548,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
 
           return row === undefined ? null : (
             <div className="mt-3">
-              <CampaignQuickPreview row={row} projectId={projectId} range={range} filters={filters} onClose={() => setPreviewing(null)} />
+              <CampaignQuickPreview row={row} projectId={projectId} range={range} filters={filters} onClose={() => setPreviewing(null)} analysisOnly={analysisOnlySurface} />
             </div>
           )
         })()}
@@ -1826,6 +1855,8 @@ function AccountBudgets({ projectId, range, filters, provider, picked, onPick }:
 function BudgetTab({ projectId, range, filters }: TabProps) {
   const ar = useAr()
   const b = useBudget(projectId, range, filters)
+  /* Same query key as PlatformBudgets below, so react-query answers it from cache — no second request. */
+  const budgetPlatforms = useBudgetPlatforms(projectId, range, filters)
   const reading = useBudgetExplanation(projectId, range, filters)
   /*
    * BUDGET-HIERARCHY-001 — one drill from the project down to a campaign.
@@ -1879,6 +1910,8 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
       was a question a client could answer from their report while the operator responsible could
       not. It reads through the same table as the campaign rung because it returns the same shape.
     */}
+    {/* ANALYTICS-VISUAL-DECKS-001 — rings and pace bars over the same rows the tables below read. */}
+    <BudgetVisualDeck platforms={budgetPlatforms.data ?? []} campaigns={rows} ar={ar} />
     <PlatformBudgets projectId={projectId} range={range} filters={filters} picked={drill.provider} onPick={pickPlatform} />
     <AccountBudgets projectId={projectId} range={range} filters={filters} provider={drill.provider} picked={drill.account?.id ?? null} onPick={pickAccount} />
     {/*
@@ -1911,6 +1944,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
         Pacing is blank rather than wrong when the plan and the spend are denominated differently,
         and the row says which case it is instead of leaving a reader to guess at an empty cell.
       */}
+      <div data-testid="budget-campaign-table">
       <MetricTable
         head={ar
           ? ['الحملة', 'الميزانية', 'حدّ المنصة', 'الإنفاق', 'المتبقي', 'نسبة الإنفاق', 'المتوقع حتى اليوم', 'المعدل اليومي', 'السرعة', 'المتوقع', 'فوق / تحت']
@@ -1994,6 +2028,7 @@ function BudgetTab({ projectId, range, filters }: TabProps) {
         /* Fastest-burning first: a campaign about to overrun is why somebody opens this table. */
         initialSort={{ column: 8, dir: 'desc' }}
       />
+      </div>
     </Panel>
     </div>
   )
@@ -2258,29 +2293,41 @@ function AttributionFindings({
     watch: 'border-border bg-surface-secondary',
   }
 
+  /*
+   * ANALYTICS-REPORT-LAYOUT-001 — the same finding about four platforms is one card naming four platforms, not four
+   * identical cards. Grouped by what it says and who clears it; each platform keeps its own test id inside the card.
+   */
+  const groups = new Map<string, AttributionFinding[]>()
+  for (const f of findings) {
+    const k = `${f.severity}|${f.owner}|${f.what.en}|${f.affects.en}`
+    groups.set(k, [...(groups.get(k) ?? []), f])
+  }
+
   return (
-    <ul data-testid="attribution-findings" className="mb-4 flex flex-col gap-2">
-      {findings.map((finding) => (
-        <li
-          key={finding.key}
-          data-testid={`attribution-finding-${finding.key}`}
-          className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-bold text-text-primary">
-              {finding.provider === null
-                ? (ar ? 'عبر المنصات' : 'Across platforms')
-                : providerLabel(finding.provider, ar ? 'ar' : 'en')}
-            </span>
-            <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-              {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
-            </span>
-          </div>
-          <p className="mt-1 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
-          <p className="mt-0.5 text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
-          <p className="mt-0.5 text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
-        </li>
-      ))}
+    <ul data-testid="attribution-findings" className="mb-4 grid gap-2 lg:grid-cols-2">
+      {[...groups.values()].map((group) => {
+        const finding = group[0]
+        return (
+          <li key={finding.key} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {group.map((g) => (
+                <span key={g.key} data-testid={`attribution-finding-${g.key}`} className="rounded-full bg-surface px-2 py-0.5 text-xs font-bold text-text-primary">
+                  {g.provider === null ? (ar ? 'عبر المنصات' : 'Across platforms') : providerLabel(g.provider, ar ? 'ar' : 'en')}
+                </span>
+              ))}
+              <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-semibold text-text-secondary">
+                {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
+              </span>
+            </div>
+            <p className="mt-1.5 text-sm font-semibold text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+            <details className="mt-1 text-xs">
+              <summary className="cursor-pointer select-none font-semibold text-brand-600">{ar ? 'ما الذي يتأثر' : 'What this affects'}</summary>
+              <p className="mt-1 text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
+              <p className="mt-0.5 text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+            </details>
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -2319,7 +2366,7 @@ function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]
   }
 
   return (
-    <ul data-testid="quality-findings" className="mb-4 flex flex-col gap-2">
+    <ul data-testid="quality-findings" className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {findings.map((finding) => (
         <QualityFindingRow key={finding.key} finding={finding} ar={ar} />
       ))}
@@ -3607,6 +3654,9 @@ export function EntityTab({ projectId, range, filters, level, workspace, part = 
         />
       )}
 
+      {/* ANALYTICS-VISUAL-DECKS-001 — on the analytics tab only; the operational Ad groups / Ads pages stay table-first. */}
+      {!workspace && <EntityVisualDeck rows={rows} currency={currency} level={level} ar={ar} />}
+
       {part !== 'diagnosis' && <DrillCrumbs path={path} level={level} ar={ar} onUpTo={(lvl) => go(drillUpTo(path, lvl), lvl)} />}
       {part !== 'diagnosis' && <Panel
         title={heading}
@@ -3808,9 +3858,9 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
           {grouped.map((f) => {
 
             return (
-              <div key={f.key} className="rounded-xl border border-border p-3" data-testid={`objective-family-${f.key}`}>
+              <div key={f.key} className="rounded-xl border border-border border-t-4 border-t-brand-500 p-3.5" data-testid={`objective-family-${f.key}`}>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="font-semibold text-text-primary">{ar ? f.ar : f.en}</h3>
+                  <h3 className="text-base font-bold text-text-primary">{ar ? f.ar : f.en}</h3>
                   <span className="text-xs text-text-secondary">
                     {f.campaigns.length} {ar ? 'حملة' : f.campaigns.length === 1 ? 'campaign' : 'campaigns'}
                     {' · '}
@@ -3849,7 +3899,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                   whose money awaits a rate would have shown a confident zero next to a revenue the
                   KPI strip states correctly.
                 */}
-                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+                <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {f.kpis.map((k: string) => {
                     const rows = f.campaigns as unknown as FamilyRow[]
                     const spec = SPECS[k]
@@ -3862,8 +3912,8 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                       : ''
 
                     return (
-                      <div key={k} className="flex flex-col">
-                        <dt className="text-text-secondary">
+                      <div key={k} className="flex flex-col rounded-lg bg-surface-secondary/60 p-2.5">
+                        <dt className="text-xs text-text-muted">
                           {spec ? (ar ? spec.label.ar : spec.label.en) : k}
                         </dt>
                         {/*
@@ -3885,7 +3935,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                         {(() => {
                           if (total === null) {
                             /* Null stays «—»: an unavailable figure is not a figure of zero. */
-                            return <dd className="tnum text-text-primary"><Num>—</Num></dd>
+                            return <dd className="tnum text-lg font-extrabold text-text-primary"><Num>—</Num></dd>
                           }
 
                           /*
@@ -3913,7 +3963,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
                           const exact = 'exact' in read ? read.exact : (read.exact ?? undefined)
 
                           return (
-                            <dd className="tnum text-text-primary" title={exact ?? undefined}>
+                            <dd className="tnum text-lg font-extrabold text-text-primary" title={exact ?? undefined}>
                               <Num>{read.text}</Num>
                             </dd>
                           )
@@ -4049,7 +4099,7 @@ function FamilySpend({
 
   return (
     <div className="mt-2 flex flex-col gap-1.5" data-testid={`family-distribution-${family}`}>
-      <div className="flex h-2 overflow-hidden rounded-full bg-surface-secondary">
+      <div className="flex h-3 overflow-hidden rounded-full bg-surface-secondary">
         {slices.map((slice, i) => (
           <span
             key={slice.name}
@@ -4060,7 +4110,7 @@ function FamilySpend({
         ))}
       </div>
 
-      <ul className="space-y-0.5 text-xs text-text-secondary">
+      <ul className="grid gap-x-4 gap-y-0.5 text-xs text-text-secondary sm:grid-cols-2">
         {slices.map((slice) => (
           <li key={slice.name} className="flex items-center justify-between gap-2">
             <span className="truncate">
@@ -4166,6 +4216,9 @@ function AccountsTab({ projectId, range, filters }: TabProps) {
         comparable={comparableWindows(s.data)}
         subtitle={windowsUnlikeNote(s.data, ar, (c) => providerLabel(c, ar ? 'ar' : 'en')) ?? undefined}
       />
+
+      {/* ANALYTICS-VISUAL-DECKS-001 */}
+      <div className="my-4"><AccountVisualDeck rows={rows} currency={currency} ar={ar} /></div>
 
       <Panel
       title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'}

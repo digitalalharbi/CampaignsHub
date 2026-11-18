@@ -107,38 +107,38 @@ export function ObjectivePathCards({ block, locale, currency, showMoney = true }
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {block.paths.map((p) => (
-          <article key={p.family} data-testid={`objective-path-${p.family}`} className="min-w-0 rounded-xl border border-border p-3">
-            <div className="flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${TONE[p.family] ?? 'bg-border'}`} />
-              <span className="truncate text-sm font-semibold text-text-primary">{p.label[l]}</span>
-              {money_ && <span className="ms-auto text-xs text-text-secondary"><Num>{percent(p.spend_share, 0)}</Num></span>}
-            </div>
-            <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+          <article key={p.family} data-testid={`objective-path-${p.family}`} className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface-secondary/40">
+            {/* ANALYTICS-REPORT-LAYOUT-001 — the objective's own result set large, its cost beside it, money as chips. */}
+            <span className={`block h-1 ${TONE[p.family] ?? 'bg-border'}`} aria-hidden />
+            <div className="p-3">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-bold text-text-primary">{p.label[l]}</span>
+                {money_ && <span className="ms-auto rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-text-secondary"><Num>{percent(p.spend_share, 0)}</Num></span>}
+              </div>
+              <div className="mt-2 flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-xs text-text-muted">{p.result_label?.[l] ?? '—'}</div>
+                  <div className="tnum text-xl font-extrabold text-text-primary" title={p.result_missing_label?.[l]}><Num>{p.result === null ? '—' : compact(p.result)}</Num></div>
+                </div>
+                {money_ && p.cost_per_result_label && (
+                  <div className="text-end">
+                    <div className="text-xs text-text-muted">{p.cost_per_result_label[l]}</div>
+                    <div className="tnum text-base font-bold text-text-secondary"><Num>{money(p.cost_per_result, currency)}</Num></div>
+                  </div>
+                )}
+              </div>
               {money_ && (
-                <>
-                  <dt className="text-text-secondary">{T.spend[l]}</dt>
-                  <dd className="text-end font-medium"><Num>{money(p.spend, currency)}</Num></dd>
-                </>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                  <span className="rounded-full bg-surface px-2 py-0.5 text-text-secondary">{T.spend[l]} <Num>{money(p.spend, currency)}</Num></span>
+                  {p.family === 'sales' && (
+                    <>
+                      <span className="rounded-full bg-surface px-2 py-0.5 text-text-secondary">{T.revenue[l]} <Num>{money(p.revenue, currency)}</Num></span>
+                      <span className="rounded-full bg-success/10 px-2 py-0.5 font-semibold text-success" data-testid="objective-path-roas">{T.roas[l]} <Num>{ratio(p.roas)}</Num></span>
+                    </>
+                  )}
+                </div>
               )}
-              <dt className="text-text-secondary">{p.result_label?.[l] ?? '—'}</dt>
-              <dd className="text-end font-medium" title={p.result_missing_label?.[l]}>
-                <Num>{p.result === null ? '—' : compact(p.result)}</Num>
-              </dd>
-              {money_ && p.cost_per_result_label && (
-                <>
-                  <dt className="text-text-secondary">{p.cost_per_result_label[l]}</dt>
-                  <dd className="text-end font-medium"><Num>{money(p.cost_per_result, currency)}</Num></dd>
-                </>
-              )}
-              {money_ && p.family === 'sales' && (
-                <>
-                  <dt className="text-text-secondary">{T.revenue[l]}</dt>
-                  <dd className="text-end font-medium"><Num>{money(p.revenue, currency)}</Num></dd>
-                  <dt className="text-text-secondary">{T.roas[l]}</dt>
-                  <dd className="text-end font-medium" data-testid="objective-path-roas"><Num>{ratio(p.roas)}</Num></dd>
-                </>
-              )}
-            </dl>
+            </div>
           </article>
         ))}
       </div>

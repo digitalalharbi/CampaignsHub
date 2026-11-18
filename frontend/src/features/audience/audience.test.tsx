@@ -47,8 +47,11 @@ describe('audience blocks', () => {
 
   it('draws one card per platform with the numerator and denominator, and no total across platforms', () => {
     renderWithProviders(<AudienceReportBlocks payload={{ audience_regions: { groups: [meta, snap] } }} locale="en" />)
-    expect(screen.getByTestId('audience-delivery-meta-region')).toHaveTextContent('75% (300/400)')
-    expect(screen.getByTestId('audience-delivery-snapchat-region')).toHaveTextContent('100% (1,000/1,000)')
+    // ANALYTICS-REPORT-LAYOUT-001 — the share leads; the fraction stays readable under «Details».
+    expect(screen.getByTestId('audience-delivery-meta-region')).toHaveTextContent('75%')
+    expect(screen.getByTestId('audience-delivery-meta-region')).toHaveTextContent('300 / 400')
+    expect(screen.getByTestId('audience-delivery-snapchat-region')).toHaveTextContent('100%')
+    expect(screen.getByTestId('audience-delivery-snapchat-region')).toHaveTextContent('1,000 / 1,000')
     expect(screen.queryByText(/1,400/)).toBeNull()
     expect(screen.queryByText(/Spend/)).toBeNull()
   })

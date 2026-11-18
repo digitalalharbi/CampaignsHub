@@ -131,11 +131,15 @@ export interface BellSoundState {
   quiet: boolean
 }
 
+/** The bell's figure from the summary's `data`, defaults filled in. The one place the shape is read, for the endpoint and for `/bootstrap`. */
+export function toBellSummary(d: Partial<BellSummary> | null | undefined): BellSummary {
+  return { unread: d?.unread ?? 0, attention: d?.attention ?? [], sound: d?.sound }
+}
+
 export async function getNotificationSummary(): Promise<BellSummary> {
   const res = await api.get<ApiEnvelope<BellSummary>>('/notifications/summary')
-  const d = res.data.data
 
-  return { unread: d?.unread ?? 0, attention: d?.attention ?? [], sound: d?.sound }
+  return toBellSummary(res.data.data)
 }
 
 export async function listDeliveries(): Promise<NotificationDeliveryRow[]> {

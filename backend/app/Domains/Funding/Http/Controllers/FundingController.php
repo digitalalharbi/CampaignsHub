@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Funding\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Bootstrap\Support\WorkspaceReadCache;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Funding\Models\FundingPayment;
@@ -22,6 +23,7 @@ use App\Domains\Funding\Services\FundingStatement;
 use App\Domains\Funding\Support\FundingDisclaimer;
 use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Projects\Lifecycle\LiveProjects;
+use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -53,7 +55,26 @@ final class FundingController extends Controller
     /** GET funding/disclaimer — the one financial disclaimer, in both languages, for every money surface of the web app. */
     public function disclaimer(): JsonResponse
     {
-        return ApiResponse::success(FundingDisclaimer::both(), 'Disclaimer.');
+        return ApiResponse::success($this->disclaimerText(), 'Disclaimer.');
+    }
+
+    /**
+     * The disclaimer in both languages. PERF-BOOTSTRAP-001 — filed per tenant in {@see WorkspaceReadCache}; the two language files'
+     * modification times are in the key, so a deploy that rewords it is read at once, not after the TTL.
+     *
+     * @return array{ar: string, en: string}
+     */
+    public function disclaimerText(): array
+    {
+        $tenantId = app(TenantContext::class)->tenantId();
+        $version = (int) @filemtime(lang_path('ar/funding.php')).'-'.(int) @filemtime(lang_path('en/funding.php'));
+
+        return WorkspaceReadCache::remember(
+            WorkspaceReadCache::DISCLAIMER,
+            (string) $tenantId,
+            static fn (): array => FundingDisclaimer::both(),
+            variant: $version,
+        );
     }
 
     /** GET funding — every funded project the reader reaches, with its live figures, needing a decision first. */

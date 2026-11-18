@@ -182,6 +182,37 @@ describe('AccessCenter', () => {
     expect(screen.queryByTestId('drawer-remove')).toBeNull()
   })
 
+  it('lets one workspace manager move another to a different category, after a confirmation', async () => {
+    data.members.push({ ...data.members[0], id: 'u-owner2', email: 'owner2@a.test', name: 'Owner 2', is_self: false })
+    renderWithProviders(<AccessCenter />, { locale: 'ar' })
+    fireEvent.click(screen.getByTestId('access-row-member-owner2@a.test'))
+    expect(screen.queryByTestId('drawer-locked')).toBeNull()
+    expect(screen.getByTestId('drawer-owner-move-save')).toBeDisabled()
+    fireEvent.click(screen.getByTestId('drawer-owner-category-finance'))
+    fireEvent.click(screen.getByTestId('drawer-owner-move-save'))
+    expect(actions.updateMember.mutateAsync).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('drawer-owner-move-confirm'))
+    await waitFor(() => expect(actions.updateMember.mutateAsync).toHaveBeenCalledWith({ id: 'u-owner2', category: 'finance' }))
+  })
+
+  it('grants a partly held area in full when the owner picks «إدارة» again (launch included)', async () => {
+    data.members[1].areas = { ...data.members[1].areas!, campaigns: { level: 'manage', held: 6, total: 17 } }
+    renderWithProviders(<AccessCenter />, { locale: 'ar' })
+    fireEvent.click(screen.getByTestId('access-row-member-sara@a.test'))
+    expect(screen.getByTestId('partial-campaigns')).toHaveTextContent('6/17')
+    fireEvent.click(screen.getByTestId('toggle-campaigns-manage'))
+    fireEvent.click(screen.getByTestId('drawer-save'))
+    await waitFor(() => expect(actions.updateMember.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ areas: expect.objectContaining({ campaigns: 'manage' }) })))
+  })
+
+  it('keeps another workspace manager locked for a reader who is not one', () => {
+    data.members.push({ ...data.members[0], id: 'u-owner2', email: 'owner2@a.test', name: 'Owner 2', is_self: false })
+    data.me = { ...data.me, is_owner: false }
+    renderWithProviders(<AccessCenter />, { locale: 'ar' })
+    fireEvent.click(screen.getByTestId('access-row-member-owner2@a.test'))
+    expect(screen.getByTestId('drawer-locked')).toBeInTheDocument()
+  })
+
   it('resends and withdraws an invitation from its drawer; removal needs a second click', async () => {
     renderWithProviders(<AccessCenter />, { locale: 'ar' })
     fireEvent.click(screen.getByTestId('access-row-invitation-late@a.test'))

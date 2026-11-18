@@ -134,7 +134,7 @@ final class EnvContractTest extends TestCase
 
         self::assertStringContainsString('scripts/env-contract.sh', $deploy);
         self::assertMatchesRegularExpression(
-            '/env-contract\.sh[^\n]*\n(?:.*\n)*?.*up -d --build/',
+            '/env-contract\.sh[^\n]*\n(?:.*\n)*?.*up -d --(?:no-)?build/',
             $deploy,
             'the contract has to be checked BEFORE the image is built and started'
         );

@@ -44,7 +44,8 @@ describe('anomalies drawn on the metric’s own curve', () => {
       { locale: 'en' },
     )
 
-    expect(screen.getByTestId('anomaly-trend-spend')).toBeInTheDocument()
+    // ANALYTICS-REPORT-LAYOUT-001 — the unusual day is drawn as a card, not a marker on a curve.
+    expect(screen.getByTestId('anomaly-card-2026-08-04-spend')).toBeInTheDocument()
   })
 
   /** The list stays. The chart says WHERE; the list says exactly what, and both are wanted. */
@@ -67,7 +68,7 @@ describe('anomalies drawn on the metric’s own curve', () => {
       { locale: 'en' },
     )
 
-    expect(screen.queryByTestId('anomaly-charts')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('anomaly-trend-spend')).not.toBeInTheDocument()
     // And the finding is still reachable — the list is what must never disappear.
     expect(screen.getByTestId('change-timeline')).toHaveTextContent('2026-08-04')
   })

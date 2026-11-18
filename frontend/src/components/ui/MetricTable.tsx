@@ -300,13 +300,13 @@ export function MetricTable({
     <div ref={wrap} className="min-w-0 max-w-full overflow-x-auto">
       <table className="w-full min-w-[640px] text-sm">
         <thead>
-          <tr className="border-b border-border text-text-muted">
+          <tr className="border-b border-border bg-surface-secondary/60 text-xs text-text-muted">
             {head.map((h, i) => {
               const align = i === 0 ? 'text-start' : 'text-center'
               const active = sort?.column === i
 
               return (
-                <th key={i} className={`py-2 font-semibold ${align}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                <th key={i} className={`px-2 py-2.5 font-semibold first:rounded-s-lg last:rounded-e-lg ${align}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
                   {values ? (
                     <button
                       type="button"
@@ -369,7 +369,7 @@ export function MetricTable({
  */
 const MetricRow = memo(function MetricRow({ cells, exact }: { cells: ReactNode[]; exact: (string | null)[] | undefined }) {
   return (
-    <tr className="border-b border-border last:border-0 hover:bg-surface-secondary">
+    <tr className="border-b border-border last:border-0 even:bg-surface-secondary/30 hover:bg-surface-secondary">
       {cells.map((cell, j) => {
         const full = exact?.[j] ?? null
         /*
@@ -403,7 +403,7 @@ const MetricRow = memo(function MetricRow({ cells, exact }: { cells: ReactNode[]
              * still reads as «there is more here».
              */
             title={full ?? undefined}
-            className={`py-2.5 ${j === 0 ? 'text-start font-normal' : 'tnum text-center'}`
+            className={`px-2 py-2.5 ${j === 0 ? 'text-start font-normal' : 'tnum text-center'}`
               + (full === null ? '' : ' cursor-help underline decoration-dotted underline-offset-4')}
           >
             {cell}
