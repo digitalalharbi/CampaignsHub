@@ -169,6 +169,19 @@ export function levelsOf(areas: AreaLevels | null | undefined): Record<string, L
   return out
 }
 
+/**
+ * ACCESS-PARTIAL-LEVEL-001 — the areas whose level is only PARTLY held (e.g. «إدارة» with 6 of 17 actions, launch
+ * missing). The level label alone hides this, so clicking «إدارة» on such an area looked like «no change» and full
+ * management (launch included) could never be granted.
+ */
+export function partialOf(areas: AreaLevels | null | undefined): Record<string, { held: number; total: number }> {
+  const out: Record<string, { held: number; total: number }> = {}
+  for (const [k, v] of Object.entries(areas ?? {})) {
+    if (v.level !== 'none' && v.held < v.total) out[k] = { held: v.held, total: v.total }
+  }
+  return out
+}
+
 /** Only the areas that differ from the category: the overrides sent for ONE person. */
 export function diffLevels(base: Record<string, Level>, chosen: Record<string, Level>): Record<string, Level> {
   const out: Record<string, Level> = {}

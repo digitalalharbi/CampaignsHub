@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { toApiError } from '@/lib/api/client'
 import { fmtDate } from '@/lib/datetime'
-import { canAssign, diffLevels, diffSections, levelsOf, useAccessActions, useAccessHistory, type AccessData, type AccessInvitation, type AccessMember, type Level, type SectionStates } from './accessApi'
+import { canAssign, diffLevels, diffSections, levelsOf, partialOf, useAccessActions, useAccessHistory, type AccessData, type AccessInvitation, type AccessMember, type Level, type SectionStates } from './accessApi'
 import { AreaChips, AreaToggles, ChipPicker } from './AreaControls'
 import { ACTION_LABEL, PORTAL_ROLE_LABEL } from './labels'
 import { SectionToggles } from './SectionToggles'
@@ -42,6 +42,8 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
   const base = useMemo(() => levelsOf(cat?.areas), [cat])
   // A person's current areas are their category plus their overrides; the toggles start from there.
   const [levels, setLevels] = useState<Record<string, Level>>(() => levelsOf(row.areas))
+  // ACCESS-PARTIAL-LEVEL-001 — every area the reader clicks is sent at the chosen level, in full.
+  const [touched, setTouched] = useState<string[]>([])
   const [clients, setClients] = useState<string[]>(row.scope.clients.map((c) => c.id))
   // ACCESS-SECTIONS-001 — layer three, pre-filled with the person's current sections; only changed ones are sent.
   const startSections: SectionStates = row.sections ?? {}
@@ -54,7 +56,8 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
 
   const changedCategory = category !== row.category
   const chosen = changedCategory ? { ...base, ...diffLevels(levelsOf(row.areas), levels) } : levels
-  const overrides = diffLevels(base, chosen)
+  const overrides: Record<string, Level> = { ...diffLevels(base, chosen), ...Object.fromEntries(touched.map((k) => [k, chosen[k] ?? 'none'])) }
+  const rowPartial = changedCategory ? partialOf(cat?.areas) : partialOf(row.areas)
 
   const run = async (p: Promise<unknown>, done: string) => {
     setErr(''); setOk('')
@@ -123,7 +126,7 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
         <>
           <section>
             <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'الفئة' : 'Category'}</h3>
-            <ChipPicker testId="drawer-category" label={ar ? 'الفئة' : 'Category'} value={category} onChange={(s) => { setCategory(s); setLevels(levelsOf(data.categories.find((c) => c.slug === s)?.areas)) }}
+            <ChipPicker testId="drawer-category" label={ar ? 'الفئة' : 'Category'} value={category} onChange={(s) => { setCategory(s); setTouched([]); setLevels(levelsOf(data.categories.find((c) => c.slug === s)?.areas)) }}
               options={data.categories.map((c) => ({ value: c.slug, label: ar ? c.name_ar : c.name_en, disabled: c.slug !== row.category && !canAssign(c, data.me) }))} />
           </section>
           {(data.sections ?? []).length > 0 && (
@@ -135,8 +138,8 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
           )}
           <section>
             <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'تخصيص له فقط' : 'For this person only'}</h3>
-            <AreaToggles areas={data.areas} levels={chosen} base={base} grantable={data.me.grantable} ar={ar}
-              onChange={(area, lv) => setLevels((l) => ({ ...l, [area]: lv }))} />
+            <AreaToggles areas={data.areas} levels={chosen} base={base} grantable={data.me.grantable} ar={ar} partial={rowPartial} touched={touched}
+              onChange={(area, lv) => { setLevels((l) => ({ ...l, [area]: lv })); setTouched((t) => (t.includes(area) ? t : [...t, area])) }} />
           </section>
           {data.agency && data.clients.length > 0 && (
             <section>
