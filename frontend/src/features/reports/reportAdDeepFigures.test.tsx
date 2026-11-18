@@ -31,7 +31,7 @@ describe('the content dialog goes deeper', () => {
 
     expect(value(rows, 'الإيرادات')).toBe('5,147 $')
     expect(value(rows, 'المشتريات')).toBe('81')
-    expect(value(rows, 'أيام النشاط')).toBe('14')
+    expect(value(rows, 'مدة التشغيل')).toBe('14')
     expect(value(rows, 'تكلفة النقرة')).toBe('0.36 $')
   })
 
