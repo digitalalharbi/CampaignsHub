@@ -19,11 +19,11 @@ import { useUi } from '@/stores/ui'
  * That distinction is stated on the panel, not left to be inferred. An operator who needs a creative
  * genuinely unavailable has to exclude it, and this is the only place they will be told so.
  *
- * ## Everything starts off
+ * ## Defaults
  *
- * The switches default to false, matching the backend, so a link created by an operator who never
- * opened this panel shows no creative section at all. Nothing about a client's ad content is
- * published because a form had a helpful default.
+ * A new link starts from `defaultCreativeSharing()` — everything on (REPORT-ADS-ALL-ON-001). The backend
+ * still reads an ABSENT `creatives` key as «nothing shown», so an API caller that never names the panel
+ * publishes no ad content; the default is the form's, chosen by the Owner, and visible before sharing.
  */
 
 export interface CreativeSharing {
@@ -45,6 +45,19 @@ export const emptyCreativeSharing = (): CreativeSharing => ({
   excludedIds: [],
   groupIds: [],
   display: { policy: 'activity', includeZeroActivity: false },
+})
+
+/**
+ * REPORT-ADS-ALL-ON-001 — Owner 2026-11-18: «اجعلها افتراضية … أي تفاصيل لتحليل المحتوى لا تبخل فيها أبداً».
+ *
+ * Every NEW client link opens with the ad section and all fifteen switches on — copy, analysis and recommendations included,
+ * superseding REPORT-ADS-ON-001's «copy and analysis off». The operator can still untick anything before sharing, and the server
+ * still closes cost and return on a link that hides spend or revenue, so «on» here never widens past the link's money switches.
+ * `emptyCreativeSharing()` stays all-off: it is the shape of «nothing chosen», not the default a new link starts from.
+ */
+export const defaultCreativeSharing = (): CreativeSharing => ({
+  ...emptyCreativeSharing(),
+  permissions: Object.fromEntries(['creatives', ...GROUP_KEYS()].map((k) => [k, true])),
 })
 
 /** The switches, grouped the way an operator thinks about them rather than alphabetically. */
@@ -95,6 +108,10 @@ const GROUPS: Array<{
     ],
   },
 ]
+
+function GROUP_KEYS(): string[] {
+  return GROUPS.flatMap((g) => g.keys.map((k) => k.key))
+}
 
 export function ShareCreativeControls({
   projectId,

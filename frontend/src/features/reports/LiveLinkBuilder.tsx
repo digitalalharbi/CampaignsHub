@@ -21,7 +21,7 @@ import { ReportIdentityCards, type IdentityNames } from './ReportIdentityCards'
 import { pickSelected, ResultEventsPanel } from './ResultEventsPanel'
 import { fetchResultEvents, type GenericNameKind, type ResultEventsMap } from './api'
 import { GenericNameChoices } from './ReportComposeControls'
-import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
+import { ShareCreativeControls, creativeSharingBody, defaultCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 
 /**
  * LIVEREP-002 — make a client link by choosing, not by generating a document first.
@@ -274,15 +274,8 @@ export function LiveLinkBuilder({ projectId, onClose }: { projectId: string; onC
    * on the saved-report dialog did nothing on a link made from here. The defaults are the Owner's: the section shown, the ads listed by
    * period activity, refreshed automatically, zero-activity ads left out.
    */
-  /*
-   * REPORT-ADS-ON-001 — Owner 2026-11-17: «فعّلها جميع التفاصيل مهمة التحليلية … تجاهل أي شيء فيه نصوص». A new link opens with the ad section
-   * and every visual and numeric switch on; the copy and the written analysis stay off until the operator ticks them. The
-   * server still resolves cost and return to off on a link that hides spend.
-   */
-  const [creatives, setCreatives] = useState<CreativeSharing>(() => ({
-    ...emptyCreativeSharing(),
-    permissions: { creatives: true, video: true, image_zoom: true, download: true, comparison: true, spend: true, revenue: true, cpa: true, roas: true },
-  }))
+  /* REPORT-ADS-ALL-ON-001 — a new link opens with the ad section and all fifteen switches on (supersedes REPORT-ADS-ON-001). */
+  const [creatives, setCreatives] = useState<CreativeSharing>(defaultCreativeSharing)
 
   /* RESULT-EVENTS-001 — this link's definition of «Results»; empty = none, and then no Results are drawn. */
   const [resultEvents, setResultEvents] = useState<ResultEventsMap>({})
