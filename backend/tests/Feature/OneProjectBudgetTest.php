@@ -137,4 +137,35 @@ final class OneProjectBudgetTest extends TestCase
         $client = $this->actingAs($this->agencyOwner(), 'sanctum')->getJson('/api/v1/app/clients/'.$project->client_workspace_id)->assertOk()->json('data.budget');
         $this->assertFalse($client['projects'][0]['budget']['has_budget']);
     }
+
+    /**
+     * DASH-CLIENT-FILTER-001 — Owner 2026-11-18: choosing a client narrows every figure on the home page to it, the budget
+     * included; a client outside the member's reach is ignored, never widened to.
+     */
+    public function test_the_role_dashboard_budget_follows_the_chosen_client(): void
+    {
+        $owner = $this->owner();
+        $a = $this->newProject('University', 'Campus');
+        $b = $this->newProject('Store', 'Shop');
+        $this->spendRow($a, (string) Str::uuid(), 2, 4_404);
+        $this->addBudget($a, 5_069, 6);
+        $this->spendRow($b, (string) Str::uuid(), 2, 1_000);
+
+        $all = $this->actingAs($owner, 'sanctum')->getJson('/api/v1/me/dashboard?view=finance')->assertOk()->json('data');
+        $this->assertSame(2, $all['scope']['projects']);
+
+        $onlyA = $this->getJson('/api/v1/me/dashboard?view=finance&client='.$a->client_workspace_id)->assertOk()->json('data');
+        $this->assertSame(1, $onlyA['scope']['clients']);
+        $this->assertSame(1, $onlyA['scope']['projects']);
+        $this->assertEqualsWithDelta(5_069, $onlyA['money']['budget'], 0.001);
+
+        // The other client has no budget: its page states none, never the first client's 5,069.
+        $onlyB = $this->getJson('/api/v1/me/dashboard?view=finance&client='.$b->client_workspace_id)->assertOk()->json('data');
+        $this->assertSame(1, $onlyB['scope']['projects']);
+        $this->assertNotEquals(5_069, $onlyB['money']['budget'] ?? null);
+
+        // An id the member cannot reach changes nothing.
+        $unknown = $this->getJson('/api/v1/me/dashboard?view=finance&client='.Str::uuid())->assertOk()->json('data');
+        $this->assertSame($all['scope'], $unknown['scope']);
+    }
 }
