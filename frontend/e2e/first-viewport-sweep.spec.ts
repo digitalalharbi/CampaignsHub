@@ -36,8 +36,10 @@ const SURFACES: Array<{ path: string; project?: boolean; projectPath?: boolean; 
   { path: '/agency/portfolio', firstScreen: ['portfolio-intro-kpis', 'portfolio-trend'] },
   /* Named from the live review (LIVE_ROUTE_CHECKLIST.md, 2026-10-09): the KPI row or summary that
      answers each page's question, and the filter block that scopes it. */
-  { path: '/agency/campaigns', project: true, firstScreen: ['campaigns-intro-kpis', 'campaigns-secondary-strip'] },
-  { path: '/agency/analytics', project: true, firstScreen: ['analytics-filters', 'analytics-overview'] },
+  // CAMPAIGNS-TABLE-FIRST-001 — the section lands on the management table, so its controls are the first-screen block.
+  { path: '/agency/campaigns', project: true, firstScreen: ['campaigns-intro-kpis', 'campaigns-table-controls'] },
+  // ANALYTICS-DAILY-MEASURE-001 — the analysis page opens on the daily chart; the overview follows it.
+  { path: '/agency/analytics', project: true, firstScreen: ['analytics-filters', 'analytics-daily'] },
   { path: '/agency/content', project: true, firstScreen: ['content-summary', 'content-filters'] },
   { path: '/agency/reports', project: true, firstScreen: ['reports-hero-kpis', 'reports-filters'] },
   // INTEG-PROJECT-SPACE-001 — the centre is the selected project's space; without one it is the chooser.

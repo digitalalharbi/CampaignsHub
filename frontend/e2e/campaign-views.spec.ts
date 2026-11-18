@@ -21,6 +21,8 @@ test('a draft is its own band, the chip narrows the table to it, and the history
 
   await selectProject(page, project)
   await page.goto('/agency/campaigns')
+  // CAMPAIGNS-TABLE-FIRST-001 — the section lands on the table; the bands are drawn by the overview, one click away.
+  await page.getByTestId('view-overview').click({ timeout: 20_000 })
   await expect(page.getByTestId('campaigns-bands')).toBeVisible({ timeout: 20_000 })
   const drafts = page.getByTestId('campaigns-band-drafts')
   await expect(drafts).toBeVisible()

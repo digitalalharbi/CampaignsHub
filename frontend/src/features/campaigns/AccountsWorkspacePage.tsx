@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useUrlState } from '@/features/analytics/filterUrlState'
 import { LevelTabs } from './LevelTabs'
 import { providerLabel } from './labels'
 import { useAccounts, useSummary, type AccountRow } from '@/features/analytics/api'
@@ -24,7 +25,8 @@ export function AccountsWorkspacePage() {
   const ar = useUi((s) => s.locale) === 'ar'
   const { currentProjectId } = useProject()
   const { range } = usePeriod()
-  const [platform, setPlatform] = useState('all')
+  // CAMPAIGN-LEVELS-003 — the platform travels in the address, to the levels below.
+  const [platform, setPlatform] = useUrlState('platform', 'all')
   const [search, setSearch] = useState('')
 
   const accounts = useAccounts(currentProjectId, range)
@@ -120,13 +122,15 @@ export function AccountsWorkspacePage() {
               values={rows.map((r) => [r.account_name ?? '', providerLabel(r.provider, ar ? 'ar' : 'en'), r.spend ?? null, r.impressions ?? null, r.clicks ?? null])}
               initialSort={{ column: 2, dir: 'desc' }}
               testId="accounts-metric-table"
+            footer={[
+              L('الإجمالي', 'Total'),
+              '',
+              /* The platform's own total; with a search narrowing the rows it is not the rows' total, so it is not shown. */
+              <span key="s" title={total?.note ?? undefined}>{search.trim() === '' ? (total?.text ?? '—') : '—'}</span>,
+              compact(sum('impressions')),
+              compact(sum('clicks')),
+            ]}
             />
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-hover/40 px-3 py-2 text-sm font-bold" data-testid="accounts-total">
-              <span>{L('الإجمالي', 'Total')}</span>
-              <span className="tabular-nums">{total?.text ?? '—'}</span>
-              <span className="tabular-nums">{compact(sum('impressions'))} {L('ظهور', 'impr.')}</span>
-              <span className="tabular-nums">{compact(sum('clicks'))} {L('نقرة', 'clicks')}</span>
-            </div>
           </div>
         </>
       )}
