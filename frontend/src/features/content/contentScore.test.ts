@@ -20,7 +20,7 @@ describe('the content scorecard', () => {
     expect(g.completion).toBe('weak')
     expect(g.ctr).toBe('good')
     expect(s.score).not.toBeNull()
-    expect(diagnosis(s, true)).toBe('يفقد المشاهد قبل الرسالة')
+    expect(diagnosis(s, true)).toBe('يطلعون قبل ما توصل الرسالة')
   })
 
   it('never grades orders above carts', () => {
@@ -57,5 +57,14 @@ describe('the content scorecard', () => {
     expect(s.criteria.find((c) => c.key === 'ctr')?.grade).toBe('na')
     expect(s.criteria.find((c) => c.key === 'hook')?.grade).toBe('na')
     expect(diagnosis(s, true)).toBe('متفوق')
+  })
+
+  /** CONTENT-SCORE-003 — each criterion carries its normal band; click-through takes its platform's. */
+  it('carries the normal band of each criterion', () => {
+    const s = scoreContent({ provider: 'google_ads', metrics: { clicks: 553, spend: 100, revenue: 300, orders: 12 } })
+
+    expect(s.criteria.find((c) => c.key === 'hook')?.norm).toEqual([0.2, 0.3])
+    expect(s.criteria.find((c) => c.key === 'ctr')?.norm).toEqual([0.02, 0.05])
+    expect(s.criteria.find((c) => c.key === 'roas')?.grade).toBe('ok')
   })
 })
