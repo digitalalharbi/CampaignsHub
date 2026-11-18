@@ -1,6 +1,5 @@
 import { useState } from 'react'
 
-import { METRIC_LABEL } from '@/styles/scale'
 import type { Locale } from '@/stores/ui'
 
 /**
@@ -97,38 +96,31 @@ export function BudgetReading({ reading, locale }: { reading: BudgetExplanationP
             bars share one scale, so the DISTANCE between them is the finding. The reference tick is
             drawn at on-pace, because 0.22× means nothing without knowing what «right» looks like.
           */}
-          <span className={`block text-text-secondary ${METRIC_LABEL}`}>{ar ? 'سرعة الصرف' : 'Spend pace'}</span>
-
-          <div className="flex flex-col gap-1.5" data-testid="budget-pace-bars">
+          {/* ANALYTICS-REPORT-LAYOUT-001 — the two ends of the pace range as two tiles: the figure large, coloured against plan. */}
+          <div className="grid gap-2 sm:grid-cols-2" data-testid="budget-pace-bars">
             {[
-              { key: 'fastest', row: reading.signal.fastest, tone: 'bg-warning' },
-              { key: 'slowest', row: reading.signal.slowest, tone: 'bg-brand-500' },
-            ].map(({ key, row, tone }) => (
-              <div key={key} className="flex items-center gap-2" data-testid={`budget-pace-${key}`}>
-                <span className="min-w-0 flex-1 truncate text-xs text-text-secondary" title={row.campaign}>{row.campaign}</span>
-                <span className="relative h-2 w-32 shrink-0 overflow-hidden rounded-full bg-surface sm:w-44">
-                  <span
-                    className={`block h-full rounded-full ${tone}`}
-                    style={{ width: `${Math.min(100, Math.max(2, (row.value / paceCeiling) * 100))}%` }}
-                  />
-                  {/* On pace. The one mark that makes every other position readable. */}
-                  <span
-                    aria-hidden
-                    className="absolute inset-y-0 w-px bg-text-muted"
-                    style={{ insetInlineStart: `${(1 / paceCeiling) * 100}%` }}
-                  />
-                </span>
-                <span dir="ltr" className="tnum w-14 shrink-0 text-end text-xs font-semibold text-text-primary">{pace(row.value)}</span>
-              </div>
-            ))}
+              { key: 'fastest', row: reading.signal.fastest, label: ar ? 'الأسرع صرفًا' : 'Fastest' },
+              { key: 'slowest', row: reading.signal.slowest, label: ar ? 'الأبطأ صرفًا' : 'Slowest' },
+            ].map(({ key, row, label }) => {
+              const tone = row.value > 1.05 ? 'text-danger' : row.value >= 0.8 ? 'text-success' : 'text-warning'
+              const fill = row.value > 1.05 ? 'bg-danger' : row.value >= 0.8 ? 'bg-success' : 'bg-warning'
+              return (
+                <div key={key} className="flex flex-col gap-1.5 rounded-xl bg-surface p-3" data-testid={`budget-pace-${key}`}>
+                  <span className="text-xs font-semibold text-text-muted">{label}</span>
+                  <span className="truncate text-sm font-semibold text-text-primary" title={row.campaign}>{row.campaign}</span>
+                  <span dir="ltr" className={`tnum text-xl font-extrabold ${tone}`}>{pace(row.value)}</span>
+                  <span className="relative h-2 overflow-hidden rounded-full bg-surface-secondary">
+                    <span className={`block h-full rounded-full ${fill}`} style={{ width: `${Math.min(100, Math.max(2, (row.value / paceCeiling) * 100))}%` }} />
+                    <span aria-hidden className="absolute inset-y-0 w-0.5 bg-text-primary/60" style={{ insetInlineStart: `${(1 / paceCeiling) * 100}%` }} />
+                  </span>
+                </div>
+              )
+            })}
           </div>
-
-          <p className="text-[11px] text-text-muted">
-            {ar ? 'الخط الرأسي = على السرعة المخطّطة (1.00×)' : 'The tick marks on-pace (1.00×)'}
-          </p>
+          <p className="text-xs text-text-muted">{ar ? 'الخط = على الخطة (1.00×)' : 'The tick = on plan (1.00×)'}</p>
 
           {reading.action && (
-            <p data-testid="budget-reading-action" className="text-sm font-medium text-text-primary">
+            <p data-testid="budget-reading-action" className="rounded-lg bg-brand-600/10 px-3 py-2 text-sm font-semibold text-text-primary">
               {ar ? reading.action.ar : reading.action.en}
             </p>
           )}

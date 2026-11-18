@@ -45,6 +45,15 @@ describe('the campaign quick preview', () => {
     )
   })
 
+  it('answers in place with no door to campaign management on the analytics surface (ANALYTICS-READ-ONLY-001)', () => {
+    renderWithProviders(
+      <CampaignQuickPreview row={row()} projectId="p1" range={{ from: '2026-09-01', to: '2026-09-30' }} onClose={() => {}} analysisOnly />,
+      { route: '/agency/analytics', locale: 'en' },
+    )
+
+    expect(screen.queryByTestId('campaign-quick-preview-cta')).not.toBeInTheDocument()
+  })
+
   /**
    * An unreported figure is «—», never a zero.
    *

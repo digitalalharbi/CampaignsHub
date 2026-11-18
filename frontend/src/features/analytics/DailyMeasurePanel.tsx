@@ -4,7 +4,8 @@ import { Num } from '@/components/ui/Num'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform, isAdPlatform, sortPlatforms } from '@/lib/platforms'
 import { usePlatforms, usePlatformTimeseries, type MetricFilters, type TimePoint } from './api'
-import { ChartCard, PlatformDonutChart, StackedAreaChart } from './charts'
+import { ChartCard, StackedAreaChart } from './charts'
+import { StatCard } from '@/components/ui/StatCard'
 import { platformColor } from './components'
 import { compact, percent } from './format'
 
@@ -104,6 +105,22 @@ export function DailyMeasurePanel({ projectId, range, filters, ar }: { projectId
             })}
           </div>
         )}
+        {/*
+          ANALYTICS-REPORT-LAYOUT-001 — Owner 2026-11-19: «خصوصًا القياس اليومي». Read the way the live report reads a
+          period: three headline tiles (the total, the daily average, the peak day), the daily curve, and each platform's
+          contribution as a ranked bar with its share — one legend, not three.
+        */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" data-testid="analytics-daily-headline">
+          {(() => {
+            const perDay = data.map((row) => ({ date: String(row.date), v: visible.reduce((a, p) => a + (Number(row[p]) || 0), 0) }))
+            const peak = perDay.reduce((best, d) => (d.v > best.v ? d : best), perDay[0] ?? { date: '', v: 0 })
+            return [
+              { k: 'total', label: ar ? `إجمالي ${active.ar}` : `Total ${active.en.toLowerCase()}`, value: compact(total), hint: ar ? `${perDay.length} يوم` : `${perDay.length} days` },
+              { k: 'avg', label: ar ? 'المتوسط اليومي' : 'Daily average', value: compact(perDay.length ? total / perDay.length : 0), hint: undefined },
+              { k: 'peak', label: ar ? 'أعلى يوم' : 'Peak day', value: compact(peak.v), hint: peak.date },
+            ].map((t) => <StatCard key={t.k} testid={`analytics-daily-${t.k}`} label={t.label} value={t.value} hint={t.hint} />)
+          })()}
+        </div>
         <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="min-w-0 lg:col-span-2">
             <StackedAreaChart
@@ -115,15 +132,29 @@ export function DailyMeasurePanel({ projectId, range, filters, ar }: { projectId
             />
           </div>
           <div className="min-w-0" data-testid="analytics-daily-donut" data-total={total}>
+            <div className="mb-2 text-xs font-semibold text-text-muted">{ar ? `المساهمة في ${active.ar}` : `Contribution to ${active.en.toLowerCase()}`}</div>
             {shares.length > 0 ? (
-              <PlatformDonutChart data={shares} height={280} legend colorBy="platform" centerLabel={ar ? active.ar : active.en} centerValue={compact(total)} />
+              <ul className="flex flex-col gap-3">
+                {[...shares].sort((x, y) => y.value - x.value).map((sh, i) => (
+                  <li key={sh.key} className="min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-text-primary">
+                        <ProviderName provider={sh.key} locale={ar ? 'ar' : 'en'} size={16} />
+                        {i === 0 && shares.length > 1 && <span className="rounded-full bg-success/15 px-1.5 py-0.5 text-xs font-bold text-success">▲ {ar ? 'الأعلى' : 'Top'}</span>}
+                      </span>
+                      <span className="flex items-baseline gap-2">
+                        <Num className="tnum text-xs text-text-muted">{compact(sh.value)}</Num>
+                        <Num className="tnum text-base font-extrabold text-text-primary">{percent(sh.value / (total || 1), 0)}</Num>
+                      </span>
+                    </div>
+                    <span className="mt-1 block h-2.5 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+                      <span className="block h-full rounded-full" style={{ width: `${Math.max(2, (sh.value / (total || 1)) * 100)}%`, background: platformColor(sh.key) }} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
             ) : (
               <div className="grid place-items-center text-xs text-text-muted" style={{ height: 280 }}><Num>{compact(total)}</Num></div>
-            )}
-            {shares.length > 1 && (
-              <p className="mt-1 flex flex-wrap justify-center gap-x-3 text-xs text-text-muted">
-                {shares.map((s) => <span key={s.key} className="tnum">{s.name} {percent(s.value / (total || 1), 0)}</span>)}
-              </p>
             )}
           </div>
         </div>

@@ -16,12 +16,16 @@ use Illuminate\Support\Carbon;
  * without bound; deleted immediately they answer none of the questions they exist for. Ninety days is
  * the window in which somebody actually disputes a figure or notices a mapping bug.
  *
+ * RAW-RETENTION-30-001 (Owner decision 2026-11-19): thirty days. Ninety days of Snapchat and TikTok
+ * responses had grown the table to 4.9 GB (two thirds of the database) on a host with an 80%-full
+ * disk. Thirty days still covers every window `integrations:diagnose` reads (it looks back 29 days).
+ *
  * Deleted in batches rather than one statement, because a single delete over months of payloads takes
  * a lock long enough to be noticed by everything else using the table.
  */
 final class PruneRawPayloadsCommand extends Command
 {
-    protected $signature = 'integrations:prune-raw {--days=90 : Keep payloads newer than this}';
+    protected $signature = 'integrations:prune-raw {--days=30 : Keep payloads newer than this}';
 
     protected $description = 'Delete retained platform payloads older than the retention window.';
 

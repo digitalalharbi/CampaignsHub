@@ -5,7 +5,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { campaignResult, type ResultFamily } from '@/features/campaigns/campaignResult'
 import { canonicalObjectiveLabel } from '@/features/campaigns/canonicalObjectives'
 import { relevanceOf, type CampaignRelevance } from '@/features/campaigns/campaignRelevance'
-import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, RatioBars, SpendEfficiencyScatter, StatusMixBar, type MixTone } from './charts'
+import { ChartCard, PlatformDonutChart, ProgressRing, RankingBarChart, RatioBars, StatusMixBar, type MixTone } from './charts'
 import { compact, money, percent, ratio } from './format'
 import type { AccountRow, BudgetRow, CampaignRow, EntityRow, PlatformBudgetRow } from './api'
 
@@ -158,8 +158,8 @@ export function CampaignVisualDeck({ rows, currency, windowEnd, ar }: { rows: Ca
 
       <ChartCard
         className="lg:col-span-2"
-        title={ar ? 'الإنفاق مقابل تكلفة النتيجة' : 'Spend against cost per result'}
-        subtitle={ar ? 'أعلى اليمين أولًا: إنفاق كبير بتكلفة نتيجة مرتفعة. المقارنة داخل هدف واحد فقط.' : 'Top-right first: high spend at a high cost per result. Compared inside one objective only.'}
+        title={ar ? 'تكلفة النتيجة لكل حملة' : 'Cost per result by campaign'}
+        subtitle={ar ? 'الأحمر أغلى من متوسط الهدف، والأخضر أرخص. المقارنة داخل هدف واحد.' : 'Red costs more than the objective average, green less. Compared inside one objective.'}
         action={families.order.length > 1 ? (
           <div className="flex flex-wrap gap-1" role="group" aria-label={ar ? 'الهدف' : 'Objective'}>
             {families.order.map((f) => (
@@ -177,7 +177,22 @@ export function CampaignVisualDeck({ rows, currency, windowEnd, ar }: { rows: Ca
           </div>
         ) : undefined}
       >
-        <SpendEfficiencyScatter ar={ar} currency={currency} points={chosen ? families.out.get(chosen) ?? [] : []} />
+        {(() => {
+          const pts = chosen ? families.out.get(chosen) ?? [] : []
+          if (pts.length === 0) return <Declined testid="deck-cost-empty" text={ar ? 'لا حملة تحمل إنفاقًا ونتيجة معًا في هذه الفترة.' : 'No campaign has both spend and a result in this period.'} />
+          /* The objective's own average: total spend over total results, not a mean of ratios. */
+          const avg = pts.reduce((s, p) => s + p.spend, 0) / pts.reduce((s, p) => s + p.spend / p.costPer, 0)
+          return (
+            <RatioBars
+              ar={ar}
+              testId="deck-cost-per-result"
+              reference={avg}
+              referenceLabel={ar ? `متوسط الهدف ${money(avg, currency ?? undefined)}` : `Objective average ${money(avg, currency ?? undefined)}`}
+              format={(v) => money(v, currency ?? undefined)}
+              rows={pts.slice().sort((a, b) => b.spend - a.spend).slice(0, 10).map((p) => ({ id: p.id, label: p.name, value: p.costPer }))}
+            />
+          )
+        })()}
         <ExcludedNote ar={ar} testid="deck-scatter-excluded" count={chosen ? families.missing.get(chosen) ?? 0 : 0} />
       </ChartCard>
 

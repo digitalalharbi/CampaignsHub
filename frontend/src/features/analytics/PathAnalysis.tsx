@@ -85,7 +85,6 @@ const METRIC: Record<string, { ar: string; en: string }> = {
 }
 
 /** The name of a figure: one step above caption text, because it names rather than annotates. */
-const METRIC_LABEL = 'text-xs font-semibold leading-tight'
 
 const t = (key: keyof typeof T, ar: boolean) => (ar ? T[key].ar : T[key].en)
 
@@ -124,46 +123,56 @@ export function PathAnalysis({
   const ar = locale === 'ar'
   const explain = (path: string) => explanations.find((e) => e.path === path) ?? null
 
+  /*
+   * ANALYTICS-REPORT-LAYOUT-001 — Owner 2026-11-18: these blocks read as clutter. A path where nothing was
+   * spent is not a section: it is named once in one quiet line. A comparable path is a «versus» card — the two
+   * campaigns side by side with bars and their figure set large — and the next step as one highlighted line.
+   * How it was measured folds away under «كيف حُسبت».
+   */
+  const empty = leaders.filter((p) => p.comparable_reason === 'nothing_spent_on_this_path')
+  const shown = leaders.filter((p) => p.comparable_reason !== 'nothing_spent_on_this_path')
+
   return (
     <div data-testid="path-analysis" className="flex flex-col gap-4">
-      {/*
-        Said once, above the blocks, rather than implied by their separation: the reason there is no
-        «best platform» card anywhere on this page.
-      */}
       <p data-testid="path-analysis-never" className="text-xs text-text-muted">
         {ar ? T.never.ar : T.never.en}
       </p>
 
-      {leaders.map((path) => {
+      {empty.length > 0 && (
+        <p data-testid="path-analysis-empty" className="text-xs text-text-muted">
+          {ar ? 'بلا إنفاق في هذه الفترة: ' : 'No spend this period: '}
+          {empty.map((p) => (ar ? p.label_ar : p.label_en)).join(' · ')}
+        </p>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+      {shown.map((path) => {
         const leader = path
         const reading = explain(path.path)
         const label = ar ? path.label_ar : path.label_en
+        const pair = leader?.comparable && leader.strongest && leader.weakest ? [leader.strongest, leader.weakest] as const : null
+        const top = pair ? Math.max(Math.abs(pair[0].value ?? 0), Math.abs(pair[1].value ?? 0)) || 1 : 1
 
         return (
-          <Panel
-            key={path.path}
-            title={label}
-            description={t('inside', ar)}
-            loading={loading}
-            error={error}
-          >
-            <div data-testid={`path-${path.path}`} className="flex flex-col gap-4">
-              {/* Strongest and weakest, or the reason a ranking of one would not be one. */}
-              {leader?.comparable && leader.strongest && leader.weakest ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {([['strongest', leader.strongest], ['weakest', leader.weakest]] as const).map(([kind, campaign]) => (
-                    <div
-                      key={kind}
-                      data-testid={`path-${path.path}-${kind}`}
-                      className={`rounded-xl border p-3 ${
-                        kind === 'strongest' ? 'border-success/40 bg-success/5' : 'border-warning/40 bg-warning/5'
-                      }`}
-                    >
-                      <span className={`block text-text-secondary ${METRIC_LABEL}`}>{t(kind, ar)}</span>
-                      <span className="mt-0.5 block truncate text-sm font-bold text-text-primary">{campaign.name}</span>
-                      <span className="text-start tnum mt-1 block text-xs text-text-secondary">
-                        <Num>{metricName(campaign.metric, ar)}: {metricValue(campaign.metric, campaign.value, currency)}</Num>
-                      </span>
+          <Panel key={path.path} title={label} description={t('inside', ar)} loading={loading} error={error}>
+            <div data-testid={`path-${path.path}`} className="flex flex-col gap-3">
+              {pair ? (
+                <div className="flex flex-col gap-3">
+                  {([['strongest', pair[0]], ['weakest', pair[1]]] as const).map(([kind, campaign]) => (
+                    <div key={kind} data-testid={`path-${path.path}-${kind}`} className="flex flex-col gap-1">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${kind === 'strongest' ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'}`}>{t(kind, ar)}</span>
+                          <span className="truncate text-sm font-semibold text-text-primary">{campaign.name}</span>
+                        </span>
+                        <span className="tnum shrink-0 text-lg font-extrabold text-text-primary" dir="ltr">
+                          <Num>{metricValue(campaign.metric, campaign.value, currency)}</Num>
+                        </span>
+                      </div>
+                      <div className="h-2.5 overflow-hidden rounded-full bg-surface-secondary">
+                        <div className={`h-full rounded-full ${kind === 'strongest' ? 'bg-success' : 'bg-warning'}`} style={{ width: `${(Math.abs(campaign.value ?? 0) / top) * 100}%` }} />
+                      </div>
+                      <span className="text-xs text-text-muted">{metricName(campaign.metric, ar)}</span>
                     </div>
                   ))}
                 </div>
@@ -176,39 +185,29 @@ export function PathAnalysis({
                 )
               )}
 
-              {/*
-                Signal → context → explanation → evidence → action. Absent steps are absent, and the
-                reason takes the action's place rather than the product inventing one.
-              */}
               {reading && (
-                <div data-testid={`path-${path.path}-reading`} className="rounded-xl border border-border bg-surface-secondary/40 p-3">
+                <div data-testid={`path-${path.path}-reading`} className="flex flex-col gap-2">
                   {reading.signal ? (
                     <>
-                      <span className={`block text-text-secondary ${METRIC_LABEL}`}>{t('signal', ar)}</span>
-                      <p dir="auto" className="mt-1 text-sm text-text-primary">
-                        {metricName(reading.signal.metric, ar)}:{' '}
-                        <span dir="ltr" className="tnum font-bold">
-                          {metricValue(reading.signal.metric, reading.signal.best.value, currency)}
-                        </span>{' '}
-                        ({reading.signal.best.campaign}) →{' '}
-                        <span dir="ltr" className="tnum font-bold">
-                          {metricValue(reading.signal.metric, reading.signal.worst.value, currency)}
-                        </span>{' '}
-                        ({reading.signal.worst.campaign})
-                      </p>
-                      {reading.explanation && (
-                        <p className="mt-1.5 text-sm text-text-secondary">{ar ? reading.explanation.ar : reading.explanation.en}</p>
-                      )}
-                      {reading.evidence.length > 0 && (
-                        <p className="mt-1.5 text-xs text-text-muted">
-                          {t('evidence', ar)}: {reading.evidence.map((key) => metricName(key, ar)).join(' · ')}
-                        </p>
-                      )}
                       {reading.action && (
-                        <p data-testid={`path-${path.path}-action`} className="mt-2 text-sm font-semibold text-text-primary">
+                        <p data-testid={`path-${path.path}-action`} className="rounded-xl bg-brand-600/10 px-3 py-2 text-sm font-semibold text-text-primary">
                           {t('action', ar)}: {ar ? reading.action.ar : reading.action.en}
                         </p>
                       )}
+                      <details className="text-xs text-text-muted">
+                        <summary className="cursor-pointer select-none font-semibold">{ar ? 'كيف حُسبت' : 'How it was read'}</summary>
+                        <p dir="auto" className="mt-1.5 text-text-secondary">
+                          {t('signal', ar)} — {metricName(reading.signal.metric, ar)}:{' '}
+                          <span dir="ltr" className="tnum font-bold">{metricValue(reading.signal.metric, reading.signal.best.value, currency)}</span>{' '}
+                          ({reading.signal.best.campaign}) →{' '}
+                          <span dir="ltr" className="tnum font-bold">{metricValue(reading.signal.metric, reading.signal.worst.value, currency)}</span>{' '}
+                          ({reading.signal.worst.campaign})
+                        </p>
+                        {reading.explanation && <p className="mt-1">{ar ? reading.explanation.ar : reading.explanation.en}</p>}
+                        {reading.evidence.length > 0 && (
+                          <p className="mt-1">{t('evidence', ar)}: {reading.evidence.map((key) => metricName(key, ar)).join(' · ')}</p>
+                        )}
+                      </details>
                     </>
                   ) : (
                     <p data-testid={`path-${path.path}-silent`} className="text-sm text-text-secondary">
@@ -221,6 +220,7 @@ export function PathAnalysis({
           </Panel>
         )
       })}
+      </div>
     </div>
   )
 }
