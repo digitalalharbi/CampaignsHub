@@ -474,7 +474,7 @@ test('personal (agency) account: register → onboard → full menu', async ({ p
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
   await page.getByLabel(/Project name|اسم المشروع/).fill('First Project')
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
-  await page.getByRole('button', { name: /Go to dashboard|لوحة التحكم/ }).click()
+  await page.getByRole('button', { name: /Go to dashboard|الرئيسية/ }).click()
 
   /*
    * The AGENCY portal, not merely «a dashboard» — that binding is the whole point of the signup
@@ -507,7 +507,7 @@ test('company (brand) account: register → onboard → simplified menu, no agen
   // Company skips the client step → straight to first project.
   await page.getByLabel(/Project name|اسم المشروع/).fill('Brand Project')
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
-  await page.getByRole('button', { name: /Go to dashboard|لوحة التحكم/ }).click()
+  await page.getByRole('button', { name: /Go to dashboard|الرئيسية/ }).click()
 
   // The SELF-managed path is sold `/app`, and this is where the walk proves it landed there.
   await expect(page).toHaveURL(/\/app\/home/)

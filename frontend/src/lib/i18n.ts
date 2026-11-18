@@ -8,7 +8,7 @@ const dictionary = {
     app_name: brand.lockup.nameAr,
     search: 'بحث',
     analytics: 'التحليلات',
-    dashboard: 'لوحة التحكم',
+    dashboard: 'الرئيسية',
     overview: 'نظرة عامة',
     system_status: 'حالة النظام',
     clients: 'العملاء',

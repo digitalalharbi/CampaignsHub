@@ -184,7 +184,9 @@ export function CampaignsPage() {
    * the reader's place. The default is untouched — the overview is what an operator should meet
    * first, and that is a product decision, not a consequence of where the state was kept.
    */
-  const [view, setView] = useUrlState('view', 'overview') as [ViewMode, (v: string) => void]
+  // CAMPAIGNS-TABLE-FIRST-001 — Owner 2026-11-18: the section opens on the management table, as every platform's ads
+  // manager does; the overview stays one click away as the first mode.
+  const [view, setView] = useUrlState('view', 'table') as [ViewMode, (v: string) => void]
   /* CAMPAIGN-VIEWS-001 — a band chip narrows the table to its band; empty means every band. */
   const [band] = useUrlState('band', '') as [CampaignBand | '', (v: string) => void]
   /* For the handlers that change the view AND a filter together — see the band button below. */

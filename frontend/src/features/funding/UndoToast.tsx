@@ -28,7 +28,7 @@ export function UndoToast({ message, undoLabel, onUndo, onDismiss, pending = fal
     <div
       role="status"
       data-testid="undo-toast"
-      className="fixed bottom-4 start-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-xl bg-text-primary px-4 py-2.5 text-sm font-semibold text-surface shadow-lg rtl:translate-x-1/2"
+      className="fixed bottom-4 start-1/2 z-[70] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-xl bg-text-primary px-4 py-2.5 text-sm font-semibold text-surface shadow-lg rtl:translate-x-1/2"
     >
       <span className="min-w-0 truncate">{failed ?? message}</span>
       {onUndo && (
