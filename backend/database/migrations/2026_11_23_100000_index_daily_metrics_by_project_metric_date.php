@@ -18,13 +18,16 @@ use Illuminate\Support\Facades\DB;
  */
 return new class extends Migration
 {
+    /** CREATE INDEX CONCURRENTLY cannot run inside a transaction: syncs keep writing while the index builds. */
+    public $withinTransaction = false;
+
     public function up(): void
     {
-        DB::statement('CREATE INDEX IF NOT EXISTS daily_metrics_project_metric_date_idx ON daily_metrics (project_id, metric_key, metric_date)');
+        DB::statement('CREATE INDEX CONCURRENTLY IF NOT EXISTS daily_metrics_project_metric_date_idx ON daily_metrics (project_id, metric_key, metric_date)');
     }
 
     public function down(): void
     {
-        DB::statement('DROP INDEX IF EXISTS daily_metrics_project_metric_date_idx');
+        DB::statement('DROP INDEX CONCURRENTLY IF EXISTS daily_metrics_project_metric_date_idx');
     }
 };
