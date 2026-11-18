@@ -29,11 +29,12 @@ const RING: Record<'good' | 'ok' | 'weak' | 'none', string> = {
   none: 'var(--color-border, #888780)',
 }
 
-const show = (c: Criterion): string => {
-  if (c.value === null) return '—'
+const fmt = (key: Criterion['key'], v: number): string => (key === 'roas' ? `${v.toFixed(1)}×` : `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`)
 
-  return c.key === 'roas' ? `${c.value.toFixed(1)}×` : `${(c.value * 100).toFixed(c.value < 0.1 ? 1 : 0)}%`
-}
+const show = (c: Criterion): string => (c.value === null ? '—' : fmt(c.key, c.value))
+
+/** CONTENT-SCORE-003 — the normal band beside the figure, so 6% reads against 20–30%. */
+const band = (c: Criterion): string => (c.key === 'roas' ? `${c.norm[0]}–${c.norm[1]}×` : `${fmt(c.key, c.norm[0]).replace('%', '')}–${fmt(c.key, c.norm[1])}`)
 
 export function ContentScoreCard({ ad, ar }: { ad: Record<string, unknown>; ar: boolean }) {
   const s = scoreContent(ad)
@@ -63,6 +64,7 @@ export function ContentScoreCard({ ad, ar }: { ad: Record<string, unknown>; ar: 
                   <Icon size={15} aria-hidden />
                   <span className="text-[10px] font-semibold leading-tight text-text-secondary">{ar ? c.ar : c.en}</span>
                   <span className="tnum text-xs font-bold"><Num>{show(c)}</Num></span>
+                <span data-testid={`content-score-norm-${c.key}`} className="tnum text-[9px] leading-tight text-text-muted">{ar ? 'الطبيعي' : 'Norm'} <Num>{band(c)}</Num></span>
                 </li>
               )
             })}
