@@ -26,7 +26,9 @@ describe('PortalAudience', () => {
   it('draws each project’s cards with no spend line', async () => {
     vi.mocked(getData).mockResolvedValue({ period: reading.period, projects: [{ project: { id: 'p1', name: 'P' }, reading }] })
     renderWithProviders(<PortalAudience />)
-    expect(await screen.findByTestId('portal-audience')).toHaveTextContent('75% (300/400)')
+    // ANALYTICS-REPORT-LAYOUT-001 — the share leads; the fraction sits under «Details».
+    expect(await screen.findByTestId('portal-audience')).toHaveTextContent('75%')
+    expect(screen.getByTestId('portal-audience')).toHaveTextContent('300 / 400')
     expect(screen.queryByText(/Spend/)).toBeNull()
     expect(vi.mocked(getData).mock.calls[0][0]).toBe('/client/audience')
   })

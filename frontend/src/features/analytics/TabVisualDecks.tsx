@@ -327,7 +327,7 @@ export function BudgetVisualDeck({ platforms, campaigns, ar }: { platforms: Plat
 
   return (
     <DeckGrid testid="budget-visual-deck">
-      <ChartCard title={ar ? 'استهلاك ميزانية كل منصة' : 'Budget consumed per platform'} subtitle={ar ? 'لون الحلقة من سرعة الصرف: أحمر يتجاوز الخطة' : 'Ring colour follows pace: red overruns the plan'}>
+      <ChartCard title={ar ? 'صرف ميزانية كل منصة' : 'Budget consumed per platform'} subtitle={ar ? 'لون الحلقة من سرعة الصرف: أحمر يتجاوز الخطة' : 'Ring colour follows pace: red overruns the plan'}>
         {rings.length === 0
           ? <Declined testid="deck-budget-rings-empty" text={ar ? 'لا منصة لها ميزانية قابلة للمقارنة بإنفاقها.' : 'No platform has a budget comparable with its spend.'} />
           : (
