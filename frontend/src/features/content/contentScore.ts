@@ -11,7 +11,7 @@
 export type Grade = 'good' | 'ok' | 'weak' | 'na'
 
 export interface Criterion {
-  key: 'hook' | 'hold' | 'completion' | 'ctr' | 'cart_order' | 'roas'
+  key: 'hook' | 'hold' | 'completion' | 'ctr' | 'cart_order' | 'roas' | 'click_lead' | 'engagement'
   ar: string
   en: string
   /** The rate itself (0.34 = 34%, 4.2 = 4.2×); null when not graded. */
@@ -64,6 +64,8 @@ const LABELS: Record<Criterion['key'], { ar: string; en: string }> = {
   ctr: { ar: 'ضغطوا عليه', en: 'CTR' },
   cart_order: { ar: 'من السلة للطلب', en: 'Cart → order' },
   roas: { ar: 'العائد', en: 'ROAS' },
+  click_lead: { ar: 'من النقرة لعميل', en: 'Click → lead' },
+  engagement: { ar: 'تفاعلوا معه', en: 'Engagement' },
 }
 
 /** The normal band [ok, good] of each criterion; click-through is replaced by its platform's own band. */
@@ -74,6 +76,32 @@ const NORM: Record<Criterion['key'], [number, number]> = {
   ctr: [0.005, 0.01],
   cart_order: [0.15, 0.3],
   roas: [2, 4],
+  click_lead: [0.05, 0.1],
+  engagement: [0.01, 0.03],
+}
+
+/**
+ * CONTENT-ANALYSIS-BY-OBJECTIVE-001 — Owner 2026-11-18: a lead ad is judged on leads, a sales ad on orders and return.
+ * The video criteria and click-through apply to every path; what follows the click is the objective's own.
+ */
+export type ScorePath = 'leads' | 'sales' | 'reach'
+
+export function scorePath(ad: Bag): ScorePath {
+  const objective = typeof ad.objective === 'string' ? ad.objective : ''
+  if (['leads', 'sign_ups', 'registrations'].includes(objective)) return 'leads'
+  if (['sales', 'purchases', 'add_to_cart'].includes(objective)) return 'sales'
+  if (['awareness', 'reach', 'video_views', 'engagement', 'traffic', 'landing_page_views', 'store_visits'].includes(objective)) return 'reach'
+  // A conversion objective, or none stated: leads when the item states leads and sold nothing, else the sales path.
+  const leads = num(ad, 'leads')
+  const sold = (num(ad, 'purchases') ?? 0) + (num(ad, 'orders') ?? 0) + (num(ad, 'add_to_cart') ?? 0)
+
+  return leads !== null && leads > 0 && sold === 0 ? 'leads' : 'sales'
+}
+
+const PATH_KEYS: Record<ScorePath, Criterion['key'][]> = {
+  leads: ['hook', 'hold', 'completion', 'ctr', 'click_lead', 'engagement'],
+  sales: ['hook', 'hold', 'completion', 'ctr', 'cart_order', 'roas'],
+  reach: ['hook', 'hold', 'completion', 'ctr', 'engagement'],
 }
 
 export function scoreContent(input: Bag): ContentScore {
@@ -89,8 +117,9 @@ export function scoreContent(input: Bag): ContentScore {
     return { key, ...LABELS[key], value: g === 'na' ? null : value, grade: g, norm }
   }
 
+  const keys = PATH_KEYS[scorePath(ad)]
   if (!sufficient) {
-    return { score: null, sufficient: false, weakest: null, criteria: (Object.keys(LABELS) as Criterion['key'][]).map((k) => make(k, null)) }
+    return { score: null, sufficient: false, weakest: null, criteria: keys.map((k) => make(k, null)) }
   }
 
   const imp = impressions
@@ -112,16 +141,23 @@ export function scoreContent(input: Bag): ContentScore {
   const ctr = imp !== null && clicks !== null && clicks >= MIN_CLICKS && clicks <= imp ? clicks / imp : null
   const cartOrder = carts !== null && carts >= MIN_CARTS && orders !== null && orders <= carts ? orders / carts : null
   const roas = spend !== null && spend > 0 && revenue !== null && orders !== null && orders >= MIN_ORDERS ? revenue / spend : null
+  const leads = num(ad, 'leads')
+  const engagements = num(ad, 'engagements')
+  const clickLead = clicks !== null && clicks >= MIN_CLICKS && leads !== null && leads <= clicks ? leads / clicks : null
+  const engagement = imp !== null && engagements !== null && engagements > 0 && engagements <= imp ? engagements / imp : null
   const [ctrGood, ctrOk] = ctrBands(typeof ad.provider === 'string' ? ad.provider : null)
 
-  const criteria: Criterion[] = [
-    make('hook', hook),
-    make('hold', hold),
-    make('completion', completion),
-    make('ctr', ctr, [ctrOk, ctrGood]),
-    make('cart_order', cartOrder),
-    make('roas', roas),
-  ]
+  const all: Record<Criterion['key'], Criterion> = {
+    hook: make('hook', hook),
+    hold: make('hold', hold),
+    completion: make('completion', completion),
+    ctr: make('ctr', ctr, [ctrOk, ctrGood]),
+    cart_order: make('cart_order', cartOrder),
+    roas: make('roas', roas),
+    click_lead: make('click_lead', clickLead),
+    engagement: make('engagement', engagement),
+  }
+  const criteria: Criterion[] = keys.map((k) => all[k])
 
   const graded = criteria.filter((c) => c.grade !== 'na')
   const points = { good: 100, ok: 60, weak: 20, na: 0 }
@@ -131,7 +167,19 @@ export function scoreContent(input: Bag): ContentScore {
   return { score, sufficient: true, criteria, weakest: weak[0]?.key ?? null }
 }
 
-/** The one-line diagnosis — the weakest link, or «متفوق» when nothing graded is weak. */
+/**
+ * The one-line diagnosis — the weakest link, or, when nothing graded is weak, a plain rating by the score.
+ * CONTENT-ANALYSIS-BY-OBJECTIVE-001 — Owner 2026-11-18: «ممتاز جداً، ممتاز، جيد» instead of «متفوق».
+ */
+export function rating(s: ContentScore): { ar: string; en: string } {
+  const graded = s.criteria.filter((c) => c.grade !== 'na')
+  const points = s.score ?? (graded[0]?.grade === 'good' ? 100 : graded[0]?.grade === 'ok' ? 60 : 0)
+  if (points >= 85) return { ar: 'ممتاز جداً', en: 'Outstanding' }
+  if (points >= 70) return { ar: 'ممتاز', en: 'Excellent' }
+
+  return { ar: 'جيد', en: 'Good' }
+}
+
 export function diagnosis(s: ContentScore, ar: boolean): string | null {
   if (!s.criteria.some((c) => c.grade !== 'na')) return null
   const lines: Record<Criterion['key'], { ar: string; en: string }> = {
@@ -141,8 +189,10 @@ export function diagnosis(s: ContentScore, ar: boolean): string | null {
     ctr: { ar: 'يشوفونه وما يضغطون', en: 'Seen, not clicked' },
     cart_order: { ar: 'يضيفون للسلة وما يطلبون', en: 'Carts that do not become orders' },
     roas: { ar: 'العائد أقل من المطلوب', en: 'Return below the bar' },
+    click_lead: { ar: 'يضغطون وما يسجلون', en: 'Clicks that do not become leads' },
+    engagement: { ar: 'التفاعل أقل من الطبيعي', en: 'Engagement below normal' },
   }
-  if (s.weakest === null) return ar ? 'متفوق' : 'Outperforming'
+  if (s.weakest === null) return ar ? rating(s).ar : rating(s).en
 
   return ar ? lines[s.weakest].ar : lines[s.weakest].en
 }

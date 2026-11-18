@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diagnosis, monotoneSteps, scoreContent } from './contentScore'
+import { diagnosis, monotoneSteps, rating, scoreContent, scorePath } from './contentScore'
 
 /** CONTENT-SCORE-001 — no verdict without data, no stage above the one before it, CTR judged on its own platform. */
 describe('the content scorecard', () => {
@@ -56,7 +56,7 @@ describe('the content scorecard', () => {
     expect(s.criteria.find((c) => c.key === 'roas')?.grade).toBe('good')
     expect(s.criteria.find((c) => c.key === 'ctr')?.grade).toBe('na')
     expect(s.criteria.find((c) => c.key === 'hook')?.grade).toBe('na')
-    expect(diagnosis(s, true)).toBe('متفوق')
+    expect(diagnosis(s, true)).toBe('ممتاز جداً')
   })
 
   /** CONTENT-SCORE-003 — each criterion carries its normal band; click-through takes its platform's. */
@@ -66,5 +66,37 @@ describe('the content scorecard', () => {
     expect(s.criteria.find((c) => c.key === 'hook')?.norm).toEqual([0.2, 0.3])
     expect(s.criteria.find((c) => c.key === 'ctr')?.norm).toEqual([0.02, 0.05])
     expect(s.criteria.find((c) => c.key === 'roas')?.grade).toBe('ok')
+  })
+
+  /** CONTENT-ANALYSIS-BY-OBJECTIVE-001 — a lead ad is judged on leads, never on carts or return. */
+  it('judges a lead ad on click to lead and engagement, not on carts and return', () => {
+    const s = scoreContent({ provider: 'meta', objective: 'leads', impressions: 40_000, clicks: 600, leads: 72, engagements: 900, add_to_cart: 20, purchases: 5 })
+    const keys = s.criteria.map((c) => c.key)
+
+    expect(keys).toContain('click_lead')
+    expect(keys).not.toContain('cart_order')
+    expect(keys).not.toContain('roas')
+    expect(s.criteria.find((c) => c.key === 'click_lead')?.grade).toBe('good')
+    expect(s.criteria.find((c) => c.key === 'engagement')?.grade).toBe('ok')
+  })
+
+  it('names the lead gap when clicks do not become leads', () => {
+    const s = scoreContent({ provider: 'snapchat', objective: 'leads', impressions: 50_000, clicks: 700, leads: 7 })
+
+    expect(diagnosis(s, true)).toBe('يضغطون وما يسجلون')
+  })
+
+  it('reads a conversion ad that only states leads as a lead ad', () => {
+    expect(scorePath({ objective: 'conversions', leads: 12, purchases: 0 })).toBe('leads')
+    expect(scorePath({ objective: 'conversions', leads: 0, purchases: 9 })).toBe('sales')
+    expect(scorePath({ objective: 'traffic' })).toBe('reach')
+  })
+
+  it('rates a sound item «ممتاز جداً / ممتاز / جيد» instead of «متفوق»', () => {
+    const base = { score: 0, sufficient: true, weakest: null, criteria: [] }
+
+    expect(rating({ ...base, score: 92 }).ar).toBe('ممتاز جداً')
+    expect(rating({ ...base, score: 75 }).ar).toBe('ممتاز')
+    expect(rating({ ...base, score: 60 }).ar).toBe('جيد')
   })
 })
