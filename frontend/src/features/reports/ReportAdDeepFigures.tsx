@@ -30,7 +30,7 @@ const COUNTS: Array<{ key: string; ar: string; en: string }> = [
   { key: 'landing_page_views', ar: 'زيارات الصفحة', en: 'Page views' },
   { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads' },
   { key: 'video_views', ar: 'المشاهدات', en: 'Video views' },
-  { key: 'active_days', ar: 'أيام النشاط', en: 'Active days' },
+  { key: 'active_days', ar: 'مدة التشغيل', en: 'Days running' },
 ]
 
 const JOURNEY: Array<{ key: string; ar: string; en: string }> = [
