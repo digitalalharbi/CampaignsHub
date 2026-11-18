@@ -8,6 +8,7 @@ use App\Domains\Access\Support\MemberOverrideMemo;
 use App\Domains\Accounts\Services\AccountGrants;
 use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Audit\Listeners\RecordAuthAudit;
+use App\Domains\Bootstrap\Support\WorkspaceCacheInvalidator;
 use App\Domains\Campaigns\Services\CreativeResultAvailability;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Campaigns\Support\PresentationAudience;
@@ -234,6 +235,9 @@ class AppServiceProvider extends ServiceProvider
                 }
             });
         });
+
+        // PERF-BOOTSTRAP-001 — a write to a table the workspace read cache is derived from abandons its entries (every write path).
+        WorkspaceCacheInvalidator::listen();
 
         // PERF-RECOVERY-001 — every query counted, the slow ones filed by their placeholdered SQL.
         DB::listen(static function (QueryExecuted $query): void {

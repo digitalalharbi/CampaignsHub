@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Subscriptions\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Bootstrap\Support\WorkspaceReadCache;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPaymentMethod;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
@@ -76,59 +77,86 @@ final class SubscriptionController extends Controller
     /** GET /subscriptions/current — the tenant's current subscription + per-metric usage/remaining. */
     public function current(Request $request): JsonResponse
     {
+        return ApiResponse::success($this->currentPayload($request), 'Current subscription.');
+    }
+
+    /**
+     * The document of `/subscriptions/current`, for it and for `/bootstrap`. Authorised HERE, on the request in hand, before
+     * anything is read or cached: `subscriptions.view`, as the route has always required.
+     *
+     * PERF-BOOTSTRAP-001 — the subscription, its plan and how the next renewal will be taken are filed per tenant in
+     * {@see WorkspaceReadCache} and abandoned when a subscription, a plan or a saved card is written. The USAGE is not: it counts
+     * rows (projects, clients, seats…) that change on every create, and it is what the plan-limit meter exists to show, so it is
+     * always read live.
+     *
+     * @return array<string, mixed>
+     */
+    public function currentPayload(Request $request): array
+    {
         abort_unless($request->user()?->hasPermission('subscriptions.view'), 403);
 
         $tenant = $this->tenant();
-        $subscription = $this->subscriptions->subscriptionFor($tenant);
-        $plan = $this->subscriptions->currentPlan($tenant);
 
-        return ApiResponse::success([
-            'subscription' => $subscription === null ? null : [
-                'status' => $subscription->status,
-                'commercial_basis' => $subscription->commercial_basis,
-                'seats' => $subscription->seats,
-                'billing_interval' => $subscription->billing_interval,
-                'unit_amount' => $subscription->unit_amount === null ? null : (string) $subscription->unit_amount,
-                // PRICING-VAT-001/002 — what each renewal is charged, on this subscription's own VAT terms.
-                'vat' => $subscription->unit_amount === null ? null
-                    : app(SubscriptionTax::class)->split($subscription->plan?->code, (string) $subscription->unit_amount, $subscription),
-                'currency' => $subscription->currency,
-                // The period's START, so the interface can show how much of it is left rather than
-                // only when it ends (PAY-002).
-                'current_period_start' => $subscription->current_period_start?->toIso8601String(),
-                'current_period_end' => $subscription->current_period_end?->toIso8601String(),
+        $static = WorkspaceReadCache::remember(WorkspaceReadCache::SUBSCRIPTION, (string) $tenant->id, function () use ($tenant): array {
+            $subscription = $this->subscriptions->subscriptionFor($tenant);
+            $plan = $this->subscriptions->currentPlan($tenant);
+
+            return [
+                'subscription' => $subscription === null ? null : [
+                    'status' => $subscription->status,
+                    'commercial_basis' => $subscription->commercial_basis,
+                    'seats' => $subscription->seats,
+                    'billing_interval' => $subscription->billing_interval,
+                    'unit_amount' => $subscription->unit_amount === null ? null : (string) $subscription->unit_amount,
+                    // PRICING-VAT-001/002 — what each renewal is charged, on this subscription's own VAT terms.
+                    'vat' => $subscription->unit_amount === null ? null
+                        : app(SubscriptionTax::class)->split($subscription->plan?->code, (string) $subscription->unit_amount, $subscription),
+                    'currency' => $subscription->currency,
+                    // The period's START, so the interface can show how much of it is left rather than
+                    // only when it ends (PAY-002).
+                    'current_period_start' => $subscription->current_period_start?->toIso8601String(),
+                    'current_period_end' => $subscription->current_period_end?->toIso8601String(),
+                    /*
+                     * A change that is agreed but not in force.
+                     *
+                     * Reported separately from `plan` and never merged into it: the customer is
+                     * entitled to what `plan` says until this one takes effect, and an interface that
+                     * showed the coming plan as the current one would be describing a downgrade as
+                     * already having happened.
+                     */
+                    'scheduled_change' => $subscription->hasScheduledChange() ? [
+                        'plan' => $subscription->scheduledPlan?->code,
+                        'plan_name' => $subscription->scheduledPlan?->name,
+                        'billing_interval' => $subscription->scheduled_billing_interval,
+                        'unit_amount' => $subscription->scheduled_unit_amount === null ? null : (string) $subscription->scheduled_unit_amount,
+                        'effective_at' => $subscription->scheduled_change_at?->toIso8601String(),
+                        // No date means it is waiting on a payment rather than on the calendar.
+                        'awaiting_payment' => $subscription->scheduled_change_at === null,
+                    ] : null,
+                ],
+                'plan' => $plan === null ? null : $this->planShape($plan),
+                'is_default_plan' => $subscription === null, // no subscription → defaulted to the most permissive plan
                 /*
-                 * A change that is agreed but not in force.
+                 * How the NEXT payment will be taken — PAY-TOKEN-003.
                  *
-                 * Reported separately from `plan` and never merged into it: the customer is
-                 * entitled to what `plan` says until this one takes effect, and an interface that
-                 * showed the coming plan as the current one would be describing a downgrade as
-                 * already having happened.
+                 * The customer agreed to automatic renewal before they paid, and until now nothing told
+                 * them whether the product was actually able to honour that. Without a card on file the
+                 * renewal is an invoice somebody has to remember to visit, and the first sign of it is a
+                 * past-due notice. Saying so here, beside the renewal date, is the difference between a
+                 * customer choosing to pay and a customer being surprised.
                  */
-                'scheduled_change' => $subscription->hasScheduledChange() ? [
-                    'plan' => $subscription->scheduledPlan?->code,
-                    'plan_name' => $subscription->scheduledPlan?->name,
-                    'billing_interval' => $subscription->scheduled_billing_interval,
-                    'unit_amount' => $subscription->scheduled_unit_amount === null ? null : (string) $subscription->scheduled_unit_amount,
-                    'effective_at' => $subscription->scheduled_change_at?->toIso8601String(),
-                    // No date means it is waiting on a payment rather than on the calendar.
-                    'awaiting_payment' => $subscription->scheduled_change_at === null,
-                ] : null,
-            ],
-            'plan' => $plan === null ? null : $this->planShape($plan),
-            'is_default_plan' => $subscription === null, // no subscription → defaulted to the most permissive plan
+                'renewal' => $subscription === null ? null : $this->renewalShape($subscription),
+            ];
+        });
+
+        // Key order of the response is unchanged: subscription, plan, is_default_plan, usage, renewal.
+        return [
+            'subscription' => $static['subscription'],
+            'plan' => $static['plan'],
+            'is_default_plan' => $static['is_default_plan'],
             'usage' => $this->subscriptions->usageSummary($tenant, self::METERED),
-            /*
-             * How the NEXT payment will be taken — PAY-TOKEN-003.
-             *
-             * The customer agreed to automatic renewal before they paid, and until now nothing told
-             * them whether the product was actually able to honour that. Without a card on file the
-             * renewal is an invoice somebody has to remember to visit, and the first sign of it is a
-             * past-due notice. Saying so here, beside the renewal date, is the difference between a
-             * customer choosing to pay and a customer being surprised.
-             */
-            'renewal' => $subscription === null ? null : $this->renewalShape($subscription),
-        ], 'Current subscription.');
+            'renewal' => $static['renewal'],
+        ];
     }
 
     /**
