@@ -1,3 +1,4 @@
+import { RankingBarChart } from './charts'
 import { Num } from '@/components/ui/Num'
 import { useEffect, useState } from 'react'
 import { api, getData } from '@/lib/api/client'
@@ -176,6 +177,17 @@ export function TrafficExplorer({ projectId, range, ar }: { projectId: string; r
         ) : q.data && q.data.state !== 'ready' ? (
           <p data-testid="site-traffic-absent" className="text-sm text-text-muted">{ar ? 'لا خاصية الموقع محددة لهذا المشروع.' : 'No Website property is selected for this project.'}</p>
         ) : (
+          <>
+          {/* ANALYTICS-REPORT-LAYOUT-001 — the largest rows of this view drawn first; the full explorer folds away. */}
+          {(q.data?.rows ?? []).length > 0 && (
+            <RankingBarChart
+              horizontal
+              data={[...(q.data?.rows ?? [])].sort((a, b) => (b.sessions ?? 0) - (a.sessions ?? 0)).slice(0, 8).map((r) => ({ label: `${r.dimension_1}${r.dimension_2 ? ` / ${r.dimension_2}` : ''}`.slice(0, 30), sessions: r.sessions ?? 0 }))}
+              bars={[{ key: 'sessions', name: ar ? 'الجلسات' : 'Sessions', kind: 'num' }]}
+              height={Math.max(160, Math.min(8, (q.data?.rows ?? []).length) * 34)}
+            />
+          )}
+          <details className="text-xs" data-testid="traffic-table-fold"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول الكامل' : 'Full table'}</summary>
           <DataTable<TrafficRow>
             columns={columns} rows={q.data?.rows ?? []} loading={q.isLoading}
             rowKey={(r) => `${r.dimension_1}\u001f${r.dimension_2 ?? ''}`}
@@ -189,6 +201,8 @@ export function TrafficExplorer({ projectId, range, ar }: { projectId: string; r
             )}
             server={{ total: q.data?.total ?? 0, state: table, onChange: setTable }} maxHeight="32rem"
           />
+          </details>
+          </>
         )}
       </div>
     </ChartCard>

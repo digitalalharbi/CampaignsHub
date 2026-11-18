@@ -40,7 +40,10 @@ export function CampaignQuickPreview({
   range,
   filters,
   onClose,
+  analysisOnly = false,
 }: {
+  /** ANALYTICS-READ-ONLY-001 — on the analytics surface the preview answers in place and links nowhere. */
+  analysisOnly?: boolean
   row: CampaignRow
   projectId: string | null
   range: Range
@@ -140,7 +143,7 @@ export function CampaignQuickPreview({
         </div>
       )}
 
-      {projectId !== null && (
+      {projectId !== null && !analysisOnly && (
         <Link
           to={{ pathname: `${portalBaseOf(location.pathname) ?? '/app'}/campaigns/${projectId}/${row.campaign_id}`, search: location.search }}
           state={{ from: `${location.pathname}${location.search}` }}
