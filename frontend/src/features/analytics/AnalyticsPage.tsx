@@ -1044,67 +1044,58 @@ function PlatformPaths({
               )
             })()}
 
-            <ul className="flex flex-col gap-1">
+            {/*
+              ANALYTICS-REPORT-LAYOUT-001 — the path drawn the way the live report draws a split: one bar of
+              shares in each platform's colour, then a tile per platform with the figure the path is judged
+              on set large. The sync gaps stay beside their platform, as a small chip, not as the headline.
+            */}
+            <div data-testid={`platform-path-${path.path}-share-bar`} className="mb-3 flex h-3 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+              {path.platforms
+                .filter((row) => (row.spend_share ?? 0) > 0)
+                .map((row) => (
+                  <span key={row.provider} style={{ width: `${(row.spend_share ?? 0) * 100}%`, background: platformColor(canonicalPlatform(row.provider)) }} />
+                ))}
+            </div>
+            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {path.platforms.map((row) => {
                 const efficiency = efficiencyFor(path.path, row)
                 const returned = returnFor(path.path, row)
                 const gap = gaps.get(canonicalPlatform(row.provider))
 
                 return (
-                  <li key={row.provider} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
-                    <span className="flex items-center gap-2">
+                  <li key={row.provider} className="flex flex-col gap-2 rounded-xl bg-surface-secondary/60 p-3" style={{ borderInlineStart: `3px solid ${platformColor(canonicalPlatform(row.provider))}` }}>
+                    <span className="flex items-center justify-between gap-2">
                       <PlatformCell provider={row.provider} />
-                      {/*
-                        The gap, beside the platform it belongs to. A platform three days short in
-                        this window is not a platform that performed worse, and the share above says
-                        nothing about which of the two it is.
-                      */}
-                      {gap !== undefined && (gap.missing > 0 || gap.status !== null) && (
-                        <span
-                          data-testid={`path-gap-${path.path}-${row.provider}`}
-                          className="rounded-full bg-warning/10 px-2 py-0.5 text-[11px] text-warning"
-                        >
-                          {gap.missing > 0
-                            ? (ar ? `ناقص ${countedDays(gap.missing, 'ar')}` : `${countedDays(gap.missing, 'en')} missing`)
-                            : (ar ? 'آخر مزامنة لم تنجح' : 'last sync did not succeed')}
-                        </span>
-                      )}
-                    </span>
-
-                    <span className="flex flex-wrap items-center gap-3">
-                      <span className="tnum text-text-secondary" dir="ltr">{money(row.spend, currency)}</span>
-                      {/* Share of the PATH. «40% of awareness» is a decision somebody made; «40% of
-                          everything» is the mix, and reading the second as performance is the defect. */}
-                      <span className="tnum text-text-muted" dir="ltr">
+                      <span className="tnum text-xs font-semibold text-text-secondary" dir="ltr">
                         {row.spend_share === null ? '—' : percent(row.spend_share, 0)}
                       </span>
-
-                      {/*
-                        The cost that names what this path was BUYING — never a fixed four columns
-                        with two of them empty, which is the cross-objective comparison this section
-                        exists to refuse, printed one column at a time.
-                      */}
-                      <span
-                        data-testid={`path-efficiency-${path.path}-${row.provider}`}
-                        className="tnum text-[11px] text-text-muted"
-                        dir="ltr"
-                      >
-                        {(ar ? efficiency.labelAr : efficiency.labelEn)}
-                        {' '}
-                        {/*
-                          `moneyExact`, not `money`: a per-unit cost is where rounding lies. `money`
-                          compacts, and a cost per thousand of 6.67 printed «7 SAR» — a seven per cent
-                          error in the figure the comparison is actually about.
-                        */}
-                        {efficiency.value === null ? '—' : moneyExact(efficiency.value, currency)}
-                      </span>
-
-                      {returned.value !== null && (
-                        <span className="tnum text-[11px] text-text-muted" dir="ltr">
-                          {ratio(returned.value)}
-                        </span>
-                      )}
                     </span>
+                    <span className="flex items-end justify-between gap-2">
+                      <span data-testid={`path-efficiency-${path.path}-${row.provider}`} className="flex flex-col">
+                        <span className="text-[11px] text-text-muted">{ar ? efficiency.labelAr : efficiency.labelEn}</span>
+                        <span className="tnum text-lg font-extrabold text-text-primary" dir="ltr">
+                          {efficiency.value === null ? '—' : moneyExact(efficiency.value, currency)}
+                        </span>
+                      </span>
+                      <span className="flex flex-col items-end">
+                        <span className="text-[11px] text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
+                        <span className="tnum text-sm font-bold text-text-secondary" dir="ltr">{money(row.spend, currency)}</span>
+                      </span>
+                    </span>
+                    {(returned.value !== null || (gap !== undefined && (gap.missing > 0 || gap.status !== null))) && (
+                      <span className="flex flex-wrap items-center justify-between gap-2">
+                        {returned.value !== null
+                          ? <span className="tnum rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success" dir="ltr">ROAS {ratio(returned.value)}</span>
+                          : <span />}
+                        {gap !== undefined && (gap.missing > 0 || gap.status !== null) && (
+                          <span data-testid={`path-gap-${path.path}-${row.provider}`} className="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
+                            {gap.missing > 0
+                              ? (ar ? `ناقص ${countedDays(gap.missing, 'ar')}` : `${countedDays(gap.missing, 'en')} missing`)
+                              : (ar ? 'آخر مزامنة لم تنجح' : 'last sync did not succeed')}
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </li>
                 )
               })}
