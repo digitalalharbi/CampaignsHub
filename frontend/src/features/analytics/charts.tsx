@@ -552,7 +552,7 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false, diffe
                     <span className="tnum text-sm font-bold text-text-primary">{percent(s.step_rate, s.step_rate < 0.1 ? 1 : 0)}</span>
                   </span>
                   {s.drop_off != null && s.drop_off > 0 && (
-                    <span className="tnum text-[11px] text-danger" data-testid="funnel-drop-off">{ar ? 'تسرّب' : 'drop'} {percent(s.drop_off, 0)}</span>
+                    <span className="tnum text-xs text-danger" data-testid="funnel-drop-off">{ar ? 'تسرّب' : 'drop'} {percent(s.drop_off, 0)}</span>
                   )}
                 </span>
               )}
