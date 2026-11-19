@@ -89,6 +89,7 @@ import { AccountVisualDeck, BudgetVisualDeck, CampaignVisualDeck, EntityVisualDe
 import { SPECS, layoutFor, valueReading } from './metricCatalog'
 import { FilterBar, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
+import { lastSuccessfulSync } from '@/features/analyticsShared/syncTruth'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
 import { DashboardContextStrip } from './DashboardContextStrip'
 import { AdvertiserProjectsStrip, AdvertiserSourcesStrip } from '@/features/dashboard/AdvertiserContext'
@@ -588,14 +589,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   const projectName = projectsQuery.data?.find((p) => p.id === currentProjectId)?.name ?? null
 
   const headFreshness = useFreshness(currentProjectId, range, filters)
-  const freshestAt = useMemo(
-    () => (headFreshness.data?.rows ?? [])
-      .map((row) => row.data_freshness_at)
-      .filter((at): at is string => at !== null)
-      .sort()
-      .at(-1) ?? null,
-    [headFreshness.data],
-  )
+  // ANALYTICS-SYNC-TRUTH-001 — the last successful sync, not the newest stored figure (zero spend is data, not a gap).
+  const freshestAt = useMemo(() => lastSuccessfulSync(headFreshness.data?.rows ?? []), [headFreshness.data])
 
   return (
     <AnalysisOnly.Provider value={isAnalysis}>

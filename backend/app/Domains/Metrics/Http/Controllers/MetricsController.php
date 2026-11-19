@@ -1160,9 +1160,17 @@ final class MetricsController extends Controller
                 // Which grain an incomplete sync left behind: `campaign`, `ad_set` or `ad`.
                 'missing_grain' => $source['missing_grain'] ?? null,
                 'last_sync_at' => $source['last_checked_at'],
+                /*
+                 * ANALYTICS-SYNC-TRUTH-001 — the latest SUCCESSFUL sync, apart from the latest attempt and from the
+                 * newest stored figure: a run that reached the provider (`success` / `no_data`) counts even when it
+                 * stored nothing, so a quiet account (zero spend) reads «synced», never «no data has arrived».
+                 */
+                'last_success_at' => $this->latestOf($source['data_as_of'] ?? null, $source['succeeded_at'] ?? null),
                 'last_sync_error' => $source['last_sync_error'],
             ];
         }, $state['sources']);
+
+        $summaryLastSuccess = collect($out)->pluck('last_success_at')->filter()->max();
 
         return ApiResponse::success($out, 'Data freshness.', meta: $this->meta($from, $to) + [
             /*
@@ -1183,8 +1191,18 @@ final class MetricsController extends Controller
                 'last_sync_at' => $state['last_sync_at'],
                 'missing_days' => $state['missing_days'],
                 'sync_failed' => $state['sync_failed'],
+                'last_success_at' => $summaryLastSuccess === null ? null : (string) $summaryLastSuccess,
             ],
         ]);
+    }
+
+    private function latestOf(?string $a, ?string $b): ?string
+    {
+        if ($a === null || $b === null) {
+            return $a ?? $b;
+        }
+
+        return $b > $a ? $b : $a;
     }
 
     /**
