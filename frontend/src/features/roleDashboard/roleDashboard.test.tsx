@@ -213,6 +213,11 @@ describe('the manager performance panels', () => {
     page(base({ can_watch: false }))
     expect(screen.queryByTestId('watch-board')).not.toBeInTheDocument()
   })
+
+  it('FINANCE-HOME-SCOPE-001 — the finance page never carries the campaigns board, even for a member who may open campaigns', () => {
+    page(base({ can_watch: true, view: 'finance' }))
+    expect(screen.queryByTestId('watch-board')).not.toBeInTheDocument()
+  })
 })
 
 describe('ANALYTICS-POPUP-001 — Home opens the matching analytics section in a popup', () => {
