@@ -28,7 +28,7 @@ const rows = [
   row({ client_id: 'c2', client_name: 'Beta', projects_breakdown: [], project_budget: { ...approved(100, 2900, 29), fx: {
     complete: false, excluded: [{ currency: 'EUR', original_amount: 400, days: 4 } as never], excluded_label: 'سعر صرف غير متوفر',
     statement: 'سعر صرف غير متوفر: EUR — Account (400.00 EUR، 4 أيام) — مستبعد من الإجمالي.', statement_en: 'Exchange rate unavailable: EUR — Account (400.00 EUR, 4 days) — left out of the total.',
-    stale: [], stale_label: null, rates_page: null,
+    stale: [], rates_page: null,
   } } }),
   row({
     client_id: 'c3', client_name: 'Gamma', projects_breakdown: [], daily_spend_7d: null,
