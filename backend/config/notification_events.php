@@ -76,6 +76,10 @@ return [
         // NOTIF-V2-EXTERNAL-001 — a held message nobody decided on within the review window was skipped.
         'external.review_skipped' => $i('info', $ops, ['internal_only' => true, 'channels' => $quiet, 'groupable' => false]),
 
+        // ── CONTENT-INTAKE-001 — the content quality gate (internal only; the decision goes to the uploader alone) ──
+        'content.submitted' => $i('info', $ops, ['channels' => ['in_app'], 'groupable' => true]),
+        'content.decided' => $i('info', $everyone, ['channels' => ['in_app'], 'groupable' => false]),
+
         // ── §5 projects ──
         'project.created' => $i('info', $everyone, ['channels' => ['in_app']]),
         'project.archived' => $i('info', $everyone, ['channels' => ['in_app']]),

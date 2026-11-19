@@ -96,7 +96,7 @@ const FormsPage = lazyPage(() => import('@/features/forms/FormsPage'), 'FormsPag
 const FormBuilderPage = lazyPage(() => import('@/features/forms/FormBuilderPage'), 'FormBuilderPage')
 const PublicFormPage = lazyPage(() => import('@/features/forms/PublicFormPage'), 'PublicFormPage')
 const TasksPage = lazyPage(() => import('@/features/tasks/TasksPage'), 'TasksPage')
-const CreativesPage = lazyPage(() => import('@/features/content/CreativesPage'), 'CreativesPage')
+const ContentHub = lazyPage(() => import('@/features/content/ContentHub'), 'ContentHub')
 const CreativeDetailPage = lazyPage(() => import('@/features/content/CreativeDetailPage'), 'CreativeDetailPage')
 const CreativeGroupsPage = lazyPage(() => import('@/features/content/CreativeGroupsPage'), 'CreativeGroupsPage')
 const FilesLibraryPage = lazyPage(() => import('@/features/files/FilesLibraryPage'), 'FilesLibraryPage')
@@ -459,7 +459,7 @@ export const router = createBrowserRouter(withErrorBoundary([
           { path: 'connections', element: <Navigate to="/app/integrations" replace /> },
           { path: 'drive', element: <Navigate to="/app/files/drive" replace /> },
           { path: 'branding', element: <Navigate to="/app/settings/branding" replace /> },
-          { path: 'content', element: <CreativesPage /> },
+          { path: 'content', element: <ContentHub /> },
           /*
            * §15.6 — one creative's own address, so it can be linked, refreshed and returned to.
            *
@@ -680,7 +680,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
             { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
-            { path: 'content', element: <CreativesPage /> },
+            { path: 'content', element: <ContentHub /> },
             // MOUNTED, not copied — the same page, told which portal to return to (ADR 0002).
             { path: 'content/groups', element: <CreativeGroupsPage portal="agency" /> },
             { path: 'content/:creativeId', element: <CreativeDetailPage portal="agency" /> },
