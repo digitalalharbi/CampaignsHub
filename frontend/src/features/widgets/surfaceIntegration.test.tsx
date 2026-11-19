@@ -45,8 +45,7 @@ describe('widgets on the Dashboard and Analytics', () => {
     vi.mocked(useWidgetLayout).mockReturnValue(layout([null, 'module_off']) as never)
     renderWithProviders(<AnalyticsPage surface="analytics" />, { locale: 'en' })
 
-    // A section of the board's bar (a pill), not a tab inside a section — the test said «tab» and had been failing since #1163.
-    const tab = await screen.findByRole('button', { name: 'Insights' })
+    const tab = await screen.findByRole('tab', { name: 'Insights' })
     fireEvent.click(tab)
     expect(await screen.findByTestId('stub-surface-analytics')).toBeTruthy()
   })
@@ -56,7 +55,7 @@ describe('widgets on the Dashboard and Analytics', () => {
     renderWithProviders(<AnalyticsPage surface="analytics" />, { locale: 'en' })
 
     await screen.findAllByRole('tab')
-    expect(screen.queryByRole('button', { name: 'Insights' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Insights' })).toBeNull()
     expect(screen.queryByTestId('stub-surface-analytics')).toBeNull()
   })
 
