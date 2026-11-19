@@ -37,9 +37,9 @@ function Ring({ value, peer, label }: { value: number; peer: number | null; labe
           <line x1="32" y1="32" x2={32 + 31 * Math.cos((peerAngle * Math.PI) / 180)} y2={32 + 31 * Math.sin((peerAngle * Math.PI) / 180)}
             stroke="var(--text-primary)" strokeWidth="1.5" strokeDasharray="2 2" />
         )}
-        <text x="32" y="36" textAnchor="middle" className="fill-current text-[11px] font-extrabold">{(value * 100).toFixed(1)}%</text>
+        <text x="32" y="36" textAnchor="middle" className="fill-current text-xs font-extrabold">{(value * 100).toFixed(1)}%</text>
       </svg>
-      <figcaption className="text-[11px] font-semibold text-text-muted">{label}</figcaption>
+      <figcaption className="text-xs font-semibold text-text-muted">{label}</figcaption>
     </figure>
   )
 }
@@ -56,7 +56,7 @@ function Length({ seconds, label }: { seconds: number; label: string }) {
         <span className="absolute inset-y-0 rounded-full bg-success/30" style={{ insetInlineStart: pos(15), width: `${(10 / max) * 100}%` }} aria-hidden />
         <span className={`absolute -top-1 h-5 w-1.5 rounded-full ${inBand ? 'bg-success' : 'bg-warning'}`} style={{ insetInlineStart: pos(seconds) }} aria-hidden />
       </div>
-      <figcaption className="flex items-center justify-between text-[11px] font-semibold text-text-muted">
+      <figcaption className="flex items-center justify-between text-xs font-semibold text-text-muted">
         <span>{label}</span><Num className="font-extrabold text-text-primary">{`${Math.round(seconds)}s`}</Num>
       </figcaption>
     </figure>
@@ -73,7 +73,7 @@ function Shape({ w, h }: { w: number; h: number }) {
   return (
     <figure className="flex flex-col items-center gap-1" data-testid="why-shape">
       <span className="block rounded-md border-2 border-brand-600 bg-brand-600/10" style={{ width: W, height: H }} aria-hidden />
-      <figcaption><Num className="text-[11px] font-extrabold text-text-primary">{`${w / d}:${h / d}`}</Num></figcaption>
+      <figcaption><Num className="text-xs font-extrabold text-text-primary">{`${w / d}:${h / d}`}</Num></figcaption>
     </figure>
   )
 }
@@ -141,7 +141,7 @@ export function CreativeVerdict({ data, ar, mediaHref }: { data: CreativeDetail;
                 </span>
                 <span className="flex flex-col items-end leading-tight">
                   <Num className="font-extrabold text-text-primary">{c.value}</Num>
-                  <Num className={`text-[10px] font-bold ${c.better ? 'text-success' : 'text-danger'}`}>{`${c.gap >= 0 ? '+' : '−'}${Math.round(Math.abs(c.gap) * 100)}%`}</Num>
+                  <Num className={`text-xs font-bold ${c.better ? 'text-success' : 'text-danger'}`}>{`${c.gap >= 0 ? '+' : '−'}${Math.round(Math.abs(c.gap) * 100)}%`}</Num>
                 </span>
               </div>
             )
@@ -167,7 +167,7 @@ export function CreativeVerdict({ data, ar, mediaHref }: { data: CreativeDetail;
                 )
               })}
             </div>
-            <figcaption className="flex justify-between text-[10px] text-text-muted"><Num>{days[0].date.slice(5)}</Num><Num>{days[days.length - 1].date.slice(5)}</Num></figcaption>
+            <figcaption className="flex justify-between text-xs text-text-muted"><Num>{days[0].date.slice(5)}</Num><Num>{days[days.length - 1].date.slice(5)}</Num></figcaption>
           </figure>
         )}
       </div>
