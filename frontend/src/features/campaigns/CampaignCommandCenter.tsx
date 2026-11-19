@@ -492,7 +492,7 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
             : <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: dayResult.key, name: resultLabel(dayResult, ar) }]} height={190} />}
         </ChartCard>
         {sells && (
-          <ChartCard title={ar ? 'العائد على الإنفاق (ROAS)' : 'Return on ad spend (ROAS)'} subtitle={ar ? 'الاتجاه اليومي' : 'Day by day'}>
+          <ChartCard title={ar ? 'معدل العائد (ROAS)' : 'Return on ad spend (ROAS)'} subtitle={ar ? 'الاتجاه اليومي' : 'Day by day'}>
             <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'roas', name: 'ROAS' }]} height={190} />
           </ChartCard>
         )}

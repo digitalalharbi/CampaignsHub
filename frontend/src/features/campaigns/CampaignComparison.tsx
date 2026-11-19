@@ -209,7 +209,7 @@ function ComparisonTable({ rows, locale, mixed, projectId, currency }: {
           },
           {
             key: 'roas',
-            label: 'العائد على الإنفاق',
+            label: 'معدل العائد',
             kind: 'ratio' as const,
             values: roas,
             emphasis: roas.map((v) => v !== null && v === bestRoas),

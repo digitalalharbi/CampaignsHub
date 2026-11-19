@@ -37,7 +37,7 @@ const ATTRIBUTION_WINDOWS = ['1d_click', '7d_click', '7d_click_1d_view', '28d_cl
 const CF_COPY = {
   ar: {
     platforms: 'المنصات', regions: 'المناطق', audiences: 'الجماهير', conversionEvents: 'أحداث التحويل',
-    creativeTypes: 'أنواع المحتوى الإبداعي', tags: 'الوسوم',
+    creativeTypes: 'أنواع المحتوى', tags: 'الوسوم',
     attributionModel: 'نموذج الإسناد', attributionWindow: 'نافذة الإسناد',
     derivedTitle: 'مؤشرات مشتقة من الهدف', primaryKpi: 'المؤشر الأساسي', secondaryKpi: 'مؤشرات ثانوية',
     funnel: 'مرحلة المسار', template: 'قالب التقرير', alerts: 'تنبيهات مقترحة',

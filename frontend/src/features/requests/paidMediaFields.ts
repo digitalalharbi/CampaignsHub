@@ -137,7 +137,7 @@ export const PAID_FIELD_DEFS: PaidFieldDef[] = [
   { token: 'audience', labelAr: 'الجمهور المستهدف', labelEn: 'Target audience', control: 'text', group: 'brief' },
   { token: 'store_or_app', labelAr: 'المتجر / التطبيق', labelEn: 'Store / app', control: 'select', group: 'brief', options: STORE_OR_APP },
   { token: 'language', labelAr: 'اللغة', labelEn: 'Language', control: 'select', group: 'brief', options: LANGUAGES },
-  { token: 'kpis', labelAr: 'مؤشرات الأداء', labelEn: 'KPIs', control: 'tags', group: 'brief' },
+  { token: 'kpis', labelAr: 'ملخص الأداء', labelEn: 'KPIs', control: 'tags', group: 'brief' },
 
   // ---- Tracking & integrations ----
   { token: 'site_url', labelAr: 'الموقع الإلكتروني', labelEn: 'Website URL', control: 'url', group: 'tracking' },

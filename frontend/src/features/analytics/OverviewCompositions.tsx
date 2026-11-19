@@ -208,7 +208,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
           { key: 'revenue', label: ar ? 'إيرادات المتجر' : 'Store revenue', value: commerce.revenue == null ? '—' : money(commerce.revenue, cur) },
           { key: 'orders', label: ar ? 'الطلبات' : 'Orders', value: num(commerce.orders) },
           { key: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order value', value: commerce.aov == null ? '—' : money(commerce.aov, cur) },
-          { key: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
+          { key: 'roas', label: ar ? 'معدل العائد' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
         ].map((k) => (
           <div key={k.key} data-testid={`store-kpi-${k.key}`} className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
             <p className="text-xs text-text-secondary">{k.label}</p>

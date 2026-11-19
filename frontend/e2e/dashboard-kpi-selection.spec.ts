@@ -56,7 +56,7 @@ test.describe('the dashboard KPI cards', () => {
     await page.getByTestId('kpi-picker-0').click()
 
     /*
-      «roas», not «Return». The catalogue's own name for this metric is «العائد على الإنفاق» in Arabic
+      «roas», not «Return». The catalogue's own name for this metric is «معدل العائد» in Arabic
       and «Return on ad spend» in English — neither contains the term an ads operator actually types,
       which is why the search matches the metric KEY as well as its label. Typing the abbreviation is
       the case that was broken.
@@ -67,7 +67,7 @@ test.describe('the dashboard KPI cards', () => {
     await page.getByTestId('kpi-option-roas').click()
 
     /* The card now carries that metric — its name is on the control that changes it. */
-    await expect(page.getByTestId('kpi-picker-0')).toHaveAttribute('aria-label', /roas|العائد على الإنفاق|Return on ad spend/i)
+    await expect(page.getByTestId('kpi-picker-0')).toHaveAttribute('aria-label', /roas|معدل العائد|Return on ad spend/i)
   })
 
   /**

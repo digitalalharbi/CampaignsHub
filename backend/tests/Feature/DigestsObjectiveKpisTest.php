@@ -68,7 +68,7 @@ final class DigestsObjectiveKpisTest extends TestCase
         // The group ends at the next group or, since DIGESTS-YESTERDAY-BY-OBJECTIVE-001 put the groups first, at the decisions.
         $ends = array_filter([strpos($awHtml, 'data-block="group"', 10), strpos($awHtml, 'يحتاج قرارك')]);
         $awHtml = substr($awHtml, 0, $ends === [] ? null : (int) min($ends));
-        $this->assertStringNotContainsString('العائد على الإنفاق', $awHtml);
+        $this->assertStringNotContainsString('معدل العائد', $awHtml);
     }
 
     /**
@@ -292,7 +292,7 @@ final class DigestsObjectiveKpisTest extends TestCase
         // Figure labels come from the model (the report's table); a view that typed «ROAS» or «CPM» would drift from the report.
         foreach (glob(base_path('resources/views/mail/digest/*.blade.php')) as $file) {
             $src = (string) file_get_contents($file);
-            $this->assertDoesNotMatchRegularExpression('/>\s*(ROAS|CPM|CPL|CPA|العائد على الإنفاق|تكلفة الألف ظهور|تكلفة العميل المحتمل)\s*</u', $src, basename($file));
+            $this->assertDoesNotMatchRegularExpression('/>\s*(ROAS|CPM|CPL|CPA|معدل العائد|تكلفة الألف ظهور|تكلفة العميل المحتمل)\s*</u', $src, basename($file));
         }
     }
 }

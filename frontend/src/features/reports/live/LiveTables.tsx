@@ -137,7 +137,7 @@ export function TablesView({
 
     metricCol('impressions', ar ? 'الظهور' : 'Impressions', 'impressions', (p) => p),
     { key: 'impressions', head: ar ? 'تغيّر الظهور' : 'Impressions vs previous', cell: (p) => delta(movement(p, 'impressions')), value: (p) => movement(p, 'impressions') },
-    { key: 'ctr', head: ar ? 'نسبة النقر' : 'CTR', cell: (p) => percent(num(p, 'ctr'), 2), value: (p) => num(p, 'ctr') },
+    { key: 'ctr', head: ar ? 'معدل النقر' : 'CTR', cell: (p) => percent(num(p, 'ctr'), 2), value: (p) => num(p, 'ctr') },
     spendCol<Row>((p) => p),
     // With Results, their cost from the resolver; without, the cost per click (named «تكلفة النقرة» by `resultWords`).
     money && configured ? { key: 'cost', head: cost, cell: (p: Row) => costCell(byPlatform(p)?.cost ?? null), value: (p: Row) => byPlatform(p)?.cost ?? null } : null,

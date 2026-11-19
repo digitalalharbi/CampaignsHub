@@ -1431,7 +1431,7 @@ function CampaignsTab({ projectId, range, filters }: TabProps) {
             </div>
           ) : rows.length > 0 && salesRows.length === 0 ? (
             <p className="text-sm text-text-muted" data-testid="analytics-worst-no-sales">
-              {ar ? 'لا توجد حملة مبيعات في هذه الفترة. العائد على الإنفاق (ROAS) لحملات المبيعات فقط.' : 'No sales campaign in this period. Return on ad spend (ROAS) applies to sales campaigns only.'}
+              {ar ? 'لا توجد حملة مبيعات في هذه الفترة. معدل العائد (ROAS) لحملات المبيعات فقط.' : 'No sales campaign in this period. Return on ad spend (ROAS) applies to sales campaigns only.'}
             </p>
           ) : rows.length > 0 ? (
             /*
@@ -3203,7 +3203,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
         CONTENT-FORMAT-ROAS-REMOVED-001 — the format READING is gone too, not just the comparison.
 
         It was a second component making the same forbidden claim in different words: «الصور يحقق
-        العائد على الإنفاق أفضل من الفيديو في هذه الفترة». The first pass of this removal searched
+        معدل العائد أفضل من الفيديو في هذه الفترة». The first pass of this removal searched
         for `CreativeFormatComparison` and `formatVerdict` and missed it entirely, which is why the
         owner saw the verdict still standing after the removal shipped.
 

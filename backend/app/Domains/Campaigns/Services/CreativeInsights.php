@@ -278,7 +278,7 @@ final class CreativeInsights
 
         if ($m = $this->moved($row, 'roas', wantedUp: false)) {
             $out[] = $this->finding($row, 'roas_decline', 'warning', ['roas', 'revenue', 'spend'], $m,
-                'تراجع العائد على الإنفاق',
+                'تراجع معدل العائد',
                 'Return on ad spend is falling',
                 'تراجع العائد من '.$this->num($m['previous']).'× إلى '.$this->num($m['current']).'×.',
                 'Return fell from '.$this->num($m['previous']).'× to '.$this->num($m['current']).'×.',
@@ -862,7 +862,7 @@ final class CreativeInsights
             'cpc' => ['ar' => 'تكلفة النقرة', 'en' => 'cost per click'],
             'cpm' => ['ar' => 'تكلفة الألف ظهور', 'en' => 'cost per thousand impressions'],
             'cpa' => ['ar' => 'تكلفة الطلب', 'en' => 'cost per order'],
-            'roas' => ['ar' => 'العائد على الإنفاق', 'en' => 'return on ad spend'],
+            'roas' => ['ar' => 'معدل العائد', 'en' => 'return on ad spend'],
             'conversion_rate' => ['ar' => 'معدل التحويل', 'en' => 'conversion rate'],
             'view_rate' => ['ar' => 'نسبة المشاهدة', 'en' => 'view rate'],
             'completion_rate' => ['ar' => 'نسبة إكمال المشاهدة', 'en' => 'completion rate'],

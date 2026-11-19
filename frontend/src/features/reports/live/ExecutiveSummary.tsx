@@ -216,7 +216,7 @@ function PlatformCards({ payload, ar, source, selected, onSelect }: { payload: L
           <span className="truncate text-[11px] font-semibold text-text-muted">{resultName}</span>
           <span className="tnum mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-text-secondary">
             {impressions !== null && <span>{ar ? 'الظهور' : 'Impr.'} <Num>{num(impressions)}</Num></span>}
-            {rate !== null && <span>{ar ? 'نسبة النقر' : 'CTR'} <Num>{rate}</Num></span>}
+            {rate !== null && <span>{ar ? 'معدل النقر' : 'CTR'} <Num>{rate}</Num></span>}
           </span>
           {share !== null && (
             <span className="mt-auto block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? `الحصة من ${resultName}` : `Share of ${resultName}`}>
@@ -440,7 +440,7 @@ function PlatformComparison({
         <div className="min-w-0 text-xs" data-testid="exec-platform-table">
           <MetricTable
           pageSize={8}
-            head={[ar ? 'المنصة' : 'Platform', source.name, ...extra.map((k) => metricName(reader, k, ar, payload)), ...(ctrShown ? [ar ? 'نسبة النقر' : 'CTR'] : [])]}
+            head={[ar ? 'المنصة' : 'Platform', source.name, ...extra.map((k) => metricName(reader, k, ar, payload)), ...(ctrShown ? [ar ? 'معدل النقر' : 'CTR'] : [])]}
             rows={rows.map((p) => {
               const key = canonicalPlatform(p.provider)
               const value = source.of(p)

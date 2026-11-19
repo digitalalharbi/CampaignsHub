@@ -1643,7 +1643,7 @@ function GeneralPerformanceSlide({ data }: { data: ReportData }) {
               {p.result_metrics_apply
                 ? (
                   <div>
-                    تكلفة الطلب {moneyExact(p.cpa, c ?? null)} · العائد على الإنفاق {ratio(p.roas)}
+                    تكلفة الطلب {moneyExact(p.cpa, c ?? null)} · معدل العائد {ratio(p.roas)}
                   </div>
                 )
                 : <div>لا تنطبق تكلفة الطلب على هذا الهدف</div>}

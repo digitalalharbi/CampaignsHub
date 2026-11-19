@@ -396,7 +396,7 @@ final class ReportSettingsAuditTest extends TestCase
         $this->assertSame('higher', $table['better']['roas']);
         $this->assertArrayNotHasKey('spend', $table['better'], 'spend names no winner');
         $this->assertSame(['roas', 'purchases', 'conversions', 'revenue', 'cpa'], $table['verdict_order']);
-        $this->assertSame('العائد على الإنفاق', $table['labels']['roas']['ar']);
+        $this->assertSame('معدل العائد', $table['labels']['roas']['ar']);
     }
 
     public function test_a_traffic_report_compares_types_on_the_traffic_set(): void
