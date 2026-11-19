@@ -62,6 +62,25 @@ final class ConfineMcpTokens
         return in_array('mcp', $abilities, true) && ! in_array('*', $abilities, true);
     }
 
+    /**
+     * MCP-ANALYTICS-001 — a token carrying `mcp:read` can only read: no proposal tool is listed or answered for it.
+     * Tokens made before this scope existed do not carry it and keep what they had.
+     */
+    public static function isReadOnly(User $user): bool
+    {
+        $token = $user->currentAccessToken();
+
+        return $token instanceof PersonalAccessToken && in_array('mcp:read', (array) $token->abilities, true);
+    }
+
+    /** The Sanctum token row behind this request, for the audit trail (id only). */
+    public static function tokenId(User $user): string
+    {
+        $token = $user->currentAccessToken();
+
+        return $token instanceof PersonalAccessToken ? (string) $token->getKey() : '';
+    }
+
     /** The membership a connector token was approved in, when it was pinned to one. */
     public static function pinnedMembership(User $user): ?string
     {

@@ -222,4 +222,40 @@ final class McpOAuthTest extends TestCase
             'code_challenge_method' => 'S256',
         ])->assertForbidden();
     }
+
+    /** MCP-ANALYTICS-001 — a refresh keeps the grant's own scope: an old grant keeps proposals, a new one is read-only. */
+    public function test_refresh_keeps_the_grants_own_scope(): void
+    {
+        $clientId = $this->register();
+        [$code, $verifier] = $this->approve($clientId);
+        $new = $this->post('/api/v1/mcp/oauth/token', [
+            'grant_type' => 'authorization_code', 'code' => $code, 'code_verifier' => $verifier, 'client_id' => $clientId, 'redirect_uri' => self::REDIRECT,
+        ])->assertOk()->json();
+
+        // A grant that existed before the scope did: its row says read_only = false (the column default).
+        $oldRefresh = 'old-refresh-token';
+        $legacy = $this->owner->createToken('mcp:Claude', ['mcp', 'membership:'.$this->owner->memberships()->first()->getKey()]);
+        DB::table('mcp_oauth_refresh_tokens')->insert([
+            'token_hash' => hash('sha256', $oldRefresh), 'client_id' => $clientId, 'user_id' => $this->owner->getKey(),
+            'access_token_id' => $legacy->accessToken->getKey(), 'membership_id' => $this->owner->memberships()->first()->getKey(),
+            'expires_at' => now()->addDays(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $names = function (string $access): array {
+            $this->flushHeaders();
+            $this->app['auth']->forgetGuards();
+
+            return array_column($this->withHeader('Authorization', 'Bearer '.$access)->postJson('/api/v1/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'])->assertOk()->json('result.tools'), 'name');
+        };
+        $refresh = function (string $token) use ($clientId): string {
+            $this->flushHeaders();
+            $this->app['auth']->forgetGuards();
+
+            return (string) $this->post('/api/v1/mcp/oauth/token', ['grant_type' => 'refresh_token', 'refresh_token' => $token, 'client_id' => $clientId])->assertOk()->json('access_token');
+        };
+
+        $this->assertNotContains('propose_change', $names($new['access_token']));
+        $this->assertNotContains('propose_change', $names($refresh($new['refresh_token'])));
+        $this->assertContains('propose_change', $names($refresh($oldRefresh)));
+    }
 }

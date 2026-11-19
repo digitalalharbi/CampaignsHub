@@ -196,7 +196,8 @@ final class McpOAuthController extends Controller
             return $this->oauthError('invalid_grant', 'The person is gone.');
         }
 
-        return $this->issue($user, (string) $row->client_id, $row->membership_id === null ? null : (string) $row->membership_id);
+        // A NEW connection is read-only (MCP-ANALYTICS-001); proposals are an explicit opt-in made on the token page.
+        return $this->issue($user, (string) $row->client_id, $row->membership_id === null ? null : (string) $row->membership_id, true);
     }
 
     private function refresh(Request $request): JsonResponse
@@ -215,16 +216,17 @@ final class McpOAuthController extends Controller
             return $this->oauthError('invalid_grant', 'The person is gone.');
         }
 
-        return $this->issue($user, (string) $row->client_id, $row->membership_id === null ? null : (string) $row->membership_id);
+        // The grant keeps the scope it was made with: an older grant keeps proposing, a new one stays read-only.
+        return $this->issue($user, (string) $row->client_id, $row->membership_id === null ? null : (string) $row->membership_id, (bool) $row->read_only);
     }
 
-    private function issue(User $user, string $clientId, ?string $membershipId): JsonResponse
+    private function issue(User $user, string $clientId, ?string $membershipId, bool $readOnly): JsonResponse
     {
         $name = ($this->client($clientId) ?? ['name' => 'MCP client'])['name'];
         // Expired connections are cleared so they never crowd the person's list in «ربط MCP».
         $user->tokens()->where('name', 'like', self::PREFIX.'%')->whereNotNull('expires_at')->where('expires_at', '<', now())->delete();
         // Pinned to the approved workspace (MCP-SCOPE-001): ResolveMembership answers this token from it and from nothing else.
-        $abilities = $membershipId === null ? ['mcp'] : ['mcp', 'membership:'.$membershipId];
+        $abilities = ['mcp', ...($readOnly ? ['mcp:read'] : []), ...($membershipId === null ? [] : ['membership:'.$membershipId])];
         $access = $user->createToken(self::PREFIX.$name, $abilities, now()->addDays(self::ACCESS_TTL_DAYS));
         $refresh = Str::random(64);
         DB::table('mcp_oauth_refresh_tokens')->insert([
@@ -233,6 +235,7 @@ final class McpOAuthController extends Controller
             'user_id' => $user->getKey(),
             'access_token_id' => $access->accessToken->getKey(),
             'membership_id' => $membershipId,
+            'read_only' => $readOnly,
             'expires_at' => now()->addDays(self::REFRESH_TTL_DAYS),
             'created_at' => now(),
             'updated_at' => now(),

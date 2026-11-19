@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Domains\Agents\Http\Controllers;
 
 use App\Domains\Agents\Engine\AgentToolbox;
+use App\Domains\Agents\Http\Middleware\ConfineMcpTokens;
+use App\Domains\Agents\Mcp\AnalyticsMcpTools;
+use App\Domains\Audit\AuditLogger;
 use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
@@ -16,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * MCP-SERVER-001 — CampaignsHub as an MCP server (Model Context Protocol, Streamable HTTP, JSON responses).
@@ -50,10 +54,16 @@ final class McpController extends Controller
         'get_budget' => 'budget.view',
     ];
 
+    /** MCP-ANALYTICS-001 — the only tool a read-only token may not hold: it queues something for a person to approve. */
+    private const WRITE_TOOLS = ['propose_change'];
+
+    /** Analytics readings per token per minute — each one runs the board's own queries on a small server. */
+    private const ANALYTICS_PER_MINUTE = 30;
+
     /** MCP-DISCLAIMER-001 — the figures are live readings, not accounts: said with every answer, in both languages. */
     private const DISCLAIMER = 'تنبيه: الأرقام لحظية من منصات الإعلان كما زامنها كامبينز هب، وقد تتغير أو تختلف عن فواتير المنصات وتقاريرها النهائية؛ ليست مستندًا محاسبيًا. Note: live figures from the ad platforms as synced; they may change and differ from platform invoices and final reports. Not an accounting document.';
 
-    public function __construct(private readonly AgentToolbox $toolbox, private readonly ProjectAbilities $abilities) {}
+    public function __construct(private readonly AgentToolbox $toolbox, private readonly ProjectAbilities $abilities, private readonly AnalyticsMcpTools $analytics, private readonly AuditLogger $audit) {}
 
     /** GET is not offered: this server sends no stream of its own. */
     public function stream(): Response
@@ -102,7 +112,7 @@ final class McpController extends Controller
                 'protocolVersion' => in_array($params['protocolVersion'] ?? null, self::PROTOCOLS, true) ? $params['protocolVersion'] : self::PROTOCOLS[0],
                 'capabilities' => ['tools' => ['listChanged' => false]],
                 'serverInfo' => ['name' => 'campaignshub', 'title' => 'CampaignsHub', 'version' => '1.0.0'],
-                'instructions' => 'CampaignsHub: every paid campaign of the person\'s workspace in one place. Call list_projects first, then pass a project_id to the other tools. Figures come from the ad platforms as synced; nothing here changes a campaign — propose_change only queues a proposal a person approves in CampaignsHub. Answer in the language the person writes in. End every answer that states a figure with the notice that comes with the tool result, as it is.',
+                'instructions' => 'CampaignsHub: every paid campaign of the person\'s workspace in one place. Call list_projects first, then pass a project_id to the other tools. Figures come from the ad platforms as synced; the analytics_* tools give the same numbers as the Analytics board, each with its source and period (status not_available_yet means the section is not built yet, never a zero). Nothing here changes a campaign — a read-only token has no way to; propose_change, offered only to tokens that were made with it, only queues a proposal a person approves in CampaignsHub. Answer in the language the person writes in. End every answer that states a figure with the notice that comes with the tool result, as it is.',
             ]),
             'ping' => $this->result($id, []),
             'tools/list' => $this->result($id, ['tools' => $this->tools($user)]),
@@ -133,6 +143,12 @@ final class McpController extends Controller
             ];
         }
 
+        foreach (AnalyticsMcpTools::specs() as $spec) {
+            if ($this->permits($user, (string) $spec['name'])) {
+                $tools[] = $spec;
+            }
+        }
+
         if ($this->permits($user, 'get_budget')) {
             $tools[] = [
                 'name' => 'get_budget',
@@ -146,9 +162,13 @@ final class McpController extends Controller
 
     private function permits(User $user, string $tool): bool
     {
-        $key = self::PERMISSION[$tool] ?? null;
+        $key = self::PERMISSION[$tool] ?? AnalyticsMcpTools::permission($tool);
+        if ($key === null || ! $user->hasPermission($key)) {
+            return false;
+        }
 
-        return $key !== null && $user->hasPermission($key);
+        // A read-only token holds no tool that proposes anything: not listed, and refused if named.
+        return ! (ConfineMcpTokens::isReadOnly($user) && in_array($tool, self::WRITE_TOOLS, true));
     }
 
     /**
@@ -170,8 +190,15 @@ final class McpController extends Controller
             return $this->text(['projects' => $rows]);
         }
 
-        if ((! in_array($name, self::TOOLS, true) && $name !== 'get_budget') || ! $this->permits($user, $name)) {
+        if ((! in_array($name, self::TOOLS, true) && $name !== 'get_budget' && ! AnalyticsMcpTools::handles($name)) || ! $this->permits($user, $name)) {
             return $this->text(['error' => "Unknown tool {$name}."], true);
+        }
+
+        // Who read what, when — the token's id and the tool's name; never the arguments' values or the answer.
+        $this->audit->log(action: 'mcp.tool.called', entityType: 'mcp_tool', entityId: $name, after: ['token_id' => ConfineMcpTokens::tokenId($user), 'tool' => $name, 'read_only' => ConfineMcpTokens::isReadOnly($user)]);
+
+        if (AnalyticsMcpTools::handles($name)) {
+            return $this->analytics($user, $name, $arguments);
         }
 
         $projectId = (string) ($arguments['project_id'] ?? '');
@@ -206,6 +233,37 @@ final class McpController extends Controller
         }
 
         return ['content' => [['type' => 'text', 'text' => $text], ['type' => 'text', 'text' => self::DISCLAIMER]], 'isError' => ! $out['ok']];
+    }
+
+    /**
+     * @param  array<string, mixed>  $arguments
+     * @return array{content: list<array{type: string, text: string}>, isError: bool}
+     */
+    private function analytics(User $user, string $name, array $arguments): array
+    {
+        $key = 'mcp-analytics:'.(ConfineMcpTokens::tokenId($user) ?: 'u'.$user->getKey());
+        if (! RateLimiter::attempt($key, self::ANALYTICS_PER_MINUTE, static fn (): bool => true, 60)) {
+            return $this->text(['error' => 'Too many readings. Wait a minute and ask again.'], true);
+        }
+
+        $project = null;
+        if (AnalyticsMcpTools::CATALOG[$name]['project']) {
+            $projectId = (string) ($arguments['project_id'] ?? '');
+            $project = $projectId === '' ? null : Project::query()->find($projectId);
+            // Reach is the app's own: a project the person cannot see, or from another workspace, is the same refusal.
+            if ($project === null || ! in_array(ProjectCapability::CAMPAIGNS_VIEW, $this->abilities->for($user, (string) $project->getKey()), true)) {
+                return $this->text(['error' => 'Unknown project, or this person cannot see it. Call list_projects.'], true);
+            }
+        }
+
+        $out = $this->analytics->run($user, $name, $project, $arguments);
+        $isError = isset($out['error']);
+        // The board's own money rule: a membership that withholds money gets the answer without it.
+        if (! $isError && $project !== null && ! $this->abilities->allows($user, (string) $project->getKey(), ProjectCapability::MONEY_VIEW)) {
+            $out = WithholdMoneyForMember::strip($out);
+        }
+
+        return $this->text($out, $isError);
     }
 
     /**

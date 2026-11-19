@@ -7,7 +7,7 @@ import { AiConnectHero } from './AiConnectHero'
 import { deleteData, getData, postData } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 
-interface McpToken { id: string; name: string; created_at: string | null; last_used_at: string | null }
+interface McpToken { id: string; name: string; created_at: string | null; last_used_at: string | null; read_only?: boolean }
 
 type App = 'claude_code' | 'claude_desktop' | 'gemini' | 'openai' | 'codex' | 'cursor' | 'vscode' | 'windsurf' | 'curl'
 
@@ -106,10 +106,12 @@ export function AiConnectPage() {
   const [app, setApp] = useState<App>('claude_code')
   const [name, setName] = useState('')
   const [fresh, setFresh] = useState<string | null>(null)
+  // MCP-ANALYTICS-001 — least privilege: a token reads only, unless the person ticks proposals on purpose.
+  const [proposals, setProposals] = useState(false)
 
   const q = useQuery({ queryKey: ['me', 'mcp-tokens'], queryFn: () => getData<{ tokens: McpToken[] }>('/me/mcp-tokens') })
   const create = useMutation({
-    mutationFn: () => postData<{ token: string; tokens: McpToken[] }>('/me/mcp-tokens', { name: name.trim() }),
+    mutationFn: () => postData<{ token: string; tokens: McpToken[] }>('/me/mcp-tokens', { name: name.trim(), read_only: !proposals }),
     onSuccess: (d) => { setFresh(d.token); setName(''); qc.setQueryData(['me', 'mcp-tokens'], { tokens: d.tokens }) },
   })
   const revoke = useMutation({
@@ -123,8 +125,8 @@ export function AiConnectPage() {
     <div className="space-y-4" data-testid="ai-connect">
       <PageIntro
         title={tx('ربط MCP', 'MCP')}
-        purpose={tx('اربط Claude أو Gemini أو ChatGPT بكامبينز هب، واسأله عن حملاتك مباشرة. يقرأ بصلاحياتك أنت فقط، ولا يغيّر أي حملة: أي تغيير يصلك هنا كاقتراح تعتمده أو ترفضه.',
-            'Connect Claude, Gemini or ChatGPT to CampaignsHub and ask about your campaigns directly. It reads with your permissions only and never changes a campaign: any change arrives here as a proposal you approve or reject.')}
+        purpose={tx('اربط Claude أو ChatGPT بكامبينز هب، واسأله عن التحليلات مباشرة: الملخص، المنصات، المحتوى، الموقع، المتجر، المؤثرين، الإسناد. للقراءة فقط وبصلاحياتك أنت، ولا يغيّر أي شيء.',
+            'Connect Claude or ChatGPT to CampaignsHub and ask about your analytics directly: summary, platforms, content, site, store, influencers, attribution. Read only, with your permissions, and it changes nothing.')}
       />
 
       {/* AI-CONNECT-EASY-001 — everyone starts here: one link, «سماح», done. The token route below is for developers. */}
@@ -144,6 +146,10 @@ export function AiConnectPage() {
             <KeyRound className="h-4 w-4" aria-hidden /> {tx('إنشاء', 'Create')}
           </Button>
         </div>
+        <label className="mt-2 flex items-center gap-2 text-xs text-text-secondary">
+          <input type="checkbox" checked={proposals} onChange={(e) => setProposals(e.target.checked)} data-testid="mcp-token-proposals" />
+          {tx('السماح بالاقتراحات (تنتظر اعتمادك)', 'Allow proposals (wait for your approval)')}
+        </label>
         {create.isError && <p role="alert" className="mt-2 text-xs text-danger">{tx('تعذّر الإنشاء. الحد 10 رموز لكل مستخدم.', 'Could not create. The limit is 10 tokens per person.')}</p>}
         {fresh && (
           <div className="mt-3 rounded-lg border border-warning/50 bg-warning/5 p-2.5" data-testid="mcp-token-fresh">
@@ -156,6 +162,7 @@ export function AiConnectPage() {
             {tokens.map((t) => (
               <li key={t.id} className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 text-xs">
                 <span className="min-w-0 flex-1 truncate font-semibold text-text-primary">{t.name}</span>
+                <span className="rounded-md bg-surface-secondary px-1.5 py-0.5 text-text-muted" data-testid={`mcp-token-mode-${t.id}`}>{t.read_only === false ? tx('قراءة + اقتراح', 'Read + propose') : tx('قراءة فقط', 'Read only')}</span>
                 <span className="text-text-muted">{t.last_used_at ? `${tx('آخر استخدام', 'Last used')} ${t.last_used_at.slice(0, 10)}` : tx('لم يُستخدم بعد', 'Not used yet')}</span>
                 <button type="button" onClick={() => revoke.mutate(t.id)} disabled={revoke.isPending} aria-label={tx('إلغاء الرمز', 'Revoke token')} title={tx('إلغاء الرمز', 'Revoke token')} className="rounded-md p-1 text-text-muted hover:bg-danger/10 hover:text-danger" data-testid={`mcp-token-revoke-${t.id}`}>
                   <Trash2 size={14} aria-hidden />
