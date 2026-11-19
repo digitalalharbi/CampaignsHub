@@ -65,23 +65,18 @@ test.describe('the advertiser portal', () => {
   }
 
   /**
-   * SURFACE-SEPARATION-001 — the dashboard and the analysis are different products.
+   * ANALYTICS-ONE-BOARD-001 (Owner, 2026-11-19) — there is ONE board, named «التحليلات».
    *
-   * Both routes rendered the same twelve tabs, so «the dashboard» and «the analysis» were one screen
-   * with its first panel swapped. In a real browser: the dashboard carries no analysis tab bar, the
-   * analysis does, and the dashboard offers a door into it rather than a dead end.
+   * This used to assert that the dashboard was a concise surface with a door into a deeper analysis. The order retired the
+   * second board: its address lands on the analysis, the rail no longer offers «لوحة التحليلات», and the analysis carries
+   * the section bar. In a real browser: the old address redirects, the tab bar is there, and the rail has one entry.
    */
-  test('the dashboard is concise and the analysis is the deep one', async ({ page }) => {
+  test('the old dashboard address lands on the one analytics board', async ({ page }) => {
     await page.goto('/app/dashboard')
-    await expect(page.locator('main')).toBeVisible()
-
-    await expect(page.getByRole('tablist')).toHaveCount(0)
-    const door = page.getByTestId('dashboard-to-analytics')
-    await expect(door).toBeVisible()
-
-    await door.click()
     await expect(page).toHaveURL(/\/app\/analytics/)
-    await expect(page.getByRole('tablist')).toBeVisible()
+    await expect(page.locator('main')).toBeVisible()
+    await expect(page.getByRole('tablist').first()).toBeVisible()
+    await expect(page.getByRole('link', { name: /لوحة التحليلات|Analytics board/ })).toHaveCount(0)
   })
 
   test('the dashboard is genuinely bilingual, not just re-directed', async ({ page }) => {
@@ -223,18 +218,18 @@ test.describe('the advertiser portal', () => {
    * account never ran on, and it still must not produce a row of cards each saying «لم ترسله المنصة».
    */
   test('an objective keeps every campaign; a platform with no campaigns says so, and nothing about the platform', async ({ page }) => {
-    await page.goto('/app/dashboard')
+    await page.goto('/app/analytics')
     await expect(page.locator('main')).toBeVisible()
 
     // Every seeded campaign on this account carries `sales`; choosing «الوعي والتفاعل» changes the KPIs and removes none of them.
-    await page.getByTestId('dashboard-objective').selectOption('awareness_engagement')
-    await expect(page.getByTestId('dashboard-metrics')).toHaveAttribute('data-strip-state', 'rows', { timeout: 20000 })
-    await expect(page.getByTestId('dashboard-metrics-empty-scope')).toHaveCount(0)
+    await page.getByTestId('analytics-objective').selectOption('awareness_engagement')
+    await expect(page.getByTestId('analytics-metrics')).toHaveAttribute('data-strip-state', 'rows', { timeout: 20000 })
+    await expect(page.getByTestId('analytics-metrics-empty-scope')).toHaveCount(0)
 
     // LinkedIn is in the control and has no campaign on this account: a scope that genuinely holds nothing.
-    await page.getByTestId('dashboard-platform-linkedin').click()
+    await page.getByTestId('analytics-platform-linkedin').click()
 
-    const panel = page.getByTestId('dashboard-metrics-empty-scope')
+    const panel = page.getByTestId('analytics-metrics-empty-scope')
 
     await expect(panel).toBeVisible({ timeout: 20000 })
     await expect(panel).toContainText('لا توجد بيانات ضمن هذه الفلاتر')
