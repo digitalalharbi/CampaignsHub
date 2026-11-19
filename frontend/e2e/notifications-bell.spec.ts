@@ -87,6 +87,10 @@ test.describe('the bell', () => {
     await page.getByTestId('bell-filter-budget').click()
     await page.locator('[data-testid^="notification-open-"]').first().click()
     await expect(page).toHaveURL(/\/agency\/budgets\?project=/)
+    // The deep link opens the project's detail dialog over the page (a centered modal that covers the shell, bell included).
+    // A person closes it before reaching for the bell again; webkit on CI draws it late and the click kept retrying under it.
+    await page.getByRole('dialog').first().waitFor({ state: 'visible', timeout: 5_000 }).then(() => page.keyboard.press('Escape')).catch(() => undefined)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
 
     // One call clears all 113, not just the 100 rows the panel loaded.
     await bell(page).click()
