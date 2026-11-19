@@ -448,14 +448,18 @@ export function ChangeDiagnosis({
           the money contract exists to prevent, arriving from a fallback rather than from a sum. A
           refusal stands alone.
         */}
-        {subtitle !== undefined && <p className="mb-2 text-xs text-text-muted">{subtitle}</p>}
+        {/* NO-OPERATOR-NOTES-001 — the windows' caveat is the heading's tooltip, not a paragraph under it. */}
+        {subtitle !== undefined && <span data-testid="change-subtitle" className="sr-only">{subtitle}</span>}
 
         {!comparable && (
-          <p data-testid="change-withheld" className="rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-text-secondary">
-            {ar
-              ? 'تحليل التغيّر محجوب: لا يُقارَن ما قيس جزئيًا بما قيس كاملًا. الأيام الخارجة عن سلوك الفترة أدناه تبقى صالحة لأنها تُقاس داخل الفترة نفسها.'
-              : 'The change analysis is withheld: a partly measured window is not compared with a whole one. The days below that departed from the period\'s own behaviour still stand, because each is measured inside the same window.'}
-          </p>
+          <span data-testid="change-withheld" title={[subtitle, ar
+              ? 'لا يُقارَن ما قيس جزئيًا بما قيس كاملًا. الأيام الخارجة عن سلوك الفترة تبقى صالحة لأنها تُقاس داخل الفترة نفسها.'
+              : 'A partly measured window is not compared with a whole one. The days that departed from the period\'s own behaviour still stand.'].filter(Boolean).join(' — ')}
+            className="inline-flex w-fit items-center gap-1.5 rounded-full bg-warning/10 px-2.5 py-1 text-xs font-bold text-warning">
+            <span aria-hidden>⏸</span>
+            {ar ? 'لا مقارنة بالفترة السابقة' : 'No comparison with the previous period'}
+            <span className="sr-only">{ar ? 'تحليل التغيّر محجوب' : 'The change analysis is withheld'}</span>
+          </span>
         )}
 
         {comparable && rows.length > 0 && (
