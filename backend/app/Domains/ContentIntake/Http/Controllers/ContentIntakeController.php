@@ -7,6 +7,7 @@ namespace App\Domains\ContentIntake\Http\Controllers;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\ContentIntake\Analysis\AiProviderAnalyzer;
+use App\Domains\ContentIntake\Enums\IntakeStatus;
 use App\Domains\ContentIntake\Models\ContentIntakeItem;
 use App\Domains\ContentIntake\Services\ContentHistory;
 use App\Domains\ContentIntake\Services\DriveIntakeImporter;
@@ -21,6 +22,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -49,11 +51,13 @@ final class ContentIntakeController extends Controller
         $query = ContentIntakeItem::query();
         $this->intake->constrain($query, $request->user());
         if ($request->filled('project')) {
-            $query->where('project_id', (string) $request->query('project'));
+            $project = (string) $request->query('project');
+            // A malformed id is an empty answer, not a database error.
+            $query->where('project_id', Str::isUuid($project) ? $project : '00000000-0000-0000-0000-000000000000');
         }
         $counts = (clone $query)->selectRaw('status, count(*) as n')->groupBy('status')->pluck('n', 'status')->all();
         if ($request->filled('status')) {
-            $query->whereIn('status', array_filter(explode(',', (string) $request->query('status'))));
+            $query->whereIn('status', array_values(array_intersect(explode(',', (string) $request->query('status')), IntakeStatus::values())));
         }
         $total = (clone $query)->count();
         $items = $query->latest('updated_at')->limit(self::PAGE)->get();

@@ -81,6 +81,8 @@ final class ContentOverviewController extends Controller
             $family = $members[0]['_family'];
             $cell = [
                 'provider' => $provider, 'family' => $familyValue, 'count' => count($members),
+                // The raw objective values of this cell — what the library's `objectives` filter accepts.
+                'objectives' => array_values(array_unique(array_filter(array_map(static fn (array $m): ?string => $m['objective'] ?? null, $members)))),
                 'fatigued' => count(array_filter($members, static fn (array $m): bool => ($m['fatigue']['status'] ?? null) === 'fatigued')),
                 'watch' => count(array_filter($members, static fn (array $m): bool => ($m['fatigue']['status'] ?? null) === 'watch')),
                 'metric' => null, 'average' => null, 'previous_average' => null, 'best' => null, 'worst' => null, 'ranked' => 0,
