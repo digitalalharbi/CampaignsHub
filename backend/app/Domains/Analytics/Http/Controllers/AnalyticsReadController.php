@@ -36,7 +36,7 @@ final class AnalyticsReadController extends Controller
     {
         [$tenantId, $projectId] = $this->scope();
 
-        return ApiResponse::success($this->site->binding($tenantId, $projectId, 'unknown'), 'GA4 binding.');
+        return ApiResponse::success($this->site->binding($tenantId, $projectId, 'unknown'), 'Website binding.');
     }
 
     public function site(Request $request): JsonResponse
