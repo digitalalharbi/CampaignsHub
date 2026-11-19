@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { AnalyticsPage } from './AnalyticsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
@@ -55,15 +55,23 @@ describe('the dashboard and the analysis are different surfaces', () => {
   it('the dashboard route carries the same section bar as the analysis', async () => {
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
 
-    expect(await screen.findByRole('button', { name: 'Platforms & audience' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Budget/i })).toBeInTheDocument()
+    // ANALYTICS-REPORT-PARITY-001 — the sections are the /r/ report's tabs, by the same names.
+    for (const name of ['Summary', 'Performance', 'Platforms', 'Content', 'Website']) {
+      expect(await screen.findByRole('button', { name })).toBeInTheDocument()
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Performance' }))
+    expect(await screen.findByRole('tab', { name: /Budget/i })).toBeInTheDocument()
   })
 
   it('analytics keeps the whole tab bar', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
 
-    expect(await screen.findByRole('button', { name: 'Platforms & audience' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Budget/i })).toBeInTheDocument()
+    // ANALYTICS-REPORT-PARITY-001 — the sections are the /r/ report's tabs, by the same names.
+    for (const name of ['Summary', 'Performance', 'Platforms', 'Content', 'Website']) {
+      expect(await screen.findByRole('button', { name })).toBeInTheDocument()
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Performance' }))
+    expect(await screen.findByRole('tab', { name: /Budget/i })).toBeInTheDocument()
   })
 
   it('the dashboard keeps its own filters', async () => {
@@ -102,5 +110,16 @@ describe('the dashboard and the analysis are different surfaces', () => {
 
     expect(overview.textContent).toMatch(/Spend, platform conversions and revenue/i)
     expect(overview.textContent).toMatch(/CTR/)
+  })
+
+  /*
+   * ANALYTICS-REPORT-PARITY-001 — a link made before the regrouping still opens: `s_campaigns` and `s_funnel` land on
+   * the «لوحة الأداء» section that holds their panels now, and an old single-tab id still opens its own panel.
+   */
+  it.each([['s_campaigns'], ['s_funnel'], ['budget'], ['ads']])('the older link ?tab=%s opens «Performance»', async (tab) => {
+    renderWithProviders(<AnalyticsPage />, { locale: 'en', route: `/app/analytics?tab=${tab}` })
+
+    const pill = await screen.findByRole('button', { name: 'Performance' })
+    expect(pill).toHaveAttribute('aria-pressed', 'true')
   })
 })

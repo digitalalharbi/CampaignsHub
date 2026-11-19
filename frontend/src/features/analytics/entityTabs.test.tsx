@@ -64,7 +64,7 @@ function route(entities: unknown[]) {
  */
 async function openAdSets() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByRole('button', { name: 'Campaigns' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
   fireEvent.click(await screen.findByRole('tab', { name: 'Ad groups' }))
 }
 
@@ -326,7 +326,7 @@ describe('ads and content are named for what they are', () => {
     route([ROW])
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Campaigns' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     await screen.findByRole('tab', { name: 'Ads' })
 
     /* «Ads» and «Ad» differ by a plural, and nothing in this bar may read that way again. */
@@ -339,7 +339,7 @@ describe('ads and content are named for what they are', () => {
     route([ROW])
     renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'الحملات' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'لوحة الأداء' }))
     await screen.findByRole('tab', { name: 'الإعلانات' })
 
     expect(screen.queryByRole('tab', { name: 'الإعلان' }), 'the ambiguous singular is back').toBeNull()

@@ -4,6 +4,7 @@ import { liveMoneyFromTotals, money, moneyExact, ratio, wholeMoney } from '@/fea
 import { formatMoneyReading, readCostPer, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import type { LivePayload } from '../api'
 import { clientKpiKeys } from '../clientKpis'
+import { frequencyText, rateText } from '@/features/analyticsShared/kpiFormat'
 import { landingLabel, purchaseIsLandingProxy, resultWords } from './leadResults'
 
 /**
@@ -129,7 +130,7 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, format: (t, p) => asReading(liveMoneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency)) },
     impressions: { ar: 'الظهور', en: 'Impressions', format: (t, _p, _m, count) => count(t.impressions) },
     clicks: { ar: 'النقرات', en: 'Clicks', format: (t, _p, _m, count) => count(t.clicks) },
-    ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => plain(t.ctr === null || t.ctr === undefined ? '—' : `${(t.ctr * 100).toFixed(2)}%`) },
+    ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => plain(rateText(t.ctr)) },
     // The platform's own optimised-for conversion. Never called «Results»: that name belongs to an event the link defined (RESULT-EVENTS-001).
     conversions: { ar: 'تحويلات المنصة', en: 'Platform conversions', format: (t, _p, _m, count) => count(t.conversions) },
     /*
@@ -163,7 +164,7 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
      * `cpa` does — a rate whose numerator is partly withheld is «—», never the converted subset.
      */
     reach: { ar: 'الوصول', en: 'Reach', format: (t, _p, _m, count) => count(t.reach) },
-    frequency: { ar: 'التكرار', en: 'Frequency', format: (t) => plain(t.frequency === null || t.frequency === undefined ? '—' : ratio(t.frequency)) },
+    frequency: { ar: 'التكرار', en: 'Frequency', format: (t) => plain(frequencyText(t.frequency)) },
     cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpm', (Number(t.impressions ?? 0)) / 1000, p.currency, ar), (v) => asExactMoney(v))) },
     cpc: { ar: 'تكلفة النقرة', en: 'CPC', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpc', 'clicks', p.currency, ar), (v) => asExactMoney(v))) },
     // LEAD-EVIDENCE-001 / LEAD-EVENTS-001 — a lead is a submission a platform REPORTED as one. Where lead events are configured for the project,
@@ -183,7 +184,7 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     cpe: { ar: 'تكلفة التفاعل', en: 'CPE', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cpe', 'engagements', p.currency, ar), (v) => asExactMoney(v))) },
     landing_page_views: { ar: 'زيارات الصفحة', en: 'Landing page views', format: (t, _p, _m, count) => count(t.landing_page_views) },
     cost_per_lpv: { ar: 'تكلفة الزيارة', en: 'Cost per visit', invertGood: true, format: (t, p) => plain(formatMoneyReading(readCostPer(t as MoneyTotals, 'cost_per_lpv', 'landing_page_views', p.currency, ar), (v) => asExactMoney(v))) },
-    conversion_rate: { ar: 'معدل التحويل', en: 'Conversion rate', format: (t) => plain(t.conversion_rate === null || t.conversion_rate === undefined ? '—' : `${(t.conversion_rate * 100).toFixed(2)}%`) },
+    conversion_rate: { ar: 'معدل التحويل', en: 'Conversion rate', format: (t) => plain(rateText(t.conversion_rate)) },
     /*
      * Average order value is deliberately NOT here yet.
      *

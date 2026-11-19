@@ -42,6 +42,7 @@ function route(campaigns: unknown[]) {
 
 async function openObjective() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
   fireEvent.click(await screen.findByRole('tab', { name: 'Objectives' }))
 }
 

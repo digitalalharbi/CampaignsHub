@@ -5,7 +5,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
 import { createContext, Fragment, type ReactNode, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeftRight, Eye, Filter, Image as ImageIcon, Layers, LayoutDashboard, Megaphone, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRight, Eye, Gauge, Globe, Image as ImageIcon, Layers, LayoutDashboard, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -285,13 +285,19 @@ const TABS: readonly AnalyticsTab[] = TAB_GROUPS.flatMap((g) => g.tabs as readon
  * and each member keeps its own panel, stacked under a plain heading in the order a reader asks.
  */
 export const ANALYTICS_SECTIONS: readonly { id: string; ar: string; en: string; icon: LucideIcon; members: readonly string[] }[] = [
-  { id: 'performance', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, members: ['performance', 'objective', 'budget'] },
-  { id: 'platforms', ar: 'المنصات والجمهور', en: 'Platforms & audience', icon: Layers, members: ['platforms', 'audience', 'accounts'] },
-  { id: 'campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, members: ['campaigns', 'ad_sets', 'ads'] },
+  // ANALYTICS-REPORT-PARITY-001 (Owner, 2026-11-19) — the sections are the /r/ report's own tabs, by the same names:
+  // الملخص · لوحة الأداء · المنصات · المحتوى · الموقع. «الجداول» has no section: here a table is a chart (nothing tabular is drawn).
+  { id: 'performance', ar: 'الملخص', en: 'Summary', icon: LayoutDashboard, members: ['performance'] },
+  { id: 'board', ar: 'لوحة الأداء', en: 'Performance', icon: Gauge, members: ['objective', 'budget', 'campaigns', 'ad_sets', 'ads', 'funnel'] },
+  { id: 'platforms', ar: 'المنصات', en: 'Platforms', icon: Layers, members: ['platforms', 'audience', 'accounts'] },
   { id: 'creative', ar: 'المحتوى', en: 'Content', icon: ImageIcon, members: ['creative'] },
-  { id: 'funnel', ar: 'النتائج والتحويل', en: 'Conversions', icon: Filter, members: ['funnel', 'store', 'site'] },
+  { id: 'site', ar: 'الموقع', en: 'Website', icon: Globe, members: ['site', 'store'] },
   { id: 'quality', ar: 'الجودة والمصادر', en: 'Quality & sources', icon: ShieldCheck, members: ['quality', 'live'] },
 ]
+
+/** A section link from before the report-parity regrouping lands on the section that holds its panels now. */
+const LEGACY_SECTION: Record<string, string> = { s_campaigns: 's_board', s_funnel: 's_board' }
+
 const MEMBER_TITLE: Record<string, { ar: string; en: string }> = {
   objective: { ar: 'الأداء حسب الهدف', en: 'Performance by objective' },
   budget: { ar: 'الميزانية', en: 'Budget' },
@@ -393,10 +399,14 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   const hasWidgetTab = isAnalysis && (widgetLayout.data?.widgets ?? []).some((w) => w.visible)
   const tab = isAnalysis ? urlTab : 'performance'
   const sections = hasWidgetTab ? [...ANALYTICS_SECTIONS, { id: 'links', ar: 'رؤى إضافية', en: 'Insights', icon: Sparkles, members: ['links'] }] : ANALYTICS_SECTIONS
-  const sectionOf = (t: string) => sections.find((x) => `s_${x.id}` === t || x.members.includes(t)) ?? sections[0]
+  const sectionOf = (t0: string) => {
+    const t = LEGACY_SECTION[t0] ?? t0
+
+    return sections.find((x) => `s_${x.id}` === t || x.members.includes(t)) ?? sections[0]
+  }
   const section = sectionOf(tab)
   // A section pill (`s_*`, and the default) stacks its members; an old single-tab link still opens only that panel.
-  const stacked = isAnalysis && tab.startsWith('s_')
+  const stacked = isAnalysis && (LEGACY_SECTION[tab] ?? tab).startsWith('s_')
   const [providers, setProviders] = useUrlList('provider')
   const [campaignIds, setCampaignIds] = useUrlList('campaign')
   /*

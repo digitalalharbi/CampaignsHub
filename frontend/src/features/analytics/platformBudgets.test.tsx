@@ -63,6 +63,7 @@ describe('the budget hierarchy reaches the platform rung', () => {
 
   it('lists each platform against its budget', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     expect(await screen.findByText(/Budget by platform/i)).toBeVisible()
@@ -81,6 +82,7 @@ describe('the budget hierarchy reaches the platform rung', () => {
    */
   it('refuses a pace it cannot compute rather than inventing one', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     await screen.findByText(/Budget by platform/i)
@@ -101,6 +103,7 @@ describe('the budget hierarchy reaches the platform rung', () => {
    */
   it('states what should have been spent by today, and by how much the forecast misses', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     const table = (await screen.findAllByRole('table'))[0]!
@@ -128,6 +131,7 @@ describe('the budget hierarchy reaches the platform rung', () => {
   /** A row the contract refuses withholds these three with everything else on it. */
   it('withholds all three where the row itself is withheld', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     const table = (await screen.findAllByRole('table'))[0]!
