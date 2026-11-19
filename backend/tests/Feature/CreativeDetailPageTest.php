@@ -460,6 +460,25 @@ final class CreativeDetailPageTest extends TestCase
         $this->assertEqualsWithDelta(502 / 31, (float) $peers['cpa'], 0.001);
     }
 
+    /** CONTENT-PEER-SAME-PLATFORM-001 — the benchmark is the same platform on the same path. */
+    public function test_peers_are_taken_from_the_same_platform_only(): void
+    {
+        $subject = $this->creative(['name' => 'Subject', 'provider' => 'tiktok']);
+        $sameTikTok = $this->creative(['name' => 'TikTok peer', 'provider' => 'tiktok']);
+        $snap = $this->creative(['name' => 'Snap peer', 'provider' => 'snapchat']);
+        $day = now()->subDays(2)->toDateString();
+        foreach ([$subject, $sameTikTok] as $c) {
+            $this->day($c, $day, ['spend' => 100, 'impressions' => 10000, 'clicks' => 50, 'conversions' => 5, 'revenue' => 500]);
+        }
+        $this->day($snap, $day, ['spend' => 100, 'impressions' => 10000, 'clicks' => 50, 'conversions' => 5, 'revenue' => 3500]);
+
+        $peers = $this->open($subject)->assertOk()->json('data.peers');
+
+        $this->assertSame(1, $peers['count'], 'a Snapchat ad was in a TikTok benchmark');
+        $this->assertEqualsWithDelta(5.0, (float) $peers['roas'], 0.001);
+        $this->assertSame('tiktok', $peers['provider']);
+    }
+
     /** The findings are §15.10's, for this creative, and they say what they were compared against. */
     public function test_the_findings_name_the_comparison_they_were_made_against(): void
     {

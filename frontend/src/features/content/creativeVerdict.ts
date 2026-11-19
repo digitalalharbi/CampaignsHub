@@ -137,7 +137,7 @@ export function readCreative(data: CreativeDetail, ar: boolean): CreativeReading
     }
   }
   const basis = peerCount > 0
-    ? L(`مقارنةً بـ ${peerCount} إعلان على مسار ${pathName} في الفترة نفسها، بأرقامها المجمّعة.`, `Against ${peerCount} ads on the ${pathName} path in the same period, on their pooled figures.`)
+    ? L(`مقارنةً بـ ${peerCount} إعلان على ${providerLabel(data.creative.provider, locale)} في مسار ${pathName}، الفترة نفسها، بأرقامها المجمّعة.`, `Against ${peerCount} ${providerLabel(data.creative.provider, locale)} ads on the ${pathName} path in the same period, on their pooled figures.`)
     : null
 
   // ---- why: the combinations that explain the figures --------------------------------------------------------------
