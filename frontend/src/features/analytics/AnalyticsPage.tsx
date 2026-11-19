@@ -2,7 +2,6 @@ import { useFitCompact } from '@/components/fit/AgencyFit'
 import { InfoTip } from '@/components/fit/InfoTip'
 import { ConsumptionBar } from './ConsumptionBar'
 import { ProviderMark } from '@/components/ProviderMark'
-import { Num } from '@/components/ui/Num'
 import { createContext, Fragment, type ReactNode, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeftRight, Eye, Gauge, Globe, Image as ImageIcon, Layers, LayoutDashboard, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
@@ -44,9 +43,7 @@ import {
 } from './hooks'
 import { findingsFor, windowConfidence, type QualityFinding, type WindowConfidence } from './dataQualityFindings'
 import { efficiencyFor, returnFor } from './pathEfficiency'
-import { platformReadings } from './platformReading'
 import { attributionFindings, type AttributionFinding } from './attributionFindings'
-import { distributionFor } from './familyDistribution'
 import type { FreshnessRow, PlatformObjectives } from './api'
 import { scopeNote, type FilterScope } from './filterScope'
 import { CAMPAIGN_RELEVANCE_ORDER, orderByRelevanceWith, relevanceOf, type CampaignRelevance } from '@/features/campaigns/campaignRelevance'
@@ -54,7 +51,6 @@ import { useCampaignOptionSource } from './useCampaignOptionSource'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { Panel, ProvenanceBadge, SERIES, platformColor, tooltipProps } from './components'
 import { BudgetReading } from './BudgetReading'
-import { FamilyDecisionTable } from './FamilyDecisionTable'
 import {
   COST_PER_DENOMINATOR,
   ENTITY_MONEY_KEYS,
@@ -64,7 +60,7 @@ import {
 } from './entityObjectiveColumns'
 import { PathAnalysis } from './PathAnalysis'
 import { ObjectivePathCards } from './ObjectivePathCards'
-import { PathTrends } from './PathTrends'
+import { ObjectiveCards, pathOfFamily } from './ObjectiveCards'
 import { CreativePulseSection } from '@/features/content/CreativePulseSection'
 import { ContentWhyVisual } from '@/features/analyticsShared/ContentWhyVisual'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
@@ -1047,184 +1043,70 @@ function PlatformPaths({
   error: boolean
   ar: boolean
 }) {
-  const REASON: Record<string, { ar: string; en: string }> = {
-    only_one_platform_spent: {
-      ar: 'منصة واحدة فقط أنفقت على هذا المسار — رقم، وليس مقارنة.',
-      en: 'Only one platform spent on this path — a figure, not a comparison.',
-    },
-    nothing_spent_on_this_path: {
-      ar: 'لم يُنفق شيء على هذا المسار في هذه الفترة.',
-      en: 'Nothing was spent on this path in this period.',
-    },
-  }
-
   const paths = (data?.paths ?? []).filter((p) => p.platforms.length > 0)
-  /* The range each path's own rows imply — computed once, keyed by path. */
-  const readings = new Map(platformReadings(paths).map((r) => [r.path, r]))
-
-  /** What this window is missing, per platform — keyed the way the payload names them. */
-  const gaps = new Map<string, { missing: number; status: string | null }>()
-  for (const row of freshness) {
-    const key = canonicalPlatform(row.provider)
-    const prior = gaps.get(key)
-    const missing = (prior?.missing ?? 0) + (row.missing_days ?? 0)
-    const status = row.last_sync_status === 'fresh' ? (prior?.status ?? null) : (row.last_sync_status ?? null)
-    gaps.set(key, { missing, status })
-  }
+  // The window's sync gaps travel with the panel's own freshness strip; they are not repeated per platform here.
+  void freshness
 
   return (
     <Panel
       title={ar ? 'مساهمة المنصات حسب الهدف' : 'Platform contribution by objective'}
-      description={ar
-        ? 'داخل كل مسار، لا عبره — المقارنة الوحيدة التي تصحّ'
-        : 'Inside each path, never across them — the only comparison that holds'}
       loading={loading}
       error={error}
       empty={!loading && paths.length === 0}
     >
-      <div data-testid="platform-paths" className="flex flex-col gap-4">
-        {paths.map((path) => (
-          <div key={path.path} data-testid={`platform-path-${path.path}`} className="rounded-xl border border-border p-3.5">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="text-sm font-bold text-text-primary">{ar ? path.label_ar : path.label_en}</span>
-              <span className="text-[11px] text-text-muted" dir="ltr">{money(path.spend, currency)}</span>
-              {!path.comparable && (
-                <span
-                  data-testid={`platform-path-${path.path}-not-comparable`}
-                  className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-secondary"
-                >
-                  {ar ? REASON[path.comparable_reason]?.ar : REASON[path.comparable_reason]?.en}
-                </span>
-              )}
-            </div>
+      {/*
+        PLATFORM-PATH-CARDS-001 — Owner 2026-11-20: «توفر رؤية لأهداف الزيارات لكل منصة … أعرف أي منصة أفضل من مكان واحد»,
+        drawn, not written. One small card per path that spent: its share bar, then each platform as a row — logo, share,
+        the cost the path is judged on as a bar against the dearest (the cheapest marked green, the dearest red), spend and,
+        for sales, ROAS. No sentence, no sync-gap chip; a path with no spend is not drawn.
+      */}
+      <div data-testid="platform-paths" className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+        {paths.filter((path) => (path.spend ?? 0) > 0).map((path) => {
+          const rows = path.platforms.map((row) => ({ row, eff: efficiencyFor(path.path, row), ret: returnFor(path.path, row) }))
+          const costs = rows.map((r) => r.eff.value).filter((v): v is number => v !== null && v > 0)
+          const maxCost = Math.max(...costs, 0)
+          const minCost = costs.length > 1 ? Math.min(...costs) : null
 
-            {/*
-              FUNNEL-ANALYTICAL-PATTERN-001 — the range this list implies, said once above it.
-
-              The rows carry each platform's cost; which of them is dearest, and by how much, is the
-              question the reader was left to answer from the column. It is stated inside ONE path
-              and on ONE metric, because a range with two units is not a range and a comparison
-              across paths is the one this section exists to refuse.
-            */}
-            {(() => {
-              const reading = readings.get(path.path)
-
-              if (reading === undefined) return null
-
-              /*
-               * INSUFFICIENT-DATA-EXPLAINED-001 — the silence says WHICH silence.
-               *
-               * `platformReadings` has always computed why it could not state a range — the path's
-               * platforms are not comparable, or no platform reported the cost this path is judged
-               * on — and this rendered nothing at all. An absent sentence where the other paths have
-               * one reads as a page that failed to load, and the reader goes looking for a sync
-               * problem. Both reasons are ordinary, and both are actionable in completely different
-               * ways.
-               */
-              if (!('cheapest' in reading)) {
-                return (
-                  <p data-testid={`platform-path-${path.path}-silent`} className="mb-2 text-xs text-text-muted">
-                    {reading.silentReason === 'not_comparable'
-                      ? (ar
-                          ? 'منصات هذا المسار غير قابلة للمقارنة على مقياس واحد، فلا يُذكر فارق.'
-                          : 'The platforms on this path are not comparable on one metric, so no spread is stated.')
-                      : (ar
-                          ? 'لم تُبلِّغ أي منصة عن التكلفة التي يُقاس بها هذا المسار في هذه الفترة.'
-                          : 'No platform reported the cost this path is judged on in this window.')}
-                  </p>
-                )
-              }
-
-              /*
-               * A spread of 1× is «they cost the same», which is a real answer and not a silence —
-               * saying it is worth more than the sentence costs, because a reader who sees nothing
-               * assumes the comparison was not made.
-               */
-              if (reading.spread <= 1) {
-                return (
-                  <p data-testid={`platform-path-${path.path}-reading`} className="mb-2 text-xs text-text-secondary">
-                    {ar
-                      ? 'تتقارب تكلفة المنصات على هذا المسار — لا فارق يُذكر.'
-                      : 'The platforms on this path cost about the same — no meaningful spread.'}
-                  </p>
-                )
-              }
-
-              return (
-                <p data-testid={`platform-path-${path.path}-reading`} className="mb-2 text-xs text-text-secondary">
-                  {ar
-                    ? `${providerLabel(reading.dearest.provider, 'ar')} أغلى ${reading.spread}× من ${providerLabel(reading.cheapest.provider, 'ar')} على هذا المسار.`
-                    : `${providerLabel(reading.dearest.provider, 'en')} costs ${reading.spread}× what ${providerLabel(reading.cheapest.provider, 'en')} costs on this path.`}
-                </p>
-              )
-            })()}
-
-            {/*
-              ANALYTICS-REPORT-LAYOUT-001 — the path drawn the way the live report draws a split: one bar of
-              shares in each platform's colour, then a tile per platform with the figure the path is judged
-              on set large. The sync gaps stay beside their platform, as a small chip, not as the headline.
-            */}
-            <div data-testid={`platform-path-${path.path}-share-bar`} className="mb-3 flex h-3 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
-              {path.platforms
-                .filter((row) => (row.spend_share ?? 0) > 0)
-                .map((row) => (
+          return (
+            <article key={path.path} data-testid={`platform-path-${path.path}`} className="relative flex min-w-0 flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-surface p-3 pt-4">
+              <span aria-hidden className={`absolute inset-x-0 top-0 h-1 ${path.path === 'conversion' ? 'bg-success' : path.path === 'traffic' ? 'bg-info' : 'bg-purple'}`} />
+              <header className="flex items-center justify-between gap-2">
+                <span className="truncate text-sm font-bold text-text-primary">{ar ? path.label_ar : path.label_en}</span>
+                <span className="tnum text-xs font-bold text-text-primary" dir="ltr">{money(path.spend, currency)}</span>
+              </header>
+              <div data-testid={`platform-path-${path.path}-share-bar`} className="flex h-2 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+                {path.platforms.filter((row) => (row.spend_share ?? 0) > 0).map((row) => (
                   <span key={row.provider} style={{ width: `${(row.spend_share ?? 0) * 100}%`, background: platformColor(canonicalPlatform(row.provider)) }} />
                 ))}
-            </div>
-            <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {path.platforms.map((row) => {
-                const efficiency = efficiencyFor(path.path, row)
-                const returned = returnFor(path.path, row)
-                const gap = gaps.get(canonicalPlatform(row.provider))
-
-                return (
-                  <li key={row.provider} className="flex flex-col gap-2 rounded-xl bg-surface-secondary/60 p-3" style={{ borderInlineStart: `3px solid ${platformColor(canonicalPlatform(row.provider))}` }}>
-                    <span className="flex items-center justify-between gap-2">
-                      <PlatformCell provider={row.provider} />
-                      <span className="tnum text-xs font-semibold text-text-secondary" dir="ltr">
-                        {row.spend_share === null ? '—' : percent(row.spend_share, 0)}
+              </div>
+              <ul className="grid gap-1.5">
+                {rows.map(({ row, eff, ret }) => {
+                  const cheapest = minCost !== null && maxCost !== minCost && eff.value === minCost
+                  const dearest = minCost !== null && eff.value === maxCost && maxCost !== minCost
+                  return (
+                    <li key={row.provider} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-xl bg-surface-secondary/50 px-2 py-1.5" title={`${ar ? eff.labelAr : eff.labelEn} · ${ar ? 'الإنفاق' : 'Spend'} ${money(row.spend, currency)}`}>
+                      <span className="flex min-w-0 items-center gap-1.5 text-xs">
+                        <PlatformCell provider={row.provider} />
+                        <span className="tnum text-text-muted" dir="ltr">{row.spend_share === null ? '' : percent(row.spend_share, 0)}</span>
                       </span>
-                    </span>
-                    <span className="flex items-end justify-between gap-2">
-                      <span data-testid={`path-efficiency-${path.path}-${row.provider}`} className="flex flex-col">
-                        <span className="text-xs text-text-muted">{ar ? efficiency.labelAr : efficiency.labelEn}</span>
-                        <span className="tnum text-lg font-extrabold text-text-primary" dir="ltr">
-                          {efficiency.value === null ? '—' : moneyExact(efficiency.value, currency)}
+                      <span className="flex items-center gap-1.5">
+                        {ret.value !== null && <span className="tnum rounded-full bg-success/10 px-1.5 py-0.5 text-xs font-semibold text-success" dir="ltr">{ratio(ret.value)}</span>}
+                        <span data-testid={`path-efficiency-${path.path}-${row.provider}`} className={`tnum text-sm font-extrabold ${cheapest ? 'text-success' : dearest ? 'text-danger' : 'text-text-primary'}`} dir="ltr">
+                          {eff.value === null ? '—' : moneyExact(eff.value, currency)}
                         </span>
                       </span>
-                      <span className="flex flex-col items-end">
-                        <span className="text-xs text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
-                        <span className="tnum text-sm font-bold text-text-secondary" dir="ltr">{money(row.spend, currency)}</span>
-                      </span>
-                    </span>
-                    {(returned.value !== null || (gap !== undefined && (gap.missing > 0 || gap.status !== null))) && (
-                      <span className="flex flex-wrap items-center justify-between gap-2">
-                        {returned.value !== null
-                          ? <span className="tnum rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success" dir="ltr">ROAS {ratio(returned.value)}</span>
-                          : <span />}
-                        {gap !== undefined && (gap.missing > 0 || gap.status !== null) && (
-                          <span data-testid={`path-gap-${path.path}-${row.provider}`} className="rounded-full bg-warning/10 px-2 py-0.5 text-xs text-warning">
-                            {gap.missing > 0
-                              ? (ar ? `ناقص ${countedDays(gap.missing, 'ar')}` : `${countedDays(gap.missing, 'en')} missing`)
-                              : (ar ? 'آخر مزامنة لم تنجح' : 'last sync did not succeed')}
-                          </span>
-                        )}
-                      </span>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        ))}
-
-        {/*
-          Said on the page, not only in the payload. It is the sentence a «best platform» card would
-          have to contradict in order to exist.
-        */}
-        <p data-testid="platform-paths-cross" className="text-[11px] text-text-muted">
-          {ar ? data?.cross_path_reason_ar : data?.cross_path_reason_en}
-        </p>
+                      {eff.value !== null && maxCost > 0 && (
+                        <span className="col-span-2 block h-1.5 overflow-hidden rounded-full bg-surface" aria-hidden>
+                          <span className={`block h-full rounded-full ${cheapest ? 'bg-success' : dearest ? 'bg-danger' : 'bg-brand-600/60'}`} style={{ width: `${Math.max(4, (eff.value / maxCost) * 100)}%` }} />
+                        </span>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </article>
+          )
+        })}
       </div>
     </Panel>
   )
@@ -3855,6 +3737,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
    * drill vocabulary the entity tables use — `drillInto` then `encodePath`, with `TAB_FOR` deciding
    * where a level is read — rather than a second way of saying where the reader is.
    */
+
   const drillWrite = useUrlWriter()
   const drillToAdSets = (campaignId: string, name: string | null) => {
     rememberName(campaignId, name)
@@ -3864,7 +3747,7 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
     })
   }
 
-  /* The same decomposition the overview uses, on the axis this tab is about — see the note below. */
+  /* The same decomposition the overview uses, on the axis this tab is about. */
   const drivers = useDrivers(projectId, range, 'objective', 'spend', filters)
 
   const ar = useAr()
@@ -3878,7 +3761,6 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
    * which is the question an operator opens this tab with, and they do not read the figures back.
    */
   const leaders = useObjectiveLeaders(projectId, range, filters)
-  const explanations = useObjectiveExplanations(projectId, range, filters)
   const trend = useObjectiveTrend(projectId, range, filters)
   // OBJECTIVE-PATHS-001 — one total, the split by objective, one card per objective (ad-set paths).
   const objectivePaths = useObjectivePaths(projectId, range, filters)
@@ -3933,6 +3815,12 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
         because the money moved from sales to awareness. Every platform looks unchanged; the whole
         answer is in what the money was BOUGHT for.
       */}
+      {/*
+        OBJECTIVE-CARDS-001 — Owner 2026-11-20: «لا أريد جداول … بطاقات صغيرة على حسب كل هدف + رسم بياني … حجمها صغير».
+        One small card per objective (its figures, its path's days as a small area chart, its strongest and weakest
+        campaign). The per-family tables, the long path charts and the written path readings are gone from this tab.
+      */}
+      {/* PRIMARY-KPI-HIERARCHY — the change decomposition leads every drill-down tab. */}
       <ChangeDiagnosis
         data={drivers.data}
         currency={currency}
@@ -3942,285 +3830,44 @@ function ObjectiveTab({ projectId, range, filters }: TabProps) {
         comparable={comparableWindows(s.data)}
         subtitle={windowsUnlikeNote(s.data, ar, (c) => providerLabel(c, ar ? 'ar' : 'en')) ?? undefined}
       />
-
-      <Panel
-        title={ar ? 'الأداء حسب الهدف' : 'Performance by objective'}
-        description={ar
-          ? 'كل عائلة تُقاس بما اشتُريت من أجله — لا يُحكم على حملة وعي بعائد الإنفاق'
-          : 'Each family is judged by what it was bought for — an awareness campaign is not judged on ROAS'}
-        loading={c.isLoading}
-        error={c.isError}
-        empty={!c.isLoading && grouped.length === 0}
-      >
-        <div className="space-y-4" data-testid="objective-families">
-          {grouped.map((f) => {
-
-            return (
-              <div key={f.key} className="rounded-xl border border-border border-t-4 border-t-brand-500 p-3.5" data-testid={`objective-family-${f.key}`}>
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 className="text-base font-bold text-text-primary">{ar ? f.ar : f.en}</h3>
-                  <span className="text-xs text-text-secondary">
-                    {f.campaigns.length} {ar ? 'حملة' : f.campaigns.length === 1 ? 'campaign' : 'campaigns'}
-                    {' · '}
-                    <span className="tnum" dir="ltr">
-                      {/* Withheld money keeps its own currency; a converted total uses the project's. */}
-                      {/*
-                        READY-4 — this stated two things it had not checked.
-                        It hardcoded `money_original_currencies: 1`, asserting every withheld campaign in the family
-                        shared one currency, and took the currency NAME from whichever campaign was found first: two
-                        campaigns withheld in USD and EUR were summed and labelled with one of them.
-                        And on a PARTIAL family — some converted, some withheld — it dropped the converted spend
-                        entirely and printed the withheld half as the family's total.
-                        `familySpend` builds the real provenance from the rows, so a partial or multi-currency family
-                        fails closed to «—», exactly as every other total in this product does.
-                      */}
-                      {rowMoney(familySpend(f.campaigns as unknown as FamilyRow[]), 'spend', currency)}
-                    </span>
-                  </span>
-                </div>
-
-                {/* The verdict metrics for THIS family — not the same row of KPIs for every objective. */}
-                {/*
-                  OBJECTIVE-TOTALS-001 — three defects in one reduce.
-
-                  It added every KPI together. Correct for a count and meaningless for a rate, and
-                  every family's list holds one: two sales campaigns returning 3× and 5× printed
-                  «8», and two at 1.2% CTR printed «2.4%». `familyTotal` rebuilds a rate from the
-                  summed bases, which is the rule `MetricsAggregator::withDerived()` already states
-                  on the server and this was the one place re-aggregating without it.
-
-                  It printed the metric KEY as the label, so the row read «conversions 176 revenue
-                  56,320 roas 15.36» in an Arabic page.
-
-                  And it formatted money with `toLocaleString` and no currency — «56,320» of
-                  nothing — over `spend`, which is the coalesced 0 on a withheld row. So a family
-                  whose money awaits a rate would have shown a confident zero next to a revenue the
-                  KPI strip states correctly.
-                */}
-                <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {f.kpis.map((k: string) => {
-                    const rows = f.campaigns as unknown as FamilyRow[]
-                    const spec = SPECS[k]
-                    const money = MONEY_KPIS.has(k)
-                    const total = money
-                      ? readMoney(familyMoney(rows), k as 'spend' | 'revenue', currency, ar).amount
-                      : familyTotal(rows, k)
-                    const unit = money
-                      ? (readMoney(familyMoney(rows), k as 'spend' | 'revenue', currency, ar).currency ?? currency ?? '')
-                      : ''
-
-                    return (
-                      <div key={k} className="flex flex-col rounded-lg bg-surface-secondary/60 p-2.5">
-                        <dt className="text-xs text-text-muted">
-                          {spec ? (ar ? spec.label.ar : spec.label.en) : k}
-                        </dt>
-                        {/*
-                          NUMBER-PRESENTATION-001 — the last two places in this file that printed a
-                          count at full width.
-
-                          «لم يتم تقريب الارقام 1k, 3M, 54.5K وهكذا» was answered for the entity
-                          tables and not for this block, because these two branches are the FALLBACKS
-                          — money, and a metric with no spec — and both reached `toLocaleString`
-                          directly. So a family summary printed «1,284,663 SAR» beside a KPI card
-                          reading «1.28M SAR» for the same figure, which reads as two different
-                          numbers rather than as one number written twice.
-
-                          `readMetricValue` is the same function the tables and the cards call, so
-                          they now agree by construction. The exact figure travels as the `title`,
-                          which is what earns an abbreviation the right to be there: a number the
-                          reader cannot get back to is a number they cannot audit.
-                        */}
-                        {(() => {
-                          if (total === null) {
-                            /* Null stays «—»: an unavailable figure is not a figure of zero. */
-                            return <dd className="tnum text-lg font-extrabold text-text-primary"><Num>—</Num></dd>
-                          }
-
-                          /*
-                           * NUMBER-PRESENTATION-001 — one reading, the same one the cards use.
-                           *
-                           * This block decided all of it by hand and got two things wrong that
-                           * `valueReading` already has right. It called `spec.format(total)` with no
-                           * currency, and every cost-per spec is formatted by `moneyExact`, so an
-                           * ordinary awareness family printed «237.90 undefined» on screen. And its
-                           * two fallback branches — money, and a metric with no spec — reached
-                           * `toLocaleString` directly, so «1,284,663 SAR» sat under a KPI card
-                           * reading «1.28M SAR» for the same figure.
-                           *
-                           * «لم يتم تقريب الارقام 1k, 3M, 54.5K وهكذا» was answered for the entity
-                           * tables and missed here, because a fallback is the path nobody looks at.
-                           *
-                           * The exact figure travels as the `title`, and only when the display
-                           * actually abbreviated — a tooltip repeating what is already on screen is
-                           * noise.
-                           */
-                          const read = spec
-                            ? valueReading(spec, total, unit || currency || null)
-                            : readMetricValue(money ? 'money' : 'number', total, { currency: unit || currency || null })
-
-                          const exact = 'exact' in read ? read.exact : (read.exact ?? undefined)
-
-                          return (
-                            <dd className="tnum text-lg font-extrabold text-text-primary" title={exact ?? undefined}>
-                              <Num>{read.text}</Num>
-                            </dd>
-                          )
-                        })()}
-                      </div>
-                    )
-                  })}
-                </dl>
-
-                {/*
-                  OBJECTIVE-ANALYTICS-DEPTH-001 — where this family's money actually went.
-
-                  The card above says what the family spent; a list of names says which campaigns
-                  exist. Neither answers «where is the budget concentrated», which is the question an
-                  operator opens this tab with — eight sales campaigns with ninety per cent of the
-                  money in one of them is a fact about a decision, and it is invisible in a total.
-
-                  The share is of THIS FAMILY, never of the account: «40% of sales» is a decision
-                  somebody made, «40% of everything» is the mix, and reading the second as
-                  concentration makes a small family look concentrated and a large one look spread.
-                */}
-                <FamilySpend
-                  family={f.key}
-                  campaigns={f.campaigns.map((r) => ({
-                    name: (r.campaign_name ?? r.campaign_id) as string,
-                    spend: typeof r.spend === 'number' ? r.spend : 0,
-                    // The provenance travels with the figure: without it this component cannot tell
-                    // «spent nothing» from «could not be converted», and it was saying the first.
-                    spend_original: (r as { spend_original?: number | null }).spend_original ?? null,
-                    spend_withheld_rows: (r as { spend_withheld_rows?: number | null }).spend_withheld_rows ?? null,
-                  }))}
-                  ar={ar}
-                />
-
-                {/*
-                  OBJECTIVE-ANALYTICS-DEPTH-001 — the decision surface, inside the family.
-
-                  The card above says how the objective is doing and the bar says where its money
-                  sits. Neither settles the question the tab is opened for: of these eight sales
-                  campaigns, which is worth more money next week. That is a comparison between rows
-                  on a column the reader picks, and a list of totals cannot be one.
-
-                  One table PER family and never one across them — the requirement's central rule,
-                  expressed structurally rather than asserted: there is no all-objectives list here
-                  to sort, so no ranking can be produced whose top row is decided by which objective
-                  happens to make the bigger number.
-                */}
-                <FamilyDecisionTable
-                  family={f.key}
-                  campaigns={f.campaigns as unknown as FamilyRow[]}
-                  kpis={f.kpis}
-                  currency={currency}
-                  locale={ar ? 'ar' : 'en'}
-                  specs={SPECS}
-                  onDrill={drillToAdSets}
-                />
-              </div>
-            )
-          })}
-        </div>
-      </Panel>
-
-      {/*
-        OBJECTIVE-ANALYTICS-DEPTH-001 — each path over time, before the reading of it.
-
-        The blocks below say which campaign inside a path is carrying it; this says whether the path
-        itself is going anywhere, which is the question that comes first.
-      */}
+      {/* A filter the trend or the leaders could not honour is still said — it changes what the cards mean. */}
       <ScopeNote scope={trend.data?.scope} testid="objective-trend-scope" />
-      <PathTrends
-        paths={trend.data?.value?.paths ?? []}
-        locale={ar ? 'ar' : 'en'}
-        loading={trend.isLoading}
-        error={trend.isError}
-      />
-
       <ScopeNote scope={leaders.data?.scope} testid="objective-leaders-scope" />
-      <PathAnalysis
-        locale={ar ? 'ar' : 'en'}
-        currency={currency}
+      <ObjectiveCards
+        cards={grouped.map((f) => {
+          const famRows = f.campaigns as unknown as FamilyRow[]
+          return {
+            key: f.key,
+            name: ar ? f.ar : f.en,
+            campaigns: f.campaigns.length,
+            spend: rowMoney(familySpend(famRows), 'spend', currency),
+            path: pathOfFamily(f.key),
+            kpis: f.kpis.filter((k: string) => k !== 'spend').map((k: string) => {
+              const spec = SPECS[k]
+              const isMoney = MONEY_KPIS.has(k)
+              const total = isMoney ? readMoney(familyMoney(famRows), k as 'spend' | 'revenue', currency, ar).amount : familyTotal(famRows, k)
+              const unit = isMoney ? (readMoney(familyMoney(famRows), k as 'spend' | 'revenue', currency, ar).currency ?? currency ?? '') : ''
+              if (total === null) return { label: spec ? (ar ? spec.label.ar : spec.label.en) : k, text: '—' }
+              const read = spec ? valueReading(spec, total, unit || currency || null) : readMetricValue(isMoney ? 'money' : 'number', total, { currency: unit || currency || null })
+              const exact = 'exact' in read ? read.exact : (read.exact ?? undefined)
+              return { label: spec ? (ar ? spec.label.ar : spec.label.en) : k, text: read.text, exact: exact ?? undefined }
+            }),
+          }
+        })}
+        trends={trend.data?.value?.paths ?? []}
         leaders={leaders.data?.value?.paths ?? []}
-        explanations={explanations.data?.value?.paths ?? []}
-        loading={leaders.isLoading}
-        error={leaders.isError}
+        format={(metric, value) => {
+          if (value === null) return '—'
+          const spec = SPECS[metric]
+          return spec ? valueReading(spec, value, currency || null).text : readMetricValue('number', value, { currency: currency || null }).text
+        }}
+        ar={ar}
+        onDrill={drillToAdSets}
       />
     </div>
   )
 }
 
-/**
- * A family's spend, and where inside it the money sits.
- *
- * Drawn as bars rather than a pie: three shares read against a common baseline are comparable at a
- * glance, and a pie of eight campaigns is a legend with a decoration attached. A family with fewer
- * than two spending campaigns is told it is not a distribution rather than shown a single bar at
- * a hundred per cent, which is the shape of an answer to a question nobody asked.
- */
-function FamilySpend({
-  family, campaigns, ar,
-}: {
-  family: string
-  campaigns: { name: string; spend: number; spend_original?: number | null; spend_withheld_rows?: number | null }[]
-  ar: boolean
-}) {
-  const d = distributionFor(campaigns)
-
-  if (!d.meaningful) {
-    return (
-      <div className="mt-2">
-        <ul className="space-y-0.5 text-xs text-text-secondary">
-          {campaigns.slice(0, 5).map((c) => <li key={c.name} className="truncate">{c.name}</li>)}
-        </ul>
-        {/*
-          The reason, where a bare list of names used to stand.
-
-          A family whose money the sync could not convert looked exactly like a family that spent
-          nothing. Naming it is the difference between «there is nothing to distribute» and «we hold
-          this money and cannot state it in this currency» — and the second is a fact about our
-          exchange rates that an operator can act on.
-        */}
-        {d.reason === 'spend_withheld' && (
-          <p className="mt-1 text-[11px] leading-snug text-text-muted" data-testid={`family-distribution-withheld-${family}`}>
-            {ar
-              ? 'الإنفاق على هذه الحملات لم يُحوَّل إلى عملة التقرير، فلا يمكن عرض توزيع دقيق له.'
-              : 'Spend on these campaigns was not converted into the report’s currency, so no accurate distribution can be shown.'}
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  const slices = [...d.slices, ...(d.rest === null ? [] : [d.rest])]
-
-  return (
-    <div className="mt-2 flex flex-col gap-1.5" data-testid={`family-distribution-${family}`}>
-      <div className="flex h-3 overflow-hidden rounded-full bg-surface-secondary">
-        {slices.map((slice, i) => (
-          <span
-            key={slice.name}
-            className={i === 0 ? 'bg-brand-500' : i === 1 ? 'bg-brand-400' : i === 2 ? 'bg-brand-300' : 'bg-border-strong'}
-            style={{ width: `${Math.max(1, slice.share * 100)}%` }}
-            aria-hidden
-          />
-        ))}
-      </div>
-
-      <ul className="grid gap-x-4 gap-y-0.5 text-xs text-text-secondary sm:grid-cols-2">
-        {slices.map((slice) => (
-          <li key={slice.name} className="flex items-center justify-between gap-2">
-            <span className="truncate">
-              {slice.name === 'rest' ? (ar ? 'بقية الحملات' : 'The rest') : slice.name}
-            </span>
-            <span className="tnum shrink-0 text-text-muted" dir="ltr">{percent(slice.share, 0)}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
 
 
 /**

@@ -62,8 +62,9 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    expect(await screen.findByTestId('objective-family-awareness')).toHaveTextContent('Brand film')
-    expect(screen.getByTestId('objective-family-sales')).toHaveTextContent('Ramadan sale')
+    // OBJECTIVE-CARDS-001 — one small card per objective; the campaigns are counted on it, not listed in a table.
+    expect(await screen.findByTestId('objective-card-awareness')).toHaveTextContent('1 campaign')
+    expect(screen.getByTestId('objective-card-sales')).toHaveTextContent('1 campaign')
   })
 
   /** The whole point: an awareness family is not headlined with ROAS. */
@@ -75,8 +76,8 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    const awareness = within(await screen.findByTestId('objective-family-awareness'))
-    const sales = within(screen.getByTestId('objective-family-sales'))
+    const awareness = within(await screen.findByTestId('objective-card-awareness'))
+    const sales = within(screen.getByTestId('objective-card-sales'))
 
     /*
       Asserted on the LABELS, not the metric keys.
@@ -103,8 +104,8 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    await screen.findByTestId('objective-family-awareness')
-    expect(screen.queryByTestId('objective-family-app')).not.toBeInTheDocument()
+    await screen.findByTestId('objective-card-awareness')
+    expect(screen.queryByTestId('objective-card-app')).not.toBeInTheDocument()
   })
 
   /** Withheld money keeps its own currency here too. */
@@ -121,7 +122,7 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    expect(await screen.findByTestId('objective-family-awareness')).toHaveTextContent('412.50 $')
+    expect(await screen.findByTestId('objective-card-awareness')).toHaveTextContent('412.50 $')
   })
 
   /** A campaign the platform never classified lands in Unclassified, never in Sales. */
@@ -130,7 +131,7 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    expect(await screen.findByTestId('objective-family-unknown')).toHaveTextContent('Unknown intent')
+    expect(await screen.findByTestId('objective-card-unknown')).toHaveTextContent('1 campaign')
   })
 })
 
