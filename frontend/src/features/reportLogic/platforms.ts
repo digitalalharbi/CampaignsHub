@@ -54,7 +54,6 @@ export function resultsSplit(payload: LivePayload, source: ResultSource, ar: boo
 export const splitTitle = (isClicks: boolean, resultName: string, ar: boolean) =>
   isClicks ? (ar ? 'مصادر الزيارات' : 'Traffic sources') : ar ? `مصادر ${resultName}` : `Sources of ${resultName.toLowerCase()}`
 
-export type RankSort = 'result' | 'impressions' | 'clicks' | 'ctr' | 'name'
 export type RankRow = {
   key: string
   name: string
@@ -68,11 +67,12 @@ export type RankRow = {
   bar: number
 }
 
-/** The platform comparison: every platform that delivered, sortable by any column; ties break on the name so the order is stable. */
-export function rankPlatforms(payload: LivePayload, source: ResultSource, ar: boolean, sort: RankSort = 'result', dir: 'asc' | 'desc' = 'desc'): RankRow[] {
+/** Every platform that delivered, as comparison rows in the payload's own order; `bar` is the result as a share of the best platform's. */
+export function platformRows(payload: LivePayload, source: ResultSource, ar: boolean): RankRow[] {
   const rows = (payload.platforms ?? []).filter((p) => shownPlatform(p, source))
   const max = Math.max(0, ...rows.map((p) => Number(source.of(p) ?? 0)))
-  const model = rows.map((p): RankRow => {
+
+  return rows.map((p): RankRow => {
     const key = canonicalPlatform(p.provider)
     const result = source.of(p)
     const mov = (p as { movement?: Record<string, number | null> }).movement?.[source.key]
@@ -87,19 +87,5 @@ export function rankPlatforms(payload: LivePayload, source: ResultSource, ar: bo
       movement: mov === undefined ? null : mov,
       bar: result === null || max <= 0 ? 0 : result / max,
     }
-  })
-  const pick = (r: RankRow): number | string | null => (sort === 'name' ? r.name : r[sort])
-  const sign = dir === 'asc' ? 1 : -1
-
-  return model.sort((a, b) => {
-    const va = pick(a)
-    const vb = pick(b)
-    // A missing figure sorts last whichever way the column runs — «not reported» is never the best or the worst.
-    if (va === null && vb === null) return a.name.localeCompare(b.name)
-    if (va === null) return 1
-    if (vb === null) return -1
-    const diff = typeof va === 'string' ? va.localeCompare(String(vb)) : Number(va) - Number(vb)
-
-    return diff === 0 ? a.name.localeCompare(b.name) : diff * sign
   })
 }

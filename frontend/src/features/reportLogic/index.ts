@@ -7,6 +7,7 @@
  */
 export * from './results'
 export * from './platforms'
+export * from './ranking'
 export * from './trend'
 export * from './content'
 export * from './funnel'

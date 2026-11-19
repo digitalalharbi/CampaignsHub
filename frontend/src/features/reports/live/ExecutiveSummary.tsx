@@ -17,10 +17,11 @@ import { liveSpark } from './liveSpark'
 import { ComparisonWithheld, kpiKeysFor, visibleKpiKeys } from './LiveKpis'
 import { cardHasFigure, metricLabel } from './liveMetrics'
 import { landingLabel, NATIVE_LEADS_LABEL, nativeLeads, revenueReported } from './leadResults'
-import {
-  basisLine, contentLists, count, funnelStages, headlineKeys, metricName, platformCards, rankPlatforms, resultBoardKeys, resultSource, resultsSplit,
-  rightAxisFor, shownPlatform, splitTitle, SPEND_DERIVED, toggleTrend, trendOptions, type Reader, type ResultSource,
-} from '@/features/reportLogic'
+import { basisLine, contentLists } from '@/features/reportLogic/content'
+import { funnelStages } from '@/features/reportLogic/funnel'
+import { platformCards, platformRows, resultsSplit, splitTitle } from '@/features/reportLogic/platforms'
+import { count, headlineKeys, metricName, resultBoardKeys, resultSource, shownPlatform, SPEND_DERIVED, type Reader, type ResultSource } from '@/features/reportLogic/results'
+import { rightAxisFor, toggleTrend, trendOptions } from '@/features/reportLogic/trend'
 import { PlatformCardsView } from '@/features/reportLogic/PlatformCardsView'
 
 /* REPORT-LOGIC-001 — the result logic lives in `features/reportLogic`; the old names are re-exported below. */
@@ -284,7 +285,7 @@ function PlatformComparison({
   payload, reader, ar, source, selected, onSelect, wide,
 }: { payload: LivePayload; reader: Reader; ar: boolean; source: ResultSource; selected: string | null; onSelect: (p: string | null) => void; wide: boolean }) {
   const result = source.key
-  const model = rankPlatforms(payload, source, ar, 'result', 'desc')
+  const model = platformRows(payload, source, ar)
   const rows = (payload.platforms ?? []).filter((p) => shownPlatform(p, source))
   const extra = (['impressions', 'clicks'] as const).filter((k) => k !== result)
   const ctrText = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(2)}%`)
