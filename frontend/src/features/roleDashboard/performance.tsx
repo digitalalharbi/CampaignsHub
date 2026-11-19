@@ -4,7 +4,10 @@ import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
 import { Delta } from '@/components/ui/Delta'
 import { days } from '@/lib/counted'
-import { metricsCurrency, type CampaignRow, type PlatformRow, type RoleDashboard } from './api'
+import { metricsCurrency, useDashboardPerformance, type CampaignRow, type DashboardWindow, type PlatformRow, type RoleDashboard } from './api'
+import { Skeleton } from '@/components/ui/States'
+import { useAgencyClient } from '@/stores/agencyClient'
+import { useProject } from '@/stores/project'
 import { Kpi, Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
 
 /*
@@ -194,6 +197,44 @@ export function WindowKpis({ d, portal }: { d: RoleDashboard; portal: 'agency' |
       )}
       <Kpi testId="dash-kpi-window-results" to={`/${portal}/analytics`} label={resultLabel} value={f.short(p.results)} hint={p.family ? `${t.objective}: ${familyName(p.family, f.ar)}` : undefined} />
       {d.can_money && <Kpi testId="dash-kpi-window-cost" to={`/${portal}/analytics`} label={costLabel} value={f.money(p.cost_per_result, cur)} hint={p.family ? familyName(p.family, f.ar) : undefined} />}
+    </div>
+  )
+}
+
+/**
+ * HOME-360-001 — Owner 2026-11-20: «هذي التفاصيل تهم مدير المشروع أيضًا … نظرة متكاملة 360 درجة بنظرة واحدة وبسيطة».
+ *
+ * The window's spend, results and cost per result, the leading campaigns, the platforms side by side and where the money
+ * went — one block, read from `GET /me/dashboard/performance` over the chosen client and project, so the manager's page and
+ * the project manager's (and any view that adds it) show the same 360° at a glance, from one implementation.
+ */
+export function PerformanceBlock({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'app' }) {
+  const scopeClient = useAgencyClient((s) => s.currentClientId)
+  const scopeProject = useProject((s) => s.currentProjectId)
+  const needs = d.performance_deferred === true || d.campaign_rows === undefined
+  const perf = useDashboardPerformance(d.window.days as DashboardWindow, needs, portal === 'agency' ? scopeClient : null, portal === 'agency' && scopeClient ? scopeProject : null)
+  const pd: RoleDashboard = needs ? { ...d, ...(perf.data ?? {}) } : d
+  const loading = needs && perf.isLoading
+  const mc = metricsCurrency(pd)
+
+  return (
+    <div className="grid min-h-0 grid-cols-1 gap-2" data-testid="dash-performance-block">
+      {loading ? <Skeleton className="h-20" /> : <WindowKpis d={pd} portal={portal} />}
+      <div className="grid min-h-0 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-12" data-testid="dash-performance">
+        {loading ? (
+          <>
+            <Skeleton className="h-[220px] md:col-span-2 lg:col-span-5" />
+            <Skeleton className="h-[220px] lg:col-span-4" />
+            <Skeleton className="h-[220px] lg:col-span-3" />
+          </>
+        ) : (
+          <>
+            <TopCampaignsPanel rows={pd.campaign_rows ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] md:col-span-2 lg:col-span-5" />
+            <PlatformComparePanel platforms={pd.platforms ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] lg:col-span-4" />
+            <SpendSharePanel platforms={pd.platforms ?? []} currency={mc} portal={portal} className="min-h-[220px] lg:col-span-3" />
+          </>
+        )}
+      </div>
     </div>
   )
 }

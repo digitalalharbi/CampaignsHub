@@ -281,14 +281,23 @@ function Finding({ finding, ar }: { finding: DiagnosticFinding; ar: boolean }) {
   )
 }
 
+/**
+ * NO-OPERATOR-NOTES-001 — Owner 2026-11-20: «لا يجب إظهار تعليمات لمدراء المشاريع والمالية … كلها تحليلات». The state is a
+ * short tag (✓ سليم / قياسات غير كافية); the full sentence is the tooltip and the screen reader's.
+ */
 function Note({ text, icon, testId, tone }: { text: string; icon: React.ReactNode; testId: string; tone?: 'good' }) {
+  const ar = /[\u0600-\u06FF]/.test(text)
+  const tag = tone === 'good' ? (ar ? 'سليم' : 'Healthy') : (ar ? 'قياسات غير كافية' : 'Not enough data')
+
   return (
-    <div
-      className={`flex items-start gap-2 rounded-xl border border-border p-3 text-sm ${tone === 'good' ? 'text-text-secondary' : 'text-text-muted'}`}
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${tone === 'good' ? 'bg-success/10 text-success' : 'bg-surface-secondary text-text-muted'}`}
       data-testid={testId}
+      title={text}
     >
-      <span className={`mt-0.5 shrink-0 ${tone === 'good' ? 'text-success' : 'text-text-muted'}`}>{icon}</span>
-      <span>{text}</span>
-    </div>
+      <span className="shrink-0">{icon}</span>
+      <span>{tag}</span>
+      <span className="sr-only">{text}</span>
+    </span>
   )
 }

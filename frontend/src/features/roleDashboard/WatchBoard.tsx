@@ -14,6 +14,7 @@ import { campaigns as countedCampaigns, days as countedDays } from '@/lib/counte
 import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
 import { useAgencyClient } from '@/stores/agencyClient'
+import { useProject } from '@/stores/project'
 import { useWatchBoard, type DashboardWindow, type RankedCampaign, type WatchBoard as Board, type WatchContent } from './api'
 import { Door, Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
 import { PlatformComparePanel, SpendSharePanel } from './performance'
@@ -298,7 +299,9 @@ export function WatchBoard({ portal, days }: { portal: 'agency' | 'app'; days: D
     }
     setLocal(id)
   }
-  const q = useWatchBoard(days, unit)
+  // HOME-SCOPE-ISOLATION-001 — the project chosen at the top narrows the board inside its unit.
+  const project = useProject((s) => s.currentProjectId)
+  const q = useWatchBoard(days, unit, true, portal === 'agency' && stored ? project : null)
   const b = q.data
   const units = b?.units ?? []
   const shown = b ? b.unit : unit
