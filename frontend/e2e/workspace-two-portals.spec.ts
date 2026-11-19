@@ -86,7 +86,8 @@ test.describe('one session, two portals', () => {
 
     await expect(tabB.getByTestId('portal-entry-choice')).toBeVisible({ timeout: 20_000 })
     await expect(tabB.getByTestId('portal-entry-current')).toContainText('Two Portals Brand')
-    expect(calls.filter((c) => !c.startsWith('/auth/') && !c.startsWith('/me') && !c.startsWith('/public'))).toEqual([])
+    // `/bootstrap` is the session probe (PERF-BOOTSTRAP-001 answers «who are you» with the same call `/auth/me` used to): identity, like `/auth/*`.
+    expect(calls.filter((c) => !c.startsWith('/auth/') && !c.startsWith('/me') && !c.startsWith('/public') && c !== '/bootstrap')).toEqual([])
     expect((await memberships(tabA)).current?.id).toBe(before.current?.id)
 
     // Tab A did not move, and is not told to.

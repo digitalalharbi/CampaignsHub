@@ -119,7 +119,12 @@ export function NotificationCenter() {
    * zero would have this mount ask again at once for the answer that landed a moment earlier. The 30 s interval and the focus
    * refetch are unchanged (both are far past five seconds).
    */
-  const summary = useQuery({ queryKey: ['notifications', 'summary'], queryFn: getNotificationSummary, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 5_000 })
+  /*
+   * A tab that regains focus looks again, ALWAYS. The bootstrap now files this summary before the page paints (PERF-BOOTSTRAP-001), so
+   * a reader returning inside `staleTime` of that filing was told «fresh» and never saw what arrived meanwhile — the e2e ping spec
+   * raises findings seconds after load and waits for the badge. The endpoint is a small count query, built to be asked every 30s.
+   */
+  const summary = useQuery({ queryKey: ['notifications', 'summary'], queryFn: getNotificationSummary, refetchInterval: 30_000, refetchOnWindowFocus: 'always', staleTime: 5_000 })
   useBellSound(summary.data)
   usePushRefresh()
   const q = useQuery({
