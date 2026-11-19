@@ -32,7 +32,8 @@ import { BioPageEditor } from './BioPageEditor'
  */
 const COPY = {
   ar: {
-    title: 'اختصار الروابط',
+    // NAV-TITLE-PARITY-001 — the page is called what the sidebar calls it.
+    title: 'روابط التتبع',
     subtitle: 'رابط قصير تشاركه في الإعلان أو الرسالة، ونحن نحسب النقرات.',
     whatsapp: 'واتساب',
     link: 'رابط',
