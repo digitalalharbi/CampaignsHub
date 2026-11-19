@@ -2,7 +2,7 @@ import { PLATFORM_LABELS } from '@/lib/platforms'
 import type { ReactNode } from 'react'
 import { CampaignLink } from '@/features/campaigns/CampaignLink'
 import { fmtDateTime } from '@/lib/datetime'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { money, moneyExact, num, ratio } from '@/features/analytics/format'
 
@@ -434,25 +434,35 @@ export function UnifiedCampaignOverview({
         {!isMarketing && (
         <div className={`flex flex-col gap-3 ${compact ? '' : 'lg:flex-row lg:items-start'}`}>
           <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
-            <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.needsAttention}</div>
-            {vm.needsAttention.length === 0 ? (
-              <p className={`text-xs ${c.muted}`}>{w.nothingNeedsAttention}</p>
-            ) : (
-              <ul className="space-y-1.5">
+            {/* NO-OPERATOR-NOTES-001 — a count and chips, not sentences: the reason rides in each chip's tooltip. */}
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className={`${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.needsAttention}</span>
+              <span data-testid="overview-attention-count" title={vm.needsAttention.length === 0 ? w.nothingNeedsAttention : undefined}
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-sm font-extrabold ${vm.needsAttention.length === 0 ? 'bg-success/10 text-success' : 'bg-warning/15 text-warning'}`}>
+                {vm.needsAttention.length === 0 ? <CheckCircle2 size={14} aria-hidden /> : <AlertTriangle size={14} aria-hidden />}
+                <span className="tnum">{vm.needsAttention.length}</span>
+              </span>
+            </div>
+            {vm.needsAttention.length > 0 && (
+              <ul className="flex flex-wrap gap-1.5">
                 {vm.needsAttention.slice(0, 3).map((n) => (
-                  <li key={n.id} className="flex items-start gap-2 text-xs">
-                    <AlertTriangle size={13} className="mt-0.5 shrink-0 text-warning" />
-                    <span><span className={`font-semibold ${c.value}`}>{n.name}</span> — <span className={c.sub}>{n.reason}</span></span>
+                  <li key={n.id} title={n.reason} className="inline-flex max-w-full items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-xs">
+                    <span className={`truncate font-semibold ${c.value}`}>{n.name}</span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
           <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
-            <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topAlerts}</div>
-            {vm.alerts.length === 0 ? (
-              <p className={`text-xs ${c.muted}`}>{w.noCriticalAlerts}</p>
-            ) : (
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className={`${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topAlerts}</span>
+              <span data-testid="overview-alerts-count" title={vm.alerts.length === 0 ? w.noCriticalAlerts : undefined}
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-sm font-extrabold ${vm.alerts.length === 0 ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                {vm.alerts.length === 0 ? <CheckCircle2 size={14} aria-hidden /> : <AlertTriangle size={14} aria-hidden />}
+                <span className="tnum">{vm.alerts.length}</span>
+              </span>
+            </div>
+            {vm.alerts.length === 0 ? null : (
               <ul className="space-y-1.5">
                 {vm.alerts.slice(0, 3).map((a, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs">
