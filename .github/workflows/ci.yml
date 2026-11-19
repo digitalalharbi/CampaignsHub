@@ -26,6 +26,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # CI-SPEED-002 — what does this change need? (.github/scripts/ci-changes.py, tested by test_ci_changes.py)
+  #
+  # A frontend-only change used to run the whole sharded backend suite, and a docs change ran everything. The script reads the
+  # pull request's file list from the API (no checkout of history, no third-party action) and answers four questions:
+  # the full backend suite, the frontend unit job, the production image, the chromium browser gate. Everything that is
+  # not needed REPORTS GREEN under its own name — `backend`, `frontend`, `image` and `gate (chromium)` always run and say
+  # «not needed for this change» — so the checks the Lander (`waitpr.py` NEED list), the merge queue and the ruleset read
+  # are always present and always SUCCESS or red. Nothing here weakens a verdict: it only decides whether the work behind
+  # one is needed. A merge_group, a dispatch, a `full-gate` label (the PR being landed), a change under .github/, or any
+  # doubt (unreadable file list) answers «all of it». See docs/ci/CI-SPEED-2026-11-19.md.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend_full: ${{ steps.c.outputs.backend_full }}
+      frontend: ${{ steps.c.outputs.frontend }}
+      image: ${{ steps.c.outputs.image }}
+      e2e: ${{ steps.c.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: The classifier's own tests
+        run: python3 .github/scripts/test_ci_changes.py
+      - name: Classify the change
+        id: c
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 .github/scripts/ci-changes.py \
+            --event "${{ github.event_name }}" \
+            --full-gate "${{ contains(github.event.pull_request.labels.*.name, 'full-gate') }}" \
+            --pr "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}"
+
   # CI-TIER-001: the longest jobs are defined first so the runner queue starts them first (webkit ~19 min, firefox ~17).
   gate-webkit-shards:
     name: gate shards (webkit)
@@ -75,7 +114,10 @@ jobs:
   # union is that list, and each shard's junit recording every test it was given (see the script's docstring).
   backend-static:
     name: backend (static)
+    needs: changes
+    if: ${{ needs.changes.outputs.backend_full == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: backend
@@ -105,14 +147,18 @@ jobs:
         run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=1G
 
   backend-tests:
-    name: backend (tests ${{ matrix.shard }}/5)
+    name: backend (tests ${{ matrix.shard }}/8)
+    needs: changes
+    if: ${{ needs.changes.outputs.backend_full == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     strategy:
       # Every shard reports: «shard 2 failed» and «shards 2 and 3 failed» are different findings.
       fail-fast: false
       matrix:
-        # The shard count is written twice — here and as the `5` in the plan/verdict calls below. Change all of them.
-        shard: [1, 2, 3, 4, 5]
+        # The shard count is written four times — here, in the job name, and as the `8` in the plan/verdict calls below.
+        # CI-SPEED-002: 5 -> 8 (measured 11.8 min median per shard at 5; the 8-way cut targets ~7).
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     services:
       postgres:
         image: postgres:16
@@ -148,8 +194,8 @@ jobs:
         run: python3 -m pip install --quiet pikepdf
       # Writes this shard's phpunit.xml (the repository's, with only <testsuites> narrowed to this shard's files) and
       # the evidence the `backend` verdict reads. Fails if PHPUnit lists nothing.
-      - name: Plan shard ${{ matrix.shard }}/5
-        run: python3 ../.github/scripts/backend-shard.py plan ${{ matrix.shard }} 5 "$RUNNER_TEMP/backend-evidence"
+      - name: Plan shard ${{ matrix.shard }}/8
+        run: python3 ../.github/scripts/backend-shard.py plan ${{ matrix.shard }} 8 "$RUNNER_TEMP/backend-evidence"
       - name: Tests
         env:
           DB_CONNECTION: pgsql
@@ -172,32 +218,110 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # CI-SPEED-002 — the backend tests that read files OUTSIDE backend/ (frontend sources, docs, the ledger and the matrix
+  # vocabulary guards), for a change that does not touch backend/ (docs-only, frontend-only). The set is found by
+  # reading the tests, not by a list kept here: every *Test.php that names frontend/, docs/ or a path above backend/.
+  # So `OwnerDefectLedgerTest` and `MatrixStatusVocabularyTest` still run when the ledger or the matrix changes.
+  backend-guards:
+    name: backend (guards)
+    needs: changes
+    if: ${{ needs.changes.outputs.backend_full != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mediabuying_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.example .env && php artisan key:generate
+      - name: Tests that read the repository outside backend/
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: mediabuying_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+          REDIS_HOST: 127.0.0.1
+          REDIS_CLIENT: phpredis
+        run: |
+          set -euo pipefail
+          classes=$(grep -rlE "frontend|docs/|\.\./docs|base_path\('\.\./|/docs" tests --include='*Test.php' \
+            | xargs -n1 basename | sed 's/\.php$//' | sort -u | paste -sd'|' -)
+          [ -n "$classes" ] || { echo "::error::no guard tests found - the grep matched nothing"; exit 1; }
+          echo "guard classes: $(echo "$classes" | tr '|' '\n' | wc -l)"
+          php artisan test --filter "($classes)"
+
   backend:
     # `always()`, not `!cancelled()`: a job that is skipped reports «skipped», and a skipped required check counts
     # as passing. This one always runs and is red unless every part it stands for succeeded.
+    #
+    # CI-SPEED-002: two modes, chosen by the `changes` job. FULL (backend/ or anything not frontend/docs changed, a
+    # dispatch, a merge_group, the `full-gate` label): static + eight shards + the proof that they ran the whole suite
+    # once — exactly as before. GUARDS (docs/frontend only): the guard job above; the static and shard jobs are
+    # skipped on purpose and must be skipped, not merely absent.
     if: ${{ always() }}
-    needs: [backend-static, backend-tests]
+    needs: [changes, backend-static, backend-tests, backend-guards]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Every backend job succeeded
         run: |
+          full="${{ needs.changes.outputs.backend_full }}"
+          echo "changes: ${{ needs.changes.result }}  full: $full"
           echo "backend (static): ${{ needs.backend-static.result }}"
           echo "backend (tests):  ${{ needs.backend-tests.result }}"
-          [ "${{ needs.backend-static.result }}" = success ] && [ "${{ needs.backend-tests.result }}" = success ] \
-            || { echo "::error::a backend job did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
-      - uses: actions/checkout@v4
+          echo "backend (guards): ${{ needs.backend-guards.result }}"
+          [ "${{ needs.changes.result }}" = success ] || { echo "::error::the change classifier did not succeed"; exit 1; }
+          if [ "$full" = true ]; then
+            [ "${{ needs.backend-static.result }}" = success ] && [ "${{ needs.backend-tests.result }}" = success ] \
+              || { echo "::error::a backend job did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+          else
+            [ "${{ needs.backend-guards.result }}" = success ] \
+              || { echo "::error::the backend guard tests did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+          fi
+      - if: ${{ needs.changes.outputs.backend_full == 'true' }}
+        uses: actions/checkout@v4
         with:
           sparse-checkout: .github/scripts
-      - uses: actions/download-artifact@v4
+      - if: ${{ needs.changes.outputs.backend_full == 'true' }}
+        uses: actions/download-artifact@v4
         with:
           pattern: backend-shard-*
           path: ${{ runner.temp }}/backend-evidence
       - name: The shards ran the whole suite, exactly once
-        run: python3 .github/scripts/backend-shard.py verdict 5 "$RUNNER_TEMP/backend-evidence"
+        if: ${{ needs.changes.outputs.backend_full == 'true' }}
+        run: python3 .github/scripts/backend-shard.py verdict 8 "$RUNNER_TEMP/backend-evidence"
 
-  frontend:
+  # CI-SPEED-002 — `frontend` as three kinds of job behind ONE name, like `backend`: the static checks (typecheck, lint,
+  # build), the unit tests dealt into three Vitest shards (`--shard`, Vitest's own partition: every file in exactly one
+  # shard; measured 484 s as one process), and `frontend`, which is green only when all of them succeeded — or when
+  # the `changes` job says nothing under frontend/ changed, in which case it says so and is green.
+  frontend-static:
+    name: frontend (static)
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -213,10 +337,51 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
-      - name: Unit tests
-        run: npm run test
       - name: Production build
         run: npm run build
+
+  frontend-unit:
+    name: frontend (unit ${{ matrix.shard }}/3)
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Written twice — here and in the `--shard` argument below (and in the job name).
+        shard: [1, 2, 3]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Unit tests
+        run: npm run test -- --shard=${{ matrix.shard }}/3
+
+  frontend:
+    if: ${{ always() }}
+    needs: [changes, frontend-static, frontend-unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every frontend job succeeded
+        run: |
+          echo "changes: ${{ needs.changes.result }}  frontend: ${{ needs.changes.outputs.frontend }}"
+          echo "static: ${{ needs.frontend-static.result }}  unit: ${{ needs.frontend-unit.result }}"
+          [ "${{ needs.changes.result }}" = success ] || { echo "::error::the change classifier did not succeed"; exit 1; }
+          if [ "${{ needs.changes.outputs.frontend }}" = true ]; then
+            [ "${{ needs.frontend-static.result }}" = success ] && [ "${{ needs.frontend-unit.result }}" = success ] \
+              || { echo "::error::a frontend job did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+          else
+            echo "frontend: not needed for this change (nothing under frontend/ or .github/ changed)."
+          fi
   # REPORT-EXPORT-FUNCTIONAL-001 — the image the server actually runs, built before it is deployed.
   #
   # Nothing here ever built `deploy/backend.production.Dockerfile`. The host rebuilds it from `main`
@@ -227,17 +392,39 @@ jobs:
   # This job does not deploy and does not push: it proves the Dockerfile still builds, and that the
   # renderer runtime the PDF pipeline needs is present INSIDE the built image. A guard reading the
   # file could be satisfied by a line that looks right; asking the image is what cannot be faked.
+  #
+  # CI-SPEED-002 — the job always runs (the `image` check is read by the Lander and the merge queue and must be SUCCESS),
+  # but its steps run only when the change can affect the image (backend/, deploy/, .github/). The build now reads the
+  # layer cache `deploy-production.yml` writes on main (`scope=backend`, read-only here, so a PR never evicts it).
   image:
+    needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - name: Not needed for this change
+        if: ${{ needs.changes.outputs.image != 'true' }}
+        run: |
+          echo "image: not needed for this change (nothing under backend/, deploy/ or .github/ changed)."
+      - if: ${{ needs.changes.outputs.image == 'true' }}
+        uses: actions/checkout@v4
+      - if: ${{ needs.changes.outputs.image == 'true' }}
+        uses: docker/setup-buildx-action@v3
 
       - name: Build the production backend image
-        run: docker build -f deploy/backend.production.Dockerfile -t campaignshub-backend:ci .
+        if: ${{ needs.changes.outputs.image == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/backend.production.Dockerfile
+          load: true
+          push: false
+          tags: campaignshub-backend:ci
+          cache-from: type=gha,scope=backend
 
       # Each of these is a dependency the renderer spawns or resolves at runtime. A missing one does
       # not break the build — it breaks the export, silently, on the server.
       - name: The renderer runtime exists in the image
+        if: ${{ needs.changes.outputs.image == 'true' }}
         run: |
           set -euo pipefail
           run() { docker run --rm --entrypoint sh campaignshub-backend:ci -c "$1"; }
@@ -254,6 +441,7 @@ jobs:
       # CREATIVE-VIDEO-FRAME-COVER-001 — the cover fallback spawns ffmpeg (and busybox `nice`). Ask the image,
       # then take a real frame from a generated clip, over the same argument shape the extractor uses.
       - name: ffmpeg exists in the image and can take a frame
+        if: ${{ needs.changes.outputs.image == 'true' }}
         run: |
           set -euo pipefail
           run() { docker run --rm --entrypoint sh campaignshub-backend:ci -c "$1"; }
@@ -303,37 +491,54 @@ jobs:
   # test counts (one file holds 224 quick tests). They were computed from the per-test timestamps of run 43054580907
   # (min-max contiguous partition over whole files). They cannot change coverage: Playwright's shard filter is a
   # partition whatever the weights say, and the verdict checks it on every run.
+  # CI-SPEED-002 — six chromium shards, re-cut from the measured per-test times of run 44413244191 (see
+  # docs/ci/CI-SPEED-2026-11-19.md). The floor is a FILE: `agency-fit-2.spec.ts` alone is 16.4 minutes (312 tests),
+  # and Playwright keeps a file's tests together, so no shard count goes below ~17 minutes of tests until that file
+  # is split. The weights below put it alone in a shard (shard 2); the fifth and sixth shards are the same ~16.5.
+  # The shard count is written three times: `shards`, `total`, and the `6` in the verdict below.
   gate-chromium-shards:
     name: gate shards (chromium)
+    needs: changes
+    if: ${{ needs.changes.outputs.e2e == 'true' }}
     uses: ./.github/workflows/gate-shards.yml
     with:
       browser: chromium
-      shards: '[1,2,3,4]'
-      total: 4
-      weights: '262:347:281:226'
+      shards: '[1,2,3,4,5,6]'
+      total: 6
+      weights: '36:170:498:495:317:373'
   gate-chromium:
     name: gate (chromium)
     if: ${{ always() }}
-    needs: gate-chromium-shards
+    needs: [changes, gate-chromium-shards]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Every chromium shard succeeded
+      # The browser gate is not needed (docs-only, backend-only without database changes): the check still reports,
+      # green, with the reason. The `full-gate` run that lands the PR always answers e2e=true.
+      - name: Not needed for this change
+        if: ${{ needs.changes.result == 'success' && needs.changes.outputs.e2e != 'true' }}
         run: |
-          echo "shards: ${{ needs.gate-chromium-shards.result }}"
-          [ "${{ needs.gate-chromium-shards.result }}" = success ] \
-            || { echo "::error::a chromium shard did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
-      - uses: actions/checkout@v4
+          echo "gate (chromium): not needed for this change (see the 'changes' job). Shards ${{ needs.gate-chromium-shards.result }}."
+      - name: Every chromium shard succeeded
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.e2e == 'true' }}
+        run: |
+          echo "changes: ${{ needs.changes.result }}  shards: ${{ needs.gate-chromium-shards.result }}"
+          [ "${{ needs.changes.result }}" = success ] && [ "${{ needs.gate-chromium-shards.result }}" = success ] \
+            || { echo "::error::the change classifier or a chromium shard did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+      - if: ${{ needs.changes.outputs.e2e == 'true' }}
+        uses: actions/checkout@v4
         with:
           sparse-checkout: .github/scripts
-      - uses: actions/download-artifact@v4
+      - if: ${{ needs.changes.outputs.e2e == 'true' }}
+        uses: actions/download-artifact@v4
         with:
           pattern: gate-shard-chromium-*
           path: ${{ runner.temp }}/gate-evidence
       - name: The shards ran the whole chromium suite, exactly once
-        run: python3 .github/scripts/gate-verdict.py chromium 4 "$RUNNER_TEMP/gate-evidence"
+        if: ${{ needs.changes.outputs.e2e == 'true' }}
+        run: python3 .github/scripts/gate-verdict.py chromium 6 "$RUNNER_TEMP/gate-evidence"
       - name: Merged report
-        if: always()
+        if: ${{ always() && needs.changes.outputs.e2e == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: gate-merged-chromium

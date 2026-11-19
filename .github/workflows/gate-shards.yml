@@ -101,12 +101,20 @@ jobs:
           echo "listed: $(wc -c < "$PLAYWRIGHT_JSON_OUTPUT_FILE") bytes"
       # The browsers and their system packages — see the long account in `.github/scripts/install-browsers.sh` and in
       # the history of `ci.yml`. The matrix browser AND chromium: the `setup` project runs under Playwright's default.
+      # CI-SPEED-002 — keyed by the Playwright VERSION, not the lock file. The browser build depends only on the
+      # version; keying on package-lock.json wrote a fresh ~300 MB cache on every unrelated dependency change
+      # (measured 2026-11-19: 24 `playwright-*` entries, 6.8 GB of the repository's 11.0 GB against the 10 GB cap,
+      # so GitHub was evicting the oldest — the Docker layer cache among them).
+      - name: Playwright version
+        id: pwv
+        working-directory: frontend
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ inputs.browser }}-${{ hashFiles('frontend/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ inputs.browser }}-${{ steps.pwv.outputs.version }}
       - name: Restore apt archives
         uses: actions/cache/restore@v4
         with:
