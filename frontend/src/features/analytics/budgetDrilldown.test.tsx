@@ -62,6 +62,7 @@ describe('the budget hierarchy drills from the project to a campaign', () => {
 
   it('the campaign rung states the platform limit beside the plan, and «not sent» where none was', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     const row = (await within(await screen.findByTestId('budget-campaign-table')).findByText('Spring launch')).closest('tr') as HTMLElement
@@ -72,6 +73,7 @@ describe('the budget hierarchy drills from the project to a campaign', () => {
 
   it('a platform pick narrows the accounts and campaigns, an account pick narrows further, and the crumbs lead back', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
     await within(await screen.findByTestId('budget-campaign-table')).findByText('Spring launch')
     await within(await screen.findByTestId('budget-campaign-table')).findByText('Ramadan clips')

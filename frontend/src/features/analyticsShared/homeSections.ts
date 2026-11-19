@@ -5,15 +5,15 @@
  * section in a popup. A card is matched by what it is about (the page it used to link to); a card whose page is not an
  * analytics matter (tasks, approvals, invoices, integrations…) is not matched and keeps its link.
  */
-export type AnalyticsSectionId = 'performance' | 'platforms' | 'campaigns' | 'creative' | 'funnel' | 'quality'
+export type AnalyticsSectionId = 'performance' | 'board' | 'platforms' | 'creative' | 'site' | 'quality'
 
 /** `/{portal}/<segment>` → the section that answers the same question. First match wins. */
 const BY_SEGMENT: ReadonlyArray<readonly [RegExp, AnalyticsSectionId]> = [
   [/^\/(?:app|agency)\/analytics(?:[/?#]|$)/, 'performance'],
-  [/^\/(?:app|agency)\/campaigns(?:[/?#]|$)/, 'campaigns'],
-  [/^\/(?:app|agency)\/(?:ad-groups|ads)(?:[/?#]|$)/, 'campaigns'],
+  [/^\/(?:app|agency)\/campaigns(?:[/?#]|$)/, 'board'],
+  [/^\/(?:app|agency)\/(?:ad-groups|ads)(?:[/?#]|$)/, 'board'],
   [/^\/(?:app|agency)\/content(?:[/?#]|$)/, 'creative'],
-  [/^\/(?:app|agency)\/(?:budgets|spend-limits)(?:[/?#]|$)/, 'performance'],
+  [/^\/(?:app|agency)\/(?:budgets|spend-limits)(?:[/?#]|$)/, 'board'],
 ]
 
 export function analyticsSectionFor(to: string): AnalyticsSectionId | null {

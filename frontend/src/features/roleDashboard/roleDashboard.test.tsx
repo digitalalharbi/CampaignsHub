@@ -44,8 +44,8 @@ describe('the role dashboards', () => {
   it('manager: figures open their pages, spend carries its status, the strip names alerts and integrations', () => {
     page(base({}))
     // ANALYTICS-POPUP-001 — a figure the board answers opens that section in a popup; the rest stay links.
-    expect(screen.getByTestId('dash-kpi-budget')).toHaveAttribute('data-opens', 'analytics:performance')
-    expect(screen.getByTestId('dash-kpi-active')).toHaveAttribute('data-opens', 'analytics:campaigns')
+    expect(screen.getByTestId('dash-kpi-budget')).toHaveAttribute('data-opens', 'analytics:board')
+    expect(screen.getByTestId('dash-kpi-active')).toHaveAttribute('data-opens', 'analytics:board')
     expect(screen.getByTestId('dash-kpi-budget')).not.toHaveAttribute('href')
     expect(screen.getByTestId('dash-kpi-alerts')).toHaveAttribute('href', '/agency/alerts')
     // 1500 of 3000 is 50%: green.
@@ -218,15 +218,15 @@ describe('the manager performance panels', () => {
 describe('ANALYTICS-POPUP-001 — Home opens the matching analytics section in a popup', () => {
   beforeEach(() => { state.data = null; state.watch = null })
 
-  it('pressing a campaigns card opens the Campaigns section over Home, view-only, and the page address does not move', async () => {
+  it('pressing a campaigns card opens the Performance board section over Home, view-only, and the page address does not move', async () => {
     const { user } = page(base({})) as unknown as { user?: { click: (e: Element) => Promise<void> } }
     expect(screen.queryByTestId('analytics-popup')).toBeNull()
     const card = screen.getByTestId('dash-kpi-active')
     if (user) await user.click(card); else card.click()
     const popup = await screen.findByTestId('analytics-popup')
-    expect(popup.getAttribute('data-section')).toBe('campaigns')
+    expect(popup.getAttribute('data-section')).toBe('board')
     // The only link out is «افتح التحليلات», to the same section of the board — never a campaign's controls.
-    expect(screen.getByTestId('analytics-popup-open').getAttribute('href')).toBe('/agency/analytics?tab=s_campaigns')
+    expect(screen.getByTestId('analytics-popup-open').getAttribute('href')).toBe('/agency/analytics?tab=s_board')
   })
 
   it('a card that is not an analytics matter (alerts) keeps its link', () => {
