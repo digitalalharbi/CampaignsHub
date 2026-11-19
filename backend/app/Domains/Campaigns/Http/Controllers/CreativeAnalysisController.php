@@ -479,7 +479,7 @@ final class CreativeAnalysisController extends Controller
          * is a useful sentence only when the average is of content doing the same job. Averaging an
          * awareness video's CPM into a sales benchmark produces a comparison nobody should act on.
          */
-        $peers = $this->peerAverages((string) $model->project_id, $objective, $from, $to, exclude: $id);
+        $peers = $this->peerAverages((string) $model->project_id, $objective, $from, $to, exclude: $id, provider: (string) $model->provider);
 
         $trend = $this->trend($id, $from, $to);
         $findings = $this->findingsFor($request, $insights, $model, $objective, $from, $to);
@@ -1108,7 +1108,7 @@ final class CreativeAnalysisController extends Controller
      *
      * @return array<string, float|null>|null
      */
-    private function peerAverages(string $project, ?string $objective, Carbon $from, Carbon $to, string $exclude): ?array
+    private function peerAverages(string $project, ?string $objective, Carbon $from, Carbon $to, string $exclude, ?string $provider = null): ?array
     {
         $path = $this->metrics->pathFor($objective);
 
@@ -1130,6 +1130,12 @@ final class CreativeAnalysisController extends Controller
             ->where('project_id', $project)
             ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'))
             ->whereKeyNot($exclude)
+            /*
+             * CONTENT-PEER-SAME-PLATFORM-001 — Owner 2026-11-19: a TikTok video was benchmarked against a sales path
+             * that held Snapchat ads returning 35×, so it read «49% below the path» against no peer of its own kind. The
+             * report compares content inside its platform and objective (`contentWhy`); this page now does too.
+             */
+            ->when($provider !== null && $provider !== '', fn ($q) => $q->where('provider', $provider))
             ->whereIn('campaign_id', function ($sub) use ($objectives): void {
                 $sub->select('id')->from('unified_campaigns')->whereIn('objective', $objectives);
             })
@@ -1155,7 +1161,7 @@ final class CreativeAnalysisController extends Controller
          */
         $pooled = $this->metrics->aggregate(array_values($figures)) ?? [];
 
-        $out = ['count' => count($figures), 'path' => $path->value];
+        $out = ['count' => count($figures), 'path' => $path->value, 'provider' => $provider];
         foreach (['ctr', 'cpc', 'cpm', 'cpa', 'roas', 'view_rate', 'completion_rate'] as $key) {
             $v = $pooled[$key] ?? null;
             $out[$key] = is_numeric($v) ? round((float) $v, 4) : null;

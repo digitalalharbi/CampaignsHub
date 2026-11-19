@@ -7,6 +7,7 @@ import type { BudgetRow } from './fundingApi'
 import { L, MODE, PLAN_DIFF, STATUS, TONE_BAR } from './labels'
 import { Money, moneyNumber } from './money'
 import { withMark } from '@/lib/money/mark'
+import { days as countedDays } from '@/lib/counted'
 
 type Lang = { ar: string; en: string }
 
@@ -241,11 +242,11 @@ export function PaceNote({ row, ar }: { row: BudgetRow; ar: boolean }) {
   const early = !!row.run_out_date && !!row.period_end && row.run_out_date < row.period_end
   const when = row.run_out_date
     ? <>{ar ? 'يخلص' : 'Runs out'} <bdi dir="ltr" className="tnum">{row.run_out_date.slice(5).replace('-', '/')}</bdi></>
-    : row.days_left !== null ? <>{ar ? `يكفي ${row.days_left} يوم` : `Lasts ${row.days_left} days`}</> : null
+    : row.days_left !== null ? <>{ar ? `يكفي ${countedDays(row.days_left, 'ar')}` : `Lasts ${countedDays(row.days_left, 'en')}`}</> : null
 
   return (
     <span
-      className={`whitespace-nowrap text-[11px] font-semibold ${early ? 'text-warning' : 'text-text-muted'}`}
+      className={`whitespace-nowrap text-xs font-semibold ${early ? 'text-warning' : 'text-text-muted'}`}
       data-testid="row-pace"
       data-early={early ? 'true' : undefined}
       title={ar ? 'بمعدل صرف آخر 3 أيام مكتملة' : 'At the last 3 full days\' pace'}

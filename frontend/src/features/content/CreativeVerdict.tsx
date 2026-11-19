@@ -1,45 +1,101 @@
 import { useMemo } from 'react'
-import { CircleCheck, CircleAlert, Download, FileSpreadsheet, Lightbulb, Printer, Search, CalendarDays, Clapperboard } from 'lucide-react'
+import { Download, FileSpreadsheet, Printer } from 'lucide-react'
 import type { CreativeDetail } from './api'
 import { Num } from '@/components/ui/Num'
-import { readCreative, readingCsv, type Line } from './creativeVerdict'
+import { PlatformMark } from '@/components/brand/PlatformMark'
+import { readCreative, readingCsv } from './creativeVerdict'
 
 /**
- * CONTENT-WHY-DETAIL-001 — «لماذا نجح · لماذا لم ينجح» on the content page, in the report's own voice.
+ * CONTENT-WHY-VISUAL-001 — Owner 2026-11-19: «احتاج جانب ابداعي وبياني فقط … لا اريد نصوص ابدا».
  *
- * One large verdict card, then the metric-by-metric bars against the path, then the reading in short blocks: strengths,
- * what needs work, why, the creative, the days, what to do. Every sentence is written by `readCreative` from the page's
- * own payload; a block with nothing real to say is not drawn. Downloadable as CSV, printable as PDF, and the ad itself.
+ * «Why it worked / why it did not», DRAWN — no sentences (the rule ANALYTICS-CONTENT-WHY-002 holds for the analytics board):
+ *   a verdict pill · one diverging bar per figure against the same platform on the same path (green right, red left, the gap
+ *   at the end) · the frame's shape · the watch-through as a ring against its peers · the length against the platform's
+ *   sweet spot · the days as bars, a stopped day in red and the best day in green. Labels are metric names only. The written
+ *   reading travels in the CSV download, never on the page.
  */
-const VERDICT_TONE = {
-  win: 'border-success/40 bg-[var(--positive-background)] text-success',
-  par: 'border-border bg-surface-secondary text-text-primary',
-  lose: 'border-danger/40 bg-[var(--warning-background)] text-danger',
-  insufficient: 'border-border bg-surface-secondary text-text-muted',
+const PILL = {
+  win: 'bg-success text-white',
+  par: 'bg-surface-secondary text-text-primary',
+  lose: 'bg-danger text-white',
+  insufficient: 'bg-surface-secondary text-text-muted',
 } as const
 
-function Block({ title, icon, items, testid }: { title: string; icon: React.ReactNode; items: Line[]; testid: string }) {
-  if (items.length === 0) return null
+function Ring({ value, peer, label }: { value: number; peer: number | null; label: string }) {
+  const r = 26
+  const c = 2 * Math.PI * r
+  const good = peer === null ? value >= 0.05 : value >= peer
+  const peerAngle = peer === null ? null : Math.min(1, peer) * 360 - 90
+
   return (
-    <div className="rounded-2xl border border-border bg-surface p-3" data-testid={testid}>
-      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-text-primary">{icon}{title}</h3>
-      <ul className="space-y-1.5 text-sm leading-relaxed">
-        {items.map((l) => (
-          <li key={l.id} className="flex gap-1.5" data-tone={l.tone} data-testid={`why-line-${l.id}`}>
-            {l.tone === 'good' ? <CircleCheck size={15} className="mt-0.5 shrink-0 text-success" aria-hidden />
-              : l.tone === 'bad' ? <CircleAlert size={15} className="mt-0.5 shrink-0 text-danger" aria-hidden />
-                : <span aria-hidden className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-text-muted" />}
-            <span>{l.text}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <figure className="flex flex-col items-center gap-1" data-testid="why-ring">
+      <svg width="72" height="72" viewBox="0 0 64 64" role="img" aria-label={`${label} ${(value * 100).toFixed(1)}%`}>
+        <circle cx="32" cy="32" r={r} fill="none" stroke="currentColor" strokeOpacity="0.12" strokeWidth="7" />
+        <circle cx="32" cy="32" r={r} fill="none" stroke={good ? 'var(--success)' : 'var(--danger)'} strokeWidth="7" strokeLinecap="round"
+          strokeDasharray={`${Math.max(0.01, Math.min(1, value)) * c} ${c}`} transform="rotate(-90 32 32)" />
+        {peerAngle !== null && (
+          <line x1="32" y1="32" x2={32 + 31 * Math.cos((peerAngle * Math.PI) / 180)} y2={32 + 31 * Math.sin((peerAngle * Math.PI) / 180)}
+            stroke="var(--text-primary)" strokeWidth="1.5" strokeDasharray="2 2" />
+        )}
+        <text x="32" y="36" textAnchor="middle" className="fill-current text-xs font-extrabold">{(value * 100).toFixed(1)}%</text>
+      </svg>
+      <figcaption className="text-xs font-semibold text-text-muted">{label}</figcaption>
+    </figure>
+  )
+}
+
+/** The length against the vertical platforms' sweet spot (15–25 s): a band, and a marker where this ad sits. */
+function Length({ seconds, label }: { seconds: number; label: string }) {
+  const max = Math.max(60, seconds)
+  const pos = (s: number) => `${(s / max) * 100}%`
+  const inBand = seconds >= 15 && seconds <= 25
+
+  return (
+    <figure className="flex min-w-[9rem] flex-col gap-1.5" data-testid="why-length">
+      <div className="relative h-3 rounded-full bg-surface-secondary">
+        <span className="absolute inset-y-0 rounded-full bg-success/30" style={{ insetInlineStart: pos(15), width: `${(10 / max) * 100}%` }} aria-hidden />
+        <span className={`absolute -top-1 h-5 w-1.5 rounded-full ${inBand ? 'bg-success' : 'bg-warning'}`} style={{ insetInlineStart: pos(seconds) }} aria-hidden />
+      </div>
+      <figcaption className="flex items-center justify-between text-xs font-semibold text-text-muted">
+        <span>{label}</span><Num className="font-extrabold text-text-primary">{`${Math.round(seconds)}s`}</Num>
+      </figcaption>
+    </figure>
+  )
+}
+
+/** The frame's shape, drawn to scale. */
+function Shape({ w, h }: { w: number; h: number }) {
+  const g = (a: number, b: number): number => (b === 0 ? a : g(b, a % b))
+  const d = g(w, h)
+  const H = 44
+  const W = Math.max(14, Math.round((w / h) * H))
+
+  return (
+    <figure className="flex flex-col items-center gap-1" data-testid="why-shape">
+      <span className="block rounded-md border-2 border-brand-600 bg-brand-600/10" style={{ width: W, height: H }} aria-hidden />
+      <figcaption><Num className="text-xs font-extrabold text-text-primary">{`${w / d}:${h / d}`}</Num></figcaption>
+    </figure>
   )
 }
 
 export function CreativeVerdict({ data, ar, mediaHref }: { data: CreativeDetail; ar: boolean; mediaHref: string | null }) {
   const r = useMemo(() => readCreative(data, ar), [data, ar])
   const L = (a: string, e: string) => (ar ? a : e)
+  const m = (data.metrics ?? {}) as Record<string, unknown>
+  const peers = (data.peers ?? null) as Record<string, unknown> | null
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+
+  const days = (data.trend ?? []).map((d) => ({ date: String(d.date), spend: num(d.spend) ?? 0, revenue: num(d.revenue) ?? 0, orders: num(d.conversions) ?? 0 }))
+  const maxSpend = Math.max(1, ...days.map((d) => d.spend))
+  const firstSpent = days.findIndex((d) => d.spend >= 1)
+  const lastSpent = days.length - 1 - [...days].reverse().findIndex((d) => d.spend >= 1)
+  const best = days.filter((d) => d.spend >= 1).sort((a, b) => b.revenue - a.revenue || b.orders - a.orders)[0] ?? null
+
+  const completion = num(m.completion_rate)
+  const seconds = num((data.creative as { duration_seconds?: unknown }).duration_seconds)
+  const w = data.creative.dimensions?.width ?? null
+  const h = data.creative.dimensions?.height ?? null
+  const isVideo = data.creative.kind === 'video' || data.creative.format === 'video'
 
   const downloadCsv = () => {
     const blob = new Blob([readingCsv(data, r, ar)], { type: 'text/csv;charset=utf-8' })
@@ -52,55 +108,69 @@ export function CreativeVerdict({ data, ar, mediaHref }: { data: CreativeDetail;
     a.remove()
     URL.revokeObjectURL(url)
   }
-
-  const btn = 'inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-text-secondary hover:bg-surface-hover print:hidden'
+  const icon = 'grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-text-secondary hover:bg-surface-hover print:hidden'
 
   return (
-    <section className="space-y-3 rounded-lg border border-border bg-surface p-4" data-testid="creative-why">
+    <section className="space-y-3 rounded-2xl border border-border bg-surface p-3" data-testid="creative-why">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-text-primary">{L('لماذا نجح · لماذا لم ينجح', 'Why it worked · why it did not')}</h2>
-        <div className="flex flex-wrap items-center gap-1.5" data-testid="creative-why-downloads">
-          <button type="button" className={btn} onClick={downloadCsv} data-testid="creative-why-csv"><FileSpreadsheet size={14} aria-hidden />{L('تحميل التحليل (Excel)', 'Download analysis (Excel)')}</button>
-          <button type="button" className={btn} onClick={() => window.print()} data-testid="creative-why-print"><Printer size={14} aria-hidden />{L('PDF / طباعة', 'PDF / print')}</button>
-          {mediaHref && <a className={btn} href={mediaHref} download target="_blank" rel="noopener noreferrer" data-testid="creative-why-media"><Download size={14} aria-hidden />{L('تحميل الإعلان', 'Download the ad')}</a>}
+        <div className="flex items-center gap-2">
+          <span className={`rounded-full px-3 py-1 text-sm font-extrabold ${PILL[r.verdict]}`} data-testid="creative-why-verdict" data-verdict={r.verdict}>{r.verdictLabel}</span>
+          <span className="flex items-center gap-1 text-xs text-text-muted" title={r.basis ?? undefined} data-testid="creative-why-basis">
+            <PlatformMark platform={data.creative.provider} size={14} />
+            <Num>{`× ${num(peers?.count) ?? 0}`}</Num>
+          </span>
+        </div>
+        <div className="flex items-center gap-1" data-testid="creative-why-downloads">
+          <button type="button" className={icon} onClick={downloadCsv} title={L('تحميل Excel', 'Download Excel')} aria-label={L('تحميل Excel', 'Download Excel')} data-testid="creative-why-csv"><FileSpreadsheet size={15} aria-hidden /></button>
+          <button type="button" className={icon} onClick={() => window.print()} title="PDF" aria-label="PDF" data-testid="creative-why-print"><Printer size={15} aria-hidden /></button>
+          {mediaHref && <a className={icon} href={mediaHref} download target="_blank" rel="noopener noreferrer" title={L('تحميل الإعلان', 'Download the ad')} aria-label={L('تحميل الإعلان', 'Download the ad')} data-testid="creative-why-media"><Download size={15} aria-hidden /></a>}
         </div>
       </div>
 
-      {/* The large card: the verdict and the one sentence that carries it. */}
-      <div className={`rounded-2xl border p-4 ${VERDICT_TONE[r.verdict]}`} data-testid="creative-why-verdict" data-verdict={r.verdict}>
-        <div className="text-2xl font-extrabold">{r.verdictLabel}</div>
-        <p className="mt-1 text-sm font-semibold text-text-primary" data-testid="creative-why-headline">{r.headline}</p>
-        {r.basis && <p className="mt-1 text-xs text-text-muted">{r.basis}</p>}
-      </div>
-
-      {/* The small cards: each metric against the path, the bar's length its gap. */}
+      {/* One diverging bar per figure: the centre is the platform's own average on this path. */}
       {r.comparisons.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-testid="creative-why-comparisons">
-          {r.comparisons.map((c) => (
-            <div key={c.key} className="rounded-xl border border-border bg-surface px-3 py-2" data-testid={`why-cmp-${c.key}`}>
-              <div className="truncate text-xs font-semibold text-text-muted">{c.label}</div>
-              <div className="text-base font-extrabold text-text-primary"><Num>{c.value}</Num></div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
-                <span className={`block h-full rounded-full ${c.better ? 'bg-success' : 'bg-danger'}`} style={{ width: `${Math.min(100, Math.abs(c.gap) * 100)}%` }} />
+        <div className="grid gap-1.5" data-testid="creative-why-comparisons">
+          {r.comparisons.map((c) => {
+            const width = `${Math.min(50, Math.abs(c.gap) * 50)}%`
+            return (
+              <div key={c.key} className="grid grid-cols-[7.5rem_minmax(0,1fr)_4.5rem] items-center gap-2 text-xs" data-testid={`why-cmp-${c.key}`} title={`${c.label}: ${c.value} · ${c.average}`}>
+                <span className="truncate font-semibold text-text-secondary">{c.label}</span>
+                <span className="relative h-5 rounded-md bg-surface-secondary" aria-hidden>
+                  <span className="absolute inset-y-0 start-1/2 w-px bg-border-strong" />
+                  <span className={`absolute inset-y-0.5 rounded ${c.better ? 'start-1/2 bg-success' : 'end-1/2 bg-danger'}`} style={{ width }} />
+                </span>
+                <span className="flex flex-col items-end leading-tight">
+                  <Num className="font-extrabold text-text-primary">{c.value}</Num>
+                  <Num className={`text-xs font-bold ${c.better ? 'text-success' : 'text-danger'}`}>{`${c.gap >= 0 ? '+' : '−'}${Math.round(Math.abs(c.gap) * 100)}%`}</Num>
+                </span>
               </div>
-              <div className="mt-1 flex items-center justify-between gap-1 text-[11px] text-text-muted">
-                <span>{L('المسار', 'Path')} <bdi dir="ltr" className="tnum">{c.average}</bdi></span>
-                <bdi dir="ltr" className={`tnum font-bold ${c.better ? 'text-success' : 'text-danger'}`}>{c.gap >= 0 ? '+' : '−'}{Math.round(Math.abs(c.gap) * 100)}%</bdi>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Block title={L('نقاط القوة', 'Strengths')} icon={<CircleCheck size={15} className="text-success" />} items={r.strengths} testid="why-strengths" />
-        <Block title={L('تحتاج تحسينًا', 'Needs work')} icon={<CircleAlert size={15} className="text-danger" />} items={r.weaknesses} testid="why-weaknesses" />
-        <Block title={L('لماذا', 'Why')} icon={<Search size={15} className="text-text-muted" />} items={r.diagnosis} testid="why-diagnosis" />
-        <Block title={L('قراءة الإبداع', 'The creative')} icon={<Clapperboard size={15} className="text-text-muted" />} items={r.creative} testid="why-creative" />
-        <Block title={L('الأيام', 'The days')} icon={<CalendarDays size={15} className="text-text-muted" />} items={r.timeline} testid="why-timeline" />
-        <Block title={L('ماذا نفعل', 'What to do')} icon={<Lightbulb size={15} className="text-warning" />} items={r.actions} testid="why-actions" />
+      {/* The creative and its days, drawn. */}
+      <div className="flex flex-wrap items-end gap-4 border-t border-border pt-3">
+        {w && h && <Shape w={w} h={h} />}
+        {isVideo && completion !== null && <Ring value={completion} peer={num(peers?.completion_rate)} label={L('الإكمال', 'Completion')} />}
+        {isVideo && seconds !== null && <Length seconds={seconds} label={L('المدة', 'Length')} />}
+        {days.length > 1 && (
+          <figure className="flex min-w-[12rem] flex-1 flex-col gap-1" data-testid="why-days">
+            <div className="flex h-14 items-end gap-0.5">
+              {days.map((d, i) => {
+                const stopped = i > firstSpent && i < lastSpent && d.spend < 1
+                const isBest = best !== null && d.date === best.date
+                return (
+                  <span key={d.date} title={d.date} data-stopped={stopped || undefined} data-best={isBest || undefined}
+                    className={`min-w-[3px] flex-1 rounded-t ${stopped ? 'bg-danger/40' : isBest ? 'bg-success' : 'bg-brand-600/60'}`}
+                    style={{ height: stopped ? '100%' : `${Math.max(4, (d.spend / maxSpend) * 100)}%` }} />
+                )
+              })}
+            </div>
+            <figcaption className="flex justify-between text-xs text-text-muted"><Num>{days[0].date.slice(5)}</Num><Num>{days[days.length - 1].date.slice(5)}</Num></figcaption>
+          </figure>
+        )}
       </div>
-      <p className="text-[11px] text-text-muted">{L('القراءة مبنية على أرقام المنصة لهذه الفترة فقط؛ الأرقام الرسمية للمحاسبة هي فواتير المنصات.', 'Read from the platform figures for this period only; the platforms\' invoices are the reference for accounting.')}</p>
     </section>
   )
 }

@@ -6,6 +6,7 @@ import { AdPoster } from '@/features/content/AdPoster'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
 import type { CreativeCard } from '@/features/content/api'
 import { Num } from '@/components/ui/Num'
+import { moneyExact } from '@/features/analytics/format'
 import { PlatformMark } from '@/components/brand/PlatformMark'
 import { StatCard, type StatTone } from '@/components/ui/StatCard'
 import { Skeleton } from '@/components/ui/States'
@@ -137,7 +138,7 @@ function ContentTile({ c, f, currency, tone, rank, basis, onOpen }: {
       <AdPoster preview={c.preview} name={c.name ?? ''} provider={provider} className="h-28 w-full rounded-xl" fit="cover" />
       <span className="min-w-0">
         <span dir="auto" className="block truncate text-start text-sm font-bold text-text-primary" title={c.name ?? ''}>{c.name ?? '—'}</span>
-        <span className="flex items-center gap-1 truncate text-[11px] text-text-muted">
+        <span className="flex items-center gap-1 truncate text-xs text-text-muted">
           <PlatformMark platform={provider} size={13} />
           <span className="truncate">{platformLabel(provider, f.ar)}</span>
         </span>
@@ -145,7 +146,7 @@ function ContentTile({ c, f, currency, tone, rank, basis, onOpen }: {
       <dl className="grid grid-cols-3 gap-1.5 text-center" data-testid="watch-content-figures">
         {figures.map((x) => (
           <div key={x.key} className={`rounded-lg p-1.5 ${x.key === 'basis' ? (tone === 'best' ? 'bg-[var(--positive-background)]' : 'bg-[var(--warning-background)]') : 'bg-surface-secondary'}`}>
-            <dt className="truncate text-[10px] font-semibold text-text-muted">{x.label}</dt>
+            <dt className="truncate text-xs font-semibold text-text-muted">{x.label}</dt>
             <dd className="text-xs font-bold text-text-primary"><Num>{x.value}</Num></dd>
           </div>
         ))}
@@ -163,7 +164,7 @@ function contentFigures(c: WatchContent, f: Fmt, currency: string | null, basis:
   const metric = basis?.metric ?? null
   const label = basis ? (f.ar ? basis.label_ar : basis.label_en) : null
   const val = metric === 'roas' ? (c.roas === null ? null : `${c.roas.toFixed(2)}×`)
-    : metric === 'cpa' ? (c.cpa === null ? null : f.money(c.cpa, currency))
+    : metric === 'cpa' ? (c.cpa === null ? null : moneyExact(c.cpa, currency))
       : metric === 'ctr' ? (c.ctr === null ? null : f.pct(c.ctr > 1 ? c.ctr / 100 : c.ctr))
         : null
   if (metric && label) out.push({ key: 'basis', label, value: val ?? '—' })

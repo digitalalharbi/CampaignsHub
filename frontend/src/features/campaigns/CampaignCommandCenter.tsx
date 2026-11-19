@@ -185,12 +185,12 @@ function MiniKpi({ label, value, hint, delta, deltaKey }: { label: string; value
   return (
     <div className="min-w-0 rounded-2xl border border-border bg-surface px-3 py-2" title={hint}>
       {/* the reason a figure is missing is said, not hidden in a tooltip */}
-      <div className="truncate text-[11px] text-text-muted">{label}</div>
+      <div className="truncate text-xs text-text-muted">{label}</div>
       <div className="mt-0.5 flex items-baseline justify-between gap-2">
         <span className="tnum truncate text-base font-bold text-text-primary">{value}</span>
-        {shown != null && <span dir="ltr" className={`shrink-0 text-[11px] font-semibold ${toneClass}`}>{percent(Math.abs(shown), 0)}</span>}
+        {shown != null && <span dir="ltr" className={`shrink-0 text-xs font-semibold ${toneClass}`}>{percent(Math.abs(shown), 0)}</span>}
       </div>
-      {hint && <div className="mt-0.5 text-[11px] leading-snug text-text-secondary">{hint}</div>}
+      {hint && <div className="mt-0.5 text-xs leading-snug text-text-secondary">{hint}</div>}
     </div>
   )
 }

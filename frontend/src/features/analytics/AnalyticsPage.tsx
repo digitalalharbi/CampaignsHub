@@ -542,6 +542,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         label={ar ? 'الإجراء' : 'Action'}
         value={outcomes[0] ?? 'all'}
         testid={`${surface}-outcome`}
+        // ANALYTICS-FILTERS-COMPACT-001 — folded into «المزيد من الفلاتر», the select fits the dialog on a phone instead of growing to its longest option.
+        settledWidth="w-full max-w-full sm:w-56"
         options={[
           { value: 'all', label: ar ? 'كل الإجراءات' : 'All actions' },
           ...OUTCOME_KEYS.map((key) => ({
@@ -708,7 +710,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
             */}
             <div className="grid gap-2">
               <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{ar ? 'تضييق أدق' : 'Narrow further'}</span>
-              <div className="flex flex-wrap items-end gap-2">{! isAnalysis && campaignControl}{actionControl}</div>
+              <div className="flex min-w-0 flex-wrap items-end gap-2 [&>*]:min-w-0 [&>*]:max-w-full">{! isAnalysis && campaignControl}{actionControl}</div>
             </div>
           </div>
         }
