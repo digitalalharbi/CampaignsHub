@@ -35,7 +35,7 @@ const base = (over: Partial<RoleDashboard>): RoleDashboard => ({
 
 const page = (d: RoleDashboard, locale: 'ar' | 'en' = 'en') => {
   state.data = d
-  return renderWithProviders(<RoleDashboardPage portal="agency" />, { route: '/agency/home', locale })
+  return renderWithProviders(<RoleDashboardPage portal="agency" />, { route: '/agency/dashboard', locale })
 }
 
 describe('the role dashboards', () => {

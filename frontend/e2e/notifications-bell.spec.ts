@@ -62,7 +62,7 @@ test.describe('the bell', () => {
     raise(['--count=1', '--kind=budget_90', '--type=budget_risk', '--severity=warning'])
     raise(['--count=1', '--kind=sync_failed', '--type=sync_failed', '--severity=critical'])
 
-    await page.goto('/agency/home')
+    await page.goto('/agency/dashboard')
     // The number is the real count — 113 — and reads 99+ above 99.
     await expect(page.getByTestId('bell-badge')).toHaveText('99+', { timeout: 20_000 })
 
@@ -105,7 +105,7 @@ test.describe('the bell', () => {
   test('two different objects with the same finding are two notifications, each named by it (the control — the same-object repeat is BellNotificationsTest)', async ({ page }) => {
     expect(raise(['--count=2', '--kind=roas_drop'])).toBe(2)
 
-    await page.goto('/agency/home')
+    await page.goto('/agency/dashboard')
     await bell(page).click()
     await expect(page.locator('[data-kind="roas_drop"]')).toHaveCount(2)
     await expect(page.locator('[data-kind="roas_drop"] [data-testid="notification-title"]').first()).toHaveText('انخفاض العائد')
@@ -121,7 +121,7 @@ test.describe('the ping', () => {
     page.on('pageerror', (e) => problems.push(e.message))
     await watchAudio(page)
 
-    await page.goto('/agency/home')
+    await page.goto('/agency/dashboard')
     await expect(bell(page)).toBeVisible()
 
     // Before any gesture the browser would refuse audio: nothing plays, and nothing is logged.

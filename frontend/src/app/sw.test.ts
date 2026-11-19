@@ -182,7 +182,7 @@ describe('public/sw.js — push', () => {
 
   it('shows the short message with the system sound and vibration, and tells open windows', async () => {
     const seen: unknown[] = []
-    sw.windows.push({ url: 'https://app.test/agency/home', focus: async () => undefined, postMessage: (m) => seen.push(m) })
+    sw.windows.push({ url: 'https://app.test/agency/dashboard', focus: async () => undefined, postMessage: (m) => seen.push(m) })
 
     await push({ title: 'قهوة الصباح', body: 'الميزانية 90%', url: '/agency/budgets?project=p1', tag: 'ch-budget_90-L1' })
 
@@ -220,7 +220,7 @@ describe('public/sw.js — push', () => {
 
     const focus = vi.fn(async () => undefined)
     const navigate = vi.fn(async () => undefined)
-    sw.windows.push({ url: 'https://app.test/agency/home', focus, navigate, postMessage: () => undefined })
+    sw.windows.push({ url: 'https://app.test/agency/dashboard', focus, navigate, postMessage: () => undefined })
     await click('/agency/alerts')
 
     expect(focus).toHaveBeenCalled()

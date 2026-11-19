@@ -29,8 +29,8 @@ const WIDTHS = [
 
 /** Route → the testids of blocks that must be at least partly inside the first viewport (desktop). */
 const SURFACES: Array<{ path: string; project?: boolean; projectPath?: boolean; firstScreen: string[] }> = [
-  // ANALYTICS-ONE-BOARD-001 — the retired agency board (counts, tabs, all-clients cards) has no page any more; `/agency/home` below is its replacement and keeps the same first-screen rule.
-  { path: '/agency/home', firstScreen: ['role-dashboard'] },
+  // ANALYTICS-ONE-BOARD-001 — the retired agency board (counts, tabs, all-clients cards) has no page any more; `/agency/dashboard` below is its replacement and keeps the same first-screen rule.
+  { path: '/agency/dashboard', firstScreen: ['role-dashboard'] },
   { path: '/agency/portfolio', firstScreen: ['portfolio-intro-kpis', 'portfolio-trend'] },
   /* Named from the live review (LIVE_ROUTE_CHECKLIST.md, 2026-10-09): the KPI row or summary that
      answers each page's question, and the filter block that scopes it. */

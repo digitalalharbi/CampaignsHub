@@ -38,7 +38,7 @@ import { AUTH, seededProject, selectProject } from './helpers'
 const STORE_PROJECT = 'متجر تجريبي — Demo'
 
 const OPERATOR_ROUTES = [
-  '/agency/home',
+  '/agency/dashboard',
   '/agency/campaigns',
   '/agency/content',
   '/agency/analytics',

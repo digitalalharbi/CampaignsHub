@@ -973,7 +973,6 @@ function PerformanceTab({ projectId, range, filters, objective, surface }: Overv
     <>
       {/* ANALYTICS-HEADLINE-001 — figures, then the daily drawing (first screen), then the findings that read them. */}
       <DailyMeasurePanel projectId={projectId} range={range} filters={filters} ar={ar} />
-      {surface === 'analytics' && <SmartReading projectId={projectId} range={range} filters={filters} ar={ar} />}
     </>
   )
 
@@ -995,6 +994,8 @@ function PerformanceTab({ projectId, range, filters, objective, surface }: Overv
         <AnalyticsHeadline {...data} />
         {daily}
         <AnalyticsOverview {...data} />
+        {/* SMART-READING-PLACE-001 — Owner 2026-11-20: at the top it read as text; the drawings lead, the reading follows. */}
+        <SmartReading projectId={projectId} range={range} filters={filters} ar={ar} />
       </>
     )
 }

@@ -86,6 +86,13 @@ export function AnalyticsBoardRedirect({ portal }: { portal: 'app' | 'agency' })
   return <Navigate to={`/${portal}/analytics${search}${hash}`} replace />
 }
 
+/** DASHBOARD-PATH-001 — the landing moved from `/…/home` to `/…/dashboard`; an old bookmark keeps its query and hash. */
+export function HomeToDashboard({ portal }: { portal: 'app' | 'agency' }) {
+  const { search, hash } = useLocation()
+
+  return <Navigate to={`/${portal}/dashboard${search}${hash}`} replace />
+}
+
 /**
  * The paths that lived at the root before the move. Parameterised segments are declared exactly as
  * the router matched them, so the redirect fires for the same URLs the old tree served.

@@ -243,7 +243,7 @@ final class EnsurePortalSessionIsolationTest extends TestCase
     public function test_the_post_auth_destination_is_unchanged_by_a_portal_route(): void
     {
         $before = $this->browser()->getJson('/api/v1/auth/memberships?portal=agency')->assertOk()->json('data.destination');
-        $this->assertSame('/agency/home', $before);
+        $this->assertSame('/agency/dashboard', $before);
 
         $this->browser()->getJson('/api/v1/client-workspaces')->assertOk();
 

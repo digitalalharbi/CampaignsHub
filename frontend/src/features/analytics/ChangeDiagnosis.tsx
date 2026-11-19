@@ -429,6 +429,8 @@ export function ChangeDiagnosis({
         WIDE — the decomposition. Two thirds of the row, because a comparison needs the width and the
         reader is meant to read DOWN it rather than across a row of cards.
       */}
+      {/* SHOW-AVAILABLE-001 — no comparable previous period, nothing to decompose: the card is not drawn; the days below still stand. */}
+      {comparable ? (
       <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-2">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-base font-bold text-text-primary">
@@ -451,16 +453,6 @@ export function ChangeDiagnosis({
         {/* NO-OPERATOR-NOTES-001 — the windows' caveat is the heading's tooltip, not a paragraph under it. */}
         {subtitle !== undefined && <span data-testid="change-subtitle" className="sr-only">{subtitle}</span>}
 
-        {!comparable && (
-          <span data-testid="change-withheld" title={[subtitle, ar
-              ? 'لا يُقارَن ما قيس جزئيًا بما قيس كاملًا. الأيام الخارجة عن سلوك الفترة تبقى صالحة لأنها تُقاس داخل الفترة نفسها.'
-              : 'A partly measured window is not compared with a whole one. The days that departed from the period\'s own behaviour still stand.'].filter(Boolean).join(' — ')}
-            className="inline-flex w-fit items-center gap-1.5 rounded-full bg-warning/10 px-2.5 py-1 text-xs font-bold text-warning">
-            <span aria-hidden>⏸</span>
-            {ar ? 'لا مقارنة بالفترة السابقة' : 'No comparison with the previous period'}
-            <span className="sr-only">{ar ? 'تحليل التغيّر محجوب' : 'The change analysis is withheld'}</span>
-          </span>
-        )}
 
         {comparable && rows.length > 0 && (
           <p className="mb-3 text-sm text-text-secondary">
@@ -494,6 +486,7 @@ export function ChangeDiagnosis({
 
         {comparable && <Decomposed d={lead} currency={currency} />}
       </div>
+      ) : <span data-testid="change-withheld" className="sr-only">{ar ? 'لا مقارنة بالفترة السابقة — تحليل التغيّر محجوب' : 'No comparison with the previous period — the change analysis is withheld'}</span>}
 
       {/* SQUARE — the focused signals. One number each, and each one a different question. */}
       <div className="grid grid-cols-2 gap-3">

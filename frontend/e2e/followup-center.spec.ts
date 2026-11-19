@@ -20,8 +20,8 @@ const noSideScroll = (page: Page) => page.evaluate(() => document.documentElemen
 const bell = (page: Page) => page.getByRole('button', { name: 'الإشعارات' })
 
 const WORKSPACES = [
-  { name: 'agency', auth: AUTH.owner, email: 'agency@campaignshub.io', home: '/agency/home', base: '/agency' },
-  { name: 'direct business', auth: AUTH.advertiser, email: 'advertiser@campaignshub.io', home: '/app/home', base: '/app' },
+  { name: 'agency', auth: AUTH.owner, email: 'agency@campaignshub.io', home: '/agency/dashboard', base: '/agency' },
+  { name: 'direct business', auth: AUTH.advertiser, email: 'advertiser@campaignshub.io', home: '/app/dashboard', base: '/app' },
 ] as const
 
 for (const ws of WORKSPACES) {

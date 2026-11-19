@@ -17,7 +17,7 @@ export function RequirePlatformAdmin() {
   const status = useAuth((s) => s.status)
 
   if (status === 'loading') return null
-  if (!user?.is_platform_admin) return <Navigate to="/app/home" replace />
+  if (!user?.is_platform_admin) return <Navigate to="/app/dashboard" replace />
 
   return <Outlet />
 }
