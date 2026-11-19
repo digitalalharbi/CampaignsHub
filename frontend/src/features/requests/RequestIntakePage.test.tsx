@@ -292,3 +292,48 @@ describe('RequestIntakePage — paid-media dynamic intake (?module=paid-media)',
     expect(await screen.findByText('Describe your custom request')).toBeInTheDocument()
   })
 })
+
+/**
+ * OPS-1 — the brief says how complete it is, and survives a closed tab.
+ */
+describe('RequestIntakePage — completion bar and draft on this device', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    try { localStorage.clear() } catch { /* noop */ }
+    vi.mocked(getRequestMeta).mockResolvedValue({ types: TYPES })
+    mockCatalog()
+  })
+  afterEach(() => { try { localStorage.clear() } catch { /* noop */ } })
+
+  it('shows the completion rising as the applicant is filled, and keeps the draft', async () => {
+    const first = renderWithProviders(<RequestIntakePage />, { route: '/requests/new?module=paid-media&services=new_campaign', locale: 'en' })
+    await screen.findByText('Requested services')
+    clickNext()
+    await screen.findByText('Applicant information')
+    const bar = screen.getByRole('progressbar')
+    expect(Number(bar.getAttribute('aria-valuenow'))).toBeGreaterThan(0)
+    const before = Number(bar.getAttribute('aria-valuenow'))
+
+    fillApplicant()
+    await waitFor(() => expect(Number(screen.getByRole('progressbar').getAttribute('aria-valuenow'))).toBeGreaterThan(before))
+    expect(await screen.findByTestId('brief-autosaved', {}, { timeout: 3000 })).toBeInTheDocument()
+
+    first.unmount()
+    // A new visit on the same device: the name comes back, nobody retypes it.
+    renderWithProviders(<RequestIntakePage />, { route: '/requests/new?module=paid-media&services=new_campaign', locale: 'en' })
+    await screen.findByText('Requested services')
+    clickNext()
+    await screen.findByText('Applicant information')
+    expect(screen.getByLabelText(/^Name/)).toHaveValue('Tester')
+    expect(screen.getByLabelText(/^Company/)).toHaveValue('Acme')
+  })
+
+  it('starts empty when nothing was saved', async () => {
+    renderWithProviders(<RequestIntakePage />, { route: '/requests/new?module=paid-media&services=new_campaign', locale: 'en' })
+    await screen.findByText('Requested services')
+    clickNext()
+    await screen.findByText('Applicant information')
+    expect(screen.getByLabelText(/^Name/)).toHaveValue('')
+    expect(screen.queryByTestId('brief-autosaved')).toBeNull()
+  })
+})
