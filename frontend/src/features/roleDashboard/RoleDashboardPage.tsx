@@ -11,7 +11,9 @@ import { FinanceView } from './FinanceView'
 import { ManagerView } from './ManagerView'
 import { MarketerView } from './MarketerView'
 import { PmView } from './PmView'
-import { useFitViewport } from './parts'
+import { OpenAnalytics, useFitViewport } from './parts'
+import { AnalyticsPopup } from '@/features/analyticsShared/AnalyticsPopup'
+import type { AnalyticsSectionId } from '@/features/analyticsShared/homeSections'
 import { WatchBoard } from './WatchBoard'
 
 /**
@@ -56,6 +58,8 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const [chosen, setChosen] = useState<DashboardView | null>(null)
   const [days, setDays] = useState<DashboardWindow>(30)
+  // ANALYTICS-POPUP-001 — a card that has an analytics counterpart opens that section here, over Home.
+  const [popup, setPopup] = useState<AnalyticsSectionId | null>(null)
   // DASH-CLIENT-FILTER-001 — the client chosen in the watch board (one shared choice) narrows every figure above it too.
   const client = useAgencyClient((s) => s.currentClientId)
   const q = useRoleDashboard(chosen, days, portal === 'agency' ? client : null)
@@ -63,6 +67,7 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
   const d = q.data
 
   return (
+    <OpenAnalytics.Provider value={setPopup}>
     <div ref={ref} data-testid="role-dashboard" data-view={d?.view} className="grid min-w-0 grid-cols-1 content-start gap-2">
       <PageIntro
         testid="role-dashboard-intro"
@@ -95,6 +100,8 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
       {d && <Body d={d} portal={portal} />}
       {d?.can_watch === true && <WatchBoard portal={portal} days={days} />}
       {d?.can_money && <FinancialDisclaimer />}
+      <AnalyticsPopup section={popup} days={days} onClose={() => setPopup(null)} />
     </div>
+    </OpenAnalytics.Provider>
   )
 }

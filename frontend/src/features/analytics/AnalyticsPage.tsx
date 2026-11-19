@@ -284,7 +284,7 @@ const TABS: readonly AnalyticsTab[] = TAB_GROUPS.flatMap((g) => g.tabs as readon
  * not operate. Every old tab id still opens: `?tab=budget` lands on the section that now holds it,
  * and each member keeps its own panel, stacked under a plain heading in the order a reader asks.
  */
-const SECTIONS: readonly { id: string; ar: string; en: string; icon: LucideIcon; members: readonly string[] }[] = [
+export const ANALYTICS_SECTIONS: readonly { id: string; ar: string; en: string; icon: LucideIcon; members: readonly string[] }[] = [
   { id: 'performance', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, members: ['performance', 'objective', 'budget'] },
   { id: 'platforms', ar: 'المنصات والجمهور', en: 'Platforms & audience', icon: Layers, members: ['platforms', 'audience', 'accounts'] },
   { id: 'campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, members: ['campaigns', 'ad_sets', 'ads'] },
@@ -392,18 +392,11 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   const widgetLayout = useWidgetLayout(isAnalysis ? currentProjectId : null, 'analytics')
   const hasWidgetTab = isAnalysis && (widgetLayout.data?.widgets ?? []).some((w) => w.visible)
   const tab = isAnalysis ? urlTab : 'performance'
-  const sections = hasWidgetTab ? [...SECTIONS, { id: 'links', ar: 'رؤى إضافية', en: 'Insights', icon: Sparkles, members: ['links'] }] : SECTIONS
+  const sections = hasWidgetTab ? [...ANALYTICS_SECTIONS, { id: 'links', ar: 'رؤى إضافية', en: 'Insights', icon: Sparkles, members: ['links'] }] : ANALYTICS_SECTIONS
   const sectionOf = (t: string) => sections.find((x) => `s_${x.id}` === t || x.members.includes(t)) ?? sections[0]
   const section = sectionOf(tab)
   // A section pill (`s_*`, and the default) stacks its members; an old single-tab link still opens only that panel.
   const stacked = isAnalysis && tab.startsWith('s_')
-  const has = (id: string) => (stacked ? section.members.includes(id) : tab === id)
-  const sub = (id: string, children: ReactNode) => (
-    <section key={id} className="flex flex-col gap-3" data-testid={`section-${id}`}>
-      {MEMBER_TITLE[id] && <h2 className="text-lg font-bold text-text-primary">{ar ? MEMBER_TITLE[id].ar : MEMBER_TITLE[id].en}</h2>}
-      {children}
-    </section>
-  )
   const [providers, setProviders] = useUrlList('provider')
   const [campaignIds, setCampaignIds] = useUrlList('campaign')
   /*
@@ -858,22 +851,15 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
             <AdvertiserSourcesStrip projectId={currentProjectId} />
           </div>
         )}
-        {has('performance') && sub('performance', <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />)}
-        {has('platforms') && sub('platforms', <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('audience') && sub('audience', <AudiencePanel projectId={currentProjectId} range={range} />)}
-        {has('accounts') && sub('accounts', <AccountsTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('campaigns') && sub('campaigns', <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('ad_sets') && sub('ad_sets', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />)}
-        {has('ads') && sub('ads', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />)}
-        {has('creative') && sub('creative', <CreativeTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('objective') && sub('objective', <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('funnel') && sub('funnel', <FunnelTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('store') && sub('store', <StoreFunnelTab projectId={currentProjectId} range={range} />)}
-        {has('site') && sub('site', <SiteAnalyticsTab projectId={currentProjectId} range={range} />)}
-        {has('budget') && sub('budget', <BudgetTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('quality') && sub('quality', <QualityTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('live') && sub('live', <LiveOperatingTab projectId={currentProjectId} />)}
-        {has('links') && hasWidgetTab && sub('links', <WidgetSurface projectId={currentProjectId} surface="analytics" range={range} />)}
+        <AnalyticsSectionBody
+          members={stacked ? section.members : [tab]}
+          projectId={currentProjectId}
+          range={range}
+          filters={filters}
+          objective={objective}
+          surface={surface}
+          widgets={hasWidgetTab}
+        />
         </>
       )}
 
@@ -886,6 +872,54 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
 }
 
 type TabProps = { projectId: string | null; range: { from: string; to: string }; filters: MetricFilters }
+
+/**
+ * ANALYTICS-SHARED-001 — the panels of one section (or one old tab), by explicit props.
+ *
+ * The page stacks a section's members from here, and the Home popup (`AnalyticsPopup`) opens the SAME panels over the SAME
+ * queries for the period it was opened on — one composition, so a figure on «الرئيسية» and the section it opens cannot be
+ * read two ways. It takes no router state of its own: filters, range and objective come in as props.
+ */
+export function AnalyticsSectionBody({ members, projectId: currentProjectId, range, filters, objective, surface = 'analytics', widgets = false }: {
+  members: readonly string[]
+  projectId: string
+  range: { from: string; to: string }
+  filters: MetricFilters
+  objective: string
+  surface?: Surface
+  widgets?: boolean
+}) {
+  const ar = useAr()
+  const has = (id: string) => members.includes(id)
+  const sub = (id: string, children: ReactNode) => (
+    <section key={id} className="flex flex-col gap-3" data-testid={`section-${id}`}>
+      {MEMBER_TITLE[id] && <h2 className="text-lg font-bold text-text-primary">{ar ? MEMBER_TITLE[id].ar : MEMBER_TITLE[id].en}</h2>}
+      {children}
+    </section>
+  )
+  const hasWidgetTab = widgets
+
+  return (
+    <>
+        {has('performance') && sub('performance', <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />)}
+      {has('platforms') && sub('platforms', <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('audience') && sub('audience', <AudiencePanel projectId={currentProjectId} range={range} />)}
+      {has('accounts') && sub('accounts', <AccountsTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('campaigns') && sub('campaigns', <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('ad_sets') && sub('ad_sets', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />)}
+      {has('ads') && sub('ads', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />)}
+      {has('creative') && sub('creative', <CreativeTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('objective') && sub('objective', <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('funnel') && sub('funnel', <FunnelTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('store') && sub('store', <StoreFunnelTab projectId={currentProjectId} range={range} />)}
+      {has('site') && sub('site', <SiteAnalyticsTab projectId={currentProjectId} range={range} />)}
+      {has('budget') && sub('budget', <BudgetTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('quality') && sub('quality', <QualityTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('live') && sub('live', <LiveOperatingTab projectId={currentProjectId} />)}
+      {has('links') && hasWidgetTab && sub('links', <WidgetSurface projectId={currentProjectId} surface="analytics" range={range} />)}
+    </>
+  )
+}
 
 /**
  * The overview tab also needs the objective, because its KPI row is chosen BY the objective — and

@@ -37,7 +37,7 @@ export function ProjectOpenPage() {
   if (project.data.lifecycle_status === 'archived') return <ArchivedProjectView project={project.data} />
 
   return inAdvertiser
-    ? <Navigate to={`/app/dashboard?project=${project.data.id}`} replace />
+    ? <Navigate to={`/app/analytics?project=${project.data.id}`} replace />
     : <Navigate to={`/agency/clients/${project.data.client_workspace_id}${search}${hash}`} replace />
 }
 

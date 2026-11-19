@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useSearchParams, type NavigateOptions } from 'react-router-dom'
 
 /**
@@ -27,7 +27,33 @@ function baseFor(path: string, key: string, rendered: URLSearchParams): URLSearc
 
 export type LatestParamsUpdate = (latest: URLSearchParams) => URLSearchParams
 
+/**
+ * ANALYTICS-POPUP-001 — an embedded reader keeps its own query string.
+ *
+ * Analytics' filters, drill path and tab are URL state. A popup that shows one of its sections over another page
+ * (Home, «الرئيسية») must not write `?drill=` or `?tab=` into that page's address, nor read the page's `?project=` as
+ * its own. Inside this provider every `useLatestSearchParams` reader — `useUrlState`, `useUrlList`, `usePeriod` —
+ * reads and writes a private, in-memory query string seeded from `initial`, and the real address is left alone.
+ */
+const ScopedParams = createContext<[URLSearchParams, (update: LatestParamsUpdate) => void] | null>(null)
+
+export function ScopedSearchParams({ initial = '', children }: { initial?: string; children: ReactNode }) {
+  const [search, setSearch] = useState(initial)
+  const latest = useRef(search)
+  latest.current = search
+  const set = useCallback((update: LatestParamsUpdate) => {
+    const next = update(new URLSearchParams(latest.current)).toString()
+    latest.current = next
+    setSearch(next)
+  }, [])
+
+  const value = useMemo<[URLSearchParams, (update: LatestParamsUpdate) => void]>(() => [new URLSearchParams(search), set], [search, set])
+
+  return createElement(ScopedParams.Provider, { value }, children)
+}
+
 export function useLatestSearchParams(): [URLSearchParams, (update: LatestParamsUpdate, options?: NavigateOptions) => void] {
+  const scoped = useContext(ScopedParams)
   const [params, setParams] = useSearchParams()
   const { pathname, key } = useLocation()
 
@@ -45,7 +71,7 @@ export function useLatestSearchParams(): [URLSearchParams, (update: LatestParams
     }, options)
   }, [key, pathname, setParams])
 
-  return [params, write]
+  return scoped ?? [params, write]
 }
 
 /** Test seam. */
