@@ -9,8 +9,7 @@ import { useProject } from '@/stores/project'
 import { days as countedDays } from '@/lib/counted'
 import { metricsCurrency, useDashboardPerformance, type DashboardUnit, type DashboardWindow, type RoleDashboard } from './api'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
-import { Skeleton } from '@/components/ui/States'
-import { PlatformComparePanel, SpendSharePanel, TopCampaignsPanel, WindowKpis } from './performance'
+import { PerformanceBlock } from './performance'
 
 const T = {
   ar: { budget: 'الميزانية', spend: 'الإنفاق', remaining: 'المتبقي', active: 'حملات نشطة', alerts: 'التنبيهات', vsBudget: 'الإنفاق والميزانية', onPlan: 'على الخطة', offPlan: 'خارج الخطة', daily: 'الإنفاق اليومي', integrations: 'التكاملات', healthy: 'سليمة', review: 'تحتاج مراجعة', pending: 'قيد الإعداد', paused: 'متوقفة', critical: 'حرجة', open: 'مفتوحة', nothing: 'لا توجد بيانات', unmeasured: 'حملة بلا قياس', of: 'من الميزانية', barBudget: 'الميزانية', barSpent: 'الإنفاق', campaignBudgets: 'ميزانيات الحملات' },
@@ -60,7 +59,6 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
   const scopeProject = useProject((s) => s.currentProjectId)
   const perf = useDashboardPerformance(d.window.days as DashboardWindow, d.performance_deferred === true, portal === 'agency' ? scopeClient : null, portal === 'agency' && scopeClient ? scopeProject : null)
   const pd: RoleDashboard = d.performance_deferred ? { ...d, ...(perf.data ?? {}) } : d
-  const perfLoading = d.performance_deferred === true && perf.isLoading
   // DASH-METRICS-CURRENCY-001 — the platforms' figures in their own unit; the budgets above stay in theirs.
   const mc = metricsCurrency(pd)
   const ratio = m && m.budget && m.spent !== null ? m.spent / m.budget : null
@@ -103,22 +101,8 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
         money went), then the money against its budgets. One block, so the page keeps its rows.
       */}
       <div className="grid min-h-0 grid-cols-1 gap-2">
-      {perfLoading ? <Skeleton className="h-20" /> : <WindowKpis d={pd} portal={portal} />}
-      <div className="grid min-h-0 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-12" data-testid="dash-performance">
-        {perfLoading ? (
-          <>
-            <Skeleton className="h-[220px] md:col-span-2 lg:col-span-5" />
-            <Skeleton className="h-[220px] lg:col-span-4" />
-            <Skeleton className="h-[220px] lg:col-span-3" />
-          </>
-        ) : (
-          <>
-            <TopCampaignsPanel rows={pd.campaign_rows ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] md:col-span-2 lg:col-span-5" />
-            <PlatformComparePanel platforms={pd.platforms ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] lg:col-span-4" />
-            <SpendSharePanel platforms={pd.platforms ?? []} currency={mc} portal={portal} className="min-h-[220px] lg:col-span-3" />
-          </>
-        )}
-      </div>
+      {/* HOME-360-001 — one block, shared with the project manager's page (same query, deduplicated). */}
+      <PerformanceBlock d={d} portal={portal} />
 
       <div className="grid min-h-0 grid-cols-1 gap-2 lg:grid-cols-12 lg:grid-rows-1">
         <Panel title={t.vsBudget} to={`/${portal}/budgets`} testId="dash-panel-bars" className="min-h-[220px] lg:col-span-6">
