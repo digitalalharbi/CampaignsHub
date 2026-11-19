@@ -26,6 +26,10 @@ final class RoleDashboardPerformanceController extends Controller
 
         $days = (int) $request->integer('days', RoleDashboardBuilder::DEFAULT_DAYS);
 
-        return ApiResponse::success($builder->performanceFor($user, $days), 'Dashboard performance.');
+        // HOME-SCOPE-ISOLATION-001 — the client and project chosen at the top; the builder ignores either outside reach.
+        $client = $request->string('client')->toString() ?: null;
+        $project = $request->string('project')->toString() ?: null;
+
+        return ApiResponse::success($builder->performanceFor($user, $days, $client, $project), 'Dashboard performance.');
     }
 }

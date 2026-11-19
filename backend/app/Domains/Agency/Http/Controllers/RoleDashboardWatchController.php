@@ -27,6 +27,6 @@ final class RoleDashboardWatchController extends Controller
         $days = (int) $request->integer('days', RoleDashboardBuilder::DEFAULT_DAYS);
         $unit = $request->query('unit');
 
-        return ApiResponse::success($builder->watchFor($user, $days, is_string($unit) && $unit !== '' ? $unit : null), 'Dashboard watch board.');
+        return ApiResponse::success($builder->watchFor($user, $days, is_string($unit) && $unit !== '' ? $unit : null, $request->string('project')->toString() ?: null), 'Dashboard watch board.');
     }
 }
