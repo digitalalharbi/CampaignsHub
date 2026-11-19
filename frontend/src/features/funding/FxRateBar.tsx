@@ -28,7 +28,6 @@ export function FxRateBar() {
       <span className="rounded-full bg-surface-hover px-2 py-0.5" data-testid="fx-rate-managed">
         {data.kind === 'pegged' ? tx(L.fxPegged) : tx(L.fxPlatform)}
       </span>
-      {data.stale && <span className="font-semibold text-warning" data-testid="fx-rate-stale">⚠ {tx(L.fxStale)}</span>}
     </div>
   )
 }
