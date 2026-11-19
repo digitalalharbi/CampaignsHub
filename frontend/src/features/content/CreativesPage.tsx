@@ -1,6 +1,7 @@
 import { creativeKindLabel as creativeKindLabelImpl } from './creativeKind'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { useLatestSearchParams } from '@/lib/url/latestSearchParams'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { GitCompare, Layers, LayoutGrid, Rows3 } from 'lucide-react'
 import { DeliveryBadge } from './DeliveryBadge'
@@ -10,6 +11,9 @@ import { AdPreviewDialog } from './AdPreviewDialog'
 import { creativeDialogFigures } from './creativeDialogFigures'
 import { CreativeTrend } from './CreativeTrend'
 import { CreativeCompare } from './CreativeCompare'
+import { StandingStrip } from './StandingStrip'
+import { COMPARE_MAX, getStanding, standingQuery, whyById, type StandingItem } from './standing'
+import type { WhyRow } from '@/features/analyticsShared/contentWhy'
 import { AboutThisData } from './AboutThisData'
 import { MetricValue } from './MetricValue'
 import { metricLabel } from './metrics'
@@ -167,6 +171,7 @@ const COPY = {
     sortName: 'الاسم',
     compare: 'مقارنة',
     compareHint: 'اختر إعلانين أو أكثر للمقارنة.',
+    compareMax: 'المقارنة تكون من 2 إلى 4 محتويات.',
     selected: 'محدَّد',
     merge: 'دمج كأصل واحد',
     merging: 'جارٍ الدمج…',
@@ -257,6 +262,7 @@ const COPY = {
     sortName: 'Name',
     compare: 'Compare',
     compareHint: 'Select two or more ads to compare.',
+    compareMax: 'Compare between 2 and 4 items.',
     selected: 'selected',
     merge: 'Merge as one asset',
     merging: 'Merging…',
@@ -348,7 +354,11 @@ const FATIGUE_LABEL: Record<FatigueStatus, { ar: string; en: string }> = {
 export { creativeKindLabel } from './creativeKind'
 
 /** This module re-exports the labeller, so it reads it under its own name. */
-const kindWord = (kind: string, ar: boolean): string => creativeKindLabelImpl(kind, ar)
+/*
+ * CONTENT-CARDS-001 — «text» is a FILTER word (an ad with no still and no film), not a kind a card can have, and it is NOT
+ * in the shared kind vocabulary: a provider's own token `text` must keep reading as «غير مصنّف», never as a reader's word.
+ */
+const kindWord = (kind: string, ar: boolean): string => (kind === 'text' ? (ar ? 'نص فقط' : 'Text only') : creativeKindLabelImpl(kind, ar))
 
 /**
  * Which of a creative's headline metrics is its RESULT, and which is its efficiency.
@@ -437,7 +447,9 @@ export function CreativesPage() {
    * like they disagree. Read once, as the initial value: after that the controls own the state, and
    * the effect below writes it back so a refresh or a shared link reopens the same page.
    */
-  const [params, setParams] = useSearchParams()
+  const [params, writeParams] = useLatestSearchParams()
+  /* URL-WRITE-RACE-001: every write merges into the LATEST address, never the one this render saw. */
+  const setParams = (next: string, options?: { replace?: boolean }) => writeParams(() => new URLSearchParams(next), options)
   const initial = useRef(params)
   const opened = useRef(false)
 
@@ -587,6 +599,23 @@ export function CreativesPage() {
   })
 
   /*
+   * CONTENT-CARDS-001 — where each card stands among content of the SAME objective.
+   *
+   * One server read over the whole filtered scope (not this page), cached per tenant. The page, the sort, the search and
+   * the health filter choose what is DRAWN and are left out of the key, so paging and sorting never refetch it. A failure
+   * is silent: the cards draw without the strip rather than the library failing because a reading did.
+   */
+  const scope = useMemo(() => standingQuery(query), [query])
+  const standing = useQuery({
+    queryKey: ['content-standing', currentProjectId, scope],
+    queryFn: () => getStanding(scope),
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  })
+  const standingById = useMemo(() => new Map((standing.data?.items ?? []).map((i) => [i.id, i])), [standing.data])
+  const whyMap = useMemo(() => whyById(standing.data?.why_rows ?? []), [standing.data])
+
+  /*
    * The address follows the controls — so a refresh, a Back, or a shared link reopens this view.
    *
    * `replace` deliberately: typing in the search box would otherwise push a history entry per
@@ -608,7 +637,7 @@ export function CreativesPage() {
     // `params` is deliberately absent from the deps: including it would re-run this on the write it
     // just made. It is READ here only to compare, which cannot loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, view, setParams])
+  }, [query, view])
 
   /*
    * Choosing a view IS writing the address — one step, not two.
@@ -831,9 +860,9 @@ export function CreativesPage() {
           <>
             <Button
               variant="secondary"
-              disabled={selected.length < 2}
+              disabled={selected.length < 2 || selected.length > COMPARE_MAX}
               onClick={() => setComparing(true)}
-              title={selected.length < 2 ? t.compareHint : undefined}
+              title={selected.length < 2 ? t.compareHint : selected.length > COMPARE_MAX ? t.compareMax : undefined}
             >
               <GitCompare className="h-4 w-4" aria-hidden />
               {t.compare}
@@ -1227,6 +1256,8 @@ export function CreativesPage() {
                 showPreviewPanel={anyPreview}
                 detailsTo={`${creative.id}${libraryAddress}`}
                 windowEnd={to}
+                standing={standingById.get(creative.id)}
+                why={whyMap.get(creative.id)}
               />
             </li>
           ))}
@@ -1553,8 +1584,9 @@ export function CreativesPage() {
 
       {comparing && (
         <CreativeCompare
-          creativeIds={selected}
-          creatives={creatives.filter((c) => selected.includes(c.id))}
+          creativeIds={selected.slice(0, COMPARE_MAX)}
+          creatives={creatives.filter((c) => selected.slice(0, COMPARE_MAX).includes(c.id))}
+          standing={selected.slice(0, COMPARE_MAX).map((id) => standingById.get(id)).filter((i): i is StandingItem => i !== undefined)}
           window={{ from, to }}
           onClose={() => setComparing(false)}
         />
@@ -1583,7 +1615,12 @@ function CreativeGridCard({
   showPreviewPanel = true,
   detailsTo,
   windowEnd,
+  standing,
+  why,
 }: {
+  /** CONTENT-CARDS-001 — the server's standing for this card, and `contentWhy`'s reading; both absent until they arrive. */
+  standing?: StandingItem
+  why?: WhyRow
   creative: CreativeCard
   /** False when nothing in the result has an asset — the reserved 16:9 panel is then dead space. */
   showPreviewPanel?: boolean
@@ -1671,6 +1708,8 @@ function CreativeGridCard({
    * NOT this — `absenceLabel` already prefers the server's note over its own wording.
    */
   const said = absenceLabel(readPreview(preview, ar), ar)
+  /* CONTENT-CARDS-001 — the ad's own words, when it has some: shown whenever the picture is not, even if no card in the result has one. */
+  const hasAdText = Boolean(preview.text && (preview.text.body || ownHeadline(preview.text.headline)))
 
   return (
     /*
@@ -1782,7 +1821,7 @@ function CreativeGridCard({
               className={`h-full w-full ${mediaFitClass(preview.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), preview.aspect ?? null, 'cover')}`}
               onUnavailable={() => setBrokenVideo(true)}
             />
-          ) : showPreviewPanel ? (
+          ) : showPreviewPanel || hasAdText ? (
             /*
              * AD-PREVIEW-001 — the canonical sentence, not a generic one.
              *
@@ -1803,13 +1842,13 @@ function CreativeGridCard({
              * cover now, under the platform's mark. X names every promoted post «Tweet <id>», which is an id, not a
              * headline, so it is never printed as one.
              */
-            preview.text && (preview.text.body || ownHeadline(preview.text.headline)) ? (
+            hasAdText && preview.text ? (
               <span
                 data-testid="creative-text-card"
                 data-cover="text-card"
                 data-absence={preview.state}
                 title={said || undefined}
-                className="relative flex h-full flex-col justify-center gap-1.5 overflow-hidden bg-surface-secondary p-3 text-start"
+                className={`relative flex flex-col justify-center gap-1.5 overflow-hidden bg-surface-secondary p-3 text-start ${showPreviewPanel ? 'h-full' : 'min-h-40'}`}
               >
                 <span aria-hidden className="absolute inset-x-0 top-0 h-1" style={{ background: platformColor(canonicalPlatform(creative.provider)) }} />
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-text-muted">
@@ -1944,6 +1983,8 @@ function CreativeGridCard({
           * hid the only fact that mattered: whether the platform was asked, answered, or refused.
           * A creative that has figures keeps the grid; one that has none gets the reason instead.
           */}
+        <StandingStrip item={standing} why={why} name={creative.name} ar={ar} />
+
         {creative.metrics === null ? (
           /*
              CONTENT-AD-DELIVERED-001 — three absences, three sentences.
