@@ -18,6 +18,7 @@ use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Projects\Models\Project;
 use App\Models\User;
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -87,7 +88,9 @@ final class ClientInvoiceService
             'line_items' => [[
                 'description' => 'Advertising management fee',
                 'description_ar' => 'رسوم إدارة الحملات الإعلانية',
-                'period' => $from->toDateString().' → '.$to->toDateString(),
+                'period' => PeriodLabel::range($from, $to, 'ar'),
+                'period_from' => $from->toDateString(),
+                'period_to' => $to->toDateString(),
                 'quantity' => 1,
                 'unit_price' => $subtotal,
                 'total' => $subtotal,

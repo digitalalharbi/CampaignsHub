@@ -8,6 +8,7 @@ use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ReportGenerator;
 use App\Domains\Reports\Services\ReportVersions;
+use App\Support\PeriodLabel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -83,11 +84,11 @@ final class GenerateReportJob implements ShouldQueue
             'severity' => $ready ? 'info' : 'error',
             'title' => $ready ? 'Report ready: '.$name : 'Report failed: '.$name,
             'message' => $ready
-                ? 'The report «'.$name.'» for '.$report->period_start?->toDateString().' → '.$report->period_end?->toDateString().' has been generated.'
+                ? 'The report «'.$name.'» for '.($report->period_start !== null && $report->period_end !== null ? PeriodLabel::range($report->period_start, $report->period_end, 'en') : '—').' has been generated.'
                 : 'The report «'.$name.'» could not be generated'.($error ? ': '.$error : '.'),
             'title_ar' => $ready ? 'التقرير جاهز: '.$name : 'تعذّر توليد التقرير: '.$name,
             'message_ar' => $ready
-                ? 'اكتمل توليد تقرير «'.$name.'» للفترة '.$report->period_start?->toDateString().' → '.$report->period_end?->toDateString().'.'
+                ? 'اكتمل توليد تقرير «'.$name.'» للفترة '.($report->period_start !== null && $report->period_end !== null ? PeriodLabel::range($report->period_start, $report->period_end, 'ar') : '—').'.'
                 : 'تعذّر توليد تقرير «'.$name.'»'.($error ? ': '.$error : '.'),
             'source' => 'reports',
             'entity_type' => Report::class,

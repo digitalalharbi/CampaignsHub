@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Support;
 
 use App\Domains\Reports\Models\Report;
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 
 /**
@@ -90,7 +91,7 @@ final class ReportPeriod
     {
         $ar = $locale === 'ar';
         if ($mode === 'fixed') {
-            return $start === null || $end === null ? null : $start.' — '.$end;
+            return $start === null || $end === null ? null : PeriodLabel::range($start, $end, $locale);
         }
 
         $label = match ($kind) {

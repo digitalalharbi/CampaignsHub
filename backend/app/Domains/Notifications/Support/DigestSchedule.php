@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 
 /**
@@ -83,12 +84,6 @@ final class DigestSchedule
         ];
     }
 
-    /** Gregorian month names, Arabic — the mail states its period in words with Latin digits, never through a locale that may print ٠١٢. */
-    private const AR_MONTHS = [1 => 'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-
-    /** ISO weekday → Arabic name. */
-    private const AR_DAYS = [1 => 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
-
     /**
      * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the period word of each rhythm, in the same plain dialect everywhere:
      * the daily mail is about YESTERDAY (one whole day), the weekly about the seven complete days that ended yesterday,
@@ -120,27 +115,9 @@ final class DigestSchedule
      */
     public static function periodLabel(string $kind, string $from, string $to, bool $ar): string
     {
-        $f = Carbon::parse($from);
-        $t = Carbon::parse($to);
-        $month = static fn (Carbon $d): string => $ar ? self::AR_MONTHS[$d->month] : $d->format('F');
-        $day = static fn (Carbon $d): string => $ar ? self::AR_DAYS[$d->dayOfWeekIso] : $d->format('l');
-
-        if ($kind === 'monthly') {
-            return $month($f).' '.$f->year;
-        }
-        if ($kind === 'daily' || $f->isSameDay($t)) {
-            // «أمس» only when the day IS yesterday in Riyadh; an older stored window or a `--date` run names its day alone.
-            $yesterday = $t->toDateString() === Carbon::now('Asia/Riyadh')->subDay()->toDateString();
-
-            return $yesterday
-                ? ($ar ? 'أمس '.$day($t).' '.$t->day.' '.$month($t) : 'Yesterday, '.$day($t).' '.$t->day.' '.$month($t))
-                : $day($t).' '.$t->day.' '.$month($t);
-        }
-        $range = $f->month === $t->month
-            ? AlertEventText::ltr($f->day.'–'.$t->day).' '.$month($t)
-            : $f->day.' '.$month($f).' – '.$t->day.' '.$month($t);
-
-        return $range.($f->year !== (int) Carbon::now()->year || $t->year !== $f->year ? ' '.$t->year : '');
+        // PERIOD-LABEL-001 — the Owner's one period format; the name comes from the days themselves («أمس», «آخر 7 أيام»,
+        // «الشهر الماضي»), never from the rhythm, so a re-run or an older window names exactly the days it covers.
+        return PeriodLabel::inferred($from, $to, $ar ? 'ar' : 'en');
     }
 
     /** What the figures are compared with, for each rhythm. */

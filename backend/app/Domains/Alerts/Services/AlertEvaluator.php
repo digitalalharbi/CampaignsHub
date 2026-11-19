@@ -44,6 +44,7 @@ use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
+use App\Support\PeriodLabel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
@@ -1653,7 +1654,7 @@ final class AlertEvaluator
                     'entity_id' => (string) $c->id,
                     'project_id' => (string) $c->project_id,
                     'title' => 'Spending with no results',
-                    'message' => $c->name.' spent '.round($spend, 2).' with no '.strtolower((string) ($label['en'] ?? 'results')).' from '.$v['from'].' to '.$v['to'].' ('.$v['days'].' days).',
+                    'message' => $c->name.' spent '.round($spend, 2).' with no '.strtolower((string) ($label['en'] ?? 'results')).' for '.PeriodLabel::range((string) $v['from'], (string) $v['to'], 'en').' ('.$v['days'].' days).',
                     // `conversions` keeps its name for the readers of this context; it now holds the objective's result.
                     // `days` is the days JUDGED (since it last started delivering), not the rule's ceiling.
                     'context' => ['spend' => $spend, 'conversions' => (float) $result, 'days' => $v['days'], 'from' => $v['from'], 'to' => $v['to'],

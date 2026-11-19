@@ -216,7 +216,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $mixed = array_values(array_filter($d['projects'], static fn (array $b): bool => count($b['groups']) > 1))[0];
         $m = OperationalDigestModel::project($mixed, 'ar', 1);
         $this->assertSame(['spend', 'impressions', 'clicks'], array_column($m['kpis'], 'key'), 'the total: what every objective shares, never a blended result');
-        $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'project', 'أمس الأربعاء 11 نوفمبر'))->render();
+        $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'project', 'أمس: 11 نوفمبر 2026'))->render();
         $this->assertLessThan(strpos($html, 'data-block="group"'), strpos($html, 'data-block="kpis"'), 'total before the objective blocks');
     }
 
@@ -414,13 +414,13 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
 
     public function test_the_period_label_states_the_day_and_the_dates_in_latin_digits(): void
     {
-        $this->assertSame('أمس الأربعاء 11 نوفمبر', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', true));
-        $this->assertSame('Yesterday, Wednesday 11 November', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', false));
-        $this->assertStringContainsString('5–11', DigestSchedule::periodLabel('weekly', '2026-11-05', '2026-11-11', true));
+        $this->assertSame('أمس: 11 نوفمبر 2026', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', true));
+        $this->assertSame('Yesterday: Nov 11, 2026', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', false));
+        $this->assertSame('آخر 7 أيام: 5 نوفمبر – 11 نوفمبر 2026', DigestSchedule::periodLabel('weekly', '2026-11-05', '2026-11-11', true));
         $this->assertStringContainsString('نوفمبر', DigestSchedule::periodLabel('weekly', '2026-11-05', '2026-11-11', true));
-        $this->assertSame('أكتوبر 2026', DigestSchedule::periodLabel('monthly', '2026-10-01', '2026-10-31', true));
+        $this->assertSame('الشهر الماضي: 1 أكتوبر – 31 أكتوبر 2026', DigestSchedule::periodLabel('monthly', '2026-10-01', '2026-10-31', true));
         // Review fix — «أمس» only for yesterday: an older day (a stored alert window, a `--date` run) names its day alone.
-        $this->assertSame('الأحد 8 نوفمبر', DigestSchedule::periodLabel('daily', '2026-11-08', '2026-11-08', true));
+        $this->assertSame('8 نوفمبر 2026', DigestSchedule::periodLabel('daily', '2026-11-08', '2026-11-08', true));
         $this->assertSame('مقارنة باليوم اللي قبله', DigestSchedule::comparedWith('daily', true));
     }
 
@@ -448,7 +448,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
             $html = $m->render();
 
             return $m->scope === 'portfolio'
-                && $m->periodLabel === 'أمس الأربعاء 11 نوفمبر'
+                && $m->periodLabel === 'أمس: 11 نوفمبر 2026'
                 && str_contains((string) $m->envelope()->subject, 'ملخص المشاريع • أمس')
                 && str_contains($html, 'مقارنة باليوم اللي قبله')
                 && ! str_contains($html, 'آخر 7 أيام');
@@ -476,7 +476,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         Mail::assertSent(OperationalDigestMail::class, function (OperationalDigestMail $m) use (&$names): bool {
             $names[] = $m->model['name'];
             $this->assertSame('project', $m->scope, 'a separate mail per project, never a combined one');
-            $this->assertSame('أمس الأربعاء 11 نوفمبر', $m->periodLabel);
+            $this->assertSame('أمس: 11 نوفمبر 2026', $m->periodLabel);
             $this->assertStringContainsString('ملخص المشروع • أمس', (string) $m->envelope()->subject);
             if ($m->model['name'] !== 'Spending') {
                 $this->assertSame('none', $m->model['state']);
@@ -526,7 +526,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
             $this->assertNotContains($i['reason'], ['stale', 'sync_failed'], 'a late or failed sync is not a performance decision');
         }
         $this->assertNotSame([], $m['linking'], 'the demo has late and failed sources; they are reported in «ملخص الربط»');
-        $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio', 'أمس الأربعاء 11 نوفمبر'))->render();
+        $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio', 'أمس: 11 نوفمبر 2026'))->render();
         $decide = (int) strpos($html, 'يحتاج قرارك الآن');
         $link = (int) strpos($html, 'data-block="linking"');
         $this->assertGreaterThan(0, $decide);
@@ -571,12 +571,12 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $digest = app(DailyDigest::class)->buildRange($this->user, (string) $this->tenant->id, [(string) $project->id], $day->copy()->startOfDay(), $day->copy()->endOfDay(), 'daily');
         $m = OperationalDigestModel::project($digest['projects'][0], 'ar', 1);
 
-        return [(new OperationalDigestMail($m, 'ar', 'م', 'daily', 'project', 'أمس الأربعاء 11 نوفمبر'))->render(), $m];
+        return [(new OperationalDigestMail($m, 'ar', 'م', 'daily', 'project', 'أمس: 11 نوفمبر 2026'))->render(), $m];
     }
 
     /**
      * The Owner approved this card (2026-11-12): the metric and its % change as the title, before/after bars that name their
-     * days («أمس الأربعاء 11 نوفمبر» against «الثلاثاء 10 نوفمبر», never a bare «قبل / الآن»), and numbered action chips.
+     * days («أمس: 11 نوفمبر 2026» against «10 نوفمبر 2026», never a bare «قبل / الآن»), and numbered action chips.
      */
     public function test_the_decision_card_keeps_the_approved_layout_with_dated_bars(): void
     {
@@ -587,8 +587,8 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
 
         $this->assertStringContainsString('data-viz="before_now"', $html);
         $this->assertMatchesRegularExpression('/تكلفة النقرة زادت\s*\S*100%/u', $text, 'the metric and its % change');
-        $this->assertStringContainsString('الثلاثاء 10 نوفمبر · ', $text, 'the «before» bar names its day');
-        $this->assertStringContainsString('أمس الأربعاء 11 نوفمبر · ', $text, 'the «after» bar names its day');
+        $this->assertStringContainsString('10 نوفمبر 2026 · ', $text, 'the «before» bar names its day');
+        $this->assertStringContainsString('أمس: 11 نوفمبر 2026 · ', $text, 'the «after» bar names its day');
         preg_match_all('/data-viz="before_now".*?<\/table>\s*<\/td>\s*<\/tr>\s*<\/table>/us', $html, $bars);
         $this->assertNotEmpty($bars[0]);
         foreach ($bars[0] as $bar) {

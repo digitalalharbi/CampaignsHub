@@ -89,7 +89,7 @@
   <div class="meta">
     <div><div class="k">{{ $t['issued'] }}</div><div class="v">{{ $date($invoice->issued_at) }}</div></div>
     <div><div class="k">{{ $t['due'] }}</div><div class="v">{{ $date($invoice->due_date) }}</div></div>
-    <div><div class="k">{{ $t['period'] }}</div><div class="v">{{ $date($invoice->period_start) }} → {{ $date($invoice->period_end) }}</div></div>
+    <div><div class="k">{{ $t['period'] }}</div><div class="v">@if ($invoice->period_start && $invoice->period_end){{ \App\Support\PeriodLabel::range($invoice->period_start, $invoice->period_end, $lang) }}@else—@endif</div></div>
   </div>
 
   <div class="parties">
@@ -109,7 +109,7 @@
     @foreach ($lines as $line)
       <tr>
         <td>{{ $ar ? ($line['description_ar'] ?? $line['description'] ?? '') : ($line['description'] ?? $line['description_ar'] ?? '') }}
-          @if (! empty($line['period'])) <div class="muted small" dir="ltr" style="text-align:start">{{ $line['period'] }}</div> @endif</td>
+          @if (! empty($line['period'])) <div class="muted small" dir="ltr" style="text-align:start">{{ ! empty($line['period_from']) && ! empty($line['period_to']) ? \App\Support\PeriodLabel::range((string) $line['period_from'], (string) $line['period_to'], $lang) : $line['period'] }}</div> @endif</td>
         <td class="num">{{ $line['quantity'] ?? 1 }}</td>
         <td class="num">{{ $money($line['unit_price'] ?? $line['total'] ?? 0) }}</td>
         <td class="num">{{ $money($line['total'] ?? $line['unit_price'] ?? 0) }}</td>

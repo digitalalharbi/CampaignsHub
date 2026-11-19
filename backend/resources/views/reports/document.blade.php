@@ -29,7 +29,7 @@
   <h1>{{ $report->name }}</h1>
   <div class="muted">
     {{ $report->type }} ·
-    {{ data_get($data, 'period.from') }} → {{ data_get($data, 'period.to') }} ·
+    {{ data_get($data, 'period.from') && data_get($data, 'period.to') ? \App\Support\PeriodLabel::range((string) data_get($data, 'period.from'), (string) data_get($data, 'period.to'), data_get($data, 'disclaimer.locale_default', 'ar') === 'en' ? 'en' : 'ar') : '' }} ·
     {{ $report->currency }}
     @if($report->is_demo) <span class="badge">Demo</span> @endif
   </div>
@@ -100,7 +100,7 @@
     $fTo = data_get($data, 'period.to');
     $fItems = array_filter([
       $fLabels[0] => $report->generated_at?->copy()->timezone(in_array($report->timezone, timezone_identifiers_list(), true) ? $report->timezone : 'Asia/Riyadh')->format('Y-m-d H:i'),
-      $fLabels[1] => $fFrom && $fTo ? ($fFrom === $fTo ? $fFrom : $fFrom.' → '.$fTo) : null,
+      $fLabels[1] => $fFrom && $fTo ? \App\Support\PeriodLabel::range((string) $fFrom, (string) $fTo, $fLoc) : null,
       $fLabels[2] => $report->currency,
       $fLabels[3] => $report->timezone,
       $fLabels[4] => $report->campaign_objective ?: null,

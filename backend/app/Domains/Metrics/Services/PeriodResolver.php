@@ -28,7 +28,7 @@ final class PeriodResolver
         'today', 'yesterday', 'today_yesterday',
         'last_7', 'last_14', 'last_28', 'last_30', 'last_90',
         'this_week', 'last_week', 'this_month', 'last_month',
-        'last_3m', 'last_6m', 'last_12m', 'ytd',
+        'last_3m', 'last_6m', 'last_12m', 'ytd', 'this_year',
     ];
 
     /** Today's date in Riyadh — never the server's own clock, which is UTC. */
@@ -62,6 +62,7 @@ final class PeriodResolver
             'last_6m' => [$t->copy()->subMonthsNoOverflow(6), $y],
             'last_12m' => [$t->copy()->subMonthsNoOverflow(12), $y],
             'ytd' => self::yearToDate($t, $y),
+            'this_year' => [$t->copy()->startOfYear(), $t],
             default => throw new InvalidArgumentException("Unknown period: {$key}"),
         };
 

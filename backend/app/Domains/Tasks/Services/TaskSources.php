@@ -9,6 +9,7 @@ use App\Domains\Delivery\Models\DeliveryPack;
 use App\Domains\Delivery\Services\DeliveryTasks;
 use App\Domains\Tasks\Models\Task;
 use App\Models\User;
+use App\Support\PeriodLabel;
 
 /**
  * OPS-LINK-001 — what each task came from and who holds it, for a whole page of tasks in a fixed number of queries.
@@ -73,7 +74,7 @@ final class TaskSources
                     'id' => (string) $pack->getKey(),
                     'client_workspace_id' => (string) $pack->client_workspace_id,
                     'status' => $pack->status,
-                    'period' => $pack->period_start->toDateString().' → '.$pack->period_end->toDateString(),
+                    'period' => PeriodLabel::range($pack->period_start, $pack->period_end, 'ar'),
                 ],
                 isset($meta['source']) && is_string($meta['source']) => ['kind' => $meta['source']],
                 default => ['kind' => 'manual'],
