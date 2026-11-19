@@ -21,7 +21,10 @@ export type BoardKpi = {
  */
 export function boardKpis(payload: LivePayload, reader: Reader, ar: boolean): BoardKpi[] {
   const { result } = headlineKeys(payload, reader)
-  const keys = [...new Set(['spend', 'clicks', result, 'revenue', 'roas'])]
+  const t = payload.totals ?? {}
+  // «Orders» and «Results» are one figure on a sales objective: the same count is never shown twice.
+  const sameAsResult = (k: string) => (k === 'purchases' || k === 'conversions') && (result === 'purchases' || result === 'conversions') && Number(t[k]) === Number(t[result])
+  const keys = [...new Set(['spend', 'clicks', result, 'purchases', 'revenue', 'roas'])].filter((k) => k === result || !sameAsResult(k))
   const withheld = payload.comparison !== undefined && !payload.comparison.comparable
   const d: Record<string, number | null | undefined> = withheld ? {} : (payload.deltas ?? {})
 

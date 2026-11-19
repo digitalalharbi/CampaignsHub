@@ -5,7 +5,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
 import { createContext, Fragment, type ReactNode, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeftRight, Eye, Gauge, Globe, Image as ImageIcon, Layers, LayoutDashboard, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRight, Eye, Gauge, GitCompareArrows, Globe, Image as ImageIcon, Layers, LayoutDashboard, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -66,6 +66,9 @@ import { PathAnalysis } from './PathAnalysis'
 import { ObjectivePathCards } from './ObjectivePathCards'
 import { PathTrends } from './PathTrends'
 import { CreativePulseSection } from '@/features/content/CreativePulseSection'
+import { BoardCampaignRanking, BoardContentReport, BoardPlatformRanking, BoardPlatformSummary } from '@/features/analyticsReport/ReportBoard'
+import { CompareBoard } from '@/features/analyticsReport/CompareBoard'
+import { ReportFromViewButton } from '@/features/analyticsReport/ReportFromView'
 import { ContentWhyVisual } from '@/features/analyticsShared/ContentWhyVisual'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
@@ -294,6 +297,8 @@ export const ANALYTICS_SECTIONS: readonly { id: string; ar: string; en: string; 
   { id: 'creative', ar: 'المحتوى', en: 'Content', icon: ImageIcon, members: ['creative'] },
   { id: 'site', ar: 'الموقع', en: 'Website', icon: Globe, members: ['site', 'store'] },
   { id: 'quality', ar: 'الجودة والمصادر', en: 'Quality & sources', icon: ShieldCheck, members: ['quality', 'live'] },
+  // ANALYTICS-REPORT-LOGIC-001 — «مقارنة»: period, platform, campaign or project against another, on the report's own payload.
+  { id: 'compare', ar: 'مقارنة', en: 'Compare', icon: GitCompareArrows, members: ['compare'] },
 ]
 
 /** A section link from before the report-parity regrouping lands on the section that holds its panels now. */
@@ -813,6 +818,11 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         })}
       </div>
       )}
+      {isAnalysis && currentProjectId !== null && (
+        <div className="-mt-2 flex flex-wrap items-center gap-2" data-testid="analytics-report-from-view">
+          <ReportFromViewButton projectId={currentProjectId} range={range} />
+        </div>
+      )}
       {isAnalysis && (
         <div role="tablist" aria-label={ar ? 'عروض القسم' : 'Section views'} data-testid="analytics-views" className="-mt-2 flex flex-wrap items-center gap-1.5">
           {section.members.length > 1 && (
@@ -913,14 +923,35 @@ export function AnalyticsSectionBody({ members, projectId: currentProjectId, ran
 
   return (
     <>
-        {has('performance') && sub('performance', <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />)}
-      {has('platforms') && sub('platforms', <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />)}
+        {has('performance') && sub('performance', (
+          <>
+            <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />
+            {/* ANALYTICS-REPORT-LOGIC-001 — the report's «ملخص المنصات» and «مصادر النتائج»: cards and a donut; a click filters the page. */}
+            {surface === 'analytics' && <BoardPlatformSummary projectId={currentProjectId} range={range} />}
+          </>
+        ))}
+      {has('platforms') && sub('platforms', (
+        <>
+          <BoardPlatformRanking projectId={currentProjectId} range={range} />
+          <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />
+        </>
+      ))}
       {has('audience') && sub('audience', <AudiencePanel projectId={currentProjectId} range={range} />)}
       {has('accounts') && sub('accounts', <AccountsTab projectId={currentProjectId} range={range} filters={filters} />)}
-      {has('campaigns') && sub('campaigns', <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('campaigns') && sub('campaigns', (
+        <>
+          <BoardCampaignRanking projectId={currentProjectId} range={range} />
+          <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />
+        </>
+      ))}
       {has('ad_sets') && sub('ad_sets', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />)}
       {has('ads') && sub('ads', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />)}
-      {has('creative') && sub('creative', <CreativeTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('creative') && sub('creative', (
+        <>
+          <BoardContentReport projectId={currentProjectId} range={range} />
+          <CreativeTab projectId={currentProjectId} range={range} filters={filters} />
+        </>
+      ))}
       {/* The creative pulse (findings across the content) lived only on the retired agency board; it belongs with the content. */}
       {has('creative') && sub('pulse', <CreativePulseSection filters={{}} projectId={currentProjectId} libraryPath={`${portalBase}/content`} axes={['period', 'providers', 'objectives', 'kinds']} />)}
       {has('objective') && sub('objective', <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />)}
@@ -930,6 +961,7 @@ export function AnalyticsSectionBody({ members, projectId: currentProjectId, ran
       {has('budget') && sub('budget', <BudgetTab projectId={currentProjectId} range={range} filters={filters} />)}
       {has('quality') && sub('quality', <QualityTab projectId={currentProjectId} range={range} filters={filters} />)}
       {has('live') && sub('live', <LiveOperatingTab projectId={currentProjectId} />)}
+      {has('compare') && sub('compare', <CompareBoard projectId={currentProjectId} range={range} />)}
       {has('links') && hasWidgetTab && sub('links', <WidgetSurface projectId={currentProjectId} surface="analytics" range={range} />)}
     </>
   )

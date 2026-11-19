@@ -1,3 +1,5 @@
+import { addDays, addMonths, addYears, spanLength } from '@/lib/period/periodMath'
+
 /**
  * REPORT-LOGIC-001 — «مقارنة»: one side against another, from real numbers only.
  *
@@ -41,4 +43,15 @@ export function overlayDaily(a: Array<Record<string, unknown>>, b: Array<Record<
   const n = Math.max(a.length, b.length)
 
   return Array.from({ length: n }, (_, i) => ({ day: i + 1, a: real(a[i]?.[key]), b: real(b[i]?.[key]) }))
+}
+
+/** The baseline window of a period comparison, the same length as the page's period. */
+export type DateRange = { from: string; to: string }
+
+export function baselineRange(range: DateRange, key: string): DateRange {
+  if (key === 'month') return { from: addMonths(range.from, -1), to: addMonths(range.to, -1) }
+  if (key === 'year') return { from: addYears(range.from, -1), to: addYears(range.to, -1) }
+  const n = spanLength(range)
+
+  return { from: addDays(range.from, -n), to: addDays(range.to, -n) }
 }

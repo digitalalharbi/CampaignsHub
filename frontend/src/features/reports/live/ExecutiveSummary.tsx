@@ -1,4 +1,4 @@
-import { ProviderMark, ProviderName } from '@/components/ProviderMark'
+import { ProviderMark } from '@/components/ProviderMark'
 import { useMemo, useState } from 'react'
 import { CheckCircle2, CircleDashed, Clock, Lightbulb, Sparkles, TrendingUp, Trophy } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -21,6 +21,7 @@ import {
   basisLine, contentLists, count, funnelStages, headlineKeys, metricName, platformCards, rankPlatforms, resultBoardKeys, resultSource, resultsSplit,
   rightAxisFor, shownPlatform, splitTitle, SPEND_DERIVED, toggleTrend, trendOptions, type Reader, type ResultSource,
 } from '@/features/reportLogic'
+import { PlatformCardsView } from '@/features/reportLogic/PlatformCardsView'
 
 /* REPORT-LOGIC-001 — the result logic lives in `features/reportLogic`; the old names are re-exported below. */
 export { headlineKeys, resultSource, splitTitle, basisLine }
@@ -133,66 +134,8 @@ export function ExecutiveSummary({
 /* ─────────────────────────────── Platforms summary ─────────────────────────────── */
 
 function PlatformCards({ payload, ar, source, selected, onSelect }: { payload: LivePayload; ar: boolean; source: ResultSource; selected: string | null; onSelect: (p: string | null) => void }) {
-  const models = platformCards(payload, source, ar)
-  if (models.length === 0) return null
-  const resultName = source.name
-  const card = (key: string | null, title: string, value: number | null, impressions: number | null, rate: string | null, share: number | null, color: string) => {
-    const on = selected === key
-
-    return (
-      <button
-        key={key ?? 'all'}
-        type="button"
-        role="tab"
-        aria-selected={on}
-        data-testid={`exec-platform-card-${key ?? 'all'}`}
-        onClick={() => onSelect(key === null || on ? null : key)}
-        // A flex column: a button centres shorter content vertically, which pushed a card's colour bar down from its top edge.
-        className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-surface text-start transition-colors ${on ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-border hover:border-brand-400'}`}
-      >
-        <span className="block h-1 w-full shrink-0" data-testid="exec-platform-card-bar" style={{ background: color }} aria-hidden />
-        <span className="flex w-full flex-1 flex-col gap-0.5 p-2.5">
-          {/* The platform's logo and name (Owner, 2026-10-19); «all platforms» is a word, not a platform. */}
-          <span className="flex min-w-0 text-xs font-bold text-text-primary">
-            {key === null ? <span className="truncate">{title}</span> : <ProviderName provider={key} locale={ar ? 'ar' : 'en'} size={16} />}
-          </span>
-          <span className="tnum truncate text-lg font-extrabold leading-tight text-text-primary"><Num>{num(value)}</Num></span>
-          <span className="truncate text-[11px] font-semibold text-text-muted">{resultName}</span>
-          <span className="tnum mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-text-secondary">
-            {impressions !== null && <span>{ar ? 'الظهور' : 'Impr.'} <Num>{num(impressions)}</Num></span>}
-            {rate !== null && <span>{ar ? 'نسبة النقر' : 'CTR'} <Num>{rate}</Num></span>}
-          </span>
-          {share !== null && (
-            <span className="mt-auto block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? `الحصة من ${resultName}` : `Share of ${resultName}`}>
-              <span className="block h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, background: color }} />
-            </span>
-          )}
-        </span>
-      </button>
-    )
-  }
-
-  /*
-   * REPORT-COMPOSITION-CONTROL-001 — the cards fill the row. A fixed six-column grid left four cards
-   * in a narrow cluster with two empty slots beside them; the row now has exactly as many columns as
-   * cards (up to six), so the summary is as wide as the report under it.
-   */
-  const cards = models.length
-
-  return (
-    <section data-testid="exec-platform-cards" aria-label={ar ? 'ملخص المنصات' : 'Platforms summary'} className="flex flex-col gap-2">
-      <h2 className="text-base font-extrabold text-text-primary">{ar ? 'ملخص المنصات' : 'Platforms summary'}</h2>
-      <div
-        role="tablist"
-        data-cards={cards}
-        // REPORT-COMPACT-001 — Owner 2026-11-17: one compact row of platforms from a laptop width up, three on a tablet, two on a phone.
-        className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-[repeat(var(--cards),minmax(0,1fr))]"
-        style={{ '--cards': Math.min(cards, 6) } as React.CSSProperties}
-      >
-        {models.map((m) => card(m.key, m.title, m.value, m.impressions, m.rate, m.share, m.key === null ? 'var(--brand-600)' : platformColor(m.key)))}
-      </div>
-    </section>
-  )
+  // REPORT-LOGIC-001 — the cards are the shared layer's model and the shared layer's view.
+  return <PlatformCardsView models={platformCards(payload, source, ar)} resultName={source.name} ar={ar} selected={selected} onSelect={onSelect} />
 }
 
 /* ─────────────────────────────── Results board ─────────────────────────────── */
