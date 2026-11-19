@@ -87,6 +87,11 @@ test.describe('the bell', () => {
     await page.getByTestId('bell-filter-budget').click()
     await page.locator('[data-testid^="notification-open-"]').first().click()
     await expect(page).toHaveURL(/\/agency\/budgets\?project=/)
+    // The budget opens as a centred dialog over the whole screen, header included; close it as a person would before
+    // reaching for the bell again (whether it had drawn yet was a race — webkit lost it).
+    await expect(page.getByTestId('budget-drawer')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('budget-drawer')).toHaveCount(0)
 
     // One call clears all 113, not just the 100 rows the panel loaded.
     await bell(page).click()
