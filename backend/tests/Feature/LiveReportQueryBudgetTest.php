@@ -109,7 +109,8 @@ final class LiveReportQueryBudgetTest extends TestCase
         $this->assertLessThanOrEqual(1, self::matching($run, 'from "audience_breakdown_rows"'), 'the audience delivery rows are read once per build');
         // 126: OBJECTIVE-PATHS-001 adds ONE statement per build (the ad-set read behind the objective split), not one per campaign.
         // Measured with AUDIENCE-001 merged: still 126 — this build adds no audience statement, so the budget is main's, not raised.
-        $this->assertLessThanOrEqual(126, count($run), 'a build over 36 campaigns asked '.count($run).' questions (126 allowed; the build before this work asked 338)');
+        // 127: FUNNEL-ALIGNED-001 adds ONE statement per build (the funnel stages split by platform), not one per campaign.
+        $this->assertLessThanOrEqual(127, count($run), 'a build over 36 campaigns asked '.count($run).' questions (127 allowed; the build before this work asked 338)');
     }
 
     public function test_no_statement_runs_twice_with_the_same_bindings_inside_one_build(): void

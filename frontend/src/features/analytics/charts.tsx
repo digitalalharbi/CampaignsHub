@@ -441,26 +441,48 @@ function countRead(value: number | null | undefined): { text: string; exact: str
   return { text: read.text, exact: read.exact }
 }
 
-export function ConversionFunnelChart({ stages, currency = '', ar = false, differLabel }: { differLabel?: string; stages: Array<{ stage?: string; label: string; count: number | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>; currency?: string; ar?: boolean }) {
+export type FunnelStageRow = {
+  stage?: string
+  label: string
+  count: number | null
+  step_rate: number | null
+  cost_per: number | null
+  exceeds_previous?: boolean
+  drop_off?: number | null
+  /** FUNNEL-ALIGNED-001 — the platforms that reported this stage, and the ones its rate is measured on. */
+  providers?: string[]
+  rate_providers?: string[]
+  rate_partial?: boolean
+}
+
+export function ConversionFunnelChart({ stages, currency = '', ar = false, differLabel }: { differLabel?: string; stages: FunnelStageRow[]; currency?: string; ar?: boolean }) {
   const counts = stages.map((s) => s.count).filter((c): c is number => c !== null && c !== undefined)
   const top = counts.length > 0 ? Math.max(...counts) : 1
+  // FUNNEL-ALIGNED-001 — a stage reported by fewer platforms than the funnel spans names them; a full stage says nothing.
+  const everyone = new Set(stages.flatMap((s) => s.providers ?? []))
   return (
     <div className="space-y-2.5">
       {stages.map((s, i) => {
         const reported = s.count !== null && s.count !== undefined
         const w = reported ? Math.max(8, ((s.count as number) / (top || 1)) * 100) : 0
+        const fewer = reported && (s.providers?.length ?? 0) > 0 && (s.providers?.length ?? 0) < everyone.size
         return (
           /*
            * FUNNEL-MOBILE-001 — Owner 2026-11-18: «الأرقام ما تظهر في تصفح الجوال، أول رقم يظهر والباقي مختفي».
            *
-           * On a phone the fixed label (8rem) and rate column (9rem) left the bar a few dozen pixels, and each count sat INSIDE its
-           * filled bar with the overflow hidden: the first stage (100%) had room, every later one was clipped to nothing. Below `sm`
-           * the row now stacks — the label and the rate on one line, the bar the whole width under them — and a count whose bar is
-           * too short to hold it is written just after the bar, in the text colour, so every stage states its number at any width.
+           * Below `sm` the row stacks — the label and the rate on one line, the bar the whole width under them — and a count
+           * whose bar is too short to hold it is written just after the bar, in the text colour, so every stage states its number.
            */
-          <div key={s.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:flex sm:gap-3" data-testid="funnel-row">
+          <div key={s.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 sm:flex sm:gap-3" data-testid={`funnel-stage-${s.stage ?? i}`} data-row="funnel">
             {/* UX-COPY-001 — the payload labels its stages in English only. */}
-            <span className="min-w-0 truncate text-sm font-medium text-text-secondary sm:w-32 sm:shrink-0">{funnelStageLabel(s.stage ?? '', s.label, ar)}</span>
+            <span className="flex min-w-0 flex-col gap-0.5 sm:w-32 sm:shrink-0">
+              <span className="truncate text-sm font-medium text-text-secondary">{funnelStageLabel(s.stage ?? '', s.label, ar)}</span>
+              {fewer && (
+                <span className="inline-flex items-center gap-0.5" data-testid="funnel-stage-providers" title={ar ? 'المنصات التي ترسل هذه المرحلة' : 'Platforms that report this stage'}>
+                  {(s.providers ?? []).map((p) => <ProviderMark key={p} provider={p} size={12} />)}
+                </span>
+              )}
+            </span>
             {reported ? (
               <div className="order-last col-span-2 flex h-9 min-w-0 items-center overflow-hidden rounded-xl bg-surface-secondary sm:order-none sm:flex-1">
                 <div className="flex h-full shrink-0 items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>
@@ -516,7 +538,23 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false, diffe
                 </span>
               )}
               {s.step_rate !== null && !s.exceeds_previous && s.step_rate <= 1 && (
-                <span className="tnum">{percent(s.step_rate, 0)}</span>
+                <span className="inline-flex flex-col items-end leading-tight">
+                  <span className="inline-flex items-center gap-1">
+                    {s.rate_partial && (s.rate_providers ?? []).length > 0 && (
+                      <span
+                        className="inline-flex items-center gap-0.5"
+                        data-testid="funnel-rate-providers"
+                        title={ar ? 'النسبة محسوبة على المنصات التي ترسل المرحلتين فقط' : 'Rate measured on the platforms that report both stages'}
+                      >
+                        {(s.rate_providers ?? []).map((p) => <ProviderMark key={p} provider={p} size={11} />)}
+                      </span>
+                    )}
+                    <span className="tnum text-sm font-bold text-text-primary">{percent(s.step_rate, s.step_rate < 0.1 ? 1 : 0)}</span>
+                  </span>
+                  {s.drop_off != null && s.drop_off > 0 && (
+                    <span className="tnum text-xs text-danger" data-testid="funnel-drop-off">{ar ? 'تسرّب' : 'drop'} {percent(s.drop_off, 0)}</span>
+                  )}
+                </span>
               )}
               {s.cost_per != null && <span className="tnum ms-2">{moneyExact(s.cost_per, currency ?? null)}</span>}
             </div>

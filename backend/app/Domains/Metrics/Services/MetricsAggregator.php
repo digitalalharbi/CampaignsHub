@@ -2480,6 +2480,19 @@ final class MetricsAggregator
         $selects[] = "(COUNT(DISTINCT original_currency) FILTER (WHERE metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) + 2 * COUNT(DISTINCT 1) FILTER (WHERE (metric_key = 'spend' AND value IS NULL AND original_amount IS NOT NULL) AND original_currency IS NULL)) AS spend_original_currencies";
         $row = (array) $this->base($from, $to)->selectRaw(implode(', ', $selects))->first();
 
+        /*
+         * FUNNEL-ALIGNED-001 — Owner 2026-11-17 «قمع المنصات غير مكتمل»: a step rate is measured on the platforms that
+         * report BOTH of its stages. Karam Alnakhil read «بدء الدفع 363 → الشراء 675» because checkout came from one
+         * platform and purchases from four; the stage totals were each true and their ratio was a sentence about which
+         * platforms send which event. The totals stay as they are (one number, every surface); the ratio, drop-off and
+         * `rate_providers` now describe the same population, and `providers` names who reported each stage.
+         */
+        $perProvider = [];
+        foreach ($this->base($from, $to)->select('provider')->selectRaw(implode(', ', array_map(fn ($s) => "SUM(value) FILTER (WHERE metric_key = '{$s}') AS {$s}", $stages)))->groupBy('provider')->get() as $p) {
+            $perProvider[(string) $p->provider] = (array) $p;
+        }
+        ksort($perProvider);
+
         // The figure that is real, through the one money contract. `Partial` (some converted + some
         // withheld) and `MixedCurrency` have no single total, so `amount()` is null and every
         // `cost_per` below refuses rather than dividing the converted subset alone.
@@ -2500,9 +2513,18 @@ final class MetricsAggregator
             $reported = ($row[$s] ?? null) !== null;
             $count = $reported ? round((float) $row[$s]) : null;
 
+            // Who reported this stage, and the slice of them that also reported the stage the rate is measured against.
+            $providers = array_keys(array_filter($perProvider, static fn (array $p): bool => ($p[$s] ?? null) !== null));
+            $rateProviders = $prevStage === null ? [] : array_values(array_filter($providers, static fn (string $name): bool => ($perProvider[$name][$prevStage] ?? null) !== null));
+            $num = array_sum(array_map(static fn (string $name): float => (float) $perProvider[$name][$s], $rateProviders));
+            $den = array_sum(array_map(static fn (string $name): float => (float) $perProvider[$name][$prevStage], $rateProviders));
+
             // A rate needs both sides and a non-zero denominator: «100% of nothing» is not a
             // conversion rate, and neither is «a share of a step the platform never sent».
-            $ratio = $count !== null && $prev !== null && $prev > 0 ? $count / $prev : null;
+            // With no per-platform split (an empty scope) it falls back to the totals, as before.
+            $ratio = $count !== null && $prev !== null && $prev > 0
+                ? ($perProvider === [] ? $count / $prev : ($den > 0 ? $num / $den : null))
+                : null;
 
             /*
              * FUNNEL-NOT-NESTED-001 — a step larger than the one above it is not a drop-off.
@@ -2530,6 +2552,10 @@ final class MetricsAggregator
                 'count' => $count,
                 'from_stage' => $count !== null ? $prevStage : null,
                 'step_rate' => $ratio !== null ? round($ratio, 4) : null,
+                'providers' => $providers,
+                'rate_providers' => $count !== null ? $rateProviders : [],
+                // True when the rate is read on fewer platforms than reported this stage — the UI names them.
+                'rate_partial' => $ratio !== null && $perProvider !== [] && count($rateProviders) < count($providers),
                 'exceeds_previous' => $exceeds,
                 'drop_off' => $ratio !== null && ! $exceeds ? round(1 - $ratio, 4) : null,
                 // No single spend total (partial / mixed currency) ⇒ no cost-per to state.
