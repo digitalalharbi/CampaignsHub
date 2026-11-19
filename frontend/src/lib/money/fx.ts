@@ -45,8 +45,6 @@ export type FxConversion = {
   via: 'fx.convert' | 'fx.guard'
   /** PROJECT-LIFECYCLE-001 §7 — the rate used is past its validity (still used, flagged) */
   expired?: boolean
-  /** «سعر قديم — بتاريخ 2026-11-09» when `stale` */
-  stale_label?: string | null
 }
 
 export const RATES_PAGE = '/admin/settings/currency-rates'
@@ -110,8 +108,7 @@ export function conversionTooltip(c: FxConversion, ar: boolean, digits = 2): str
   const how = [c.rate_date, c.kind ? `${rateKindLabel(c.kind, ar)}${who}` : null].filter(Boolean).join(ar ? '، ' : ', ')
   const from = [fixed(c.original_amount, digits), c.original_currency].join(' ')
   const to = [fixed(c.converted_amount, digits), c.currency].join(' ')
-  const staleNote = c.stale ? (ar ? ' — ⚠ سعر أقدم من 7 أيام' : ' — ⚠ rate older than 7 days') : ''
-  return `${from} × ${rate}${how ? ` (${how})` : ''} = ${to}${staleNote}`
+  return `${from} × ${rate}${how ? ` (${how})` : ''} = ${to}`
 }
 
 /** True when this figure was converted from another currency (the «محوّل» icon). */
@@ -146,7 +143,6 @@ export type FxTotal = {
   statement?: string | null
   statement_en?: string | null
   stale_parts?: FxStalePart[]
-  stale_label?: string | null
 }
 
 /**
@@ -166,7 +162,8 @@ export type FxExcludedPart = {
 }
 
 /** A part converted at an old (or expired) rate: used, labelled «سعر قديم — بتاريخ …». */
-export type FxStalePart = { project_id?: string; currency: string; rate_date: string | null; expired: boolean; label: string | null; label_en?: string | null; days: number }
+/** An old rate that was USED: internal data only (no wording is produced for a client; the alert lives in /admin). */
+export type FxStalePart = { project_id?: string; currency: string; rate_date: string | null; expired: boolean; days: number }
 
 /** What a spend total excluded and which old rates it used — `SpendLedger` readings and the budgets' `fx` note share it. */
 export type FxSpendNote = {
@@ -176,7 +173,6 @@ export type FxSpendNote = {
   statement: string | null
   statement_en?: string | null
   stale: FxStalePart[]
-  stale_label: string | null
   rates_page: string | null
 }
 

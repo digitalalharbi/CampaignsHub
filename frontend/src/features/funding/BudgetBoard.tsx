@@ -201,7 +201,6 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
             {row.fx.excluded.map((e) => `${e.currency ?? '?'} · ${e.account_name}`).join('، ')}
           </span>
         )}
-        {row.fx && row.fx.stale.length > 0 && row.fx.stale_label && <span className="whitespace-nowrap text-[11px] text-warning" data-testid="row-fx-stale"><bdi>{ar ? row.fx.stale_label : (row.fx.stale[0]?.label_en ?? row.fx.stale_label)}</bdi></span>}
         {off && <Badge tone="warning" className="whitespace-nowrap" data-testid="plan-diff-chip">{ar ? PLAN_DIFF.ar : PLAN_DIFF.en}</Badge>}
         <FreshnessChip freshness={row.freshness} testid="row-freshness" />
       </span>
