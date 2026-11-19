@@ -82,7 +82,7 @@ const COPY = {
       `المنحنى يغطي ${recorded} من ${total} متابعة — الباقي حدث قبل بدء التسجيل.`,
   },
   en: {
-    title: 'Tracking links',
+    title: 'Short Links',
     subtitle: 'A short link to share in an ad or a message. We count the clicks.',
     whatsapp: 'WhatsApp',
     link: 'Link',
