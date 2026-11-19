@@ -80,7 +80,7 @@ test.describe('the advertiser portal', () => {
   })
 
   test('the dashboard is genuinely bilingual, not just re-directed', async ({ page }) => {
-    await page.goto('/app/dashboard')
+    await page.goto('/app/analytics')
     const main = page.locator('main')
     await expect(main).toBeVisible()
 
@@ -241,7 +241,7 @@ test.describe('the advertiser portal', () => {
 
   /** Every rail link opens a page with content — the advertiser's own sections, not the agency's. */
   test('every rail link opens a page that is not empty', async ({ page }) => {
-    await page.goto('/app/dashboard')
+    await page.goto('/app/home')
     await expect(page.getByRole('navigation').first()).toBeVisible()
 
     const hrefs = await page.getByRole('navigation').first().locator('a[href^="/app"]')
@@ -269,7 +269,7 @@ test.describe('the advertiser portal', () => {
    * Arabic inside `<code>`/`<pre>`, and the language toggle's own «ع» label, are not content.
    */
   test('no section is left in Arabic when the language is English', async ({ page }) => {
-    await page.goto('/app/dashboard')
+    await page.goto('/app/home')
     await expect(page.getByRole('navigation').first()).toBeVisible()
 
     const hrefs = await page.getByRole('navigation').first().locator('a[href^="/app"]')
@@ -317,7 +317,7 @@ test.describe('the advertiser portal', () => {
       'sar', 'usd', 'aed', 'demo', 'all', 'none', 'beta', 'utc', 'vat', 'ok',
     ])
 
-    await page.goto('/app/dashboard')
+    await page.goto('/app/home')
     await expect(page.getByRole('navigation').first()).toBeVisible()
 
     const hrefs = await page.getByRole('navigation').first().locator('a[href^="/app"]')
@@ -370,7 +370,7 @@ test.describe('the advertiser portal', () => {
 
   test('the dashboard holds together on a phone', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
-    await page.goto('/app/dashboard')
+    await page.goto('/app/home')
     await expect(page.locator('main')).toBeVisible()
 
     const overflow = await page.evaluate(
@@ -395,7 +395,7 @@ test.describe('remembered preferences', () => {
   test.use({ storageState: AUTH.advertiser })
 
   test('the chosen language survives a full page load', async ({ page }) => {
-    await page.goto('/app/dashboard')
+    await page.goto('/app/home')
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
 
     await page.getByRole('button', { name: 'Toggle language' }).first().click()
@@ -411,7 +411,7 @@ test.describe('remembered preferences', () => {
   })
 
   test('the chosen theme survives a full page load', async ({ page }) => {
-    await page.goto('/app/dashboard')
+    await page.goto('/app/home')
     const before = await page.locator('html').getAttribute('data-theme')
 
     await page.getByRole('button', { name: 'Toggle theme' }).first().click()

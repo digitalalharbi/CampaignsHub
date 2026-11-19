@@ -34,7 +34,7 @@ test.describe('the dashboard KPI cards', () => {
    */
   async function openDashboard(page: Page, request: APIRequestContext) {
     await selectProject(page, await seededProject(request, 'Growth — Acquisition'))
-    await page.goto('/app/dashboard')
+    await page.goto('/app/analytics')
     await expect(page.getByTestId('kpi-picker-0')).toBeVisible({ timeout: 60000 })
   }
 
@@ -112,7 +112,7 @@ test.describe('the dashboard KPI cards', () => {
 
     await openDashboard(page, request)
 
-    const overview = page.getByTestId('dashboard-overview')
+    const overview = page.getByTestId('analytics-overview')
 
     await expect(overview).toContainText(/Spend, platform conversions and revenue|الإنفاق وتحويلات المنصة والإيرادات/i, { timeout: 60000 })
     /* CTR appears here only as a rate-trend panel, so its presence is the claim. */
@@ -136,13 +136,13 @@ test.describe('the dashboard KPI cards', () => {
      * OBJECTIVE-FILTERS-INCLUSIVE-001 — an objective no longer empties a scope: it picks the KPIs and keeps every campaign, so the
      * cards stay. A scope that really holds nothing comes from a PLATFORM the seed never ran on.
      */
-    await page.getByTestId('dashboard-objective').selectOption('awareness_engagement')
+    await page.getByTestId('analytics-objective').selectOption('awareness_engagement')
     await expect(page.getByTestId('kpi-picker-0')).toBeVisible({ timeout: 30000 })
-    await expect(page.getByTestId('dashboard-metrics-empty-scope')).toHaveCount(0)
+    await expect(page.getByTestId('analytics-metrics-empty-scope')).toHaveCount(0)
 
-    await page.getByTestId('dashboard-platform-linkedin').click()
+    await page.getByTestId('analytics-platform-linkedin').click()
 
-    await expect(page.getByTestId('dashboard-metrics-empty-scope')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByTestId('analytics-metrics-empty-scope')).toBeVisible({ timeout: 30000 })
     await expect(page.getByTestId('kpi-picker-0')).toHaveCount(0)
   })
 })

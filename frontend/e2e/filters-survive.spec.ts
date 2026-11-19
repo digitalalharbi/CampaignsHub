@@ -43,7 +43,7 @@ test.describe('a narrowing the reader chose survives', () => {
     await expect(list, 'the view was forgotten by a refresh').toHaveAttribute('aria-pressed', 'true')
 
     /* Away and back: the address travels in history. */
-    await page.goto('/agency/dashboard')
+    await page.goto('/agency/home')
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
     await page.goBack()
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
@@ -54,7 +54,7 @@ test.describe('a narrowing the reader chose survives', () => {
      * what a shared link IS, and the state has to come entirely from the URL.
      */
     const shared = page.url()
-    await page.goto('/agency/dashboard')
+    await page.goto('/agency/home')
     await page.goto(shared)
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
     await expect(list, 'a shared link did not open the view it was taken from').toHaveAttribute('aria-pressed', 'true')

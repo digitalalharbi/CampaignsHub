@@ -20,28 +20,28 @@ test.describe('the period picker', () => {
   })
 
   test('defaults to the last 7 complete days, ends yesterday and carries itself in the address', async ({ page }) => {
-    await page.goto('/agency/dashboard?tab=figures')
-    await expect(page.getByTestId('agency-period-picker-summary')).toContainText('آخر 7 أيام: 8 نوفمبر – 14 نوفمبر 2026', { timeout: 30_000 })
+    await page.goto('/agency/analytics')
+    await expect(page.getByTestId('analytics-period-summary')).toContainText('آخر 7 أيام: 8 نوفمبر – 14 نوفمبر 2026', { timeout: 30_000 })
     await expect.poll(() => new URL(page.url()).searchParams.get('from')).toBe('2026-11-08')
     expect(new URL(page.url()).searchParams.get('to')).toBe('2026-11-14')
-    await expect(page.getByTestId('agency-period-picker-budget-hint')).toContainText('الميزانية تُحسب على فترتها')
+    await expect(page.getByTestId('analytics-period-budget-hint')).toContainText('الميزانية تُحسب على فترتها')
   })
 
   test('«آخر 30 يوم» is 16 Oct → 14 Nov, compares with 16 Sep → 15 Oct, and survives navigation and reload', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, STORE_PROJECT))
-    await page.goto('/agency/dashboard?tab=figures')
-    await page.getByTestId('agency-period-picker-button').click()
-    const panel = page.getByTestId('agency-period-picker-panel')
+    await page.goto('/agency/analytics')
+    await page.getByTestId('analytics-period-button').click()
+    const panel = page.getByTestId('analytics-period-panel')
     await expect(panel).toBeVisible()
     await expect(panel).toContainText('التواريخ بتوقيت الرياض (GMT+3)')
     // PICKER-SHORT-PRESETS-001 — «آخر 30 يوم» lives under «تخصيص».
-    await page.getByTestId('agency-period-picker-preset-custom').click()
-    await page.getByTestId('agency-period-picker-preset-last_30').click()
-    await page.getByTestId('agency-period-picker-compare-toggle').check()
-    await expect(page.getByTestId('agency-period-picker-compare-range')).toContainText('16 سبتمبر – 15 أكتوبر 2026')
-    await page.getByTestId('agency-period-picker-apply').click()
+    await page.getByTestId('analytics-period-preset-custom').click()
+    await page.getByTestId('analytics-period-preset-last_30').click()
+    await page.getByTestId('analytics-period-compare-toggle').check()
+    await expect(page.getByTestId('analytics-period-compare-range')).toContainText('16 سبتمبر – 15 أكتوبر 2026')
+    await page.getByTestId('analytics-period-apply').click()
 
-    await expect(page.getByTestId('agency-period-picker-summary')).toContainText('آخر 30 يوم: 16 أكتوبر – 14 نوفمبر 2026')
+    await expect(page.getByTestId('analytics-period-summary')).toContainText('آخر 30 يوم: 16 أكتوبر – 14 نوفمبر 2026')
     const url = new URL(page.url())
     expect([url.searchParams.get('from'), url.searchParams.get('to'), url.searchParams.get('compare')]).toEqual(['2026-10-16', '2026-11-14', 'previous'])
 

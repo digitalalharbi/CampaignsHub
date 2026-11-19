@@ -23,7 +23,7 @@ const VIEWPORTS = [
 
 const PORTALS = [
   { path: '/admin', storage: AUTH.admin },
-  { path: '/app/dashboard', storage: AUTH.advertiser },
+  { path: '/app/home', storage: AUTH.advertiser },
   { path: '/agency', storage: AUTH.owner },
   { path: '/portal', storage: AUTH.client },
 ] as const

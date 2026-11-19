@@ -65,11 +65,12 @@ import {
 import { PathAnalysis } from './PathAnalysis'
 import { ObjectivePathCards } from './ObjectivePathCards'
 import { PathTrends } from './PathTrends'
+import { CreativePulseSection } from '@/features/content/CreativePulseSection'
 import { ContentWhyVisual } from '@/features/analyticsShared/ContentWhyVisual'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
-import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
+import { AnalyticsHeadline, AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
 import { DailyMeasurePanel } from './DailyMeasurePanel'
 import { SmartReading } from './SmartReading'
 import { useUrlList, useUrlState, useUrlWriter } from './filterUrlState'
@@ -855,7 +856,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         <>
         {/* ADV-HOME-001 — the advertiser's home names their other projects and this project's data sources.
             The agency has its own home (AgencyDashboardPage); this strip is the advertiser's equivalent. */}
-        {surface === 'dashboard' && portalBase === '/app' && (
+        {portalBase === '/app' && (
           <div className="flex flex-col gap-3" data-testid="adv-context">
             <AdvertiserProjectsStrip currentProjectId={currentProjectId} onSwitch={setCurrentProjectId} />
             <AdvertiserSourcesStrip projectId={currentProjectId} />
@@ -900,6 +901,7 @@ export function AnalyticsSectionBody({ members, projectId: currentProjectId, ran
   widgets?: boolean
 }) {
   const ar = useAr()
+  const portalBase = usePortalBase()
   const has = (id: string) => members.includes(id)
   const sub = (id: string, children: ReactNode) => (
     <section key={id} className="flex flex-col gap-3" data-testid={`section-${id}`}>
@@ -919,6 +921,8 @@ export function AnalyticsSectionBody({ members, projectId: currentProjectId, ran
       {has('ad_sets') && sub('ad_sets', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />)}
       {has('ads') && sub('ads', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />)}
       {has('creative') && sub('creative', <CreativeTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {/* The creative pulse (findings across the content) lived only on the retired agency board; it belongs with the content. */}
+      {has('creative') && sub('pulse', <CreativePulseSection filters={{}} projectId={currentProjectId} libraryPath={`${portalBase}/content`} axes={['period', 'providers', 'objectives', 'kinds']} />)}
       {has('objective') && sub('objective', <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />)}
       {has('funnel') && sub('funnel', <FunnelTab projectId={currentProjectId} range={range} filters={filters} />)}
       {has('store') && sub('store', <StoreFunnelTab projectId={currentProjectId} range={range} />)}
@@ -981,6 +985,8 @@ function PerformanceTab({ projectId, range, filters, objective, surface }: Overv
     )
     : (
       <>
+        {/* ANALYTICS-HEADLINE-001 — the figures first, then the reading and the drawings. */}
+        <AnalyticsHeadline {...data} />
         {daily}
         <AnalyticsOverview {...data} />
       </>

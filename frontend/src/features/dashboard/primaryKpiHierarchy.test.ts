@@ -215,18 +215,33 @@ describe('the primary KPI region is the first analytical block on the page', () 
    * The strip is still here and must be — a diagnosis a reader cannot check against the totals it
    * was computed from is an assertion — but as EVIDENCE, after the reading it supports.
    */
-  it('Analytics opens on decision modules, with the figures as evidence', () => {
-    const order = sectionsOf('AnalyticsOverview')
+  it('Analytics opens on its headline figures, and its decision modules follow them', () => {
+    /*
+     * ANALYTICS-HEADLINE-001 (Owner, 2026-11-19 — «4 إلى 6 مؤشرات رئيسية لكل قسم», one board named التحليلات).
+     *
+     * This case used to hold the opposite: the figures as EVIDENCE after the reading. That contract belonged to the two-surface
+     * regime, where the Dashboard reported and Analytics argued. The Dashboard surface is retired (its address redirects to this
+     * board), so the headline leads here too — measured on a phone, where the figures had slid 2,100px down.
+     * What is unchanged: nothing analytical sits above the KPI region, and the decomposition stays last.
+     */
+    const headline = sectionsOf('AnalyticsHeadline')
+    expect(headline[0], `the Analytics headline opens on ${headline[0]}, not its selectable KPI cards`).toBe('KpiCards')
 
-    expect(order[0], `Analytics opens on ${order[0]} — the Dashboard's headline, not a decision module`).not.toBe('MetricStrip')
-    expect(order, 'Analytics renders the Dashboard\'s selectable KPI region — its figures are evidence, not a headline').not.toContain('KpiCards')
-    expect(order, 'Analytics renders no decision module before its figures').toContain('DiagnosticPanel')
+    const order = sectionsOf('AnalyticsOverview')
+    expect(order, 'the KPI region is the headline above the overview, not a second copy inside it').not.toContain('KpiCards')
+    expect(order, 'the overview renders no second KPI strip').not.toContain('MetricStrip')
+    expect(order, 'Analytics renders no decision module').toContain('DiagnosticPanel')
     expect(order, 'Analytics renders no distribution — «where the money sits» is its own question').toContain('DistributionBars')
 
-    expect(
-      order.indexOf('MetricStrip'),
-      'Analytics leads with its figures — that is the Dashboard\'s job, and this surface argues rather than reports',
-    ).toBeGreaterThan(order.indexOf('DiagnosticPanel'))
+    /* The page composes the headline BEFORE the overview and before the reading. */
+    const page = Object.entries(SOURCES).find(([path]) => path.endsWith('/AnalyticsPage.tsx'))
+    expect(page, 'AnalyticsPage.tsx was not found').toBeTruthy()
+    const code = bodyOf(page![1])
+    expect(code.indexOf('<AnalyticsHeadline')).toBeGreaterThan(-1)
+    expect(code.indexOf('<AnalyticsHeadline')).toBeLessThan(code.indexOf('<AnalyticsOverview'))
+    const afterHeadline = code.slice(code.indexOf('<AnalyticsHeadline'))
+    expect(afterHeadline.indexOf('{daily}'), 'the reading and the daily chart come after the headline').toBeGreaterThan(-1)
+    expect(afterHeadline.indexOf('{daily}')).toBeLessThan(afterHeadline.indexOf('<AnalyticsOverview'))
 
     /* «باستثناء على نظرة عامة تكون بمكانها الحالي بالاسفل» — on BOTH overviews, this one stays last. */
     expect(order.at(-1), 'the change decomposition must stay at the bottom of «نظرة عامة»').toBe('ChangeDiagnosis')

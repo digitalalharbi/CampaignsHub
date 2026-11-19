@@ -42,6 +42,8 @@ function route(creatives: unknown[]) {
   requested.length = 0
   vi.mocked(getData).mockImplementation(async (url: string) => {
     requested.push(url)
+    // The creative pulse (its own section below the table) is not under test here: it answers with a refusal, as it does offline.
+    if (url.includes('/creatives/pulse')) throw new Error('pulse is not under test')
     if (url.includes('/creatives')) return { creatives, currency: 'SAR', page: 1, per_page: 24, total: creatives.length, period: { from: '', to: '' }, filters: {} } as never
     if (url.includes('/summary')) return { current: {}, previous: {}, delta: {}, currency: 'SAR', provenance: { source: 'live', live_rows: 1, demo_rows: 0 } } as never
     if (url.includes('disclaimer')) return null as never

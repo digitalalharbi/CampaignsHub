@@ -2,7 +2,6 @@ import { comparableWindows, windowsUnlikeNote } from '@/lib/coverage/contract'
 import { providerLabel } from '@/features/campaigns/labels'
 import { useMemo } from 'react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { MetricStrip } from '@/components/ui/MetricStrip'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
 import { Panel, RateTrend, SERIES, tooltipProps } from './components'
@@ -517,8 +516,45 @@ export function DashboardOverview(d: OverviewData) {
  * store, attribution and data quality — are the rest of this system and are unchanged; this is only
  * the door into it.
  */
+/**
+ * ANALYTICS-HEADLINE-001 — the headline figures lead the page.
+ *
+ * On a phone the figures were 2,100px down, below the drawings that explain them (the failure
+ * `mobile-hierarchy.spec.ts` holds). The headline — the objective layout's own four to six cards, any of which the reader may
+ * change (KPI-SELECTION-001) — is the first thing in the Summary section; the drawings and the evidence follow it.
+ */
+export function AnalyticsHeadline(d: OverviewData) {
+  const { ar, s, points, comparable, unlikeNote, strip, objective } = d
+
+  return (
+    <div className="space-y-3" data-testid="analytics-headline">
+      {!comparable && s.data && (
+        <p
+          data-testid="no-comparison-period"
+          className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
+        >
+          <span className="font-semibold text-text-primary">{ar ? 'لا توجد مقارنة: ' : 'No comparison: '}</span>
+          {unlikeNote}
+        </p>
+      )}
+      <KpiCards
+        id="analytics"
+        objective={objective}
+        defaults={strip.primary.map((m) => m.key)}
+        summary={s.data}
+        ar={ar}
+        series={points}
+        comparable={comparable}
+        loading={s.isPending}
+        error={s.isError ? s.error : undefined}
+        onRetry={() => void s.refetch()}
+      />
+    </div>
+  )
+}
+
 export function AnalyticsOverview(d: OverviewData) {
-  const { ar, s, ts, series, chartCurrency, comparable, unlikeNote, drivers, strip, vm, points } = d
+  const { ar, s, ts, series, chartCurrency, drivers, vm, points } = d
 
   return (
     <div className="space-y-4" data-testid="analytics-overview" data-composition="analytics">
@@ -585,26 +621,6 @@ export function AnalyticsOverview(d: OverviewData) {
       */}
       <section data-testid="analytics-evidence" className="space-y-4">
 
-        {!comparable && s.data && (
-          <p
-            data-testid="no-comparison-period"
-            className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
-          >
-            <span className="font-semibold text-text-primary">{ar ? 'لا توجد مقارنة: ' : 'No comparison: '}</span>
-            {unlikeNote}
-          </p>
-        )}
-
-        <MetricStrip
-          id="analytics"
-          ar={ar}
-          primary={strip.primary}
-          secondary={strip.secondary}
-          hasRows={s.data === undefined ? undefined : s.data.rows_in_scope}
-          loading={s.isPending}
-          error={s.isError ? s.error : undefined}
-          onRetry={() => void s.refetch()}
-        />
 
         {s.data?.conversions_basis?.may_double_count && (
           <p

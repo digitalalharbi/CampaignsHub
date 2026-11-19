@@ -21,7 +21,7 @@ const bell = (page: Page) => page.getByRole('button', { name: 'الإشعارا�
 
 const WORKSPACES = [
   { name: 'agency', auth: AUTH.owner, email: 'agency@campaignshub.io', home: '/agency/home', base: '/agency' },
-  { name: 'direct business', auth: AUTH.advertiser, email: 'advertiser@campaignshub.io', home: '/app/dashboard', base: '/app' },
+  { name: 'direct business', auth: AUTH.advertiser, email: 'advertiser@campaignshub.io', home: '/app/home', base: '/app' },
 ] as const
 
 for (const ws of WORKSPACES) {
