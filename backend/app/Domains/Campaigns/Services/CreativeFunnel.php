@@ -163,13 +163,24 @@ final class CreativeFunnel
         $previousKey = null;
 
         foreach (self::VIDEO_STAGES as $key => $label) {
-            if (($reported[$key] ?? false) !== true) {
+            /*
+             * CONTENT-RETENTION-COMPLETIONS-001 — «watched to the end» is `video_p100`, or, where the platform names it
+             * `video_completions` (TikTok), that — the same fallback `CreativeMetrics::derive()` makes for the completion
+             * rate. Without it the page said «لم ترسل المنصة: أكملوا المشاهدة» beside a completion rate it had computed
+             * from those very completions.
+             */
+            $source = $key;
+            if ($key === 'video_p100' && ($reported[$key] ?? false) !== true && ($reported['video_completions'] ?? false) === true) {
+                $source = 'video_completions';
+            }
+
+            if (($reported[$source] ?? false) !== true) {
                 $missing[] = ['key' => $key, 'label_ar' => $label['ar'], 'label_en' => $label['en']];
 
                 continue;
             }
 
-            $count = is_numeric($metrics[$key] ?? null) ? (float) $metrics[$key] : null;
+            $count = is_numeric($metrics[$source] ?? null) ? (float) $metrics[$source] : null;
 
             $stages[] = [
                 'key' => $key,
