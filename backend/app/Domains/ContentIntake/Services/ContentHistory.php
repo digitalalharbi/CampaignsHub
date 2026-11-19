@@ -12,6 +12,7 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Campaigns\Support\ObjectiveResult;
 use App\Domains\ContentIntake\Models\ContentIntakeItem;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Support\Carbon;
 
 /**
@@ -135,7 +136,7 @@ final class ContentHistory
     {
         $to = Carbon::today();
         $from = $to->copy()->subDays(($days ?? self::WINDOW_DAYS) - 1);
-        $query = ExternalCreative::query()->where('project_id', $projectId)->where('provider', $provider);
+        $query = BoundAccountVisibility::apply(ExternalCreative::query(), 'external_creatives')->where('project_id', $projectId)->where('provider', $provider);
         $this->rows->applyPeriodActivity($query, $from, $to);
         $creatives = $query->orderBy('id')->limit(self::MAX_PEERS)->get();
         $lean = $this->rows->lean($creatives, $from, $to);
