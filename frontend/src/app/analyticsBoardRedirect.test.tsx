@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { AnalyticsBoardRedirect } from './legacyRedirects'
+import { HomeToDashboard } from './legacyRedirects'
 import { agencyNavLeafPaths } from '@/layouts/agencyNav'
 import { appNavLeafPaths } from '@/layouts/appNav'
 
 /**
- * ANALYTICS-ONE-BOARD-001 — «لوحة التحليلات» is gone from the rail and its old address lands on «التحليلات», carrying the
- * query (project, tab, period) and the hash, so a bookmark or an emailed button still opens the same project.
+ * DASHBOARD-PATH-001 — Owner 2026-11-20: the landing is `/…/dashboard`. The old `/…/home` keeps working for bookmarks,
+ * carrying its query and hash, and the rail's first leaf is the dashboard.
  */
 function Where() {
   const l = useLocation()
@@ -19,28 +19,29 @@ function at(route: string, portal: 'app' | 'agency') {
   render(
     <MemoryRouter initialEntries={[route]}>
       <Routes>
-        <Route path={`/${portal}/dashboard`} element={<AnalyticsBoardRedirect portal={portal} />} />
-        <Route path={`/${portal}/analytics`} element={<Where />} />
+        <Route path={`/${portal}/home`} element={<HomeToDashboard portal={portal} />} />
+        <Route path={`/${portal}/dashboard`} element={<Where />} />
       </Routes>
     </MemoryRouter>,
   )
 }
 
-describe('the old analytics board address', () => {
-  it('redirects the advertiser portal and keeps ?project, ?tab and the hash', () => {
-    at('/app/dashboard?project=p1&tab=budget#x', 'app')
-    expect(screen.getByTestId('where').textContent).toBe('/app/analytics?project=p1&tab=budget#x')
+describe('the old home address', () => {
+  it('redirects the advertiser portal and keeps the query and the hash', () => {
+    at('/app/home?project=p1#x', 'app')
+    expect(screen.getByTestId('where').textContent).toBe('/app/dashboard?project=p1#x')
   })
 
   it('redirects the agency portal the same way', () => {
-    at('/agency/dashboard?project=p9', 'agency')
-    expect(screen.getByTestId('where').textContent).toBe('/agency/analytics?project=p9')
+    at('/agency/home?client=c9', 'agency')
+    expect(screen.getByTestId('where').textContent).toBe('/agency/dashboard?client=c9')
   })
 
-  it('is not offered in either rail any more, while «التحليلات» is', () => {
-    expect(appNavLeafPaths).not.toContain('/app/dashboard')
-    expect(agencyNavLeafPaths).not.toContain('/agency/dashboard')
+  it('the rail opens on the dashboard, and still offers «التحليلات»', () => {
+    expect(appNavLeafPaths).toContain('/app/dashboard')
+    expect(agencyNavLeafPaths).toContain('/agency/dashboard')
     expect(appNavLeafPaths).toContain('/app/analytics')
     expect(agencyNavLeafPaths).toContain('/agency/analytics')
+    expect(appNavLeafPaths).not.toContain('/app/home')
   })
 })

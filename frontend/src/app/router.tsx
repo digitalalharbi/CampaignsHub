@@ -6,7 +6,7 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { features } from '@/lib/features'
-import { AnalyticsBoardRedirect, LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectsIndexRedirect } from './legacyRedirects'
+import { HomeToDashboard, LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectsIndexRedirect } from './legacyRedirects'
 import { lazyPage } from './lazyPage'
 
 // PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
@@ -371,11 +371,11 @@ export const router = createBrowserRouter(withErrorBoundary([
            * now names `/…/home` itself; this redirect only keeps the bare address and old bookmarks working. The detailed
            * board stays at `/…/dashboard`, one tap away in the rail («لوحة التحليلات»).
            */
-          { index: true, element: <Navigate to="/app/home" replace /> },
+          { index: true, element: <Navigate to="/app/dashboard" replace /> },
           // ROLE-DASHBOARD-001 — the page per role, at its own address. `dashboard` below stays the detailed board it always was.
-          { path: 'home', element: <RoleDashboardPage portal="app" /> },
-          // ANALYTICS-ONE-BOARD-001 — the old board's address lands on «التحليلات».
-          { path: 'dashboard', element: <AnalyticsBoardRedirect portal="app" /> },
+          // DASHBOARD-PATH-001 — Owner 2026-11-20: the landing is «Dashboard». `home` stays only for old bookmarks.
+          { path: 'dashboard', element: <RoleDashboardPage portal="app" /> },
+          { path: 'home', element: <HomeToDashboard portal="app" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           /*
            * RECOMMENDATIONS-001 — this address answered 404 while the records existed.
@@ -634,9 +634,9 @@ export const router = createBrowserRouter(withErrorBoundary([
           element: <AgencyShell />,
           children: [
             // The landing is the role dashboard (see the `/app` index above).
-            { index: true, element: <Navigate to="/agency/home" replace /> },
-            { path: 'home', element: <RoleDashboardPage portal="agency" /> },
-            { path: 'dashboard', element: <AnalyticsBoardRedirect portal="agency" /> },
+            { index: true, element: <Navigate to="/agency/dashboard" replace /> },
+            { path: 'dashboard', element: <RoleDashboardPage portal="agency" /> },
+            { path: 'home', element: <HomeToDashboard portal="agency" /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },
             { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
             { path: 'requests', element: <RequestsDashboardPage /> },

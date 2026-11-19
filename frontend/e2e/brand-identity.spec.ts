@@ -128,7 +128,7 @@ test.describe('the CampaignsHub identity in the product', () => {
   for (const locale of ['ar', 'en'] as const) {
     test(`the workspace rail keeps the mark and the tenant's own name (${locale})`, async ({ page, request }) => {
       await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-      await page.goto('/agency/home')
+      await page.goto('/agency/dashboard')
       if (locale === 'en') await switchToEnglish(page)
       // The shell itself, waited for: `domcontentloaded` fires while the app still says «Loading».
       await expect(page.getByTestId('shell-brand-mark')).toBeVisible({ timeout: 25000 })
@@ -145,7 +145,7 @@ test.describe('the CampaignsHub identity in the product', () => {
 
   test('dark mode uses the approved light mark, and the gold does not move', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/home')
+    await page.goto('/agency/dashboard')
     await expect(page.getByTestId('shell-brand-mark')).toBeVisible({ timeout: 25000 })
 
     const read = async () => markIn(page, '[data-testid="shell-brand-mark"]')
@@ -171,7 +171,7 @@ test.describe('the CampaignsHub identity in the product', () => {
   test('a phone still says what the product is', async ({ page, request }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/home')
+    await page.goto('/agency/dashboard')
     await expect(page.getByTestId('mobile-brand-mark')).toBeVisible({ timeout: 25000 })
 
     const mark = await markIn(page, '[data-testid="mobile-brand-mark"]')

@@ -431,8 +431,10 @@ export function UnifiedCampaignOverview({
       */}
       <div>
         {/* Needs attention + key alerts + top creatives — dashboard detail only (hidden on the compact marketing preview) */}
-        {!isMarketing && (
+        {/* SHOW-AVAILABLE-001 — Owner 2026-11-20: «اعرض المتاح فقط». A card with nothing in it is not drawn; the row goes when all are empty. */}
+        {!isMarketing && (vm.needsAttention.length > 0 || vm.alerts.length > 0 || (vm.topCreatives?.length ?? 0) > 0) && (
         <div className={`flex flex-col gap-3 ${compact ? '' : 'lg:flex-row lg:items-start'}`}>
+          {vm.needsAttention.length > 0 && (
           <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
             {/* NO-OPERATOR-NOTES-001 — a count and chips, not sentences: the reason rides in each chip's tooltip. */}
             <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -453,6 +455,8 @@ export function UnifiedCampaignOverview({
               </ul>
             )}
           </div>
+          )}
+          {vm.alerts.length > 0 && (
           <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <span className={`${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topAlerts}</span>
@@ -473,6 +477,7 @@ export function UnifiedCampaignOverview({
               </ul>
             )}
           </div>
+          )}
           {vm.topCreatives && vm.topCreatives.length > 0 && (
             <div className={`min-w-0 rounded-xl border p-3 ${c.card} ${compact ? '' : 'lg:flex-1'}`}>
               <div className={`mb-1.5 ${lg ? 'text-base' : 'text-sm'} font-bold ${c.title}`}>{w.topCreatives}</div>

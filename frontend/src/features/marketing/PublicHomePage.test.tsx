@@ -98,7 +98,7 @@ describe('PublicHomePage — v5 journeys & header', () => {
     signInWith([])
     renderWithProviders(<PublicHomePage />, { locale: 'en' })
     const header = screen.getByRole('banner')
-    expect(within(header).getByRole('link', { name: /Dashboard/i })).toHaveAttribute("href", "/app/home")
+    expect(within(header).getByRole('link', { name: /Dashboard/i })).toHaveAttribute("href", "/app/dashboard")
     expect(within(header).queryByRole('link', { name: /Create account/i })).not.toBeInTheDocument()
   })
 
