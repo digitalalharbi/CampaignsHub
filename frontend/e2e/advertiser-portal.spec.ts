@@ -145,7 +145,7 @@ test.describe('the advertiser portal', () => {
      * and not the other. Asking the card directly cannot be answered by a control that happens to
      * share a word.
      */
-    await page.getByTestId('analytics-objective').selectOption('sales')
+    await page.getByTestId('analytics-objective').locator(`[data-value="sales"]`).click()
 
     const roas = page.getByTestId('metric-roas')
 
@@ -222,7 +222,7 @@ test.describe('the advertiser portal', () => {
     await expect(page.locator('main')).toBeVisible()
 
     // Every seeded campaign on this account carries `sales`; choosing «الوعي والتفاعل» changes the KPIs and removes none of them.
-    await page.getByTestId('analytics-objective').selectOption('awareness_engagement')
+    await page.getByTestId('analytics-objective').locator(`[data-value="awareness_engagement"]`).click()
     await expect(page.getByTestId('analytics-metrics')).toHaveAttribute('data-strip-state', 'rows', { timeout: 20000 })
     await expect(page.getByTestId('analytics-metrics-empty-scope')).toHaveCount(0)
 

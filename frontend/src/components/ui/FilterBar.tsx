@@ -748,7 +748,7 @@ export function FilterChips({
 }: {
   label: string
   value: string
-  options: Array<{ value: string; label: string }>
+  options: Array<{ value: string; label: string; title?: string }>
   onChange: (value: string) => void
   testid?: string
 }) {
@@ -766,6 +766,9 @@ export function FilterChips({
             key={o.value}
             type="button"
             aria-pressed={value === o.value}
+            title={o.title}
+            data-value={o.value}
+            data-testid={testid ? `${testid}-${o.value}` : undefined}
             onClick={() => onChange(o.value)}
             className={`h-11 rounded-lg px-2.5 text-sm font-semibold transition-colors sm:h-8 ${
               value === o.value
