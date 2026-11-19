@@ -65,6 +65,19 @@ final class CreativeVideoRetentionTest extends TestCase
         $this->assertSame(['video_p25', 'video_p50', 'video_p75'], array_column($result['missing'], 'key'));
     }
 
+    /** CONTENT-RETENTION-COMPLETIONS-001 — TikTok names the end «video_completions»; it is the last step, not a hole. */
+    public function test_completions_stand_for_the_last_step_when_the_platform_names_them_so(): void
+    {
+        $result = (new CreativeFunnel)->video($this->metrics([
+            'video_views' => 486_153, 'video_completions' => 972,
+        ], reported: ['video_views' => true, 'video_p100' => false, 'video_completions' => true]));
+
+        $this->assertSame(['video_views', 'video_p100'], array_column($result['stages'], 'key'));
+        $this->assertSame(972, $result['stages'][1]['count']);
+        $this->assertEqualsWithDelta(972 / 486_153, (float) $result['stages'][1]['rate_from_previous'], 1e-9);
+        $this->assertSame(['video_p25', 'video_p50', 'video_p75'], array_column($result['missing'], 'key'));
+    }
+
     /** A reported ZERO is a measurement and stays on the chart — nobody watched that far. */
     public function test_a_reported_zero_is_a_step_rather_than_a_hole(): void
     {
