@@ -406,6 +406,17 @@ describe('CreativePulseSection', () => {
     expect(within(nav).queryByRole('link', { name: /^Ad( \(\d+\))?$/ })).not.toBeInTheDocument()
   })
 
+  /*
+   * The pulse now mounts inside the analytics board's Content section, and meets whatever answers that address — a stub, an older
+   * server — so a response without its `filters` (or its `totals`) offers no choices and draws the empty state; it must not throw.
+   */
+  it('survives a response that carries no filter options at all', async () => {
+    mocked.mockResolvedValue({ ...pulse(), filters: undefined, totals: undefined } as never)
+    render()
+
+    expect(await screen.findByTestId('creative-pulse')).toBeInTheDocument()
+  })
+
   /** A dashboard is the worst page to mount players on — it is the one most often left open. */
   it('mounts no video element, whatever the ad is', async () => {
     const { container } = render()
