@@ -41,6 +41,18 @@ final class CreativeKind
     public const ALL = ['image', 'video', 'carousel', 'collection', 'catalog'];
 
     /**
+     * CONTENT-CARDS-001 — the filter's extra word: an ad that is only text (a search ad, a chat card), with no still and no film.
+     *
+     * A FILTER word and nothing more. {@see of()} still answers `other` for such a row, because the card, the format
+     * comparison and the parity tests all read that vocabulary; this adds a way to ask the library for them, with the
+     * same «nothing resolved» reading of the four asset columns the `of()` fallback uses.
+     */
+    public const TEXT = 'text';
+
+    /** What the library's kind filter accepts: the kinds, and the text-only ads. */
+    public const FILTERABLE = [...self::ALL, self::TEXT];
+
+    /**
      * What this creative IS, from its format string and, where that is unhelpful, its assets.
      *
      * The order is the decision. `collection` and `catalog` come first because both contain shapes
@@ -133,7 +145,7 @@ final class CreativeKind
      */
     public static function scope(QueryBuilder $query, array $kinds): void
     {
-        $kinds = array_values(array_intersect($kinds, self::ALL));
+        $kinds = array_values(array_intersect($kinds, self::FILTERABLE));
 
         if ($kinds === []) {
             return;
@@ -244,6 +256,16 @@ final class CreativeKind
                                 ->where(fn ($e) => $e->whereNotNull('asset_url')->orWhereNotNull('thumbnail_url'));
                         });
                 });
+            }),
+
+            /* No film, no still, no cards and no format that names one: the `other` fallback of `of()`, as SQL. */
+            'text' => $q->where(function ($b) use ($notCollectionOrCatalog, $hasNot, $singleCard): void {
+                $notCollectionOrCatalog($b);
+                $hasNot($b, 'video');
+                $hasNot($b, 'image');
+                $hasNot($b, 'carousel');
+                $singleCard($b);
+                $b->whereNull('video_url')->whereNull('asset_url')->whereNull('thumbnail_url');
             }),
 
             default => null,
