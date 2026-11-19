@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { ProgressRing } from '@/features/analytics/charts'
@@ -6,6 +6,7 @@ import { compact, money, num, percent, ratio } from '@/features/analytics/format
 import { objectiveLabel } from '@/features/analytics/metricLabels'
 import { budgetStatus, STATUS_COLOR, STATUS_LABEL, STATUS_SOFT, STATUS_TEXT, type BudgetStatus } from '@/lib/colors'
 import { useUi } from '@/stores/ui'
+import { analyticsSectionFor, type AnalyticsSectionId } from '@/features/analyticsShared/homeSections'
 
 /**
  * Local primitives for the role dashboards. They live here, not in the shared `components/ui`, on purpose: the dashboards
@@ -116,6 +117,28 @@ export function useBoxHeight(min = 80): { ref: RefObject<HTMLDivElement | null>;
    (TYPOGRAPHY-PRODUCT-POLISH-001: one arbitrary size, written once). */
 const HINT_ROW = 'tnum min-h-4 truncate text-[11px] text-text-muted'
 
+/**
+ * ANALYTICS-POPUP-001 — Home's cards read the analytics data, and a card whose question the board answers opens THAT
+ * section in a popup instead of leaving the page. Provided by `RoleDashboardPage`; without it (a test rendering one card)
+ * every card is the link it always was.
+ */
+export const OpenAnalytics = createContext<((section: AnalyticsSectionId) => void) | null>(null)
+
+/** The element a card or a panel title is: a button opening the matching section, or the link to its page. */
+export function Door({ to, className, testId, status, ariaLabel, style, children }: { to: string; className: string; testId?: string; status?: string; ariaLabel?: string; style?: CSSProperties; children: ReactNode }) {
+  const open = useContext(OpenAnalytics)
+  const section = analyticsSectionFor(to)
+  if (open && section) {
+    return (
+      <button type="button" onClick={() => open(section)} data-testid={testId} data-status={status} data-opens={`analytics:${section}`} aria-haspopup="dialog" aria-label={ariaLabel} style={style} className={`${className} text-start`}>
+        {children}
+      </button>
+    )
+  }
+
+  return <Link to={to} data-testid={testId} data-status={status} aria-label={ariaLabel} style={style} className={className}>{children}</Link>
+}
+
 /** A figure that opens its detail page. */
 export function Kpi({ label, value, hint, to, testId, status, children }: {
   label: string
@@ -130,10 +153,10 @@ export function Kpi({ label, value, hint, to, testId, status, children }: {
   const s = status ?? null
 
   return (
-    <Link
+    <Door
       to={to}
-      data-testid={testId}
-      data-status={s ?? undefined}
+      testId={testId}
+      status={s ?? undefined}
       className="group relative flex min-w-0 flex-col justify-start gap-1 overflow-hidden rounded-2xl border border-border bg-surface px-3.5 py-2.5 shadow-[var(--shadow-small)] transition hover:border-border-strong hover:shadow-[var(--shadow-medium)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
     >
       {/* DASH-KPI-UNIFY-001 — one card shape for every figure: label, value, hint row always present (so values line up), the
@@ -148,7 +171,7 @@ export function Kpi({ label, value, hint, to, testId, status, children }: {
       </span>
       <span className={`tnum truncate text-2xl font-extrabold leading-tight tracking-tight ${s ? STATUS_TEXT[s] : 'text-text-primary'}`} data-testid={`${testId}-value`}>{value}</span>
       {hint ? <span className={HINT_ROW}>{hint}</span> : (children ?? <span aria-hidden className={HINT_ROW}>{'\u00a0'}</span>)}
-    </Link>
+    </Door>
   )
 }
 
@@ -165,7 +188,7 @@ export function Panel({ title, to, testId, className = '', children }: { title: 
 
   return (
     <section data-testid={testId} className={`flex min-h-0 min-w-0 flex-col gap-2 rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] ${className}`}>
-      {to ? <Link to={to} className="w-fit rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600">{head}</Link> : head}
+      {to ? <Door to={to} className="w-fit rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600">{head}</Door> : head}
       <div className="min-h-0 flex-1">{children}</div>
     </section>
   )
@@ -173,17 +196,17 @@ export function Panel({ title, to, testId, className = '', children }: { title: 
 
 export function Chip({ to, label, value, status, testId }: { to: string; label: string; value: string; status: BudgetStatus; testId: string }) {
   return (
-    <Link
+    <Door
       to={to}
-      data-testid={testId}
-      data-status={status}
-      className="inline-flex min-w-0 items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold text-text-primary hover:border-border-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600"
+      testId={testId}
+      status={status}
       style={{ background: STATUS_SOFT[status] }}
+      className="inline-flex min-w-0 items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-semibold text-text-primary hover:border-border-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600"
     >
       <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: STATUS_COLOR[status] }} />
       <span className="truncate text-text-secondary">{label}</span>
       <span className="tnum shrink-0">{value}</span>
-    </Link>
+    </Door>
   )
 }
 
@@ -200,10 +223,10 @@ export function BudgetGauge({ ratio, name, to, size = 76, testId }: { ratio: num
   const status = budgetStatus(ratio)
 
   return (
-    <Link to={to} data-testid={testId} data-status={status} aria-label={`${name}: ${ratio === null ? STATUS_LABEL.unknown[ar ? 'ar' : 'en'] : percent(ratio, 0)} — ${STATUS_LABEL[status][ar ? 'ar' : 'en']}`} className="flex min-w-0 flex-col items-center gap-1 rounded-xl p-1 hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600">
+    <Door to={to} testId={testId} status={status} ariaLabel={`${name}: ${ratio === null ? STATUS_LABEL.unknown[ar ? 'ar' : 'en'] : percent(ratio, 0)} — ${STATUS_LABEL[status][ar ? 'ar' : 'en']}`} className="flex min-w-0 flex-col items-center gap-1 rounded-xl p-1 hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600">
       <ProgressRing value={ratio ?? 0} size={size} tone={TONE[status]} label={ratio === null ? '—' : percent(ratio, 0)} />
       <span className="max-w-full truncate text-[11px] font-semibold text-text-secondary">{name}</span>
-    </Link>
+    </Door>
   )
 }
 

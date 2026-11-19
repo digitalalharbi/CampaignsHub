@@ -11,7 +11,7 @@ import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { useWatchBoard, type DashboardWindow, type RankedCampaign, type WatchBoard as Board, type WatchContent } from './api'
-import { Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
+import { Door, Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
 import { PlatformComparePanel, SpendSharePanel } from './performance'
 
 /*
@@ -57,9 +57,9 @@ function Stat({ label, value, to, testId, points, color, tone, hint, delta }: {
   delta?: { metric: string; current: number | null | undefined; previous: number | null | undefined }
 }) {
   return (
-    <Link to={to} className="block min-w-0 rounded-2xl transition hover:shadow-[var(--shadow-medium)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
+    <Door to={to} className="block min-w-0 rounded-2xl transition hover:shadow-[var(--shadow-medium)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600">
       <StatCard label={label} value={value} hint={hint} tone={tone} dot delta={delta} testid={testId} spark={<div className="h-9" aria-hidden><KpiSparkline points={points} color={color} height={36} /></div>} />
-    </Link>
+    </Door>
   )
 }
 
@@ -136,7 +136,8 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
   const t = f.ar ? T.ar : T.en
   const p = b.performance ?? null
   const cur = b.currency
-  const analytics = `/${portal}/dashboard${portal === 'agency' && b.unit && !b.unit.startsWith('p:') ? `?client=${b.unit}` : ''}`
+  // ANALYTICS-ONE-BOARD-001 — the board is «التحليلات»; the headline figures open its overview in a popup (ANALYTICS-POPUP-001).
+  const analytics = `/${portal}/analytics`
   const trend = b.trend
   const impressions = sum(trend.map((d) => d.impressions))
   const clicks = sum(trend.map((d) => d.clicks))

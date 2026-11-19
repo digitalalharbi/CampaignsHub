@@ -6,7 +6,7 @@ import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRo
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
 import { features } from '@/lib/features'
-import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectsIndexRedirect } from './legacyRedirects'
+import { AnalyticsBoardRedirect, LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectsIndexRedirect } from './legacyRedirects'
 import { lazyPage } from './lazyPage'
 
 // PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
@@ -130,7 +130,6 @@ const AddonsPage = lazyPage(() => import('@/features/admin/AddonsPage'), 'Addons
 const PlanMigrationPage = lazyPage(() => import('@/features/admin/PlanMigrationPage'), 'PlanMigrationPage')
 const UsageMetersPage = lazyPage(() => import('@/features/admin/UsageMetersPage'), 'UsageMetersPage')
 const TaxPage = lazyPage(() => import('@/features/admin/TaxPage'), 'TaxPage')
-const OverviewDashboard = lazyPage(() => import('@/features/overview/OverviewDashboard'), 'OverviewDashboard')
 const RequireAgencyPortal = lazyPage(() => import('@/features/agency/RequireAgencyPortal'), 'RequireAgencyPortal')
 const AgencyTeamPage = lazyPage(() => import('@/features/agency/AgencyTeamPage'), 'AgencyTeamPage')
 const InfluencerShell = lazyPage(() => import('@/layouts/InfluencerShell'), 'InfluencerShell')
@@ -375,7 +374,8 @@ export const router = createBrowserRouter(withErrorBoundary([
           { index: true, element: <Navigate to="/app/home" replace /> },
           // ROLE-DASHBOARD-001 — the page per role, at its own address. `dashboard` below stays the detailed board it always was.
           { path: 'home', element: <RoleDashboardPage portal="app" /> },
-          { path: 'dashboard', element: <OverviewDashboard portal="app" /> },
+          // ANALYTICS-ONE-BOARD-001 — the old board's address lands on «التحليلات».
+          { path: 'dashboard', element: <AnalyticsBoardRedirect portal="app" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           /*
            * RECOMMENDATIONS-001 — this address answered 404 while the records existed.
@@ -636,7 +636,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             // The landing is the role dashboard (see the `/app` index above).
             { index: true, element: <Navigate to="/agency/home" replace /> },
             { path: 'home', element: <RoleDashboardPage portal="agency" /> },
-            { path: 'dashboard', element: <OverviewDashboard portal="agency" /> },
+            { path: 'dashboard', element: <AnalyticsBoardRedirect portal="agency" /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },
             { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
             { path: 'requests', element: <RequestsDashboardPage /> },
