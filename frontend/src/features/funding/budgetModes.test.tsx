@@ -263,3 +263,43 @@ describe('mode, period and split helpers', () => {
     expect(onPreset).toHaveBeenCalledWith('from_today', expect.objectContaining({ end: '' }))
   })
 })
+
+describe('BUDGET-LOGIC-001 — the board says why a budget is in its class, and filters by class', () => {
+  beforeEach(() => { vi.clearAllMocks(); signInWith(['funding.manage']) })
+  afterEach(() => signOut())
+
+  it('a row reads its pace: the run-out day at the last 3 days rate, warning when it runs out before the period ends', async () => {
+    serve([base({ status: 'low', pace_3d: 500, run_out_date: '2026-11-25', period_end: '2026-11-30', days_left: 6 })], base())
+    renderWithProviders(<BudgetsPage />, { locale: 'ar' })
+    const pace = within(await screen.findByTestId('budget-row-p1')).getByTestId('row-pace')
+    expect(pace).toHaveTextContent('يخلص')
+    expect(pace).toHaveTextContent('11/25')
+    expect(pace).toHaveTextContent('500 ر.س/يوم')
+    expect(pace).toHaveAttribute('data-early', 'true')
+    expect(screen.getByTestId('row-status')).toHaveAttribute('title', expect.stringContaining('حد التنبيه'))
+  })
+
+  it('no pace, no line: an untouched budget shows nothing invented', async () => {
+    serve([base()], base())
+    renderWithProviders(<BudgetsPage />, { locale: 'ar' })
+    expect(within(await screen.findByTestId('budget-row-p1')).queryByTestId('row-pace')).toBeNull()
+  })
+
+  it('the classes carry counts in action order, and one press shows only that class', async () => {
+    serve([
+      base({ project_id: 'p1', status: 'ok' }),
+      base({ project_id: 'p2', status: 'low' }),
+      base({ project_id: 'p3', status: 'low' }),
+      base({ project_id: 'p4', status: 'over' }),
+    ], base())
+    renderWithProviders(<BudgetsPage />, { locale: 'ar' })
+    const strip = await screen.findByTestId('budget-classes')
+    expect([...strip.querySelectorAll('button')].map((b) => b.getAttribute('data-testid'))).toEqual(['budget-class-all', 'budget-class-over', 'budget-class-low', 'budget-class-ok'])
+    expect(within(strip).getByTestId('budget-class-low')).toHaveTextContent('2')
+    fireEvent.click(within(strip).getByTestId('budget-class-low'))
+    await waitFor(() => expect(screen.queryByTestId('budget-row-p1')).toBeNull())
+    expect(screen.getByTestId('budget-row-p2')).toBeInTheDocument()
+    expect(screen.getByTestId('budget-row-p3')).toBeInTheDocument()
+    expect(screen.queryByTestId('budget-row-p4')).toBeNull()
+  })
+})

@@ -42,10 +42,13 @@ describe('FxAmount', () => {
     expect(screen.getByTestId('fx-withheld-link').getAttribute('href')).toBe('/admin/settings/currency-rates')
   })
 
-  it('a rate older than 7 days is used and flagged ⚠', () => {
-    render(<FxAmount c={{ ...eur, stale: true }} ar testId="x" />)
+  /** Owner 2026-11-19 — an old rate is USED and never worded to the client: no mark, no «سعر قديم»; the alert lives in /admin. */
+  it('a rate older than 7 days is used and shows no stale mark', () => {
+    const { container } = render(<FxAmount c={{ ...eur, stale: true }} ar testId="x" />)
     expect(screen.getByTestId('x')).toHaveTextContent('283.36 $')
-    expect(screen.getByTestId('fx-stale')).toBeTruthy()
+    expect(screen.queryByTestId('fx-stale')).toBeNull()
+    expect(container).not.toHaveTextContent('سعر قديم')
+    expect(container).not.toHaveTextContent('older than 7 days')
   })
 })
 
@@ -64,10 +67,10 @@ describe('FxTotalAmount and FxCoverageNote', () => {
     expect(screen.getByTestId('t')).not.toHaveTextContent('483')
   })
 
-  it('the scope note names converted currencies, stale rates and withheld rows', () => {
+  it('the scope note names converted currencies and withheld rows, and says nothing about an old rate', () => {
     render(<FxCoverageNote fx={{ reporting_currency: 'USD', includes_converted: true, currencies: ['EUR', 'USD'], stale: true, withheld_rows: 2, withheld_currencies: ['GBP'], rates_page: '/admin/settings/currency-rates' }} ar />)
     expect(screen.getByTestId('fx-includes-converted')).toBeTruthy()
-    expect(screen.getByTestId('fx-stale')).toHaveTextContent('سعر الصرف أقدم من 7 أيام')
+    expect(screen.queryByTestId('fx-stale')).toBeNull()
     expect(screen.getByTestId('fx-coverage-withheld')).toHaveTextContent('GBP')
   })
 })
@@ -85,16 +88,17 @@ describe('FxSpendNote and a partial total', () => {
     expect(screen.getByTestId('fx-excluded').getAttribute('title')).toBe(statement)
   })
 
-  it('the note states each excluded part with its account and the old rate used', () => {
+  it('the note states each excluded part with its account and says nothing about the old rate used', () => {
     render(<FxSpendNote ar note={{ complete: false, excluded, excluded_label: 'سعر صرف غير متوفر', statement, rates_page: '/admin/settings/currency-rates',
-      stale: [{ currency: 'EUR', rate_date: '2026-11-09', expired: true, label: 'سعر قديم — بتاريخ 2026-11-09', days: 3 }], stale_label: 'سعر قديم — بتاريخ 2026-11-09' }} />)
+      stale: [{ currency: 'EUR', rate_date: '2026-11-09', expired: true, days: 3 }] }} />)
     expect(screen.getByTestId('fx-spend-note-excluded')).toHaveTextContent('Account EUR')
     expect(screen.getByTestId('fx-spend-note-excluded')).toHaveTextContent('مستبعد من الإجمالي')
-    expect(screen.getByTestId('fx-spend-note-stale')).toHaveTextContent('سعر قديم — بتاريخ 2026-11-09')
+    expect(screen.queryByTestId('fx-spend-note-stale')).toBeNull()
+    expect(screen.getByTestId('fx-spend-note')).not.toHaveTextContent('سعر قديم')
   })
 
   it('a complete reading with no old rate renders nothing', () => {
-    const { container } = render(<FxSpendNote ar note={{ complete: true, excluded: [], excluded_label: null, statement: null, rates_page: null, stale: [], stale_label: null }} />)
+    const { container } = render(<FxSpendNote ar note={{ complete: true, excluded: [], excluded_label: null, statement: null, rates_page: null, stale: [] }} />)
     expect(container.textContent).toBe('')
   })
 })

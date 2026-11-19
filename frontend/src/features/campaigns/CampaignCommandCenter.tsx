@@ -146,6 +146,7 @@ function KpiCard({
 }: {
   label: string; value: ReactNode; sub?: string; delta?: number | null; deltaKey?: Sparkable; spark?: number[]
 }) {
+  delta = meaningfulDelta(delta)
   const tone = deltaKey ? deltaTone(deltaKey, delta) : trend(delta)
   const toneClass = tone === 'up' ? 'text-success' : tone === 'down' ? 'text-danger' : 'text-text-muted'
 
@@ -164,6 +165,33 @@ function KpiCard({
       }
       spark={spark && spark.length > 1 ? <KpiSparkline points={spark} height={26} /> : undefined}
     />
+  )
+}
+
+/**
+ * CAMPAIGN-PAGE-LEAN-001 — a movement against a previous period that was near nothing («+337,892%») says nothing about
+ * the campaign; past ±999% the arrow is not drawn.
+ */
+export function meaningfulDelta(delta: number | null | undefined): number | null {
+  return delta == null || !Number.isFinite(delta) || Math.abs(delta) > 9.99 ? null : delta
+}
+
+/** CAMPAIGN-PAGE-LEAN-001 — the report's small card: label, figure and its movement, on one compact line. */
+function MiniKpi({ label, value, hint, delta, deltaKey }: { label: string; value: ReactNode; hint?: string; delta?: number | null; deltaKey?: Sparkable }) {
+  const shown = meaningfulDelta(delta)
+  const tone = deltaKey ? deltaTone(deltaKey, shown) : trend(shown)
+  const toneClass = tone === 'up' ? 'text-success' : tone === 'down' ? 'text-danger' : 'text-text-muted'
+
+  return (
+    <div className="min-w-0 rounded-2xl border border-border bg-surface px-3 py-2" title={hint}>
+      {/* the reason a figure is missing is said, not hidden in a tooltip */}
+      <div className="truncate text-xs text-text-muted">{label}</div>
+      <div className="mt-0.5 flex items-baseline justify-between gap-2">
+        <span className="tnum truncate text-base font-bold text-text-primary">{value}</span>
+        {shown != null && <span dir="ltr" className={`shrink-0 text-xs font-semibold ${toneClass}`}>{percent(Math.abs(shown), 0)}</span>}
+      </div>
+      {hint && <div className="mt-0.5 text-xs leading-snug text-text-secondary">{hint}</div>}
+    </div>
   )
 }
 
@@ -267,11 +295,13 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
           : ' The comparison with the previous period is withheld: the two windows are not alike.')}
       </p>
     )}
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
-      {/* FX-APPLY-001 — the campaign page shows the budget in BOTH currencies: converted (display) and its own. */}
-      <KpiCard label="الميزانية" value={budget != null ? (campaign.budget_fx ? <FxAmount c={campaign.budget_fx} ar={ar} showOriginal testId="campaign-budget-fx" /> : money(budget, cur)) : '—'} />
+    {/*
+      * CAMPAIGN-PAGE-LEAN-001 — Owner 2026-11-19: the report's logic, large cards and small cards. The four figures the
+      * campaign is judged on are large; every other figure is a small card, and a small card with nothing to say («—»,
+      * no budget) is not drawn at all.
+      */}
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="campaign-kpis-primary">
       <KpiCard label="الإنفاق" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
-      <KpiCard label="المتبقي" value={remainingText(remaining, cur)} sub={remainingSub} />
       <KpiCard
         label={resultLabel(result, ar)}
         value={result.value === null ? '—' : num(result.value)}
@@ -282,24 +312,30 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
       />
       <KpiCard label={costLabelOf(result, ar)} value={derived ? resultCostText(result, k, rc) : '—'} delta={spendRead.withheld ? null : costDelta} deltaKey={result.key === 'clicks' ? 'cpc' : 'cpa'} />
       {/* Revenue and ROAS belong to a sales campaign only — any other objective was never bought to return revenue. */}
-      {sells && <KpiCard label="الإيرادات" value={revenueRead.text} sub={revenueRead.note ?? undefined} delta={revenueRead.withheld ? null : d.revenue} deltaKey="revenue" spark={revenueRead.withheld ? undefined : sparks(perf.data, 'revenue')} />}
-      {sells && <KpiCard label="ROAS" value={roasRead.value === null || !derived ? '—' : ratio(roasRead.value)} sub={roasRead.note ?? undefined} delta={roasRead.kind === 'converted' || roasRead.kind === 'zero' ? d.roas : null} deltaKey="roas" spark={roasRead.kind === 'converted' && derived ? sparks(perf.data, 'roas') : undefined} />}
-      {/*
-        * AGGREGATION-TRUTH-001 — `percent()` and `num()` already return «—» for a figure the
-        * aggregator did not state, and every call on this screen passed `x ?? 0` first. A CTR that
-        * was never reported printed «0.0%» and results that were never reported printed «0», on the
-        * screen an operator uses to decide whether to pause a campaign — and a campaign that has not
-        * delivered an impression yet is not a campaign nobody clicks. The inconsistency was visible
-        * inside one row: spend, CPA, ROAS and «المساهمة» refuse correctly, and the cells between them
-        * claimed zero.
-        */}
-      <KpiCard label="CTR" value={derived ? percent(k?.ctr) : '—'} delta={d.ctr} deltaKey="ctr" spark={derived ? sparks(perf.data, 'ctr') : undefined} />
-      <KpiCard label="CPC" value={derived ? rowCostPer(k, 'cpc', 'clicks', rc) : '—'} delta={spendRead.withheld ? null : d.cpc} deltaKey="cpc" />
-      {/* CPM divides by impressions per THOUSAND. The factor lives here, visible, rather than in a
-          generic reader — and rather than as a field name no payload carries. */}
-      <KpiCard label="CPM" value={derived ? rowCostPer(k, 'cpm', (k?.impressions ?? 0) / 1000, rc) : '—'} delta={spendRead.withheld ? null : d.cpm} deltaKey="cpm" />
-      {sells && <KpiCard label="معدل التحويل" value={convRate != null ? percent(convRate) : '—'} />}
-      <KpiCard label="مرات الظهور" value={compact(k?.impressions)} delta={d.impressions} deltaKey="impressions" />
+      {sells
+        ? <KpiCard label="ROAS" value={roasRead.value === null || !derived ? '—' : ratio(roasRead.value)} sub={roasRead.note ?? undefined} delta={roasRead.kind === 'converted' || roasRead.kind === 'zero' ? d.roas : null} deltaKey="roas" spark={roasRead.kind === 'converted' && derived ? sparks(perf.data, 'roas') : undefined} />
+        : <KpiCard label="مرات الظهور" value={compact(k?.impressions)} delta={d.impressions} deltaKey="impressions" spark={sparks(perf.data, 'impressions')} />}
+    </div>
+    {/*
+      * AGGREGATION-TRUTH-001 — `percent()` and `num()` return «—» for a figure nobody stated; never `x ?? 0`. A small card
+      * whose value is «—» is left out rather than drawn empty.
+      */}
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-testid="campaign-kpis-secondary">
+      {[
+        budget != null ? { key: 'budget', label: 'الميزانية', value: campaign.budget_fx ? <FxAmount c={campaign.budget_fx} ar={ar} showOriginal testId="campaign-budget-fx" /> : money(budget, cur) } : null,
+        budget != null ? { key: 'remaining', label: 'المتبقي', value: remainingText(remaining, cur), hint: remainingSub } : null,
+        sells ? { key: 'revenue', label: 'الإيرادات', value: revenueRead.text, hint: revenueRead.note ?? undefined, delta: revenueRead.withheld ? null : d.revenue, deltaKey: 'revenue' as Sparkable } : null,
+        { key: 'ctr', label: 'CTR', value: derived ? percent(k?.ctr) : '—', delta: d.ctr, deltaKey: 'ctr' as Sparkable },
+        { key: 'cpc', label: 'CPC', value: derived ? rowCostPer(k, 'cpc', 'clicks', rc) : '—', delta: spendRead.withheld ? null : d.cpc, deltaKey: 'cpc' as Sparkable },
+        /* CPM divides by impressions per THOUSAND; the factor lives here, visible. */
+        { key: 'cpm', label: 'CPM', value: derived ? rowCostPer(k, 'cpm', (k?.impressions ?? 0) / 1000, rc) : '—', delta: spendRead.withheld ? null : d.cpm, deltaKey: 'cpm' as Sparkable },
+        sells ? { key: 'conv_rate', label: 'معدل التحويل', value: convRate != null ? percent(convRate) : '—' } : null,
+        sells ? { key: 'impressions', label: 'مرات الظهور', value: compact(k?.impressions), delta: d.impressions, deltaKey: 'impressions' as Sparkable } : null,
+      ]
+        .filter((x): x is NonNullable<typeof x> => x !== null && ((x.value !== '—' && x.value !== null && x.value !== undefined && x.value !== '') || ('hint' in x && !!x.hint)))
+        .map((x) => (
+          <MiniKpi key={x.key} label={x.label} value={x.value} hint={'hint' in x ? x.hint : undefined} delta={'delta' in x ? x.delta : null} deltaKey={'deltaKey' in x ? x.deltaKey : undefined} />
+        ))}
     </div>
     </div>
   )

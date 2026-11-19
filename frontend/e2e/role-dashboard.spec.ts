@@ -110,7 +110,22 @@ for (const role of ROLES) {
       await page.goto('/agency/home')
       await expect(page.getByTestId('role-dashboard')).toHaveAttribute('data-view', role.key, { timeout: 30_000 })
       const hrefs = await page.locator('[data-testid="dash-kpis"] a[href]').evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href') as string))])
-      expect(hrefs.length, 'a dashboard with no figure that opens anything').toBeGreaterThan(0)
+      /*
+       * ANALYTICS-POPUP-001 — a figure the board answers opens that section of «التحليلات» in a popup instead of leaving Home.
+       * It is still a card that opens a real page: the popup names its section and carries the one way on, «افتح التحليلات».
+       */
+      const openers = page.locator('[data-testid="dash-kpis"] button[data-opens^="analytics:"]')
+      const popups = await openers.count()
+      expect(hrefs.length + popups, 'a dashboard with no figure that opens anything').toBeGreaterThan(0)
+      for (let i = 0; i < popups; i++) {
+        const opener = openers.nth(i)
+        const section = (await opener.getAttribute('data-opens'))!.replace('analytics:', '')
+        await opener.click()
+        await expect(page.getByTestId('analytics-popup'), `card ${i} opened no analytics section`).toHaveAttribute('data-section', section, { timeout: 30_000 })
+        await expect(page.getByTestId('analytics-popup-open')).toHaveAttribute('href', new RegExp(`^/agency/analytics\\?tab=s_${section}$`))
+        await page.keyboard.press('Escape')
+        await expect(page.getByTestId('analytics-popup')).toHaveCount(0)
+      }
       for (const href of hrefs) {
         await page.goto(href)
         await expect(page.getByTestId('not-found'), `${href} is a dead end`).toHaveCount(0)

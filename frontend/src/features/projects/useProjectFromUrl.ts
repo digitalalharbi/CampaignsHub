@@ -60,3 +60,41 @@ export function useProjectFromUrl(): void {
     )
   }, [wanted, projects.data, clients.data, clients.isError, agency, setCurrentProjectId, setCurrentClientId, setParams])
 }
+
+/**
+ * CAMPAIGN-DETAIL-SCOPE-LOOP-001 — a page whose PATH names its project (a campaign's own page) makes that project the
+ * selection, together with the client that owns it.
+ *
+ * Setting the project alone fought the agency scope: the sidebar kept the previously chosen client, its reconcile
+ * cleared a project «belonging elsewhere» and the auto-select put the client's own project back, while this page set
+ * the address's project again on every render — React stopped it with error #185 and the page fell over («حدث خطأ في
+ * عرض هذه الصفحة»). Choosing the owning client first leaves every one of those effects with nothing to correct.
+ *
+ * Only a project from the reader's own reachable list is chosen, and the client only where the reader holds it, so the
+ * address cannot widen anyone's scope; the page's own requests keep using the path id under the server's ceilings.
+ */
+export function useProjectFromPath(projectId: string | undefined): void {
+  const { currentProjectId, setCurrentProjectId } = useProject()
+  const { currentClientId, setCurrentClientId } = useAgencyClient()
+  const agency = usePortalBase() === '/agency'
+  const enabled = projectId !== undefined && projectId !== ''
+  const clients = useQuery({ queryKey: ['agency-scope', 'clients'], queryFn: listClientWorkspaces, enabled: agency && enabled })
+  const projects = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false), enabled })
+
+  useEffect(() => {
+    if (!enabled || projects.data === undefined) return
+    if (agency && clients.data === undefined && !clients.isError) return
+
+    const project = projects.data.find((p) => p.id === projectId)
+    if (project === undefined) return
+
+    const owner = project.client_workspace_id
+    if (owner && owner !== currentClientId && (clients.data ?? []).some((c) => c.id === owner)) {
+      setCurrentClientId(owner)
+    }
+    if (currentProjectId !== project.id) setCurrentProjectId(project.id)
+  }, [
+    enabled, projectId, projects.data, clients.data, clients.isError, agency,
+    currentClientId, currentProjectId, setCurrentClientId, setCurrentProjectId,
+  ])
+}
