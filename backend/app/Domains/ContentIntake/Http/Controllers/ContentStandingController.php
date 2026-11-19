@@ -8,6 +8,7 @@ use App\Domains\Analytics\Support\AnalyticsReadCache;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\ContentIntake\Services\ContentStanding;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -50,7 +51,7 @@ final class ContentStandingController extends Controller
         $variant = md5(json_encode([$user->getKey(), $filters, $from->toDateString(), $to->toDateString()], JSON_THROW_ON_ERROR));
 
         $payload = AnalyticsReadCache::remember('content-standing', $tenantId, $scope, $variant, function () use ($user, $filters, $from, $to): array {
-            $query = ExternalCreative::query();
+            $query = BoundAccountVisibility::apply(ExternalCreative::query(), 'external_creatives');
             $this->rows->applyReach($query, $user);
             $this->rows->applyFilters($query, $filters);
             $this->rows->applyPeriodActivity($query, $from, $to);

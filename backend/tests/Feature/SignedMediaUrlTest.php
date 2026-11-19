@@ -368,7 +368,7 @@ final class SignedMediaUrlTest extends TestCase
          */
         $keys = array_column($options['kinds'], 'key');
 
-        foreach (['image', 'video', 'carousel', 'collection', 'catalog'] as $kind) {
+        foreach (['image', 'video', 'carousel', 'collection', 'catalog', 'text'] as $kind) {
             $this->assertContains(
                 $kind,
                 $keys,
@@ -377,7 +377,7 @@ final class SignedMediaUrlTest extends TestCase
         }
 
         /* And on an empty scope every one of them reaches nothing, said rather than implied. */
-        $this->assertSame([0, 0, 0, 0, 0], array_column($options['kinds'], 'count'));
+        $this->assertSame([0, 0, 0, 0, 0, 0], array_column($options['kinds'], 'count'));
     }
 
     /** @return array<string, mixed> */
