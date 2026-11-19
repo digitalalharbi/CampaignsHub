@@ -966,8 +966,9 @@ function PerformanceTab({ projectId, range, filters, objective, surface }: Overv
   // ANALYTICS-SMART-READING-001 — on the analysis surface the findings lead, each opening its evidence in a popup.
   const daily = (
     <>
-      {surface === 'analytics' && <SmartReading projectId={projectId} range={range} filters={filters} ar={ar} />}
+      {/* ANALYTICS-HEADLINE-001 — figures, then the daily drawing (first screen), then the findings that read them. */}
       <DailyMeasurePanel projectId={projectId} range={range} filters={filters} ar={ar} />
+      {surface === 'analytics' && <SmartReading projectId={projectId} range={range} filters={filters} ar={ar} />}
     </>
   )
 
