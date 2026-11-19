@@ -1,6 +1,6 @@
 import { FxAmount } from '@/components/money/FxAmount'
 import { moneyExact } from '@/features/analytics/format'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, Archive, Pause, Pencil, Play } from 'lucide-react'
@@ -62,7 +62,7 @@ import { CampaignStructureTab } from './CampaignStructureTab'
 import { RelatedEntitiesPanel } from './RelatedEntitiesPanel'
 import { CampaignWriteControl } from './CampaignWriteControl'
 import { CampaignControlPanel } from './CampaignControlPanel'
-import { useProject } from '@/stores/project'
+import { useProjectFromPath } from '@/features/projects/useProjectFromUrl'
 
 const TAB_KEYS = [
   // OWNER 2026-11-19 — the reading tabs first (what happened, where, with which content, for whom), the operating ones last.
@@ -100,7 +100,6 @@ export function CampaignDetailPage() {
   // DATE-RANGE-001 — the system's one period (shared with every page; rolling presets end yesterday).
   const { range } = usePeriod()
 
-  const { currentProjectId, setCurrentProjectId } = useProject()
 
   const canView = useAuth((s) => s.hasPermission('campaigns.view'))
   const canUpdate = useAuth((s) => s.hasPermission('campaigns.update'))
@@ -129,10 +128,8 @@ export function CampaignDetailPage() {
     setSp(next, { replace: true })
   }
 
-  // Keep the global project switcher aligned with the URL's project.
-  useEffect(() => {
-    if (projectId && currentProjectId !== projectId) setCurrentProjectId(projectId)
-  }, [projectId, currentProjectId, setCurrentProjectId])
+  // Keep the global project switcher (and the agency client that owns it) aligned with the URL's project.
+  useProjectFromPath(projectId)
 
   // Project- AND campaign-scoped query keys (isolation): ['projects', projectId, 'campaigns', campaignId, ...].
   const campaignQuery = useQuery({
