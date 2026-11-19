@@ -81,10 +81,12 @@ test.describe('the analytics board carries the report', () => {
 })
 
 test.describe('«إنشاء تقرير من هذا العرض»', () => {
-  test.use({ storageState: AUTH.owner })
+  test.use({ storageState: AUTH.advertiser })
 
+  // The reader without `reports.share` never sees the button: that is held in vitest (`boardInteraction.test.tsx`), not here, because the seeded
+  // accounts that lack it are agency accounts and need a project chosen before the board opens.
   test('offers the report to a reader who may share, and answers with a /r/ link or says why not', async ({ page }) => {
-    await page.goto('/agency/analytics')
+    await page.goto('/app/analytics')
     await expect(page.locator('main')).toBeVisible()
     const button = page.getByTestId('report-from-view')
     await expect(button).toBeVisible({ timeout: 30000 })
@@ -94,14 +96,5 @@ test.describe('«إنشاء تقرير من هذا العرض»', () => {
     const refusal = page.getByTestId('report-from-view-error')
     await expect(link.or(refusal)).toBeVisible({ timeout: 30000 })
     if (await link.isVisible()) await expect(link).toHaveValue(/\/r\//)
-  })
-
-  test('is not offered to a reader without the share permission', async ({ browser }) => {
-    const context = await browser.newContext({ storageState: AUTH.viewer })
-    const page = await context.newPage()
-    await page.goto('/app/analytics')
-    await expect(page.locator('main')).toBeVisible()
-    await expect(page.getByTestId('report-from-view')).toHaveCount(0)
-    await context.close()
   })
 })
