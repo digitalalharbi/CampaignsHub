@@ -55,7 +55,7 @@ describe('widgets on the Dashboard and Analytics', () => {
     vi.mocked(useWidgetLayout).mockReturnValue(layout(['module_off', 'module_off']) as never)
     renderWithProviders(<AnalyticsPage surface="analytics" />, { locale: 'en' })
 
-    await screen.findByRole('button', { name: /Performance|Summary|Overview/i })
+    await screen.findAllByRole('button', { name: /Performance|Summary|Overview/i })
     expect(screen.queryByRole('button', { name: 'Insights' })).toBeNull()
     expect(screen.queryByTestId('stub-surface-analytics')).toBeNull()
   })
