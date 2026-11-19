@@ -58,7 +58,7 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
   // DASH-PERF-SPLIT-001 — the performance panels arrive on their own request; the page's own figures never wait for them.
   const scopeClient = useAgencyClient((s) => s.currentClientId)
   const scopeProject = useProject((s) => s.currentProjectId)
-  const perf = useDashboardPerformance(d.window.days as DashboardWindow, d.performance_deferred === true, portal === 'agency' ? scopeClient : null, scopeProject)
+  const perf = useDashboardPerformance(d.window.days as DashboardWindow, d.performance_deferred === true, portal === 'agency' ? scopeClient : null, portal === 'agency' && scopeClient ? scopeProject : null)
   const pd: RoleDashboard = d.performance_deferred ? { ...d, ...(perf.data ?? {}) } : d
   const perfLoading = d.performance_deferred === true && perf.isLoading
   // DASH-METRICS-CURRENCY-001 — the platforms' figures in their own unit; the budgets above stay in theirs.

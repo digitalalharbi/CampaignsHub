@@ -65,7 +65,9 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
   const client = useAgencyClient((s) => s.currentClientId)
   // HOME-SCOPE-ISOLATION-001 — the project chosen at the top narrows Home too (the server ignores one outside the client).
   const project = useProject((s) => s.currentProjectId)
-  const q = useRoleDashboard(chosen, days, portal === 'agency' ? client : null, project)
+  // The project narrows only inside a chosen client: under «كل العملاء» the switcher still auto-picks one, and Home must not shrink to it.
+  const scopedProject = portal === 'agency' && client ? project : null
+  const q = useRoleDashboard(chosen, days, portal === 'agency' ? client : null, scopedProject)
   const { ref } = useFitViewport()
   const d = q.data
 

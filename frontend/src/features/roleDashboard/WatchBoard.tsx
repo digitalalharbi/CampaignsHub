@@ -301,7 +301,7 @@ export function WatchBoard({ portal, days }: { portal: 'agency' | 'app'; days: D
   }
   // HOME-SCOPE-ISOLATION-001 — the project chosen at the top narrows the board inside its unit.
   const project = useProject((s) => s.currentProjectId)
-  const q = useWatchBoard(days, unit, true, project)
+  const q = useWatchBoard(days, unit, true, portal === 'agency' && stored ? project : null)
   const b = q.data
   const units = b?.units ?? []
   const shown = b ? b.unit : unit
