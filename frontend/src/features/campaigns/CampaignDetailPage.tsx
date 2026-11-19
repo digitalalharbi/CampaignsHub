@@ -1,6 +1,6 @@
 import { FxAmount } from '@/components/money/FxAmount'
 import { moneyExact } from '@/features/analytics/format'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, Archive, Pause, Pencil, Play } from 'lucide-react'
@@ -62,22 +62,19 @@ import { CampaignStructureTab } from './CampaignStructureTab'
 import { RelatedEntitiesPanel } from './RelatedEntitiesPanel'
 import { CampaignWriteControl } from './CampaignWriteControl'
 import { CampaignControlPanel } from './CampaignControlPanel'
-import { useProject } from '@/stores/project'
+import { useProjectFromPath } from '@/features/projects/useProjectFromUrl'
 
-const TAB_KEYS = [
-  // OWNER 2026-11-19 — the reading tabs first (what happened, where, with which content, for whom), the operating ones last.
-  'overview', 'platforms', 'creatives', 'audience', 'funnel', 'budget', 'performance', 'alerts', 'reports', 'activity',
-  'structure', 'events', 'control', 'sync', 'notes', 'settings',
-] as const
+/*
+ * CAMPAIGN-PAGE-LEAN-001 — Owner 2026-11-19: sixteen tabs were too many, and the last ones were only reached by scrolling
+ * the strip sideways. Eight remain, each a reading of the campaign; the operating and internal views live together under
+ * «الإعدادات», and «المتابعة» gathers alerts, notes, reports and activity. Old `?tab=` links land on the tab that now
+ * holds their content.
+ */
+const TAB_KEYS = ['overview', 'platforms', 'creatives', 'audience', 'funnel', 'budget', 'structure', 'follow', 'settings'] as const
 type TabKey = (typeof TAB_KEYS)[number]
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-0">
-      <span className="text-xs text-text-muted">{label}</span>
-      <span className="text-sm font-semibold">{children}</span>
-    </div>
-  )
+const TAB_MOVED: Record<string, TabKey> = {
+  performance: 'overview', alerts: 'follow', reports: 'follow', activity: 'follow', notes: 'follow',
+  events: 'settings', control: 'settings', sync: 'settings',
 }
 
 export function CampaignDetailPage() {
@@ -100,15 +97,16 @@ export function CampaignDetailPage() {
   // DATE-RANGE-001 — the system's one period (shared with every page; rolling presets end yesterday).
   const { range } = usePeriod()
 
-  const { currentProjectId, setCurrentProjectId } = useProject()
 
   const canView = useAuth((s) => s.hasPermission('campaigns.view'))
   const canUpdate = useAuth((s) => s.hasPermission('campaigns.update'))
   const canPause = useAuth((s) => s.hasPermission('campaigns.pause'))
   const canApprove = useAuth((s) => s.hasPermission('reports.approve'))
 
-  const tabParam = sp.get('tab') as TabKey | null
-  const tab: TabKey = tabParam && TAB_KEYS.includes(tabParam) ? tabParam : 'overview'
+  const tabParam = sp.get('tab')
+  const tab: TabKey = tabParam && (TAB_KEYS as readonly string[]).includes(tabParam)
+    ? (tabParam as TabKey)
+    : (tabParam && TAB_MOVED[tabParam]) || 'overview'
   const setTab = (key: string) => {
     const next = new URLSearchParams(sp)
     next.set('tab', key)
@@ -129,10 +127,8 @@ export function CampaignDetailPage() {
     setSp(next, { replace: true })
   }
 
-  // Keep the global project switcher aligned with the URL's project.
-  useEffect(() => {
-    if (projectId && currentProjectId !== projectId) setCurrentProjectId(projectId)
-  }, [projectId, currentProjectId, setCurrentProjectId])
+  // Keep the global project switcher (and the agency client that owns it) aligned with the URL's project.
+  useProjectFromPath(projectId)
 
   // Project- AND campaign-scoped query keys (isolation): ['projects', projectId, 'campaigns', campaignId, ...].
   const campaignQuery = useQuery({
@@ -228,7 +224,10 @@ export function CampaignDetailPage() {
   const platforms = [...new Set(linked.map((e) => e.provider))]
   const actionError = statusMutation.isError ? String(statusMutation.error) : null
 
-  const tabs: TabItem[] = TAB_KEYS.map((k) => ({ key: k, label: t(`tab_${k}` as never) }))
+  const tabs: TabItem[] = TAB_KEYS.map((k) => ({
+    key: k,
+    label: k === 'follow' ? (locale === 'ar' ? 'المتابعة' : 'Follow-up') : t(`tab_${k}` as never),
+  }))
 
   const classSelect = (
     field: 'stage' | 'performance_label' | 'priority',
@@ -315,22 +314,31 @@ export function CampaignDetailPage() {
 
         <CampaignLaunchSuccess outcome={launch} onDismiss={() => setLaunch(null)} />
 
-      {/* Header facts grid — campaign-scoped context. */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-border pt-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
-          <HeaderFact label={t('period_label')}>
-            <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
-          </HeaderFact>
-          <HeaderFact label={t('budget_label')}>
-            {/* FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own. */}{c.total_budget !== null && c.budget_fx ? <FxAmount c={c.budget_fx} ar={locale === 'ar'} showOriginal testId="campaign-detail-budget" /> : <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>}
-          </HeaderFact>
-          <HeaderFact label={t('owner_label')}>{c.owner_id != null ? ((usersQ.data ?? []).find((u) => String(u.id) === String(c.owner_id))?.name ?? <span className="tnum">#{c.owner_id}</span>) : '—'}</HeaderFact>
-          <HeaderFact label={t('cmc_attribution')}>{c.attribution_window || '—'}</HeaderFact>
-          <HeaderFact label={t('cmc_source_of_truth')}>{c.primary_conversion_purpose || '—'}</HeaderFact>
-          <HeaderFact label={t('linked_count')}><span className="tnum">{platforms.length}</span></HeaderFact>
-          <HeaderFact label={t('cmc_stage')}>{classSelect('stage', c.stage, STAGE_KEYS, (k) => stageLabel(k, locale))}</HeaderFact>
-          <HeaderFact label={t('cmc_performance')}>{classSelect('performance_label', c.performance_label, PERFORMANCE_KEYS, (k) => performanceLabel(k, locale))}</HeaderFact>
-          <HeaderFact label={t('cmc_priority')}>{classSelect('priority', c.priority, PRIORITY_KEYS, (k) => priorityLabel(k, locale))}</HeaderFact>
-        </div>
+      {/*
+        * CAMPAIGN-PAGE-LEAN-001 — a header fact is drawn only when it has a value: «الفترة —», «المسؤول —», «نافذة الإسناد —»
+        * said nothing. The stage, performance and priority choices are settings, not facts, and moved to «الإعدادات».
+        */}
+        {(() => {
+          const owner = c.owner_id != null ? ((usersQ.data ?? []).find((u) => String(u.id) === String(c.owner_id))?.name ?? null) : null
+          const facts = [
+            c.starts_on || c.ends_on ? { key: 'period', label: t('period_label'), value: <span className="tnum text-xs">{`${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}`}</span> } : null,
+            c.total_budget !== null ? {
+              key: 'budget', label: t('budget_label'),
+              // FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own.
+              value: c.budget_fx ? <FxAmount c={c.budget_fx} ar={locale === 'ar'} showOriginal testId="campaign-detail-budget" /> : <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>,
+            } : null,
+            owner ? { key: 'owner', label: t('owner_label'), value: owner } : null,
+            c.attribution_window ? { key: 'attribution', label: t('cmc_attribution'), value: c.attribution_window } : null,
+            c.primary_conversion_purpose ? { key: 'truth', label: t('cmc_source_of_truth'), value: c.primary_conversion_purpose } : null,
+            platforms.length > 1 ? { key: 'linked', label: t('linked_count'), value: <span className="tnum">{platforms.length}</span> } : null,
+          ].filter((f): f is NonNullable<typeof f> => f !== null)
+
+          return facts.length === 0 ? null : (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-border pt-3 text-sm sm:grid-cols-3 lg:grid-cols-5" data-testid="campaign-header-facts">
+              {facts.map((f) => <HeaderFact key={f.key} label={f.label}>{f.value}</HeaderFact>)}
+            </div>
+          )
+        })()}
       </Card>
 
       {actionError && <Alert severity="danger" title={actionError} />}
@@ -357,36 +365,6 @@ export function CampaignDetailPage() {
           <div className="my-4" data-testid="campaign-overview-charts">
             <CampaignPerformanceTab campaign={c} projectId={projectId} range={range} locale={locale} />
           </div>
-          <details className="mt-4 rounded-2xl border border-border bg-surface p-4" data-testid="campaign-facts">
-            <summary className="cursor-pointer select-none text-sm font-semibold text-text-secondary">{locale === 'ar' ? 'بيانات الحملة' : 'Campaign facts'}</summary>
-          <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card>
-              <CardTitle>{t('tab_overview')}</CardTitle>
-              <div className="mt-2">
-                <Row label={t('objective_label')}>{objectiveLabel(c.objective, locale)}</Row>
-                <Row label={t('status_label')}><Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge></Row>
-                <Row label={t('cmc_stage')}>{c.stage ? stageLabel(c.stage, locale) : '—'}</Row>
-                <Row label={t('cmc_priority')}>{c.priority ? priorityLabel(c.priority, locale) : '—'}</Row>
-                <Row label={t('budget_label')}>
-                  {/* FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own. */}{c.total_budget !== null && c.budget_fx ? <FxAmount c={c.budget_fx} ar={locale === 'ar'} showOriginal testId="campaign-detail-budget" /> : <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>}
-                </Row>
-                <Row label={t('period_label')}>
-                  <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
-                </Row>
-                <Row label={t('linked_count')}><Badge tone="info">{platforms.length}</Badge></Row>
-              </div>
-            </Card>
-            <Card>
-              <CardTitle>{t('audience_label')}</CardTitle>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-text-secondary">{c.audience || '—'}</p>
-            </Card>
-          </div>
-          </details>
-          {/* CMC-5 — recent activity timeline. */}
-          <Card className="mt-4">
-            <CardTitle>{t('tab_activity')}</CardTitle>
-            <div className="mt-3"><CampaignActivityTab campaign={c} projectId={projectId} limit={6} /></div>
-          </Card>
         </TabPanel>
       )}
 
@@ -406,30 +384,6 @@ export function CampaignDetailPage() {
         </TabPanel>
       )}
 
-      {tab === 'performance' && (
-        <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
-          <CampaignPerformanceTab campaign={c} projectId={projectId} range={range} locale={locale} />
-
-          {/*
-            CREATIVE-FORMAT-INTELLIGENCE-001, scoped to THIS campaign.
-
-            «Image or video» is a different answer per campaign than per account, and a campaign page
-            that could only show the account-wide verdict would be handing the reader somebody else's
-            evidence for the decision in front of them. The scope travels: project, period and this
-            campaign.
-
-            MEDIUM depth — the scoreboard, the comparison and the spend mix. The trend and the exact
-            table stay in Content Analytics, where somebody has come to read rather than to check.
-          */}
-          <div className="mt-4">
-            {/* CONTENT-FORMAT-ROAS-REMOVED-001 — see `CreativesPage.tsx`: a return computed from
-                partially-reported creative revenue over fully-attributed creative spend is not a
-                return, and the verdict built on it told operators to move budget on it. */}
-          </div>
-        </TabPanel>
-      )}
-
       {tab === 'budget' && (
         <TabPanel>
           <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
@@ -442,22 +396,17 @@ export function CampaignDetailPage() {
           <CampaignFunnelTab campaign={c} projectId={projectId} range={range} />
         </TabPanel>
       )}
-      {tab === 'activity' && (
+      {/* CAMPAIGN-PAGE-LEAN-001 — «المتابعة»: what is open on the campaign and what was done, in one place. */}
+      {tab === 'follow' && (
         <TabPanel>
-          <CampaignActivityTab campaign={c} projectId={projectId} />
+          <div className="space-y-4">
+            <Card><CardTitle>{t('tab_alerts')}</CardTitle><div className="mt-3"><CampaignAlertsTab campaign={c} projectId={projectId} /></div></Card>
+            <Card><CardTitle>{t('tab_notes')}</CardTitle><div className="mt-3"><CampaignNotesTab campaign={c} projectId={projectId} canUpdate={canUpdate} canApprove={canApprove} /></div></Card>
+            <Card><CardTitle>{t('tab_reports')}</CardTitle><div className="mt-3"><CampaignReportsTab campaign={c} projectId={projectId} /></div></Card>
+            <Card><CardTitle>{t('tab_activity')}</CardTitle><div className="mt-3"><CampaignActivityTab campaign={c} projectId={projectId} /></div></Card>
+          </div>
         </TabPanel>
       )}
-      {tab === 'alerts' && (
-        <TabPanel>
-          <CampaignAlertsTab campaign={c} projectId={projectId} />
-        </TabPanel>
-      )}
-      {tab === 'reports' && (
-        <TabPanel>
-          <CampaignReportsTab campaign={c} projectId={projectId} />
-        </TabPanel>
-      )}
-
       {tab === 'creatives' && (
         <TabPanel>
           <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
@@ -474,31 +423,36 @@ export function CampaignDetailPage() {
           <CampaignAudienceTab campaign={c} locale={locale} />
         </TabPanel>
       )}
-      {tab === 'events' && (
-        <TabPanel>
-          <div className="mb-4 flex items-center justify-end"><DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" /></div>
-          <CampaignEventsTab campaign={c} projectId={projectId} range={range} />
-        </TabPanel>
-      )}
-      {tab === 'sync' && (
-        <TabPanel>
-          <CampaignSyncLogTab campaign={c} projectId={projectId} />
-        </TabPanel>
-      )}
-      {/* CAMPAIGN-MGMT-WRITE-001 — the platform entities, operated from here. */}
-      {tab === 'control' && (
-        <TabPanel>
-          <CampaignControlPanel campaign={c} projectId={projectId} onOpenHistory={() => setTab('activity')} />
-        </TabPanel>
-      )}
+      {/*
+        * CAMPAIGN-PAGE-LEAN-001 — «الإعدادات»: the campaign's classification, its writes, and — folded, for whoever operates it —
+        * the platform controls, the conversion events and the sync log that used to be three tabs of their own.
+        */}
       {tab === 'settings' && (
         <TabPanel>
-          <CampaignWriteControl projectId={projectId} />
-        </TabPanel>
-      )}
-      {tab === 'notes' && (
-        <TabPanel>
-          <CampaignNotesTab campaign={c} projectId={projectId} canUpdate={canUpdate} canApprove={canApprove} />
+          <div className="space-y-4">
+            <Card>
+              <CardTitle>{locale === 'ar' ? 'التصنيف' : 'Classification'}</CardTitle>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="campaign-classification">
+                <HeaderFact label={t('cmc_stage')}>{classSelect('stage', c.stage, STAGE_KEYS, (k) => stageLabel(k, locale))}</HeaderFact>
+                <HeaderFact label={t('cmc_performance')}>{classSelect('performance_label', c.performance_label, PERFORMANCE_KEYS, (k) => performanceLabel(k, locale))}</HeaderFact>
+                <HeaderFact label={t('cmc_priority')}>{classSelect('priority', c.priority, PRIORITY_KEYS, (k) => priorityLabel(k, locale))}</HeaderFact>
+              </div>
+            </Card>
+            <CampaignWriteControl projectId={projectId} />
+            {/* CAMPAIGN-MGMT-WRITE-001 — the platform entities, operated from here. */}
+            <details className="rounded-2xl border border-border bg-surface p-4">
+              <summary className="cursor-pointer select-none text-sm font-semibold text-text-secondary">{t('tab_control')}</summary>
+              <div className="mt-3"><CampaignControlPanel campaign={c} projectId={projectId} onOpenHistory={() => setTab('follow')} /></div>
+            </details>
+            <details className="rounded-2xl border border-border bg-surface p-4">
+              <summary className="cursor-pointer select-none text-sm font-semibold text-text-secondary">{t('tab_events')}</summary>
+              <div className="mt-3"><CampaignEventsTab campaign={c} projectId={projectId} range={range} /></div>
+            </details>
+            <details className="rounded-2xl border border-border bg-surface p-4">
+              <summary className="cursor-pointer select-none text-sm font-semibold text-text-secondary">{t('tab_sync')}</summary>
+              <div className="mt-3"><CampaignSyncLogTab campaign={c} projectId={projectId} /></div>
+            </details>
+          </div>
         </TabPanel>
       )}
 

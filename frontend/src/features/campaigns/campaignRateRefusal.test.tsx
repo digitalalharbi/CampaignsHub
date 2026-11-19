@@ -55,14 +55,19 @@ describe('a campaign that has reported nothing yet', () => {
   it('does not claim it delivered zero impressions', async () => {
     renderWithProviders(<CampaignKpis campaign={campaign} projectId="p1" range={range} />)
 
-    const label = await screen.findByText('مرات الظهور')
-    expect(label.closest('div')?.parentElement?.textContent).not.toMatch(/\b0\b/)
+    // CAMPAIGN-PAGE-LEAN-001 — impressions nobody reported are not drawn at all; drawn, they must never read 0.
+    await screen.findByTestId('campaign-kpis-secondary')
+    const label = screen.queryByText('مرات الظهور')
+    if (label !== null) expect(label.closest('div')?.parentElement?.textContent).not.toMatch(/\b0\b/)
   })
 
   it('does not claim a click-through rate of zero', async () => {
     renderWithProviders(<CampaignKpis campaign={campaign} projectId="p1" range={range} />)
 
-    const ctr = await screen.findByText('CTR')
-    expect(ctr.closest('div')?.parentElement?.textContent).not.toMatch(/0\.0\s*%/)
+    // CAMPAIGN-PAGE-LEAN-001 — a rate nobody reported is not drawn at all; drawn, it must never read 0.0%.
+    await screen.findByTestId('campaign-kpis-secondary')
+    const ctr = screen.queryByText('CTR')
+    if (ctr !== null) expect(ctr.closest('div')?.parentElement?.textContent).not.toMatch(/0\.0\s*%/)
+    expect(screen.getByTestId('campaign-kpis-secondary').textContent).not.toMatch(/0\.0\s*%/)
   })
 })

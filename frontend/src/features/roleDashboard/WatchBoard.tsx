@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom'
 import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, ChevronDown, Trophy } from 'lucide-react'
 import { KpiSparkline, MetricLineChart } from '@/features/analytics/charts'
 import { AdPoster } from '@/features/content/AdPoster'
+import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
+import type { CreativeCard } from '@/features/content/api'
+import { Num } from '@/components/ui/Num'
 import { PlatformMark } from '@/components/brand/PlatformMark'
 import { StatCard, type StatTone } from '@/components/ui/StatCard'
 import { Skeleton } from '@/components/ui/States'
@@ -105,31 +108,71 @@ function RankList({ rows, tone, portal, f, testId }: { rows: RankedCampaign[]; t
   )
 }
 
-/** A content as it ran: the creative itself, its platform, and the two figures it is judged on. */
-function ContentTile({ c, f, currency, tone }: { c: WatchContent; f: Fmt; currency: string | null; tone: 'best' | 'worst' }) {
-  const t = f.ar ? T.ar : T.en
+/**
+ * HOME-CONTENT-REPORT-CARD-001 — Owner 2026-11-19: the home's best / weakest content read like the report's content card
+ * (`ReportAdsSection` → `AdCard`) and open in a popup, not as tall posters with two loose figures.
+ *
+ * A filled cover, the name, the platform's logo and name, then three small figure boxes in the order that answers «did it
+ * work»: the figure it was RANKED on (the board's own basis — ROAS, cost per result…), spend, and the results only where the
+ * ranking family counts them. That last rule is the fix for «التحويلات 35.9K» under an awareness video: views counted as
+ * conversions by its platform were printed under a sales ranking.
+ */
+function ContentTile({ c, f, currency, tone, rank, basis, onOpen }: {
+  c: WatchContent; f: Fmt; currency: string | null; tone: 'best' | 'worst'; rank: number
+  basis: { metric: string | null; label_ar: string | null; label_en: string | null; family: string | null } | null
+  onOpen: (c: WatchContent) => void
+}) {
   const provider = c.provider ?? ''
-  const primary = (c.conversions ?? 0) > 0 ? { label: t.conversions, value: f.short(c.conversions) } : { label: t.clicks, value: f.short(c.clicks) }
-  const secondary = c.spend !== null ? { label: t.spend, value: f.money(c.spend, currency) } : { label: t.ctr, value: c.ctr === null ? '—' : f.pct(c.ctr > 1 ? c.ctr / 100 : c.ctr) }
+  const figures = contentFigures(c, f, currency, basis)
 
   return (
-    <figure data-testid={`watch-content-${tone}`} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-surface">
-      <div className="relative">
-        <AdPoster preview={c.preview} name={c.name ?? ''} provider={provider} className="aspect-square h-auto w-full" />
-        <span title={platformLabel(provider, f.ar)} className="absolute start-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-surface/90 shadow-[var(--shadow-small)]">
-          <PlatformMark platform={provider} size={14} />
-          <span className="sr-only">{platformLabel(provider, f.ar)}</span>
+    <button
+      type="button"
+      onClick={() => onOpen(c)}
+      data-testid={`watch-content-${tone}`}
+      aria-label={f.ar ? `تفاصيل ${c.name ?? ''}` : `Details for ${c.name ?? ''}`}
+      className="relative flex min-w-0 flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-surface p-2.5 text-start transition-colors hover:border-brand-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
+    >
+      <span aria-hidden className={`absolute start-3.5 top-3.5 z-10 grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-xs font-extrabold text-white shadow-[var(--shadow-small)] ${tone === 'best' ? 'bg-success' : 'bg-danger'}`}>{rank}</span>
+      <AdPoster preview={c.preview} name={c.name ?? ''} provider={provider} className="h-28 w-full rounded-xl" fit="cover" />
+      <span className="min-w-0">
+        <span dir="auto" className="block truncate text-start text-sm font-bold text-text-primary" title={c.name ?? ''}>{c.name ?? '—'}</span>
+        <span className="flex items-center gap-1 truncate text-[11px] text-text-muted">
+          <PlatformMark platform={provider} size={13} />
+          <span className="truncate">{platformLabel(provider, f.ar)}</span>
         </span>
-      </div>
-      <figcaption className="flex min-w-0 flex-col gap-1 p-2">
-        <span className="truncate text-xs font-semibold text-text-primary" title={c.name ?? ''}>{c.name ?? '—'}</span>
-        <span className="grid grid-cols-2 gap-1 text-xs text-text-muted">
-          <span className="flex min-w-0 flex-col"><span className="truncate">{primary.label}</span><span className="tnum truncate text-xs font-bold text-text-primary">{primary.value}</span></span>
-          <span className="flex min-w-0 flex-col"><span className="truncate">{secondary.label}</span><span className="tnum truncate text-xs font-bold text-text-primary">{secondary.value}</span></span>
-        </span>
-      </figcaption>
-    </figure>
+      </span>
+      <dl className="grid grid-cols-3 gap-1.5 text-center" data-testid="watch-content-figures">
+        {figures.map((x) => (
+          <div key={x.key} className={`rounded-lg p-1.5 ${x.key === 'basis' ? (tone === 'best' ? 'bg-[var(--positive-background)]' : 'bg-[var(--warning-background)]') : 'bg-surface-secondary'}`}>
+            <dt className="truncate text-[10px] font-semibold text-text-muted">{x.label}</dt>
+            <dd className="text-xs font-bold text-text-primary"><Num>{x.value}</Num></dd>
+          </div>
+        ))}
+      </dl>
+    </button>
   )
+}
+
+const CONVERSION_FAMILIES = new Set(['sales', 'conversion', 'leads', 'app_promotion', 'app'])
+
+/** The three figures of a content card: the ranked-on figure first, then spend, then results only where they mean results. */
+function contentFigures(c: WatchContent, f: Fmt, currency: string | null, basis: { metric: string | null; label_ar: string | null; label_en: string | null; family: string | null } | null) {
+  const t = f.ar ? T.ar : T.en
+  const out: { key: string; label: string; value: string }[] = []
+  const metric = basis?.metric ?? null
+  const label = basis ? (f.ar ? basis.label_ar : basis.label_en) : null
+  const val = metric === 'roas' ? (c.roas === null ? null : `${c.roas.toFixed(2)}×`)
+    : metric === 'cpa' ? (c.cpa === null ? null : f.money(c.cpa, currency))
+      : metric === 'ctr' ? (c.ctr === null ? null : f.pct(c.ctr > 1 ? c.ctr / 100 : c.ctr))
+        : null
+  if (metric && label) out.push({ key: 'basis', label, value: val ?? '—' })
+  if (c.spend !== null) out.push({ key: 'spend', label: t.spend, value: f.money(c.spend, currency) })
+  const counts = basis?.family ? CONVERSION_FAMILIES.has(basis.family) : true
+  if (counts && c.conversions !== null) out.push({ key: 'results', label: t.conversions, value: f.short(c.conversions) })
+  else out.push({ key: 'clicks', label: t.clicks, value: f.short(c.clicks) })
+
+  return out.slice(0, 3)
 }
 
 function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) {
@@ -146,6 +189,8 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
   const resultLabel = p?.result_label?.[f.ar ? 'ar' : 'en'] ?? t.results
   const basis = b.content?.basis
   const basisLabel = basis ? (f.ar ? basis.label_ar : basis.label_en) : null
+  // HOME-CONTENT-REPORT-CARD-001 — a content opens in the library's own popup, over Home; «التفاصيل» goes to its page.
+  const [openContent, setOpenContent] = useState<WatchContent | null>(null)
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-2">
@@ -199,18 +244,28 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
             {basisLabel && <p className="mb-1.5 text-xs text-text-muted">{t.rankedBy}: {basisLabel}</p>}
             {b.content.best.length === 0 ? <Nothing label={t.nothing} /> : (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {b.content.best.map((c, i) => <ContentTile key={c.id ?? i} c={c} f={f} currency={cur} tone="best" />)}
+                {b.content.best.map((c, i) => <ContentTile key={c.id ?? i} c={c} f={f} currency={cur} tone="best" rank={i + 1} basis={basis ?? null} onOpen={setOpenContent} />)}
               </div>
             )}
           </Panel>
           <Panel title={t.worstContent} to={`/${portal}/content`} testId="watch-panel-content-worst" className="lg:col-span-4">
             {b.content.worst.length === 0 ? <Nothing label={t.nothing} /> : (
               <div className="grid grid-cols-2 gap-2">
-                {b.content.worst.map((c, i) => <ContentTile key={c.id ?? i} c={c} f={f} currency={cur} tone="worst" />)}
+                {b.content.worst.map((c, i) => <ContentTile key={c.id ?? i} c={c} f={f} currency={cur} tone="worst" rank={i + 1} basis={basis ?? null} onOpen={setOpenContent} />)}
               </div>
             )}
           </Panel>
         </div>
+      )}
+
+      {openContent && openContent.id && (
+        <AdPreviewDialog
+          creative={{ id: openContent.id, name: openContent.name ?? '', provider: openContent.provider ?? '', preview: openContent.preview, metrics: { spend: openContent.spend, impressions: openContent.impressions, clicks: openContent.clicks, conversions: openContent.conversions, ctr: openContent.ctr, cpa: openContent.cpa, roas: openContent.roas } } as unknown as CreativeCard}
+          locale={f.ar ? 'ar' : 'en'}
+          figures={contentFigures(openContent, f, cur, basis ?? null).map((x) => ({ key: x.key, label: x.label, value: x.value }))}
+          detailsTo={`/${portal}/content/${openContent.id}`}
+          onClose={() => setOpenContent(null)}
+        />
       )}
 
       <PlatformComparePanel platforms={b.platforms ?? []} family={b.rank_family ?? null} portal={portal} />

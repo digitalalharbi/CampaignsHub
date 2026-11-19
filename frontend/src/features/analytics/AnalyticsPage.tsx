@@ -88,7 +88,7 @@ import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { DistributionBars } from './DistributionBars'
 import { AccountVisualDeck, BudgetVisualDeck, CampaignVisualDeck, EntityVisualDeck } from './TabVisualDecks'
 import { SPECS, layoutFor, valueReading } from './metricCatalog'
-import { FilterBar, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
+import { FilterBar, FilterChips, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
 import { lastSuccessfulSync } from '@/features/analyticsShared/syncTruth'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
@@ -366,6 +366,15 @@ function ResultCell({ row, ar }: { row: Record<string, unknown> & { objective?: 
   if (r.value === null) return <span className="text-xs text-text-muted">{missingText(r, ar) ?? '\u2014'}</span>
   return <span><span className="tnum">{num(r.value)}</span> <span className="text-xs text-text-muted">{resultLabel(r, ar)}</span></span>
 }
+/** ANALYTICS-FILTERS-COMPACT-001 — one word per objective on the bar; the full name is the chip's tooltip. */
+const OBJECTIVE_SHORT: Record<CanonicalObjectiveKey, { ar: string; en: string }> = {
+  awareness_engagement: { ar: 'الوعي', en: 'Awareness' },
+  traffic: { ar: 'الزيارات', en: 'Traffic' },
+  leads: { ar: 'العملاء', en: 'Leads' },
+  app_promotion: { ar: 'التطبيق', en: 'App' },
+  sales: { ar: 'المبيعات', en: 'Sales' },
+}
+
 export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } = {}) {
   const ar = useAr()
   /* EMAIL-DIGESTS-OPERATIONAL-001 — a button in an email carries `?project=`; it is chosen on arrival. */
@@ -512,9 +521,12 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
    * الفلاتر» on the dashboard. «Which campaign» and «which action» are how somebody investigates,
    * and the surface for investigating is the other one.
    */
-  const narrowingControls = (
-    <>
-      <FilterMulti
+  /*
+   * ANALYTICS-FILTERS-COMPACT-001 — Owner 2026-11-19: «الإجراء غير مناسب» in the bar. The campaign stays where it was;
+   * the action moves behind «المزيد من الفلاتر» on every surface — kept, not removed, and the button is marked while it narrows.
+   */
+  const campaignControl = (
+    <FilterMulti
         label={ar ? 'الحملة' : 'Campaign'}
         ar={ar}
         values={campaignIds}
@@ -523,12 +535,9 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         search={campaignSource.search}
         onChange={setCampaignIds}
       />
+  )
 
-      {/*
-        CAMPAIGN-OUTCOME-DIMENSION-001 — «what did it buy», beside «what was it for».
-        Single-select in the bar and a list in the URL: one action is the question people ask, and
-        the chip row is where a second one is removed.
-      */}
+  const actionControl = (
       <FilterSelect
         label={ar ? 'الإجراء' : 'Action'}
         value={outcomes[0] ?? 'all'}
@@ -542,7 +551,6 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         ]}
         onChange={(v) => setOutcomes(v === 'all' ? [] : [v])}
       />
-    </>
   )
 
   const applied: AppliedFilter[] = useMemo(() => {
@@ -673,15 +681,15 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
           amounts of room. Dense puts each label on its control's own line — one row instead of
           three, which is what stood between the header and the first figure.
         */
-        density={isAnalysis ? 'comfortable' : 'dense'}
+        density="dense"
         applied={applied}
-        onReset={() => { setProviders([]); setCampaignIds([]); setObjective('all') }}
+        onReset={() => { setProviders([]); setCampaignIds([]); setObjective('all'); setOutcomes([]) }}
         /*
           The marker has to know about the folded controls, not only the saved views.
           A narrowing somebody cannot see is the reason to mark the button at all.
         */
         advancedActive={(savedViews.data?.some((v) => v.is_default) ?? false)
-          || (! isAnalysis && (campaignIds.length > 0 || outcomes.length > 0))}
+          || outcomes.length > 0 || (! isAnalysis && campaignIds.length > 0)}
         advanced={
           <div className="grid gap-3">
             <div className="grid gap-2">
@@ -698,12 +706,10 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
               Period, project, platform and objective stay — they are what a reader changes while
               reading rather than while digging.
             */}
-            {! isAnalysis && (
-              <div className="grid gap-2">
-                <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{ar ? 'تضييق أدق' : 'Narrow further'}</span>
-                <div className="flex flex-wrap items-end gap-2">{narrowingControls}</div>
-              </div>
-            )}
+            <div className="grid gap-2">
+              <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{ar ? 'تضييق أدق' : 'Narrow further'}</span>
+              <div className="flex flex-wrap items-end gap-2">{! isAnalysis && campaignControl}{actionControl}</div>
+            </div>
           </div>
         }
       >
@@ -741,21 +747,22 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
             reader identifies fastest from its logo. The analysis surface keeps the names: it is read
             slowly, often by somebody comparing platforms they do not buy on every day.
           */
-          marks={! isAnalysis}
+          marks
           testid={`${surface}-platform`}
           options={ANALYTICS_PLATFORMS.map((key) => ({ value: canonicalPlatform(key), label: providerLabel(canonicalPlatform(key), ar ? 'ar' : 'en') }))}
           onChange={setProviders}
         />
 
-        {isAnalysis && narrowingControls}
+        {isAnalysis && campaignControl}
 
-        <FilterSelect
+        {/* ANALYTICS-FILTERS-COMPACT-001 — the objective as six short choices on screen, not a list; «الكل» stays the default. */}
+        <FilterChips
           label={ar ? 'الهدف' : 'Objective'}
           value={objective}
           testid={`${surface}-objective`}
           options={[
-            { value: 'all', label: ar ? 'كل الأهداف' : 'All objectives' },
-            ...CANONICAL_OBJECTIVE_KEYS.map((key) => ({ value: key, label: canonicalObjectiveLabel(key, ar ? 'ar' : 'en') })),
+            { value: 'all', label: ar ? 'الكل' : 'All', title: ar ? 'كل الأهداف' : 'All objectives' },
+            ...CANONICAL_OBJECTIVE_KEYS.map((key) => ({ value: key, label: ar ? OBJECTIVE_SHORT[key].ar : OBJECTIVE_SHORT[key].en, title: canonicalObjectiveLabel(key, ar ? 'ar' : 'en') })),
           ]}
           onChange={(v) => setObjective(v as CanonicalObjectiveKey | 'all')}
         />

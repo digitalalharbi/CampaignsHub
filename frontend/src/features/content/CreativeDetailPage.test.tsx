@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { CreativeDetailPage } from './CreativeDetailPage'
 import type { CreativeDetail, CreativeMetrics } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -551,15 +551,13 @@ describe('CreativeDetailPage', () => {
   })
 
   /** Changing the period rewrites the address and refetches — a control that changes the answer. */
-  it('refetches when the period changes and puts it in the address', async () => {
-    render()
+  it('reads its window from the one period control (DATE-RANGE-001), not two bare date fields', async () => {
+    render('/app/content/cr-1?from=2026-07-01&to=2026-08-06')
     await screen.findByText('Hero image')
 
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-07-01' } })
-
-    await waitFor(() =>
-      expect(mocked).toHaveBeenCalledWith('cr-1', { from: '2026-07-01', to: '2026-08-06' }),
-    )
+    expect(screen.getByTestId('creative-date-range')).toBeInTheDocument()
+    expect(screen.queryByLabelText('From')).toBeNull()
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('cr-1', { from: '2026-07-01', to: '2026-08-06' }))
   })
 
   /** The lineage a reader needs to trust the numbers, on the page rather than in a tooltip. */
