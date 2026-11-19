@@ -1,6 +1,7 @@
 import type { CreativeDetail } from './api'
 import { formatMetric, metricLabel } from './metrics'
 import { providerLabel } from '@/features/campaigns/labels'
+import { days as countedDays } from '@/lib/counted'
 
 /**
  * CONTENT-WHY-DETAIL-001 — Owner 2026-11-19: the content page reads like the report reads a content item: why it worked,
@@ -137,7 +138,7 @@ export function readCreative(data: CreativeDetail, ar: boolean): CreativeReading
     }
   }
   const basis = peerCount > 0
-    ? L(`مقارنةً بـ ${peerCount} إعلان على مسار ${pathName} في الفترة نفسها، بأرقامها المجمّعة.`, `Against ${peerCount} ads on the ${pathName} path in the same period, on their pooled figures.`)
+    ? L(`مقارنةً بـ ${peerCount} إعلان على ${providerLabel(data.creative.provider, locale)} في مسار ${pathName}، الفترة نفسها، بأرقامها المجمّعة.`, `Against ${peerCount} ${providerLabel(data.creative.provider, locale)} ads on the ${pathName} path in the same period, on their pooled figures.`)
     : null
 
   // ---- why: the combinations that explain the figures --------------------------------------------------------------
@@ -230,8 +231,8 @@ export function readCreative(data: CreativeDetail, ar: boolean): CreativeReading
     while (j <= last && !spent[j]) j++
     const n = j - i
     if (n >= 2) timeline.push({ id: `gap-${days[i].date}`, tone: 'bad', text: L(
-      `توقف التسليم ${n} أيام (${dayLabel(days[i].date, ar)} – ${dayLabel(days[j - 1].date, ar)}) ثم عاد. تحقق من السبب: إيقاف يدوي، ميزانية المجموعة، أو مراجعة المنصة.`,
-      `Delivery stopped for ${n} days (${dayLabel(days[i].date, ar)} – ${dayLabel(days[j - 1].date, ar)}) and came back. Check why: a manual pause, the ad set budget, or a platform review.`) })
+      `توقف التسليم ${countedDays(n, 'ar')} (${dayLabel(days[i].date, ar)} – ${dayLabel(days[j - 1].date, ar)}) ثم عاد. تحقق من السبب: إيقاف يدوي، ميزانية المجموعة، أو مراجعة المنصة.`,
+      `Delivery stopped for ${countedDays(n, 'en')} (${dayLabel(days[i].date, ar)} – ${dayLabel(days[j - 1].date, ar)}) and came back. Check why: a manual pause, the ad set budget, or a platform review.`) })
     i = j
   }
   const active = days.filter((d) => d.spend >= 1)
@@ -251,16 +252,16 @@ export function readCreative(data: CreativeDetail, ar: boolean): CreativeReading
     if (ctrA && ctrB) {
       const ch = ctrB / ctrA - 1
       if (Math.abs(ch) >= 0.2) timeline.push({ id: 'ctr-trend', tone: ch > 0 ? 'good' : 'bad', text: ch > 0
-        ? L(`نسبة النقر في آخر ${half} أيام نشاط أعلى بـ ${pct(ch)} من أولها — الإعلان يتحسن ولم يظهر عليه إجهاد.`, `CTR in the last ${half} active days is ${pct(ch)} higher than the first — improving, no fatigue.`)
-        : L(`نسبة النقر في آخر ${half} أيام نشاط أقل بـ ${pct(ch)} من أولها — أول علامات الإجهاد؛ جهّز نسخة بديلة.`, `CTR in the last ${half} active days is ${pct(ch)} lower than the first — early fatigue; prepare a replacement.`) })
+        ? L(`نسبة النقر في آخر ${countedDays(half, 'ar')} نشاط أعلى بـ ${pct(ch)} من أولها — الإعلان يتحسن ولم يظهر عليه إجهاد.`, `CTR in the last ${countedDays(half, 'en')} of activity is ${pct(ch)} higher than the first — improving, no fatigue.`)
+        : L(`نسبة النقر في آخر ${countedDays(half, 'ar')} نشاط أقل بـ ${pct(ch)} من أولها — أول علامات الإجهاد؛ جهّز نسخة بديلة.`, `CTR in the last ${countedDays(half, 'en')} of activity is ${pct(ch)} lower than the first — early fatigue; prepare a replacement.`) })
     }
     if (path === 'conversion' && a.spend > 0 && b.spend > 0 && a.revenue > 0) {
       const rA = a.revenue / a.spend
       const rB = b.revenue / b.spend
       const ch = rB / rA - 1
       if (Math.abs(ch) >= 0.2) timeline.push({ id: 'roas-trend', tone: ch > 0 ? 'good' : 'bad', text: L(
-        `العائد على الإنفاق في آخر ${half} أيام نشاط ${rB.toFixed(2)}× مقابل ${rA.toFixed(2)}× في أولها (${ch > 0 ? 'تحسّن' : 'تراجع'} ${pct(ch)}).`,
-        `ROAS in the last ${half} active days ${rB.toFixed(2)}× vs ${rA.toFixed(2)}× in the first (${ch > 0 ? 'up' : 'down'} ${pct(ch)}).`) })
+        `العائد على الإنفاق في آخر ${countedDays(half, 'ar')} نشاط ${rB.toFixed(2)}× مقابل ${rA.toFixed(2)}× في أولها (${ch > 0 ? 'تحسّن' : 'تراجع'} ${pct(ch)}).`,
+        `ROAS in the last ${countedDays(half, 'en')} of activity ${rB.toFixed(2)}× vs ${rA.toFixed(2)}× in the first (${ch > 0 ? 'up' : 'down'} ${pct(ch)}).`) })
     }
   }
 
