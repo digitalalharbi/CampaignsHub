@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { CircleCheck, CircleAlert, Download, FileSpreadsheet, Lightbulb, Printer, Search, CalendarDays, Clapperboard } from 'lucide-react'
 import type { CreativeDetail } from './api'
+import { Num } from '@/components/ui/Num'
 import { readCreative, readingCsv, type Line } from './creativeVerdict'
 
 /**
@@ -78,7 +79,7 @@ export function CreativeVerdict({ data, ar, mediaHref }: { data: CreativeDetail;
           {r.comparisons.map((c) => (
             <div key={c.key} className="rounded-xl border border-border bg-surface px-3 py-2" data-testid={`why-cmp-${c.key}`}>
               <div className="truncate text-xs font-semibold text-text-muted">{c.label}</div>
-              <div dir="ltr" className="tnum text-end text-base font-extrabold text-text-primary">{c.value}</div>
+              <div className="text-base font-extrabold text-text-primary"><Num>{c.value}</Num></div>
               <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
                 <span className={`block h-full rounded-full ${c.better ? 'bg-success' : 'bg-danger'}`} style={{ width: `${Math.min(100, Math.abs(c.gap) * 100)}%` }} />
               </div>
