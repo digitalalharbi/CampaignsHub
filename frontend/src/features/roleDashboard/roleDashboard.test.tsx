@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
 import type { DashboardUnit, RoleDashboard, WatchBoard } from './api'
 
@@ -206,6 +206,14 @@ describe('the manager performance panels', () => {
     expect(screen.getByTestId('watch-worst-k3')).toHaveTextContent('Leads TikTok')
     expect(screen.getAllByTestId('watch-content-best')).toHaveLength(2)
     expect(screen.getAllByTestId('watch-content-worst')).toHaveLength(1)
+    // HOME-CONTENT-REPORT-CARD-001 — the report's card: the ranked-on figure first (cost per result here), then spend, then results.
+    const first = screen.getAllByTestId('watch-content-best')[0]
+    const figs = within(first).getByTestId('watch-content-figures')
+    expect(figs.querySelectorAll('dt')[0]).toHaveTextContent('Cost per result')
+    expect(figs.querySelectorAll('dt')[1]).toHaveTextContent('Spend')
+    // …and it opens in a popup over Home, with a way to the full page.
+    fireEvent.click(first)
+    expect(screen.getByTestId('ad-preview-dialog')).toBeInTheDocument()
     expect(screen.getByTestId('watch-open-analytics')).toHaveAttribute('href', '/agency/analytics')
   })
 
