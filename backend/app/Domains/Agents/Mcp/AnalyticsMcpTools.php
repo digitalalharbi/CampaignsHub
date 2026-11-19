@@ -60,8 +60,8 @@ final class AnalyticsMcpTools
         ],
         'analytics_site' => [
             'route' => 'api.v1.projects.scoped.measurement.analytics', 'project' => true, 'permission' => 'analytics.view',
-            'source' => 'The client\'s own GA4 property, as measured by the site',
-            'description' => 'What the website measured (GA4): visits, engagement and conversions. Kept beside the platform figures, never added to them.',
+            'source' => 'The client\'s own Google Analytics property, as measured by the site',
+            'description' => 'What the website measured (Google Analytics): visits, engagement and conversions. Kept beside the platform figures, never added to them.',
         ],
         'analytics_store' => [
             'route' => 'api.v1.projects.scoped.commerce.depth', 'project' => true, 'permission' => 'analytics.view',
