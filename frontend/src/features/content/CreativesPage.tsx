@@ -41,6 +41,7 @@ import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/Pag
 import { PeriodLabel } from '@/components/patterns/Status'
 import { useFreshness } from '@/features/analytics/api'
 import { listProjects } from '@/features/projects/api'
+import { LibraryOverview } from './LibraryOverview'
 import { ContentSummary } from './ContentSummary'
 import { metricsForKeys } from '@/features/analytics/metricCatalog'
 import type { Summary } from '@/features/analytics/api'
@@ -1063,6 +1064,17 @@ export function CreativesPage() {
             />
         </>
       </FilterBar>
+
+      {/* CONTENT-LIBRARY-V2-001 — the chart-first reading of the same filtered scope; its marks narrow this page.
+          BELOW the toolbar (CONTENT-TOOLBAR-STABLE-001): it arrives with its own query and must move only itself. */}
+      <LibraryOverview
+        query={query}
+        ar={ar}
+        axes={axes}
+        setAxis={setAxis}
+        health={health}
+        setHealth={(v) => { setHealth(v); setPage(1) }}
+      />
 
       {/*
         BELOW the toolbar, not above it — CONTENT-TOOLBAR-STABLE-001.

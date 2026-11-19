@@ -20,6 +20,11 @@ export interface DriveLink {
   folder_name: string
   connection_id: string | null
   created_at?: string | null
+  /** CONTENT-INTAKE-001 — the Drive → intake sync state; absent until a link has been synced (or checked). */
+  sync_state?: 'awaiting_credentials' | 'sandbox_verified' | 'synced' | 'error' | null
+  last_synced_at?: string | null
+  last_error?: string | null
+  last_sync_summary?: { created: number; updated: number; unchanged: number; skipped: number } | null
 }
 
 export interface DriveFile {
