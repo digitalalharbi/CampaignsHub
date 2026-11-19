@@ -48,6 +48,8 @@ async function openPlatforms(page: Page, locale: 'ar' | 'en') {
    * between the tablist painting and React attaching its handler — a precondition of this test rather
    * than the thing it is about.
    */
+  // ANALYTICS-REPORT-PARITY-001 — «المنصات» is a section of the one board (a pill), and its first panel is the platforms tab.
+  await page.getByRole('button', { name: COPY[locale].tab }).click()
   const tab = page.getByRole('tab', { name: COPY[locale].tab })
   await expect(tab).toBeVisible({ timeout: 30000 })
   await tab.click()

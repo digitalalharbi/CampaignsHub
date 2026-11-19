@@ -7,6 +7,7 @@ namespace App\Domains\ContentIntake\Services;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\ContentIntake\Models\ContentIntakeEvent;
 use App\Domains\ContentIntake\Models\ContentIntakeItem;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Notifications\Internal\InternalEvents;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -197,7 +198,7 @@ final class IntakeTransitions
 
     private function creativeOf(ContentIntakeItem $item, string $creativeId): string
     {
-        $ok = ExternalCreative::query()->where('id', $creativeId)->where('project_id', $item->project_id)->exists();
+        $ok = BoundAccountVisibility::apply(ExternalCreative::query(), 'external_creatives')->where('id', $creativeId)->where('project_id', $item->project_id)->exists();
         if (! $ok) {
             throw new IntakeTransitionException('creative_not_in_project', 422);
         }

@@ -63,7 +63,7 @@ describe('the dashboard opened from a link that already carries filters', () => 
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en', route: '/app/dashboard?objective=sales' })
     await screen.findByTestId('dashboard-intro')
 
-    expect(screen.getByTestId('dashboard-objective')).toHaveValue('sales')
+    expect(screen.getByTestId('dashboard-objective-sales')).toHaveAttribute('aria-pressed', 'true')
     // …and says so, the same way it would if the reader had chosen it here.
     expect(screen.getByTestId('dashboard-applied-objective:sales')).toBeInTheDocument()
   })
@@ -88,7 +88,7 @@ describe('the dashboard opened from a link that already carries filters', () => 
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en', route: '/app/dashboard' })
     await screen.findByTestId('dashboard-intro')
 
-    fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'leads' } })
+    fireEvent.click(screen.getByTestId('dashboard-objective-leads'))
 
     expect(screen.getByTestId('dashboard-applied-objective:leads')).toBeInTheDocument()
     // The reset puts the page back AND clears the link, rather than leaving a filter in the URL that

@@ -16,6 +16,7 @@ use App\Domains\ContentIntake\Services\IntakeService;
 use App\Domains\ContentIntake\Services\IntakeTransitionException;
 use App\Domains\ContentIntake\Services\IntakeTransitions;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -192,7 +193,7 @@ final class ContentIntakeController extends Controller
         $live = $scoped()->where('status', 'live')->whereNotNull('linked_creative_id')->orderByDesc('launched_at')->limit(100)->get();
         $signals = [];
         if ($live->isNotEmpty()) {
-            $creatives = ExternalCreative::query()->whereIn('id', $live->pluck('linked_creative_id')->all())->get();
+            $creatives = BoundAccountVisibility::apply(ExternalCreative::query(), 'external_creatives')->whereIn('id', $live->pluck('linked_creative_id')->all())->get();
             $to = Carbon::today();
             $from = $to->copy()->subDays(29);
             $byId = collect($this->rows->present($creatives, $from, $to, true))->keyBy('id');
