@@ -42,6 +42,8 @@ final class EngineKinds
         'external.recipient_unsubscribed' => ['external', '/settings/workspace?tab=notifications&section=external'],
         'external.recipient_reduced' => ['external', '/settings/workspace?tab=notifications&section=external'],
         'external.recipient_unconfirmed_7d' => ['external', '/settings/workspace?tab=notifications&section=external'],
+        'content.submitted' => ['other', '/content?tab=review'],
+        'content.decided' => ['other', '/content?tab=review'],
         'project.created' => ['other', '/projects'],
         'project.archived' => ['other', '/projects'],
         'project.no_budget_for_period' => ['budget', '/budgets{p}'],

@@ -29,7 +29,10 @@ final class DriveLink extends Model
 
     protected $fillable = [
         'tenant_id', 'scope', 'scope_id', 'folder_id', 'folder_name', 'connection_id', 'created_by',
+        'sync_state', 'last_synced_at', 'last_error', 'last_sync_summary',
     ];
+
+    protected $casts = ['last_synced_at' => 'datetime', 'last_sync_summary' => 'array'];
 
     /** @return HasMany<DriveFile, $this> */
     public function files(): HasMany
