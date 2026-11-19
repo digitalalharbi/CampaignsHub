@@ -1227,7 +1227,7 @@ function ScreenshotSlide({ platform }: { platform: string }) {
       <div className="flex h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border text-text-muted">
         <ImageIcon size={28} />
         <p className="text-sm">لم تُرفع لقطات بعد — تُضاف يدويًا من محرّر التقرير.</p>
-        <p className="text-xs">اللقطة مرجعية بصرية؛ أرقام الأداء مصدرها API.</p>
+        <p className="text-xs">الصورة مرجعية بصرية؛ أرقام الأداء مصدرها API.</p>
       </div>
     </div>
   )
@@ -2003,15 +2003,15 @@ function EvidenceSlide({ data, index }: { data: ReportData; index: number }) {
   return (
     <div data-testid={`report-evidence-${e.id}`} className="flex h-full min-h-0 flex-col gap-3">
       <Title platform={e.provider} sub={[period, e.captured_at ? `التُقطت ${fmtDateTime(e.captured_at)}` : null].filter(Boolean).join(' · ')}>
-        {`لقطة من ${providerLabel(e.provider, 'ar')}`}
+        {`صورة من ${providerLabel(e.provider, 'ar')}`}
       </Title>
       {e.image && e.url ? (
-        <img src={e.url} alt={`لقطة من ${providerLabel(e.provider, 'ar')}`} className="mx-auto min-h-0 max-w-full flex-1 rounded-xl border border-border object-contain" />
+        <img src={e.url} alt={`صورة من ${providerLabel(e.provider, 'ar')}`} className="mx-auto min-h-0 max-w-full flex-1 rounded-xl border border-border object-contain" />
       ) : (
         <p className="rounded-2xl border border-border bg-surface-secondary p-6 text-center text-sm text-text-secondary">مرفق PDF: {e.name ?? '—'}</p>
       )}
       {e.note && <p className="text-sm text-text-secondary">{e.note}</p>}
-      <p className="text-[11px] text-text-muted">لقطة للاطلاع فقط — أرقام التقرير من بيانات المنصات المنظّمة، لا من هذه الصورة.</p>
+      <p className="text-[11px] text-text-muted">صورة للاطلاع فقط — أرقام التقرير من بيانات المنصات المنظّمة، لا من هذه الصورة.</p>
     </div>
   )
 }
@@ -2236,72 +2236,41 @@ function DataQualitySlide({ data }: { data: ReportData }) {
 }
 
 /**
- * REPORTS-RECONCILIATION-001 — a snapshot says WHEN it was taken.
+ * The report's period, stated once, in plain words.
  *
- * `generated_at`, `mode`, `data_source` and `attribution_window` were all present on the payload
- * and all present in this file's type — and not one of them was ever rendered. A report opened a
- * month after it was generated showed month-old figures with nothing on screen to say so, which is
- * indistinguishable from current performance to the person reading it.
- *
- * That is the failure the requirement names directly: never present a stale snapshot as current.
- * It is also, again, a value carried the whole way to the component and then dropped — the same
- * shape as the creative's ads, the asset URL and `last_active_at` before it.
- *
- * A LIVE report says so instead of quoting a generation time, because for a live report the
- * generation time is not the answer to «how current is this».
+ * Owner decision 2026-11-19: the reader does not need the word «snapshot», a generation time, or a
+ * warning about older rules here. One line names the period the figures cover (the report's own
+ * from/to). When the report was last updated lives only in the footer's «last updated» cell.
+ * A LIVE report keeps saying it is computed now, because for it the period is chosen by the viewer.
  */
 function SnapshotAge({ data }: { data: ReportData }) {
-  const generated = data.generated_at ?? null
+  const ar = useUi((s) => s.locale) === 'ar'
   const live = data.mode === 'live'
+  const from = data.period?.from ?? null
+  const to = data.period?.to ?? null
 
-  // Nothing known, nothing claimed. A snapshot written before this metadata existed says nothing
-  // rather than inventing a date for itself.
-  if (!live && generated === null) return null
-
-  const stamp = generated === null ? null : new Date(generated)
+  // No period recorded, nothing claimed.
+  if (!live && (from === null || to === null)) return null
 
   return (
     <p className="mb-3 text-xs text-text-secondary" data-testid="report-snapshot-age">
       {live ? (
-        'الأرقام محسوبة الآن من أحدث البيانات'
+        ar ? 'الأرقام محسوبة الآن من أحدث البيانات' : 'Figures are computed now from the latest data'
+      ) : ar ? (
+        <>
+          الأرقام خلال الفترة{' '}
+          <bdi className="tnum font-semibold text-text-primary" dir="ltr">{from}</bdi> – <bdi className="tnum font-semibold text-text-primary" dir="ltr">{to}</bdi>
+        </>
       ) : (
         <>
-          لقطة بتاريخ{' '}
-          <span className="tnum font-semibold text-text-primary" dir="ltr">
-            {fmtDateTime(stamp?.toISOString() ?? null)}
-          </span>
-          {' '}— الأرقام كما كانت في ذلك الوقت، وليست أداءً حاليًا
+          Figures for <bdi className="tnum font-semibold text-text-primary" dir="ltr">{from}</bdi> – <bdi className="tnum font-semibold text-text-primary" dir="ltr">{to}</bdi>
         </>
       )}
       {/* ATTRIBUTION-WINDOW-001 — the reader of this footer cannot decode a platform's parameter name. */}
       {data.attribution_window ? (
-        <span className="ms-2 opacity-80">· أساس الإسناد: {attributionWindow(data.attribution_window, true).text}</span>
+        <span className="ms-2 opacity-80">· {ar ? 'أساس الإسناد' : 'Attribution basis'}: {attributionWindow(data.attribution_window, true).text}</span>
       ) : null}
-
-      {/*
-        * REPORTS-RECONCILIATION-001 — a snapshot from an older contract cannot reconcile.
-        *
-        * The figures beneath have since changed twice in ways that alter NUMBERS, not presentation:
-        * unconvertible money is now withheld with its original where it used to become 0, and demo
-        * rows no longer enter an operational total. A v1 snapshot beside today's Analytics is not
-        * «a few hours stale» — the two were computed under different rules.
-        *
-        * Saying so is the honest alternative to letting a reader compare two incomparable numbers
-        * and conclude one of the screens is broken.
-        */}
-      {!live && (data.data_version ?? 1) < CURRENT_DATA_VERSION && (
-        <span className="mt-1 block text-warning" data-testid="report-stale-contract">
-          هذه اللقطة حُسبت بقواعد أقدم — قد لا تطابق التحليلات الحالية. أعد إنشاء التقرير للمقارنة.
-        </span>
-      )}
     </p>
   )
 }
 
-/**
- * The aggregation contract the product computes under today — mirrors `ReportGenerator::DATA_VERSION`.
- *
- * Duplicated deliberately and narrowly: it is one integer whose only job is to be compared, and a
- * round trip to fetch it would make every report wait on a request to say «this is current».
- */
-const CURRENT_DATA_VERSION = 2

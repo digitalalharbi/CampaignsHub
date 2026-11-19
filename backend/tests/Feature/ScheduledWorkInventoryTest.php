@@ -72,6 +72,8 @@ final class ScheduledWorkInventoryTest extends TestCase
         'fx:rates',
         // FX-ENGINE-001 — in-app alerts for a used currency with no rate or a stale one, and the daily money guard (03:00).
         'fx:monitor',
+        // ANALYTICS-DATA-001 — the heavy analytics sections pre-aggregated per project every 3 hours (:50), queued and bounded.
+        'analytics:build-snapshots',
         /*
          * Added 2026-09-07. `SyncAccountStructureJob::failed()` cannot close a run whose worker
          * vanished, so a structure run had been «running» since 2026-08-26 — twelve days, on a job

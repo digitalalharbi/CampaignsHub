@@ -1,98 +1,88 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { InteractiveReport } from './InteractiveReport'
+import { useUi } from '@/stores/ui'
 
 /**
- * REPORTS-RECONCILIATION-001 — a month-old snapshot must not read as current performance.
- *
- * `generated_at`, `mode` and `attribution_window` were on the payload and in this file's type, and
- * none was rendered. The reader saw figures with no indication of their age.
+ * The report states its period in one plain line (Owner, 2026-11-19): «الأرقام خلال الفترة {من} – {إلى}» /
+ * «Figures for {from} – {to}». No «snapshot», no generation time, no «not current performance», and no
+ * «older rules» warning anywhere in the report: when it was last updated lives only in the footer cell.
  */
 const base = {
-  // A recommendations slide renders from `data` alone, so the fixture does not have to carry a
-  // cover slide's whole meta shape. What is under test is the freshness line, not the deck.
   slides: [{ id: 's1', type: 'recommendations', title: 'Next', visible: true }],
   recommendations: [],
   totals: {},
+  period: { from: '2026-10-20', to: '2026-11-18' },
 } as never
 
 const meta = { currency: 'SAR', locale: 'ar', platforms: [], clientName: 'Client', title: 'Report' } as never
 
-describe('a report states how current it is', () => {
-  it('says a snapshot is a snapshot, and when it was taken', () => {
-    render(<InteractiveReport data={{ ...(base as object), mode: 'snapshot', generated_at: '2026-07-01T09:00:00Z' } as never} meta={meta} />)
+describe('a report states the period its figures cover', () => {
+  it('says «الأرقام خلال الفترة {من} – {إلى}» with the report’s own period', () => {
+    useUi.setState({ locale: 'ar' })
+    render(<InteractiveReport data={{ ...(base as object), mode: 'snapshot', generated_at: '2026-11-19T09:08:00Z' } as never} meta={meta} />)
 
     const line = screen.getByTestId('report-snapshot-age')
 
-    expect(line).toHaveTextContent('لقطة')
-    expect(line).toHaveTextContent(/2026/)
-    // The point of the sentence: these are not current figures.
-    expect(line).toHaveTextContent('وليست أداءً حاليًا')
+    expect(line).toHaveTextContent('الأرقام خلال الفترة')
+    expect(line).toHaveTextContent('2026-10-20')
+    expect(line).toHaveTextContent('2026-11-18')
   })
 
-  it('says a live report is live rather than quoting a generation time', () => {
-    render(<InteractiveReport data={{ ...(base as object), mode: 'live', generated_at: '2026-07-01T09:00:00Z' } as never} meta={meta} />)
+  it('says «Figures for {from} – {to}» in English', () => {
+    useUi.setState({ locale: 'en' })
+    render(<InteractiveReport data={{ ...(base as object), mode: 'snapshot' } as never} meta={{ ...(meta as object), locale: 'en' } as never} />)
+
+    expect(screen.getByTestId('report-snapshot-age')).toHaveTextContent(/Figures for\s*2026-10-20\s*–\s*2026-11-18/)
+    useUi.setState({ locale: 'ar' })
+  })
+
+  it('never shows the words snapshot / لقطة, a generation time, or «not current performance»', () => {
+    useUi.setState({ locale: 'ar' })
+    const { container } = render(
+      <InteractiveReport data={{ ...(base as object), mode: 'snapshot', generated_at: '2026-11-19T09:08:00Z', data_version: 1 } as never} meta={meta} />,
+    )
+
+    expect(container).not.toHaveTextContent('لقطة')
+    expect(container).not.toHaveTextContent('وليست أداءً حاليًا')
+    expect(container).not.toHaveTextContent('الأرقام كما كانت')
+    expect(container).not.toHaveTextContent(/snapshot/i)
+    // The generation time may appear only in the footer's «last updated» cell, never in the period line.
+    expect(screen.getByTestId('report-snapshot-age')).not.toHaveTextContent('2026-11-19')
+  })
+
+  /** The old-rules warning is gone for good, whatever the stored data version. */
+  it('shows no «older rules» warning for an old data version', () => {
+    useUi.setState({ locale: 'ar' })
+    const { container } = render(
+      <InteractiveReport data={{ ...(base as object), mode: 'snapshot', data_version: 1 } as never} meta={meta} />,
+    )
+
+    expect(screen.queryByTestId('report-stale-contract')).not.toBeInTheDocument()
+    expect(container).not.toHaveTextContent('قواعد أقدم')
+    expect(container).not.toHaveTextContent('أعد إنشاء التقرير للمقارنة')
+  })
+
+  it('says a live report is computed now rather than quoting a period', () => {
+    useUi.setState({ locale: 'ar' })
+    render(<InteractiveReport data={{ ...(base as object), mode: 'live' } as never} meta={meta} />)
 
     expect(screen.getByTestId('report-snapshot-age')).toHaveTextContent('الأرقام محسوبة الآن من أحدث البيانات')
-    expect(screen.getByTestId('report-snapshot-age')).not.toHaveTextContent('تقرير رابط')
   })
 
-  /** A report written before this metadata existed invents no date for itself. */
-  it('claims nothing when nothing was recorded', () => {
-    render(<InteractiveReport data={{ ...(base as object), mode: 'snapshot' } as never} meta={meta} />)
+  /** A report with no recorded period invents none. */
+  it('claims nothing when no period was recorded', () => {
+    useUi.setState({ locale: 'ar' })
+    render(<InteractiveReport data={{ slides: (base as { slides: unknown }).slides, recommendations: [], totals: {}, mode: 'snapshot' } as never} meta={meta} />)
 
     expect(screen.queryByTestId('report-snapshot-age')).not.toBeInTheDocument()
   })
 
   /** The attribution basis rides along, because two bases are two different measurements. */
-  it('names the attribution basis when the snapshot recorded one', () => {
-    render(
-      <InteractiveReport
-        data={{ ...(base as object), mode: 'snapshot', generated_at: '2026-07-01T09:00:00Z', attribution_window: 'swipe_28d' } as never}
-        meta={meta}
-      />,
-    )
+  it('names the attribution basis when one was recorded', () => {
+    useUi.setState({ locale: 'ar' })
+    render(<InteractiveReport data={{ ...(base as object), mode: 'snapshot', attribution_window: 'swipe_28d' } as never} meta={meta} />)
 
     expect(screen.getByTestId('report-snapshot-age')).toHaveTextContent('swipe_28d')
   })
-
-  /*
-   * REPORTS-RECONCILIATION-001 — a snapshot computed under older rules cannot reconcile with
-   * today's Analytics, and saying «stale» is not the same as saying «incomparable».
-   */
-  it('warns when the snapshot predates the current aggregation contract', () => {
-    render(
-      <InteractiveReport
-        data={{ ...(base as object), mode: 'snapshot', generated_at: '2026-07-01T09:00:00Z', data_version: 1 } as never}
-        meta={meta}
-      />,
-    )
-
-    expect(screen.getByTestId('report-stale-contract')).toBeInTheDocument()
-  })
-
-  /** A current snapshot says nothing extra — the warning must mean something when it appears. */
-  it('says nothing extra when the snapshot is on the current contract', () => {
-    render(
-      <InteractiveReport
-        data={{ ...(base as object), mode: 'snapshot', generated_at: '2026-07-01T09:00:00Z', data_version: 2 } as never}
-        meta={meta}
-      />,
-    )
-
-    expect(screen.queryByTestId('report-stale-contract')).not.toBeInTheDocument()
-  })
-
-  /** A live report recomputes, so the contract question does not arise. */
-  it('does not warn a live report about an old contract', () => {
-    render(
-      <InteractiveReport
-        data={{ ...(base as object), mode: 'live', generated_at: '2026-07-01T09:00:00Z', data_version: 1 } as never}
-        meta={meta}
-      />,
-    )
-
-    expect(screen.queryByTestId('report-stale-contract')).not.toBeInTheDocument()
-  })
-
 })

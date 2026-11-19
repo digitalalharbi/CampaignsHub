@@ -32,6 +32,11 @@ final class SnapchatMcpReadOnlyGuardTest extends TestCase
                 || str_ends_with($file->getPathname(), 'Agents/Http/Controllers/McpOAuthController.php')) {
                 continue;
             }
+            // MCP-ANALYTICS-001 — the analytics tools build an internal GET request (`Request::create`, a constructor, not a write);
+            // the next test pins that this file can only ever issue GET and offers no write verb.
+            if (str_ends_with($file->getPathname(), 'Agents/Mcp/AnalyticsMcpTools.php')) {
+                continue;
+            }
             $source = (string) file_get_contents($file->getPathname());
             // A write through MCP would have to name both; naming MCP beside a write verb is what is refused.
             if (preg_match('/\bmcp\b/i', $source) === 1 && preg_match('/\b(create|update|pause|publish|write|patch|delete)[A-Za-z]*\s*\(/i', $source) === 1) {
@@ -40,5 +45,15 @@ final class SnapchatMcpReadOnlyGuardTest extends TestCase
         }
 
         self::assertSame([], $hits, 'MCP named beside a write in: '.implode(', ', $hits));
+    }
+
+    /** MCP-ANALYTICS-001 — the analytics tools run GET routes only: the verb is a literal and no other verb appears. */
+    public function test_the_analytics_tools_can_only_issue_get(): void
+    {
+        $source = (string) file_get_contents(dirname(__DIR__, 2).'/app/Domains/Agents/Mcp/AnalyticsMcpTools.php');
+
+        self::assertSame(1, preg_match_all("/Request::create\\([^;]*'GET'/", $source));
+        self::assertSame(0, preg_match('/[\'"](POST|PUT|PATCH|DELETE)[\'"]/', $source));
+        self::assertSame(0, preg_match('/->(post|put|patch|delete)\w*\(/i', $source));
     }
 }
