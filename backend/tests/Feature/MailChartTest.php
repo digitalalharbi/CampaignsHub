@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Domains\Notifications\Charts\MailChart;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Support\MailGallery;
+use App\Support\PeriodLabel;
 use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
@@ -124,7 +125,7 @@ final class MailChartTest extends TestCase
         foreach (['ar', 'en'] as $locale) {
             $html = (new DailyDigestMail($digest, $locale, 'Mohammed', 'weekly'))->render();
             $this->assertStringContainsString('data-block="chart-trend"', $html);
-            $this->assertStringContainsString('2026-07-31 → 2026-08-06', $html, "[$locale] the caption is the window's real first and last day");
+            $this->assertStringContainsString(PeriodLabel::range('2026-07-31', '2026-08-06', $locale), $html, "[$locale] the caption is the window's real first and last day");
             foreach (['الفجوات', 'لم تُبلَّغ', 'gaps', 'unreported', 'missing', 'لا توجد بيانات'] as $word) {
                 $this->assertStringNotContainsString($word, $html, "[$locale] the email never says data is missing");
             }

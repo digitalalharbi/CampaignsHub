@@ -45,7 +45,7 @@ final class ExternalMessageTest extends TestCase
         $mail = $this->sent()[0]['email'];
         $html = (string) $mail->getHtmlBody();
         $text = (string) $mail->getTextBody();
-        $this->assertSame('Launch — Alpha Agency | ملخص 2026-11-01 – 2026-11-14 · CampaignsHub', $mail->getSubject());
+        $this->assertSame('Launch — Alpha Agency | ملخص 1 نوفمبر – 14 نوفمبر 2026 · CampaignsHub', $mail->getSubject());
         $this->assertSame('Alpha Agency عبر كامبينز هَب', $mail->getFrom()[0]->getName());
         $this->assertSame('info@campaignshub.io', $mail->getFrom()[0]->getAddress());
         // The approved weekly spend-summary template in its external mode (Owner, 2026-11-15): the same header, cards and footer.

@@ -337,7 +337,7 @@ final class DeliveryPackTest extends TestCase
         $this->assertSame((string) $pack->id, $row['source']['id']);
         $this->assertSame((string) $this->workspace->id, $row['source']['client_workspace_id']);
         $this->assertSame('draft', $row['source']['status']);
-        $this->assertSame('2026-10-05 → 2026-10-11', $row['source']['period']);
+        $this->assertSame('5 أكتوبر – 11 أكتوبر 2026', $row['source']['period']);
     }
 
     /** DELIV-DASH-001 — one row per client, one next action, and the follow-up signal only where both facts hold. */

@@ -345,7 +345,7 @@ final class ReportFourSurfaceParityTest extends TestCase
             // And the bytes: the CSV names the same period and currency the page does.
             app(TenantContext::class)->setTenantId($this->tenant->id);
             $csv = app(ReportExporter::class)->render(app(ShareService::class)->documentReport($report->fresh(), $link['share']), 'csv', $link['share']);
-            $this->assertContains(['Period', '2026-08-01 → 2026-08-31', 'Currency', $currency], array_map(static fn (string $l): array => str_getcsv($l, ',', '"', ''), explode("\n", $csv)));
+            $this->assertContains(['Period', 'Aug 1 – Aug 31, 2026', 'Currency', $currency], array_map(static fn (string $l): array => str_getcsv($l, ',', '"', ''), explode("\n", $csv)));
             $this->assertMatchesRegularExpression('/^spend,4321\.87$/m', $csv);
         }
     }

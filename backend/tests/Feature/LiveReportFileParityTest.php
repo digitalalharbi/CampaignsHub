@@ -21,6 +21,7 @@ use App\Domains\Reports\Services\ReportExporter;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
+use App\Support\PeriodLabel;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -98,8 +99,7 @@ final class LiveReportFileParityTest extends TestCase
 
         $csv = app(ReportExporter::class)->render(Report::withoutGlobalScopes()->findOrFail($created['report_id']), 'csv');
 
-        $this->assertStringContainsString((string) $page['period']['from'], $csv, 'the file lost the period the page shows');
-        $this->assertStringContainsString((string) $page['period']['to'], $csv);
+        $this->assertStringContainsString(PeriodLabel::range((string) $page['period']['from'], (string) $page['period']['to'], 'en'), $csv, 'the file lost the period the page shows');
         foreach (['spend', 'impressions', 'clicks'] as $key) {
             $this->assertMatchesRegularExpression('/^'.$key.',/m', $csv, "the chosen KPI {$key} has no row in the file");
         }

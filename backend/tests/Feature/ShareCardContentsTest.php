@@ -92,7 +92,7 @@ final class ShareCardContentsTest extends TestCase
 
         // REPORT-TITLE-EXACT-001 — the card's headline is the entered report title, not the client.
         $this->assertSame('تقرير الأداء الشهري', $card['who']);
-        $this->assertSame('2026-07-01 — 2026-07-31', $card['period']);
+        $this->assertSame('1 يوليو – 31 يوليو 2026', $card['period']);
         // The report's own language decides the direction, so an Arabic report's card reads right to left.
         $this->assertSame('ar', $card['lang']);
         $this->assertSame('rtl', $card['dir']);
@@ -531,7 +531,7 @@ final class ShareCardContentsTest extends TestCase
      */
     public function test_the_period_is_isolated_so_it_cannot_read_backwards(): void
     {
-        $this->assertStringContainsString('<bdi dir="ltr">2026-07-01 — 2026-07-31</bdi>', $this->render());
+        $this->assertStringContainsString('<bdi dir="ltr">1 يوليو – 31 يوليو 2026</bdi>', $this->render());
     }
 
     /**
