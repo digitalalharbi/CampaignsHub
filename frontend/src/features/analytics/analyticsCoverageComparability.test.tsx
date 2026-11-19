@@ -64,7 +64,7 @@ describe('the overview and the windows it compares', () => {
   it('compares, and shows change pills, when both windows are complete', async () => {
     route({ ...TOTALS, coverage: COMPLETE }, { ...TOTALS, coverage: COMPLETE })
     renderWithProviders(<AnalyticsPage />, { locale: 'en', route: '/app/analytics' })
-    expect((await screen.findAllByLabelText(/Change/i)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByLabelText(/^Change(?! metric)/i)).length).toBeGreaterThan(0)
     expect(screen.queryByTestId('no-comparison-period')).not.toBeInTheDocument()
   })
 
@@ -74,6 +74,6 @@ describe('the overview and the windows it compares', () => {
     const banner = await screen.findByTestId('no-comparison-period')
     expect(banner.textContent).toContain('covered through 2026-09-27 only')
     expect(banner.textContent).toContain('Meta did not report after it')
-    expect(screen.queryByLabelText(/Change/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^Change(?! metric)/i)).not.toBeInTheDocument()
   })
 })

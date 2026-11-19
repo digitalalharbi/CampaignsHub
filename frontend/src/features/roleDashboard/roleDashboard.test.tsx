@@ -43,8 +43,10 @@ describe('the role dashboards', () => {
 
   it('manager: figures open their pages, spend carries its status, the strip names alerts and integrations', () => {
     page(base({}))
-    expect(screen.getByTestId('dash-kpi-budget')).toHaveAttribute('href', '/agency/budgets')
-    expect(screen.getByTestId('dash-kpi-active')).toHaveAttribute('href', '/agency/campaigns')
+    // ANALYTICS-POPUP-001 — a figure the board answers opens that section in a popup; the rest stay links.
+    expect(screen.getByTestId('dash-kpi-budget')).toHaveAttribute('data-opens', 'analytics:board')
+    expect(screen.getByTestId('dash-kpi-active')).toHaveAttribute('data-opens', 'analytics:board')
+    expect(screen.getByTestId('dash-kpi-budget')).not.toHaveAttribute('href')
     expect(screen.getByTestId('dash-kpi-alerts')).toHaveAttribute('href', '/agency/alerts')
     // 1500 of 3000 is 50%: green.
     expect(screen.getByTestId('dash-kpi-spend')).toHaveAttribute('data-status', 'within')
@@ -204,11 +206,31 @@ describe('the manager performance panels', () => {
     expect(screen.getByTestId('watch-worst-k3')).toHaveTextContent('Leads TikTok')
     expect(screen.getAllByTestId('watch-content-best')).toHaveLength(2)
     expect(screen.getAllByTestId('watch-content-worst')).toHaveLength(1)
-    expect(screen.getByTestId('watch-open-analytics')).toHaveAttribute('href', '/agency/dashboard')
+    expect(screen.getByTestId('watch-open-analytics')).toHaveAttribute('href', '/agency/analytics')
   })
 
   it('WATCH-BOARD-001 — is not offered to a member who cannot open the campaigns', () => {
     page(base({ can_watch: false }))
     expect(screen.queryByTestId('watch-board')).not.toBeInTheDocument()
+  })
+})
+
+describe('ANALYTICS-POPUP-001 — Home opens the matching analytics section in a popup', () => {
+  beforeEach(() => { state.data = null; state.watch = null })
+
+  it('pressing a campaigns card opens the Performance board section over Home, view-only, and the page address does not move', async () => {
+    const { user } = page(base({})) as unknown as { user?: { click: (e: Element) => Promise<void> } }
+    expect(screen.queryByTestId('analytics-popup')).toBeNull()
+    const card = screen.getByTestId('dash-kpi-active')
+    if (user) await user.click(card); else card.click()
+    const popup = await screen.findByTestId('analytics-popup')
+    expect(popup.getAttribute('data-section')).toBe('board')
+    // The only link out is «افتح التحليلات», to the same section of the board — never a campaign's controls.
+    expect(screen.getByTestId('analytics-popup-open').getAttribute('href')).toBe('/agency/analytics?tab=s_board')
+  })
+
+  it('a card that is not an analytics matter (alerts) keeps its link', () => {
+    page(base({}))
+    expect(screen.getByTestId('dash-kpi-alerts')).toHaveAttribute('href', '/agency/alerts')
   })
 })

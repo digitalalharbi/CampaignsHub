@@ -21,12 +21,6 @@ const DESKTOP = [[1366, 768], [1440, 900], [1920, 1080]] as const
  */
 const PAGES: Array<{ name: string; path: string; project?: boolean }> = [
   { name: 'home', path: '/agency/home' },
-  { name: 'analytics board · attention', path: '/agency/dashboard' },
-  { name: 'analytics board · figures', path: '/agency/dashboard?tab=figures' },
-  { name: 'analytics board · trend', path: '/agency/dashboard?tab=trend' },
-  { name: 'analytics board · clients', path: '/agency/dashboard?tab=clients' },
-  { name: 'analytics board · budgets', path: '/agency/dashboard?tab=budgets' },
-  { name: 'analytics board · mix', path: '/agency/dashboard?tab=mix' },
   { name: 'budgets', path: '/agency/budgets' },
   { name: 'spend limits · chooser', path: '/agency/spend-limits' },
   { name: 'spend limits · limits', path: '/agency/spend-limits', project: true },

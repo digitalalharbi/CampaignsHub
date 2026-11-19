@@ -63,6 +63,7 @@ describe('the lower budget rungs show the plan figures', () => {
 
   it('the account rung carries expected, daily average and over / under, blank where no cap is stated', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     const capped = (await screen.findByText('Main Meta')).closest('tr') as HTMLElement
@@ -77,6 +78,7 @@ describe('the lower budget rungs show the plan figures', () => {
 
   it('the campaign rung carries the same three', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     const row = (await within(await screen.findByTestId('budget-campaign-table')).findByText('Spring launch')).closest('tr') as HTMLElement

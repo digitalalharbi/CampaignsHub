@@ -367,6 +367,12 @@ export interface FreshnessRow {
   /** With `partial`: which grain the last sync did not deliver. */
   missing_grain?: 'campaign' | 'ad_set' | 'ad' | null
   last_sync_at: string | null
+  /**
+   * ANALYTICS-SYNC-TRUTH-001 — the latest SUCCESSFUL sync (a run that reached the provider counts even when it
+   * stored nothing). Absent on an install answering from before this shipped; the reader falls back to
+   * `data_freshness_at` then.
+   */
+  last_success_at?: string | null
   last_sync_error: string | null
 }
 

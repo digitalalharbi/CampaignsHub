@@ -15,7 +15,7 @@ const SIZES: Array<[number, number]> = [[360, 740], [390, 844], [430, 932], [768
 type Surface = { name: string; path: string; ready: string; auth: string }
 const AGENCY: Surface[] = [
   { name: 'role dashboard', path: '/agency/home', ready: 'main', auth: AUTH.owner },
-  { name: 'agency dashboard + period', path: '/agency/dashboard', ready: 'main', auth: AUTH.owner },
+  { name: 'analytics board + period', path: '/agency/analytics', ready: 'main', auth: AUTH.owner },
   { name: 'budgets', path: '/agency/budgets', ready: 'main', auth: AUTH.owner },
   { name: 'spend limits', path: '/agency/spend-limits', ready: 'main', auth: AUTH.owner },
   { name: 'integrations', path: '/agency/integrations', ready: 'main', auth: AUTH.owner },

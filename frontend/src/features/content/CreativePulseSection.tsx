@@ -384,7 +384,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.client_ids?.[0] ?? ''}
               onChange={(v) => narrow('client_ids', v)}
-              options={data.filters.clients.map((c) => ({ value: c.id, label: c.name }))}
+              options={(data.filters.clients ?? []).map((c) => ({ value: c.id, label: c.name }))}
             />
           )}
 
@@ -394,7 +394,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.project_ids?.[0] ?? ''}
               onChange={(v) => narrow('project_ids', v)}
-              options={data.filters.projects.map((p) => ({ value: p.id, label: p.name }))}
+              options={(data.filters.projects ?? []).map((p) => ({ value: p.id, label: p.name }))}
             />
           )}
 
@@ -404,7 +404,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.providers?.[0] ?? ''}
               onChange={(v) => narrow('providers', v)}
-              options={data.filters.providers.map((p) => ({ value: p, label: providerLabel(p, locale) }))}
+              options={(data.filters.providers ?? []).map((p) => ({ value: p, label: providerLabel(p, locale) }))}
             />
           )}
 
@@ -422,7 +422,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.objectives?.[0] ?? ''}
               onChange={(v) => narrow('objectives', v)}
-              options={data.filters.objectives.map((o) => ({
+              options={(data.filters.objectives ?? []).map((o) => ({
                 value: o.key,
                 label: canonicalObjectiveLabel(o.key as CanonicalObjectiveKey, ar ? 'ar' : 'en'),
               }))}
@@ -435,7 +435,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.kinds?.[0] ?? ''}
               onChange={(v) => narrow('kinds', v)}
-              options={data.filters.kinds.map((k) => ({ value: k.key, label: KIND_LABEL(k.key, ar) }))}
+              options={(data.filters.kinds ?? []).map((k) => ({ value: k.key, label: KIND_LABEL(k.key, ar) }))}
             />
           )}
         </div>

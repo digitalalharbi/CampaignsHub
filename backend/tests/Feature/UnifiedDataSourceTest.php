@@ -297,6 +297,32 @@ final class UnifiedDataSourceTest extends TestCase
         $this->assertSame('fresh', collect($sources)->firstWhere('provider', 'snapchat')['state']);
     }
 
+    /**
+     * ANALYTICS-SYNC-TRUTH-001 — a successful sync that stored nothing is still a sync.
+     *
+     * The head of Analytics read the newest stored figure, so an account with zero delivery read «no data has
+     * arrived» while its runs succeeded. `last_success_at` carries the run itself.
+     */
+    public function test_freshness_endpoint_reports_last_success_when_the_run_stored_nothing(): void
+    {
+        $at = Carbon::now()->subHour();
+        MetricSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_account_id' => $this->adAccount->getKey(), 'provider' => 'snapchat',
+            'status' => 'no_data', 'window_start' => $at->toDateString(), 'window_end' => $at->toDateString(),
+            'metrics_upserted' => 0, 'attempts' => 1, 'started_at' => $at, 'finished_at' => $at,
+        ]);
+
+        $res = $this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url('metrics/freshness?from='.Carbon::today()->subDays(7)->toDateString().'&to='.Carbon::today()->toDateString()))
+            ->assertOk();
+
+        $row = collect($res->json('data'))->firstWhere('provider', 'snapchat');
+        $this->assertNotNull($row['last_success_at'], 'a quiet-but-synced account read as never synced');
+        $this->assertNull($row['data_freshness_at']);
+        $this->assertNotNull($res->json('meta.summary.last_success_at'));
+    }
+
     /** A partial sync is not fresh, and the source says which grain it did not deliver. */
     public function test_a_partial_sync_is_not_fresh_and_names_the_missing_grain(): void
     {

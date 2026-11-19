@@ -74,6 +74,19 @@ function PrefixWithApp() {
 }
 
 /**
+ * ANALYTICS-ONE-BOARD-001 — «لوحة التحليلات» was a second door onto the same board as «التحليلات».
+ *
+ * The Owner's order of 2026-11-19: one board only. Its old address (`/app/dashboard`, `/agency/dashboard`) stays
+ * alive — a bookmark, an emailed button, a post-login destination from before this — and lands on the board that
+ * replaced it, with the query string (`?project=`, `?tab=`, the period) and the hash carried across.
+ */
+export function AnalyticsBoardRedirect({ portal }: { portal: 'app' | 'agency' }) {
+  const { search, hash } = useLocation()
+
+  return <Navigate to={`/${portal}/analytics${search}${hash}`} replace />
+}
+
+/**
  * The paths that lived at the root before the move. Parameterised segments are declared exactly as
  * the router matched them, so the redirect fires for the same URLs the old tree served.
  */

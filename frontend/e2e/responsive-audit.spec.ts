@@ -49,7 +49,7 @@ const PUBLIC_ROUTES = [
 /** One authenticated landing surface per portal, with the role that actually holds it. */
 const PORTAL_ROUTES = [
   { path: '/admin', state: AUTH.admin },
-  { path: '/app/dashboard', state: AUTH.advertiser },
+  { path: '/app/home', state: AUTH.advertiser },
   { path: '/agency', state: AUTH.owner },
   { path: '/portal', state: AUTH.client },
 ] as const
@@ -156,7 +156,7 @@ test.describe('every surface fits the screen it is opened on @responsive', () =>
  * long (the footer follows the content). On the broken shell it was hundreds of pixels, and it grew
  * with the window — which is exactly why it looked worse on a large monitor.
  *
- * `/app/dashboard` at 2560×1440 is the worst case in the product: the widest window, and a page that
+ * `/app/home` at 2560×1440 is the worst case in the product: the widest window, and a page that
  * is short when a fresh workspace has no projects yet. That is the screenshot this came from.
  */
 const DESKTOP_VIEWPORTS = [

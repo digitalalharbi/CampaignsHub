@@ -17,9 +17,9 @@ test('the dashboard shows a figure before it asks for a filter', async ({ page }
   await page.setViewportSize({ width: 390, height: 844 })
   await signIn(page, 'advertiser@campaignshub.io', 'password')
   await expect(page).toHaveURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
-  await page.goto('/app/dashboard')
+  await page.goto('/app/analytics')
 
-  const strip = page.getByTestId('dashboard-metrics').first()
+  const strip = page.getByTestId('analytics-metrics').first()
   await expect(strip).toBeVisible({ timeout: 30_000 })
 
   const box = await strip.boundingBox()
@@ -34,14 +34,14 @@ test('the folded filters open on a phone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await signIn(page, 'advertiser@campaignshub.io', 'password')
   await expect(page).toHaveURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
-  await page.goto('/app/dashboard')
+  await page.goto('/app/analytics')
 
-  const toggle = page.getByTestId('dashboard-filters-toggle')
+  const toggle = page.getByTestId('analytics-filters-toggle')
   await expect(toggle).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByTestId('dashboard-filters-controls')).toBeHidden()
+  await expect(page.getByTestId('analytics-filters-controls')).toBeHidden()
 
   await toggle.click()
-  await expect(page.getByTestId('dashboard-filters-controls')).toBeVisible()
+  await expect(page.getByTestId('analytics-filters-controls')).toBeVisible()
 })
 
 /**
@@ -65,13 +65,14 @@ test('the analytics tabs scroll inside their row on a phone', async ({ page }) =
    * whose inner groups cannot wrap overflows too — so the assertion is on the tabs' own geometry:
    * every tab sits on the same line, which is only true when the row scrolls instead of wrapping.
    */
-  const tops = await tabs.getByRole('tab').evaluateAll((els) =>
+  // ANALYTICS-REPORT-PARITY-001 — the row is the board's section bar (six pills, buttons inside the tablist), not a row of tabs.
+  const tops = await tabs.getByRole('button').evaluateAll((els) =>
     [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().top)))],
   )
   expect(tops.length, `the tabs are stacked on ${tops.length} lines instead of scrolling in one`).toBe(1)
 
   const scrolls = await tabs.evaluate((el) => el.scrollWidth > el.clientWidth + 1)
-  expect(scrolls, 'a single row of eleven tabs must be scrollable to reach the last one').toBe(true)
+  expect(scrolls, 'a single row of six sections must be scrollable to reach the last one').toBe(true)
 
   const bodyOverflows = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)
   expect(bodyOverflows, 'the page itself scrolls sideways').toBe(false)

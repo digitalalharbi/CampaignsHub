@@ -19,7 +19,7 @@ import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 
 /** Every destination the rail offers, in rail order. Kept here so a dropped link fails loudly. */
 const AGENCY_PATHS = [
-  '/agency/dashboard',
+  '/agency/home',
   '/agency/clients', '/agency/projects',
   '/agency/campaigns', '/agency/content',
   '/agency/requests', '/agency/tasks', '/agency/messages', '/agency/alerts',
@@ -54,7 +54,7 @@ test.describe('the agency rail', () => {
 
   /** The rail groups are named for the job, and there are no third-level menus. */
   test('the rail is two levels and named for what somebody came to do', async ({ page }) => {
-    await page.goto('/agency/dashboard')
+    await page.goto('/agency/home')
     const nav = page.getByRole('navigation').first()
     await expect(nav).toBeVisible({ timeout: RAIL_PAINT_TIMEOUT })
 

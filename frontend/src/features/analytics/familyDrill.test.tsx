@@ -65,6 +65,7 @@ describe('a family’s campaign leads to its ad sets', () => {
 
   it('lands on the ad sets tab, scoped to the campaign that was clicked', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Objectives/i }))
 
     fireEvent.click(await screen.findByTestId('family-drill-c-ramadan'))

@@ -72,12 +72,12 @@ test.describe('signed in', () => {
     await page.goto('/agency')
     await expect(page).toHaveURL(/\/agency\/home/)
 
-    await page.goto('/agency/dashboard')
-    await expect(page).toHaveURL(/\/agency\/dashboard/)
+    await page.goto('/agency/analytics')
+    await expect(page).toHaveURL(/\/agency\/analytics/)
   })
 
   test('the worker takes control, and its caches never hold an API or auth response', async ({ page }) => {
-    await page.goto('/agency/dashboard')
+    await page.goto('/agency/analytics')
     await workerReady(page)
     // Use the app so it makes its API calls through a controlled page.
     await page.goto('/agency/home')
@@ -114,12 +114,12 @@ test.describe('signed in', () => {
    * for every branch in `src/app/sw.test.ts` («opens offline to the offline page…»).
    */
   test('with no connection it shows the offline page — chromium', async ({ page, context, browserName }) => {
-    await page.goto('/agency/dashboard')
+    await page.goto('/agency/analytics')
     await workerReady(page)
 
     if (browserName === 'chromium') {
       await context.setOffline(true)
-      await page.goto('/agency/dashboard')
+      await page.goto('/agency/analytics')
 
       await expect(page.getByRole('heading', { name: 'لا يوجد اتصال بالإنترنت' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'حاول مرة ثانية' })).toBeVisible()

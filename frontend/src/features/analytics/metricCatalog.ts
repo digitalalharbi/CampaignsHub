@@ -1,7 +1,8 @@
 import { formatMoneyReading, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 import type { MetricItem, MetricReading } from '@/components/ui/MetricStrip'
 import type { MetricTotals, Summary, TimePoint } from '@/features/analytics/api'
-import { compact, money, moneyExact, num, percent, ratio } from '@/features/analytics/format'
+import { compact, money, moneyExact, num, ratio } from '@/features/analytics/format'
+import { frequencyText, rateText } from '@/features/analyticsShared/kpiFormat'
 
 /**
  * Which metrics lead, for the money this campaign is — UX-DASH-001, and §14.6's rule applied.
@@ -82,7 +83,7 @@ export function valueReading(spec: Spec, n: number, currency: string | null): { 
   return exact !== undefined && exact !== text ? { kind: 'value', text, exact } : { kind: 'value', text }
 }
 
-const pct2 = (n: number) => percent(n, 2)
+const pct2 = (n: number) => rateText(n)
 const times = (n: number) => ratio(n, '×')
 
 export type Spec = {
@@ -140,7 +141,7 @@ export const SPECS: Record<string, Spec> = {
   },
   frequency: {
     label: { ar: 'التكرار', en: 'Frequency' },
-    format: (n) => ratio(n, ''),
+    format: (n) => frequencyText(n),
     derived: true,
     neutral: true,
     hint: { ar: 'متوسط عدد مرات رؤية الشخص الواحد للإعلان = الظهور ÷ الوصول.', en: 'How many times the average person saw the ad — impressions ÷ reach.' },

@@ -54,7 +54,7 @@ describe('the platforms tab says what moved', () => {
 
   it('leads with the decomposition between platforms', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('button', { name: 'Platforms & audience' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Platforms' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Platforms/i }))
 
     expect(await screen.findByText(/What moved between the platforms/i)).toBeVisible()
@@ -69,7 +69,7 @@ describe('the platforms tab says what moved', () => {
    */
   it('asks for the provider dimension', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('button', { name: 'Platforms & audience' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Platforms' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Platforms/i }))
     await screen.findByText(/What moved between the platforms/i)
 

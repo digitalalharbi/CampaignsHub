@@ -5,7 +5,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
 import { createContext, Fragment, type ReactNode, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeftRight, Eye, Filter, Image as ImageIcon, Layers, LayoutDashboard, Megaphone, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
+import { ArrowLeftRight, Eye, Gauge, Globe, Image as ImageIcon, Layers, LayoutDashboard, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -65,11 +65,12 @@ import {
 import { PathAnalysis } from './PathAnalysis'
 import { ObjectivePathCards } from './ObjectivePathCards'
 import { PathTrends } from './PathTrends'
-import { ContentWhy } from './ContentWhy'
+import { CreativePulseSection } from '@/features/content/CreativePulseSection'
+import { ContentWhyVisual } from '@/features/analyticsShared/ContentWhyVisual'
 import { listCreatives, type CreativeCard } from '@/features/content/api'
 import { compact, money, moneyExact, num, percent, ratio, rowCostPer, rowMoney, rowRoas } from './format'
 import { funnelStageLabel } from './metricLabels'
-import { AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
+import { AnalyticsHeadline, AnalyticsOverview, DashboardOverview, useOverviewData } from './OverviewCompositions'
 import { DailyMeasurePanel } from './DailyMeasurePanel'
 import { SmartReading } from './SmartReading'
 import { useUrlList, useUrlState, useUrlWriter } from './filterUrlState'
@@ -89,6 +90,7 @@ import { AccountVisualDeck, BudgetVisualDeck, CampaignVisualDeck, EntityVisualDe
 import { SPECS, layoutFor, valueReading } from './metricCatalog'
 import { FilterBar, FilterMulti, FilterSelect, type AppliedFilter } from '@/components/ui/FilterBar'
 import { FilterPlatforms } from '@/components/ui/FilterPlatforms'
+import { lastSuccessfulSync } from '@/features/analyticsShared/syncTruth'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
 import { DashboardContextStrip } from './DashboardContextStrip'
 import { AdvertiserProjectsStrip, AdvertiserSourcesStrip } from '@/features/dashboard/AdvertiserContext'
@@ -283,14 +285,20 @@ const TABS: readonly AnalyticsTab[] = TAB_GROUPS.flatMap((g) => g.tabs as readon
  * not operate. Every old tab id still opens: `?tab=budget` lands on the section that now holds it,
  * and each member keeps its own panel, stacked under a plain heading in the order a reader asks.
  */
-const SECTIONS: readonly { id: string; ar: string; en: string; icon: LucideIcon; members: readonly string[] }[] = [
-  { id: 'performance', ar: 'نظرة عامة', en: 'Overview', icon: LayoutDashboard, members: ['performance', 'objective', 'budget'] },
-  { id: 'platforms', ar: 'المنصات والجمهور', en: 'Platforms & audience', icon: Layers, members: ['platforms', 'audience', 'accounts'] },
-  { id: 'campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone, members: ['campaigns', 'ad_sets', 'ads'] },
+export const ANALYTICS_SECTIONS: readonly { id: string; ar: string; en: string; icon: LucideIcon; members: readonly string[] }[] = [
+  // ANALYTICS-REPORT-PARITY-001 (Owner, 2026-11-19) — the sections are the /r/ report's own tabs, by the same names:
+  // الملخص · لوحة الأداء · المنصات · المحتوى · الموقع. «الجداول» has no section: here a table is a chart (nothing tabular is drawn).
+  { id: 'performance', ar: 'الملخص', en: 'Summary', icon: LayoutDashboard, members: ['performance'] },
+  { id: 'board', ar: 'لوحة الأداء', en: 'Performance', icon: Gauge, members: ['objective', 'budget', 'campaigns', 'ad_sets', 'ads', 'funnel'] },
+  { id: 'platforms', ar: 'المنصات', en: 'Platforms', icon: Layers, members: ['platforms', 'audience', 'accounts'] },
   { id: 'creative', ar: 'المحتوى', en: 'Content', icon: ImageIcon, members: ['creative'] },
-  { id: 'funnel', ar: 'النتائج والتحويل', en: 'Conversions', icon: Filter, members: ['funnel', 'store', 'site'] },
+  { id: 'site', ar: 'الموقع', en: 'Website', icon: Globe, members: ['site', 'store'] },
   { id: 'quality', ar: 'الجودة والمصادر', en: 'Quality & sources', icon: ShieldCheck, members: ['quality', 'live'] },
 ]
+
+/** A section link from before the report-parity regrouping lands on the section that holds its panels now. */
+const LEGACY_SECTION: Record<string, string> = { s_campaigns: 's_board', s_funnel: 's_board' }
+
 const MEMBER_TITLE: Record<string, { ar: string; en: string }> = {
   objective: { ar: 'الأداء حسب الهدف', en: 'Performance by objective' },
   budget: { ar: 'الميزانية', en: 'Budget' },
@@ -391,18 +399,15 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   const widgetLayout = useWidgetLayout(isAnalysis ? currentProjectId : null, 'analytics')
   const hasWidgetTab = isAnalysis && (widgetLayout.data?.widgets ?? []).some((w) => w.visible)
   const tab = isAnalysis ? urlTab : 'performance'
-  const sections = hasWidgetTab ? [...SECTIONS, { id: 'links', ar: 'رؤى إضافية', en: 'Insights', icon: Sparkles, members: ['links'] }] : SECTIONS
-  const sectionOf = (t: string) => sections.find((x) => `s_${x.id}` === t || x.members.includes(t)) ?? sections[0]
+  const sections = hasWidgetTab ? [...ANALYTICS_SECTIONS, { id: 'links', ar: 'رؤى إضافية', en: 'Insights', icon: Sparkles, members: ['links'] }] : ANALYTICS_SECTIONS
+  const sectionOf = (t0: string) => {
+    const t = LEGACY_SECTION[t0] ?? t0
+
+    return sections.find((x) => `s_${x.id}` === t || x.members.includes(t)) ?? sections[0]
+  }
   const section = sectionOf(tab)
   // A section pill (`s_*`, and the default) stacks its members; an old single-tab link still opens only that panel.
-  const stacked = isAnalysis && tab.startsWith('s_')
-  const has = (id: string) => (stacked ? section.members.includes(id) : tab === id)
-  const sub = (id: string, children: ReactNode) => (
-    <section key={id} className="flex flex-col gap-3" data-testid={`section-${id}`}>
-      {MEMBER_TITLE[id] && <h2 className="text-lg font-bold text-text-primary">{ar ? MEMBER_TITLE[id].ar : MEMBER_TITLE[id].en}</h2>}
-      {children}
-    </section>
-  )
+  const stacked = isAnalysis && (LEGACY_SECTION[tab] ?? tab).startsWith('s_')
   const [providers, setProviders] = useUrlList('provider')
   const [campaignIds, setCampaignIds] = useUrlList('campaign')
   /*
@@ -588,14 +593,8 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   const projectName = projectsQuery.data?.find((p) => p.id === currentProjectId)?.name ?? null
 
   const headFreshness = useFreshness(currentProjectId, range, filters)
-  const freshestAt = useMemo(
-    () => (headFreshness.data?.rows ?? [])
-      .map((row) => row.data_freshness_at)
-      .filter((at): at is string => at !== null)
-      .sort()
-      .at(-1) ?? null,
-    [headFreshness.data],
-  )
+  // ANALYTICS-SYNC-TRUTH-001 — the last successful sync, not the newest stored figure (zero spend is data, not a gap).
+  const freshestAt = useMemo(() => lastSuccessfulSync(headFreshness.data?.rows ?? []), [headFreshness.data])
 
   return (
     <AnalysisOnly.Provider value={isAnalysis}>
@@ -857,28 +856,21 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
         <>
         {/* ADV-HOME-001 — the advertiser's home names their other projects and this project's data sources.
             The agency has its own home (AgencyDashboardPage); this strip is the advertiser's equivalent. */}
-        {surface === 'dashboard' && portalBase === '/app' && (
+        {portalBase === '/app' && (
           <div className="flex flex-col gap-3" data-testid="adv-context">
             <AdvertiserProjectsStrip currentProjectId={currentProjectId} onSwitch={setCurrentProjectId} />
             <AdvertiserSourcesStrip projectId={currentProjectId} />
           </div>
         )}
-        {has('performance') && sub('performance', <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />)}
-        {has('platforms') && sub('platforms', <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('audience') && sub('audience', <AudiencePanel projectId={currentProjectId} range={range} />)}
-        {has('accounts') && sub('accounts', <AccountsTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('campaigns') && sub('campaigns', <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('ad_sets') && sub('ad_sets', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />)}
-        {has('ads') && sub('ads', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />)}
-        {has('creative') && sub('creative', <CreativeTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('objective') && sub('objective', <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('funnel') && sub('funnel', <FunnelTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('store') && sub('store', <StoreFunnelTab projectId={currentProjectId} range={range} />)}
-        {has('site') && sub('site', <SiteAnalyticsTab projectId={currentProjectId} range={range} />)}
-        {has('budget') && sub('budget', <BudgetTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('quality') && sub('quality', <QualityTab projectId={currentProjectId} range={range} filters={filters} />)}
-        {has('live') && sub('live', <LiveOperatingTab projectId={currentProjectId} />)}
-        {has('links') && hasWidgetTab && sub('links', <WidgetSurface projectId={currentProjectId} surface="analytics" range={range} />)}
+        <AnalyticsSectionBody
+          members={stacked ? section.members : [tab]}
+          projectId={currentProjectId}
+          range={range}
+          filters={filters}
+          objective={objective}
+          surface={surface}
+          widgets={hasWidgetTab}
+        />
         </>
       )}
 
@@ -891,6 +883,57 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
 }
 
 type TabProps = { projectId: string | null; range: { from: string; to: string }; filters: MetricFilters }
+
+/**
+ * ANALYTICS-SHARED-001 — the panels of one section (or one old tab), by explicit props.
+ *
+ * The page stacks a section's members from here, and the Home popup (`AnalyticsPopup`) opens the SAME panels over the SAME
+ * queries for the period it was opened on — one composition, so a figure on «الرئيسية» and the section it opens cannot be
+ * read two ways. It takes no router state of its own: filters, range and objective come in as props.
+ */
+export function AnalyticsSectionBody({ members, projectId: currentProjectId, range, filters, objective, surface = 'analytics', widgets = false }: {
+  members: readonly string[]
+  projectId: string
+  range: { from: string; to: string }
+  filters: MetricFilters
+  objective: string
+  surface?: Surface
+  widgets?: boolean
+}) {
+  const ar = useAr()
+  const portalBase = usePortalBase()
+  const has = (id: string) => members.includes(id)
+  const sub = (id: string, children: ReactNode) => (
+    <section key={id} className="flex flex-col gap-3" data-testid={`section-${id}`}>
+      {MEMBER_TITLE[id] && <h2 className="text-lg font-bold text-text-primary">{ar ? MEMBER_TITLE[id].ar : MEMBER_TITLE[id].en}</h2>}
+      {children}
+    </section>
+  )
+  const hasWidgetTab = widgets
+
+  return (
+    <>
+        {has('performance') && sub('performance', <PerformanceTab projectId={currentProjectId} range={range} filters={filters} objective={objective} surface={surface} />)}
+      {has('platforms') && sub('platforms', <PlatformsTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('audience') && sub('audience', <AudiencePanel projectId={currentProjectId} range={range} />)}
+      {has('accounts') && sub('accounts', <AccountsTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('campaigns') && sub('campaigns', <CampaignsTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('ad_sets') && sub('ad_sets', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad_set" />)}
+      {has('ads') && sub('ads', <EntityTab projectId={currentProjectId} range={range} filters={filters} level="ad" />)}
+      {has('creative') && sub('creative', <CreativeTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {/* The creative pulse (findings across the content) lived only on the retired agency board; it belongs with the content. */}
+      {has('creative') && sub('pulse', <CreativePulseSection filters={{}} projectId={currentProjectId} libraryPath={`${portalBase}/content`} axes={['period', 'providers', 'objectives', 'kinds']} />)}
+      {has('objective') && sub('objective', <ObjectiveTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('funnel') && sub('funnel', <FunnelTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('store') && sub('store', <StoreFunnelTab projectId={currentProjectId} range={range} />)}
+      {has('site') && sub('site', <SiteAnalyticsTab projectId={currentProjectId} range={range} />)}
+      {has('budget') && sub('budget', <BudgetTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('quality') && sub('quality', <QualityTab projectId={currentProjectId} range={range} filters={filters} />)}
+      {has('live') && sub('live', <LiveOperatingTab projectId={currentProjectId} />)}
+      {has('links') && hasWidgetTab && sub('links', <WidgetSurface projectId={currentProjectId} surface="analytics" range={range} />)}
+    </>
+  )
+}
 
 /**
  * The overview tab also needs the objective, because its KPI row is chosen BY the objective — and
@@ -923,8 +966,9 @@ function PerformanceTab({ projectId, range, filters, objective, surface }: Overv
   // ANALYTICS-SMART-READING-001 — on the analysis surface the findings lead, each opening its evidence in a popup.
   const daily = (
     <>
-      {surface === 'analytics' && <SmartReading projectId={projectId} range={range} filters={filters} ar={ar} />}
+      {/* ANALYTICS-HEADLINE-001 — figures, then the daily drawing (first screen), then the findings that read them. */}
       <DailyMeasurePanel projectId={projectId} range={range} filters={filters} ar={ar} />
+      {surface === 'analytics' && <SmartReading projectId={projectId} range={range} filters={filters} ar={ar} />}
     </>
   )
 
@@ -942,6 +986,8 @@ function PerformanceTab({ projectId, range, filters, objective, surface }: Overv
     )
     : (
       <>
+        {/* ANALYTICS-HEADLINE-001 — the figures first, then the reading and the drawings. */}
+        <AnalyticsHeadline {...data} />
         {daily}
         <AnalyticsOverview {...data} />
       </>
@@ -3121,7 +3167,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
               : 'No content was reported under the selected ad or ad set in this period. That is not «no content» for the project.'}
           </p>
         )}
-        {!q.isLoading && !q.isError && <ContentWhy rows={rows} ar={ar} onOpen={setOpenCreative} />}
+        {!q.isLoading && !q.isError && <ContentWhyVisual rows={rows} ar={ar} onOpen={setOpenCreative} />}
         {/*
           ANALYTICS-TABLES-001 — the canonical table, last of the four hand-rolled ones.
           Numeric columns were `text-start`, so under RTL the figures and their headings sat against

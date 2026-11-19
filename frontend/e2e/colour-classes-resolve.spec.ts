@@ -21,7 +21,7 @@ import { AUTH } from './helpers'
 test.use({ storageState: AUTH.advertiser })
 
 const SURFACES = [
-  '/app/dashboard',
+  '/app/home',
   '/app/analytics?tab=quality',
   '/app/analytics?tab=budget',
   '/app/analytics?tab=funnel',

@@ -83,7 +83,7 @@ function route(overrides: Record<string, { data: unknown; meta?: unknown }> = {}
 
 async function openPlatforms() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByRole('button', { name: 'Platforms & audience' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Platforms' }))
   fireEvent.click(await screen.findByRole('tab', { name: /Platforms/i }))
 }
 
