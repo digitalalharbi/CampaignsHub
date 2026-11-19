@@ -306,6 +306,42 @@ final class RoleDashboardTest extends TestCase
         $this->getJson('/api/v1/me/dashboard/watch')->assertForbidden();
     }
 
+    /**
+     * HOME-SCOPE-ISOLATION-001 — Owner 2026-11-20: with one client and project chosen, Home printed $23.5K of spend, 1.83K
+     * orders and other clients' leading campaigns. The deferred performance panels read the whole reach; they follow the
+     * chosen client and project now, as the page and the watch board do — and a project of another client is ignored.
+     */
+    public function test_the_performance_panels_follow_the_chosen_client_and_project(): void
+    {
+        $a = $this->campaign($this->alpha, 1000, 400, 100);
+        $b = $this->campaign($this->beta, 5000, 200, 50);
+        $owner = $this->member(WorkspaceRolePresets::OWNER, null);
+
+        $all = $this->dash($owner, '', '/performance');
+        $this->assertEqualsWithDelta(700 + 350, $all['performance']['spend'] ?? 0, 0.01);
+
+        $alpha = $this->dash($owner, '?client='.$this->alpha->id, '/performance');
+        $this->assertEqualsWithDelta(700, $alpha['performance']['spend'] ?? 0, 0.01, 'another client\'s spend reached the chosen client');
+        $ids = array_merge(array_column($alpha['best'] ?? [], 'id'), array_column($alpha['worst'] ?? [], 'id'), array_column($alpha['campaign_rows'] ?? [], 'id'));
+        $this->assertNotContains((string) $b->id, $ids);
+        $this->assertContains((string) $a->id, $ids);
+
+        $project = $this->dash($owner, '?client='.$this->alpha->id.'&project='.$a->project_id, '/performance');
+        $this->assertEqualsWithDelta(700, $project['performance']['spend'] ?? 0, 0.01);
+
+        // A project of another client than the one chosen widens nothing.
+        $crossed = $this->dash($owner, '?client='.$this->alpha->id.'&project='.$b->project_id, '/performance');
+        $this->assertEqualsWithDelta(700, $crossed['performance']['spend'] ?? 0, 0.01);
+
+        // The page itself follows the project too.
+        $page = $this->dash($owner, '?client='.$this->alpha->id.'&project='.$a->project_id);
+        $this->assertSame(1, $page['scope']['projects']);
+
+        // And the watch board.
+        $watch = $this->dash($owner, '?unit='.$this->alpha->id.'&project='.$a->project_id, '/watch');
+        $this->assertSame([(string) $a->id], array_column($watch['campaign_rows'], 'id'));
+    }
+
     public function test_another_tenants_figures_never_appear(): void
     {
         $this->campaign($this->alpha, 1000, 400, 100);

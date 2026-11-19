@@ -134,6 +134,22 @@ describe('the role dashboards', () => {
 })
 
 /** DASH-MANAGER-PERFORMANCE-001 — the manager reads the leading campaigns, the platforms and where the spend went. */
+describe('HOME-BUDGET-FALLBACK-001 — a project with no approved budget', () => {
+  beforeEach(() => { state.data = null; state.watch = null })
+
+  it('reads the platforms\' campaign budgets and the window\'s real spend instead of «—»', () => {
+    page(base({
+      money: { budget: null, spent: null, remaining: null, projected: null, pace: null, currency: null, currencies: 0, excluded: 1, unmeasured: 0, campaigns: 0, rows: 0,
+        platform_campaign_budgets: { budget: 960, spent: 923.26, remaining: 36.74, projected: 923.26, pace: 0.96, currency: 'USD', currencies: 1, excluded: 4, unmeasured: 0, campaigns: 6 } },
+      performance: { spend: 412, previous_spend: null, previous: null, withheld: 0, campaigns: 2, family: 'sales', results: 3, result_label: null, cost_per_result: 137, cost_label: null },
+    } as unknown as Partial<RoleDashboard>))
+    expect(screen.getByTestId('dash-kpi-budget')).toHaveTextContent('960')
+    expect(screen.getByTestId('dash-kpi-budget')).toHaveTextContent('Campaign budgets')
+    expect(screen.getByTestId('dash-kpi-spend')).toHaveTextContent('412')
+    expect(screen.getByTestId('dash-kpi-remaining')).toHaveTextContent('37')
+  })
+})
+
 describe('the manager performance panels', () => {
   beforeEach(() => { state.data = null; state.watch = null })
 

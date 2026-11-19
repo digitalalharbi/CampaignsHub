@@ -82,7 +82,7 @@ final class RoleDashboardBuilder
 
     public const DEFAULT_DAYS = 30;
 
-    public function build(User $user, ?string $requested = null, int $days = self::DEFAULT_DAYS, ?string $client = null): array
+    public function build(User $user, ?string $requested = null, int $days = self::DEFAULT_DAYS, ?string $client = null, ?string $project = null): array
     {
         $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
         $role = $user->rolesInCurrentTenant()->sortBy('id')->first();
@@ -102,10 +102,7 @@ final class RoleDashboardBuilder
         $scope = $this->scope($user);
         // DASH-CLIENT-FILTER-001 — Owner 2026-11-18: every figure on the page follows the chosen client, the budget included.
         // A client outside the member's reach is ignored: the page stays on what they may see, never wider.
-        if ($client !== null && array_key_exists($client, $scope['clients'])) {
-            $scope['clients'] = [$client => $scope['clients'][$client]];
-            $scope['projects'] = array_filter($scope['projects'], static fn (array $p): bool => $p['client_id'] === $client);
-        }
+        $scope = $this->narrow($scope, $client, $project);
         $projectIds = array_keys($scope['projects']);
         $sections = $user->accessSections();
         $money = $user->hasPermission('budget.view') || $user->hasPermission('billing.view');
@@ -541,17 +538,42 @@ final class RoleDashboardBuilder
      *
      * @return array<string, mixed>
      */
-    public function performanceFor(User $user, int $days = self::DEFAULT_DAYS): array
+    /**
+     * HOME-SCOPE-ISOLATION-001 — Owner 2026-11-20: «يجب أن يكون هناك عزل 100%».
+     *
+     * The client and the project chosen at the top narrow every figure on Home, the deferred performance panels and the
+     * watch board included. Those panels read the member's whole reach: with «Experts Live Saudi 2026» chosen, the page
+     * printed $23.5K of spend, 1.83K orders and other clients' best campaigns. One narrowing, applied by all three reads.
+     * A client or project outside the member's reach is ignored — the page stays on what they may see, never wider — and a
+     * project outside the chosen client is ignored too.
+     *
+     * @param  array{clients: array<int|string, string>, projects: array<int|string, array{name: string, client_id: string|null}>, restricted: bool}  $scope
+     * @return array{clients: array<int|string, string>, projects: array<int|string, array{name: string, client_id: string|null}>, restricted: bool}
+     */
+    private function narrow(array $scope, ?string $client, ?string $project): array
+    {
+        if ($client !== null && array_key_exists($client, $scope['clients'])) {
+            $scope['clients'] = [$client => $scope['clients'][$client]];
+            $scope['projects'] = array_filter($scope['projects'], static fn (array $p): bool => $p['client_id'] === $client);
+        }
+        if ($project !== null && array_key_exists($project, $scope['projects'])) {
+            $scope['projects'] = [$project => $scope['projects'][$project]];
+        }
+
+        return $scope;
+    }
+
+    public function performanceFor(User $user, int $days = self::DEFAULT_DAYS, ?string $client = null, ?string $project = null): array
     {
         $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
         $today = PeriodResolver::today();
         $to = $today->copy();
         $from = $to->copy()->subDays($days - 1);
         $tenant = (string) app(TenantContext::class)->tenantId();
-        $key = 'role-dash-perf|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.$today->toDateString();
+        $key = 'role-dash-perf|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.($client ?? '*').'|'.($project ?? '*').'|'.$today->toDateString();
 
-        return Cache::remember($key, 120, function () use ($user, $days, $today, $from, $to): array {
-            $scope = $this->scope($user);
+        return Cache::remember($key, 120, function () use ($user, $days, $today, $from, $to, $client, $project): array {
+            $scope = $this->narrow($this->scope($user), $client, $project);
             $projectIds = array_keys($scope['projects']);
             $money = $user->hasPermission('budget.view') || $user->hasPermission('billing.view');
             $agg = $projectIds === [] ? null : app(MetricsAggregator::class)->forProjects($projectIds);
@@ -577,16 +599,16 @@ final class RoleDashboardBuilder
      *
      * @return array<string, mixed>
      */
-    public function watchFor(User $user, int $days = self::DEFAULT_DAYS, ?string $unit = null): array
+    public function watchFor(User $user, int $days = self::DEFAULT_DAYS, ?string $unit = null, ?string $project = null): array
     {
         $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
         $today = PeriodResolver::today();
         $to = $today->copy();
         $from = $to->copy()->subDays($days - 1);
         $tenant = (string) app(TenantContext::class)->tenantId();
-        $key = 'role-dash-watch|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.($unit ?? '*').'|'.$today->toDateString();
+        $key = 'role-dash-watch|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.($unit ?? '*').'|'.($project ?? '*').'|'.$today->toDateString();
 
-        return Cache::remember($key, 120, function () use ($user, $days, $unit, $today, $from, $to): array {
+        return Cache::remember($key, 120, function () use ($user, $days, $unit, $project, $today, $from, $to): array {
             $scope = $this->scope($user);
             $units = [];
             foreach ($scope['projects'] as $pid => $p) {
@@ -613,6 +635,11 @@ final class RoleDashboardBuilder
                 if ($chosen === null || ($p['client_id'] ?? 'p:'.$pid) === $chosen) {
                     $projectIds[] = (string) $pid;
                 }
+            }
+
+            // HOME-SCOPE-ISOLATION-001 — the project chosen at the top narrows the board too, inside the chosen unit only.
+            if ($project !== null && in_array($project, $projectIds, true)) {
+                $projectIds = [$project];
             }
 
             $money = $user->hasPermission('budget.view') || $user->hasPermission('billing.view');
