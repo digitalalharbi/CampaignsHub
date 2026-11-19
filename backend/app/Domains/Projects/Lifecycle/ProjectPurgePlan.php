@@ -101,6 +101,9 @@ final class ProjectPurgePlan
         'commerce_customers' => self::PURGE,
         'commerce_products' => self::PURGE,
         'short_links' => self::PURGE,
+        // ANALYTICS-DATA-001 — an influencer's project link and the stored heavy reads of the project.
+        'influencer_project_links' => self::PURGE,
+        'analytics_snapshots' => self::PURGE,
         'lead_form_submissions' => self::PURGE,
         'lead_forms' => self::PURGE,
         // Notifications v2 working state of the project (RELEASE-INTEGRATION): unsent outbox rows and held reviews about a purged

@@ -182,7 +182,7 @@ final class Ga4SiteAnalytics
         return 'other_paid';
     }
 
-    private function property(string $tenantId, string $projectId): ?ExternalAccount
+    public function property(string $tenantId, string $projectId): ?ExternalAccount
     {
         $accountId = ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)->where('project_id', $projectId)

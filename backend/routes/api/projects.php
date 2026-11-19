@@ -7,6 +7,8 @@ use App\Domains\Agents\Http\Controllers\AgentAutonomyController;
 use App\Domains\Agents\Http\Controllers\AgentChatController;
 use App\Domains\Agents\Http\Controllers\AgentRoutinesController;
 use App\Domains\Agents\Http\Controllers\AgentRulesController;
+use App\Domains\Analytics\Http\Controllers\AnalyticsReadController;
+use App\Domains\Analytics\Http\Controllers\InfluencerLinkController;
 use App\Domains\Automation\Http\Controllers\AutomationRulesController;
 use App\Domains\Branding\Http\Controllers\ScopedLogoController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
@@ -333,6 +335,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('measurement/store', [SiteAnalyticsController::class, 'store'])->middleware('project.can:analytics.view')->name('measurement.store');
     Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
     Route::get('measurement/attribution', [SiteAnalyticsController::class, 'attribution'])->middleware('project.can:analytics.view')->name('measurement.attribution');
+    /*
+     * ANALYTICS-DATA-001 — the analytics sections of this project, read-only, from the one service layer the MCP server
+     * also calls: site (GA4), store, influencers, attribution. Sales-bearing sections need the store capability.
+     */
+    Route::get('analytics/binding', [AnalyticsReadController::class, 'binding'])->middleware('project.can:analytics.view')->name('analytics.binding');
+    Route::get('analytics/site', [AnalyticsReadController::class, 'site'])->middleware('project.can:analytics.view')->name('analytics.site');
+    Route::get('analytics/store', [AnalyticsReadController::class, 'store'])->middleware('project.can:analytics.store.view')->name('analytics.store');
+    Route::get('analytics/influencers', [AnalyticsReadController::class, 'influencers'])->middleware('project.can:analytics.store.view')->name('analytics.influencers');
+    Route::get('analytics/attribution', [AnalyticsReadController::class, 'attribution'])->middleware('project.can:analytics.store.view')->name('analytics.attribution');
+    Route::get('analytics/influencer-links', [InfluencerLinkController::class, 'index'])->middleware('project.can:analytics.view')->name('analytics.influencer-links.index');
+    Route::post('analytics/influencer-links', [InfluencerLinkController::class, 'store'])->middleware(['module:smart_links', 'project.can:campaigns.manage'])->name('analytics.influencer-links.store');
     // AUDIENCE-001 — targeting / paid delivery / site events / organic, kept apart, per platform.
     Route::get('audience', [AudienceController::class, 'show'])->middleware('project.can:analytics.view')->name('audience.show');
     Route::get('measurement/gap', [SiteAnalyticsController::class, 'gap'])->middleware('project.can:analytics.view')->name('measurement.gap');

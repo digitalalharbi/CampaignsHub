@@ -215,6 +215,8 @@ Schedule::command('notifications:send-alerts')->cron('40 6,10,14,18 * * *')->wit
  * already been refunded.
  */
 Schedule::command('commerce:sync')->hourlyAt(20)->withoutOverlapping();
+// ANALYTICS-DATA-001 — pre-aggregate the heavy analytics sections every 3 hours, ten minutes after the store sync; queued, bounded.
+Schedule::command('analytics:build-snapshots')->cron('50 */3 * * *')->withoutOverlapping();
 
 /*
  * INTEG-WEBHOOK-ENGINE-001 — webhook reconciliation: read-only toward the provider, bounded, OFF by default.
