@@ -71,6 +71,9 @@ test.describe('signed in', () => {
 
     await page.goto('/agency')
     await expect(page).toHaveURL(/\/agency\/home/)
+    // Let the landing finish drawing before the next address: Firefox aborts a `goto` issued while the previous navigation is
+    // still settling (NS_BINDING_ABORTED), which says nothing about the app.
+    await expect(page.getByTestId('role-dashboard')).toBeVisible({ timeout: 30_000 })
 
     await page.goto('/agency/analytics')
     await expect(page).toHaveURL(/\/agency\/analytics/)
