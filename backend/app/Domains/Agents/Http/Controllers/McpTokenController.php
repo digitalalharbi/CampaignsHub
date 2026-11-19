@@ -37,13 +37,18 @@ final class McpTokenController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $this->user($request);
-        $data = $request->validate(['name' => ['required', 'string', 'min:2', 'max:60']]);
+        $data = $request->validate(['name' => ['required', 'string', 'min:2', 'max:60'], 'read_only' => ['sometimes', 'boolean']]);
+        // MCP-ANALYTICS-001 — least privilege: read-only unless the person explicitly asks for the proposal tool as well.
+        $readOnly = (bool) ($data['read_only'] ?? true);
         abort_if($user->tokens()->where('name', 'like', self::PREFIX.'%')->count() >= self::MAX, 422, 'too_many_tokens');
 
         // MCP-SCOPE-001 — pinned to the workspace it was made in; it answers from that workspace alone.
         $membership = app(MembershipContext::class)->membership()?->getKey();
-        $token = $user->createToken(self::PREFIX.trim($data['name']), $membership === null ? ['mcp'] : ['mcp', 'membership:'.$membership]);
-        $this->audit->log(action: 'mcp.token.created', entityType: PersonalAccessToken::class, entityId: (string) $token->accessToken->getKey(), after: ['name' => trim($data['name'])]);
+        $token = $user->createToken(
+            self::PREFIX.trim($data['name']),
+            ['mcp', ...($readOnly ? ['mcp:read'] : []), ...($membership === null ? [] : ['membership:'.$membership])],
+        );
+        $this->audit->log(action: 'mcp.token.created', entityType: PersonalAccessToken::class, entityId: (string) $token->accessToken->getKey(), after: ['name' => trim($data['name']), 'read_only' => $readOnly]);
 
         return ApiResponse::success(['token' => $token->plainTextToken, 'tokens' => $this->list($user)], 'Created.', status: 201);
     }
@@ -76,6 +81,7 @@ final class McpTokenController extends Controller
                 'name' => substr((string) $t->name, strlen(self::PREFIX)),
                 'created_at' => $t->created_at?->toIso8601String(),
                 'last_used_at' => $t->last_used_at?->toIso8601String(),
+                'read_only' => in_array('mcp:read', (array) $t->abilities, true),
             ])->values()->all();
     }
 }
