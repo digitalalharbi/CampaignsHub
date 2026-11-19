@@ -81,6 +81,7 @@ import { useUi } from '@/stores/ui'
 import { reports as countedReports } from '@/lib/counted'
 import { LivePerformanceNotice } from '@/features/disclaimers/PerformanceNotice'
 import { promptDialog } from '@/stores/dialogs'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-[var(--positive-background)] text-success',
@@ -884,7 +885,7 @@ function ReportRowView({
           and was correct; this one did not. `whitespace-nowrap` keeps the two dates on one line so
           there is no wrap to land badly in the first place.
         */}
-        <span className="tnum whitespace-nowrap" dir="ltr">{report.period.from} → {report.period.to}</span>
+        <span className="tnum whitespace-nowrap" dir="ltr"><PeriodText from={report.period.from} to={report.period.to} /></span>
       </td>
       <td className="p-3">
         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[report.status]}`}>
@@ -2243,7 +2244,7 @@ function ReportCards({
             </div>
             <span className="text-[11px] text-text-muted">{typeLabel(r.type)}</span>
             <span className="tnum text-[11px] text-text-muted" dir="ltr">
-              {r.period.from ?? '…'} → {r.period.to ?? '…'}
+              {r.period.from && r.period.to ? <PeriodText from={r.period.from} to={r.period.to} /> : '…'}
             </span>
           </button>
           {/* The same three actions as the table row, so a phone can tell them apart too. A draft is opened by its card. */}

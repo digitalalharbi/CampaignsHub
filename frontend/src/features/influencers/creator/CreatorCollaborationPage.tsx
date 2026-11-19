@@ -17,6 +17,7 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
 import { withMark } from '@/lib/money/mark'
+import { formatPeriodBounds } from '@/lib/period/formatPeriodLabel'
 
 /**
  * `/influencers/me/:id` — one agreement, from the creator's side (INFL-002).
@@ -348,7 +349,7 @@ export function CreatorCollaborationPage() {
         <div className="rounded-2xl border border-border bg-surface p-4">
           <dt className="text-[11px] font-semibold text-text-muted">{ar ? 'الفترة' : 'Period'}</dt>
           <dd className="mt-1 text-sm font-semibold text-text-primary">
-            <Num>{c.starts_on || c.ends_on ? `${c.starts_on ?? '—'} → ${c.ends_on ?? '—'}` : ar ? 'غير محدّدة' : 'Not set'}</Num>
+            <Num>{c.starts_on || c.ends_on ? formatPeriodBounds(c.starts_on, c.ends_on, ar ? 'ar' : 'en') : ar ? 'غير محدّدة' : 'Not set'}</Num>
           </dd>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4">

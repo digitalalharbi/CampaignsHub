@@ -80,8 +80,7 @@ describe('GA4 tab — instant data', () => {
     expect(screen.getByTestId('ga4-tile-sessions')).toHaveTextContent('1,000')
     const note = screen.getByTestId('refresh-note')
     expect(note).toHaveAttribute('data-state', 'previous')
-    expect(note).toHaveTextContent('2026-10-01')
-    expect(note).toHaveTextContent('2026-10-10')
+    expect(note).toHaveTextContent('Oct 1 – Oct 10, 2026')
 
     await act(async () => { for (const [url, r] of pending) r(url.includes('/measurement/store') ? store(R2, 222) : ga4(R2, 222)) })
     await waitFor(() => expect(screen.getByTestId('ga4-tile-sessions')).toHaveTextContent('222'))
@@ -156,7 +155,7 @@ describe('store funnel tab — instant data', () => {
 
     expect(screen.getByTestId('funnel-stage-orders')).toHaveTextContent('25')
     expect(screen.getByTestId('refresh-note')).toHaveAttribute('data-state', 'previous')
-    expect(screen.getByTestId('refresh-note')).toHaveTextContent('2026-10-01')
+    expect(screen.getByTestId('refresh-note')).toHaveTextContent('Oct 1 – Oct 10, 2026')
 
     await act(async () => { release(funnel(R2, 7)) })
     await waitFor(() => expect(screen.getByTestId('funnel-stage-orders')).toHaveTextContent('7'))

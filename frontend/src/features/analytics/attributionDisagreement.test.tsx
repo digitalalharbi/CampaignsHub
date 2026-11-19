@@ -26,7 +26,7 @@ describe('AttributionDisagreementView', () => {
   it('shows one platform at a time, names where its claim ran furthest ahead, and gives no ratio where the store confirmed nothing', () => {
     renderWithProviders(<AttributionDisagreementView data={data} ar={false} />)
 
-    expect(screen.getByTestId('disagreement-widest')).toHaveTextContent('2026-09-19 – 2026-09-25')
+    expect(screen.getByTestId('disagreement-widest')).toHaveTextContent('Sep 19 – Sep 25, 2026')
     expect(screen.getByTestId('disagreement-table-meta')).toHaveTextContent('+4')
     expect(screen.getByTestId('disagreement-table-meta')).toHaveTextContent('3×')
 

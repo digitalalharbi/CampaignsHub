@@ -18,6 +18,7 @@ import { OtpField } from '@/features/auth/OtpField'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * Where an applicant stands, at every point before they have an account (SIGNUP-002).
@@ -82,7 +83,7 @@ const COPY = {
     awaitingProvider: 'No delivery provider is configured yet (awaiting credentials), so the message was not actually sent. Use the dev button below for now.',
     codeSent: 'We sent a verification code by SMS to your mobile number.',
     linkSent: 'We sent the confirmation link to your email address.',
-    discounted: (percent: number, from: string, to: string) => `Approved with ${percent}% off the first period: ${from} → ${to}. The account activates once the remainder is confirmed.`,
+    discounted: (percent: number, from: string, to: string) => `Approved with ${percent}% off the first period: ${formatPeriodRange(from, to, 'en')}. The account activates once the remainder is confirmed.`,
     complimentary: 'Approved with direct entry and no payment. Your account is active with no end date, and nothing was charged.',
     waived: (date: string, renewal: string) => `Approved with the first period's fee waived, and your account is active. Nothing was charged. The waiver ends on ${date}, then the subscription is due at ${renewal}.`,
     trial: (date: string, renewal: string) => `Your account is active on a trial ending ${date}. Nothing is charged automatically, and after it ${renewal} is due.`,

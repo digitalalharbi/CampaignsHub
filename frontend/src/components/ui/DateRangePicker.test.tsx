@@ -121,7 +121,7 @@ describe('the period picker', () => {
 
   it('opens a shared link on the same days', () => {
     renderWithProviders(<Pages />, { locale: 'ar', route: '/agency/reports?from=2026-09-03&to=2026-09-09&compare=custom&cfrom=2026-08-01&cto=2026-08-07' })
-    expect(screen.getByTestId('date-range-summary')).toHaveTextContent('مخصص: 3 سبتمبر – 9 سبتمبر 2026')
+    expect(screen.getByTestId('date-range-summary')).toHaveTextContent('3 سبتمبر – 9 سبتمبر 2026')
     expect(screen.getByTestId('date-range-compare-summary')).toHaveTextContent('1 أغسطس – 7 أغسطس 2026')
   })
 
@@ -241,7 +241,7 @@ describe('the period picker', () => {
 
   it('speaks English when the page does', () => {
     renderWithProviders(<Pages />, { locale: 'en' })
-    expect(screen.getByTestId('date-range-summary')).toHaveTextContent('Last 7 days: 8 Nov – 14 Nov 2026')
+    expect(screen.getByTestId('date-range-summary')).toHaveTextContent('Last 7 days: Nov 8 – Nov 14, 2026')
   })
 })
 

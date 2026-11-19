@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import type { Locale } from '@/stores/ui'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * FUNNEL-ANALYTICAL-PATTERN-001 — the pacing table, read back in the funnel's own shape.
@@ -134,8 +135,8 @@ export function BudgetReading({ reading, locale }: { reading: BudgetExplanationP
               {reading.context && (
                 <p className="text-xs text-text-secondary">
                   {ar
-                    ? `على ${reading.context.lines} خط ميزانية، بين ${reading.context.from} و${reading.context.to}.`
-                    : `Across ${reading.context.lines} budget lines, ${reading.context.from} to ${reading.context.to}.`}
+                    ? `على ${reading.context.lines} خط ميزانية، للفترة ${formatPeriodRange(reading.context.from, reading.context.to, 'ar')}.`
+                    : `Across ${reading.context.lines} budget lines, ${formatPeriodRange(reading.context.from, reading.context.to, 'en')}.`}
                 </p>
               )}
               {reading.explanation && (

@@ -12,6 +12,7 @@ import { fmtDateTime } from '@/lib/datetime'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { useUi } from '@/stores/ui'
 import { syncStatusMeaning } from '@/lib/syncStatus'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * CAMPDET-010 — the depth sections that were missing from the campaign detail page: who the campaign
@@ -246,7 +247,7 @@ export function CampaignSyncLogTab({ campaign, projectId }: { campaign: UnifiedC
                     )}
                   </span>
                   <span className="tnum text-xs text-text-muted">
-                    {r.window_start} → {r.window_end}
+                    <PeriodText from={r.window_start} to={r.window_end} />
                   </span>
                 </div>
 

@@ -63,6 +63,7 @@ import { RelatedEntitiesPanel } from './RelatedEntitiesPanel'
 import { CampaignWriteControl } from './CampaignWriteControl'
 import { CampaignControlPanel } from './CampaignControlPanel'
 import { useProject } from '@/stores/project'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 const TAB_KEYS = [
   // OWNER 2026-11-19 — the reading tabs first (what happened, where, with which content, for whom), the operating ones last.
@@ -318,7 +319,7 @@ export function CampaignDetailPage() {
       {/* Header facts grid — campaign-scoped context. */}
         <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-border pt-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
           <HeaderFact label={t('period_label')}>
-            <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
+            <span className="tnum text-xs">{c.starts_on || c.ends_on ? <PeriodText from={c.starts_on} to={c.ends_on} /> : '—'}</span>
           </HeaderFact>
           <HeaderFact label={t('budget_label')}>
             {/* FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own. */}{c.total_budget !== null && c.budget_fx ? <FxAmount c={c.budget_fx} ar={locale === 'ar'} showOriginal testId="campaign-detail-budget" /> : <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>}
@@ -371,7 +372,7 @@ export function CampaignDetailPage() {
                   {/* FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own. */}{c.total_budget !== null && c.budget_fx ? <FxAmount c={c.budget_fx} ar={locale === 'ar'} showOriginal testId="campaign-detail-budget" /> : <span className="tnum">{moneyExact(c.total_budget, c.budget_currency)}</span>}
                 </Row>
                 <Row label={t('period_label')}>
-                  <span className="tnum text-xs">{c.starts_on || c.ends_on ? `${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}` : '—'}</span>
+                  <span className="tnum text-xs">{c.starts_on || c.ends_on ? <PeriodText from={c.starts_on} to={c.ends_on} /> : '—'}</span>
                 </Row>
                 <Row label={t('linked_count')}><Badge tone="info">{platforms.length}</Badge></Row>
               </div>

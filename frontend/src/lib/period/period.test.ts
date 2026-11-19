@@ -1,6 +1,7 @@
+import { formatPeriodRange } from './formatPeriodLabel'
 import { describe, expect, it } from 'vitest'
 import {
-  addMonths, formatSpan, matchPreset, percentChange, presetPeriod, resolveComparison, riyadhToday, spanLength, weekday,
+  addMonths, matchPreset, percentChange, presetPeriod, resolveComparison, riyadhToday, spanLength, weekday,
   type PresetKey,
 } from './periodMath'
 import {
@@ -76,8 +77,8 @@ describe('comparison', () => {
 })
 
 describe('labels', () => {
-  it('states the dates in clear Arabic with Latin digits', () => expect(formatSpan({ from: '2026-10-16', to: '2026-11-14' }, true)).toBe('16 أكتوبر – 14 نوفمبر 2026'))
-  it('names both years when they differ', () => expect(formatSpan({ from: '2025-12-20', to: '2026-01-10' }, true)).toBe('20 ديسمبر 2025 – 10 يناير 2026'))
+  it('states the dates in clear Arabic with Latin digits', () => expect(formatPeriodRange('2026-10-16', '2026-11-14', 'ar')).toBe('16 أكتوبر – 14 نوفمبر 2026'))
+  it('names both years when they differ', () => expect(formatPeriodRange('2025-12-20', '2026-01-10', 'ar')).toBe('20 ديسمبر 2025 – 10 يناير 2026'))
 })
 
 describe('the URL carries the period', () => {

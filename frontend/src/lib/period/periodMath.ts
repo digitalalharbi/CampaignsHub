@@ -33,7 +33,7 @@ export type PresetKey =
   | 'today' | 'yesterday' | 'today_yesterday'
   | 'last_7' | 'last_14' | 'last_28' | 'last_30' | 'last_90'
   | 'this_week' | 'last_week' | 'this_month' | 'last_month'
-  | 'last_3m' | 'last_6m' | 'last_12m' | 'ytd' | 'lifetime'
+  | 'last_3m' | 'last_6m' | 'last_12m' | 'ytd' | 'this_year' | 'lifetime'
 
 export type PeriodKey = PresetKey | 'custom'
 
@@ -73,6 +73,7 @@ export const PRESETS: ReadonlyArray<{ key: PresetKey; ar: string; en: string; in
   { key: 'last_6m', ar: 'آخر 6 أشهر', en: 'Last 6 months', includesToday: false },
   { key: 'last_12m', ar: 'آخر 12 شهر', en: 'Last 12 months', includesToday: false },
   { key: 'ytd', ar: 'من بداية السنة', en: 'Year to date', includesToday: false },
+  { key: 'this_year', ar: 'السنة الحالية', en: 'This year', includesToday: true },
   { key: 'lifetime', ar: 'طوال المدة', en: 'All time', includesToday: false },
 ]
 
@@ -184,6 +185,7 @@ export function resolvePreset(key: PresetKey, ctx: ResolveContext): DateSpan {
       // On 1 January there is no complete day of the new year: show today alone rather than last year.
       return { from, to: y < from ? t : y }
     }
+    case 'this_year': return { from: `${t.slice(0, 4)}-01-01`, to: t }
     case 'lifetime': {
       const from = ctx.earliest && isValidYmd(ctx.earliest) && ctx.earliest <= y ? ctx.earliest : LIFETIME_FLOOR
       return { from, to: y }
@@ -240,36 +242,25 @@ export function percentChange(current: number | null | undefined, previous: numb
   return ((current - previous) / Math.abs(previous)) * 100
 }
 
-/** «16 أكتوبر 2026» / «16 Oct 2026». Latin digits, Gregorian, no Intl — identical in every engine. */
+/**
+ * One date: «16 أكتوبر 2026» / «Oct 16, 2026». Latin digits, Gregorian, no Intl — identical in every engine.
+ * Single dates only; a period is ALWAYS written by `formatPeriodLabel` (./formatPeriodLabel.ts).
+ */
 export function formatDay(s: string, ar: boolean, withYear = true): string {
   const p = parseYmd(s)
   if (!p) return s
-  const month = (ar ? MONTHS_AR : MONTHS_EN)[p.m - 1]
-  const short = ar ? month : month.slice(0, 3)
+  if (ar) return `${p.d} ${MONTHS_AR[p.m - 1]}${withYear ? ` ${p.y}` : ''}`
+  const short = MONTHS_EN[p.m - 1].slice(0, 3)
 
-  return `${p.d} ${short}${withYear ? ` ${p.y}` : ''}`
+  return `${short} ${p.d}${withYear ? `, ${p.y}` : ''}`
 }
 
-/** «16 أكتوبر – 14 نوفمبر 2026»; the year is stated on each end only when the two differ. */
-export function formatSpan(span: DateSpan, ar: boolean): string {
-  if (span.from === span.to) return formatDay(span.from, ar)
-  const a = parseYmd(span.from); const b = parseYmd(span.to)
-  if (!a || !b) return `${span.from} – ${span.to}`
-  const sameYear = a.y === b.y
-
-  return `${formatDay(span.from, ar, !sameYear)} – ${formatDay(span.to, ar)}`
-}
-
+/** What a preset is called, exactly as the Owner's format names it («اليوم (جاري)» keeps its note). */
 export function presetLabel(key: PeriodKey, ar: boolean): string {
   if (key === 'custom') return ar ? 'مخصص' : 'Custom'
   const p = PRESETS.find((x) => x.key === key)
 
-  return p ? (ar ? p.ar.replace(' (جاري)', '') : p.en.replace(' (in progress)', '')) : ''
-}
-
-/** The button's text: «آخر 30 يوم: 16 أكتوبر – 14 نوفمبر 2026». */
-export function periodSummary(period: Period, ar: boolean): string {
-  return `${presetLabel(period.key, ar)}: ${formatSpan(period, ar)}`
+  return p ? (ar ? p.ar : p.en) : ''
 }
 
 export const COMPARE_LABEL: Record<Exclude<CompareMode, 'none'>, { ar: string; en: string }> = {

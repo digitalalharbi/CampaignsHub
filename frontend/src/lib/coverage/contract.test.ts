@@ -122,7 +122,7 @@ describe('whether two windows may be compared', () => {
   it('refuses when the previous window holds no rows, and says so with its dates', () => {
     const s = { previous_rows_in_scope: false, previous_range: { from: '2026-08-12', to: '2026-09-10' }, current: { coverage: complete }, previous: { coverage: complete } }
     expect(comparableWindows(s)).toBe(false)
-    expect(windowsUnlikeNote(s, false)).toBe('The previous period (2026-08-12 → 2026-09-10) holds no data, so there is nothing for this one to be measured against.')
+    expect(windowsUnlikeNote(s, false)).toBe('The previous period (Aug 12 – Sep 10, 2026) holds no data, so there is nothing for this one to be measured against.')
   })
 
   it('refuses when the current window is truncated, naming who stopped and through when', () => {

@@ -1,0 +1,17 @@
+{
+  "_comment": "Shared by frontend formatPeriodLabel.test.ts and backend PeriodLabelTest.php: the Owner's approved examples (order 2026-11-19), today = 2026-11-19 (Riyadh). Changing a row changes both languages' tests.",
+  "today": "2026-11-19",
+  "cases": [
+    { "key": "last_7", "from": "2026-11-12", "to": "2026-11-18", "ar": "آخر 7 أيام: 12 نوفمبر – 18 نوفمبر 2026", "en": "Last 7 days: Nov 12 – Nov 18, 2026" },
+    { "key": "last_30", "from": "2026-10-20", "to": "2026-11-18", "ar": "آخر 30 يوم: 20 أكتوبر – 18 نوفمبر 2026", "en": "Last 30 days: Oct 20 – Nov 18, 2026" },
+    { "key": "this_month", "from": "2026-11-01", "to": "2026-11-19", "ar": "هذا الشهر: 1 نوفمبر – 19 نوفمبر 2026", "en": "This month: Nov 1 – Nov 19, 2026" },
+    { "key": "last_month", "from": "2026-10-01", "to": "2026-10-31", "ar": "الشهر الماضي: 1 أكتوبر – 31 أكتوبر 2026", "en": "Last month: Oct 1 – Oct 31, 2026" },
+    { "key": "this_week", "from": "2026-11-15", "to": "2026-11-19", "ar": "هذا الأسبوع: 15 نوفمبر – 19 نوفمبر 2026", "en": "This week: Nov 15 – Nov 19, 2026" },
+    { "key": "yesterday", "from": "2026-11-18", "to": "2026-11-18", "ar": "أمس: 18 نوفمبر 2026", "en": "Yesterday: Nov 18, 2026" },
+    { "key": "today", "from": "2026-11-19", "to": "2026-11-19", "ar": "اليوم (جاري): 19 نوفمبر 2026", "en": "Today (in progress): Nov 19, 2026" },
+    { "key": "this_year", "from": "2026-01-01", "to": "2026-11-19", "ar": "السنة الحالية: 1 يناير – 19 نوفمبر 2026", "en": "This year: Jan 1 – Nov 19, 2026" },
+    { "key": "custom", "from": "2026-11-03", "to": "2026-11-10", "ar": "3 نوفمبر – 10 نوفمبر 2026", "en": "Nov 3 – Nov 10, 2026" },
+    { "key": "custom", "from": "2025-12-15", "to": "2026-01-14", "ar": "15 ديسمبر 2025 – 14 يناير 2026", "en": "Dec 15, 2025 – Jan 14, 2026" },
+    { "key": "custom", "from": "2026-11-10", "to": "2026-11-10", "ar": "10 نوفمبر 2026", "en": "Nov 10, 2026" }
+  ]
+}

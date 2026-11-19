@@ -20,6 +20,7 @@ import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/ca
 import { MetricTable } from '@/components/ui/MetricTable'
 import { creativeMoney } from './creativeMoney'
 import { Num } from '@/components/ui/Num'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * §15.6 — one creative, on its own page.
@@ -572,8 +573,8 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           <Fact k={t.sourceUpdated} v={creative.freshness.source_updated_at?.slice(0, 16).replace('T', ' ') ?? t.notProvided} block ltr />
           <Fact k={t.currency} v={data.currency ?? t.notProvided} block ltr />
           <Fact k={t.timezone} v={data.timezone ?? t.notProvided} block ltr />
-          <Fact k={t.period} v={`${data.period.from} → ${data.period.to}`} block ltr />
-          <Fact k={t.previousPeriod} v={`${data.previous_period.from} → ${data.previous_period.to}`} block ltr />
+          <Fact k={t.period} v={formatPeriodRange(data.period.from, data.period.to, ar ? 'ar' : 'en')} block ltr />
+          <Fact k={t.previousPeriod} v={formatPeriodRange(data.previous_period.from, data.previous_period.to, ar ? 'ar' : 'en')} block ltr />
         </dl>
         <p className="mt-3 text-xs text-text-secondary">
           {t.attribution}: {ar ? data.attribution.note_ar : data.attribution.note_en}

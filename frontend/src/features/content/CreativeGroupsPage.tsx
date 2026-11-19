@@ -22,6 +22,7 @@ import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { Num } from '@/components/ui/Num'
 import { localStill } from '@/features/content/providerMedia'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * §15.8 and §15.13 — the same asset across platforms, as one thing.
@@ -432,7 +433,7 @@ function GroupDetail({
               {group.confirmed ? t.confirmed : t.unconfirmed}
               {' · '}
               <span dir="ltr">
-                {group.period.from} → {group.period.to}
+                <PeriodText from={group.period.from} to={group.period.to} />
               </span>
             </p>
           </div>

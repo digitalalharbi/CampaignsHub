@@ -88,10 +88,10 @@ describe('a finding on the dashboard', () => {
     expect(collapsed, 'the detail and action are not inside a collapsed region').not.toBeNull()
     expect(collapsed?.textContent ?? '').toContain('Click-through fell')
 
-    expect(card.textContent).toContain('2026-09-09')
-    expect(card.textContent).toContain('2026-08-10')
+    expect(card.textContent).toContain('Sep 9 – Oct 8, 2026')
+    expect(card.textContent).toContain('Aug 10 – Sep 8, 2026')
     /* …and none of the qualification sits inside that region. */
-    expect(collapsed?.textContent ?? '').not.toContain('2026-09-09')
-    expect(collapsed?.textContent ?? '').not.toContain('2026-08-10')
+    expect(collapsed?.textContent ?? '').not.toContain('Sep 9 – Oct 8, 2026')
+    expect(collapsed?.textContent ?? '').not.toContain('Aug 10 – Sep 8, 2026')
   })
 })

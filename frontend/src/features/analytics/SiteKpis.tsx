@@ -2,6 +2,7 @@ import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { formatFixed } from '@/lib/numerals'
 import { money, num, percent } from './format'
 import { KpiSparkline } from './charts'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * GA4-BOUNCE-AOV-KPIS-001 — the site KPIs with the previous period, the change, and where each came from.
@@ -75,7 +76,7 @@ export function SiteKpis({ kpis, previous, ar }: { kpis: SiteKpi[]; previous: { 
         })}
       </StatGrid>
       <details className="text-xs text-text-secondary" data-testid="site-kpi-definitions">
-        <summary className="cursor-pointer font-semibold">{ar ? `التعريفات والمصدر (مقارنة مع ${previous.from} → ${previous.to})` : `Definitions and source (compared with ${previous.from} → ${previous.to})`}</summary>
+        <summary className="cursor-pointer font-semibold">{ar ? `التعريفات والمصدر (مقارنة مع ${formatPeriodRange(previous.from, previous.to, 'ar')})` : `Definitions and source (compared with ${formatPeriodRange(previous.from, previous.to, 'en')})`}</summary>
         <ul className="mt-2 space-y-1.5">
           {defined.map((k) => (
             <li key={k.key} data-testid={`site-kpi-def-${k.key}`}>

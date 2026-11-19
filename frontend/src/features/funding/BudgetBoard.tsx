@@ -7,6 +7,7 @@ import type { BudgetRow } from './fundingApi'
 import { L, MODE, PLAN_DIFF, STATUS, TONE_BAR } from './labels'
 import { Money, moneyNumber } from './money'
 import { withMark } from '@/lib/money/mark'
+import { formatPeriodBounds } from '@/lib/period/formatPeriodLabel'
 
 type Lang = { ar: string; en: string }
 
@@ -15,20 +16,19 @@ export function Sar({ n, ar: _ar, className = '' }: { n: number | null | undefin
   return <Money n={n} currency="SAR" className={className} />
 }
 
-/** «MM-DD → MM-DD» in Latin digits; an open end is «∞». The full dates are in the tooltip. */
+/** The budget line's days in the Owner's one period format (an open end reads «…»). */
 export function PeriodChip({ start, end, stated, ar }: { start: string | null; end: string | null; stated?: boolean; ar: boolean }) {
   if (start === null) return <span className="text-xs text-text-muted">—</span>
-  const short = (d: string) => d.slice(2).replaceAll('-', '/')
-  const full = `${start} → ${end ?? (ar ? L.open.ar : L.open.en)}`
+  const full = formatPeriodBounds(start, end, ar ? 'ar' : 'en')
 
   return (
     <span
-      dir="ltr"
+      dir={ar ? 'rtl' : 'ltr'}
       title={full}
       data-testid="period-chip"
       className={`tnum inline-flex items-center gap-1 whitespace-nowrap rounded-[var(--radius-pill)] border px-2 py-0.5 text-xs font-semibold ${stated ? 'border-brand-600/50 text-brand-700' : 'border-border text-text-secondary'}`}
     >
-      {short(start)} <span aria-hidden>→</span> {end ? short(end) : '∞'}
+      {full}
     </span>
   )
 }

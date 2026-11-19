@@ -13,6 +13,7 @@ import { Num } from '@/components/ui/Num'
 import { usePortalBase } from '@/app/portalPath'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * EXECUTIVE-OPS-DASHBOARD-001 — one project view that joins paid media, lead generation and team
@@ -115,7 +116,7 @@ export function ExecutiveOpsPage() {
         </label>
         {d && (
           <span className="text-text-muted text-xs" data-testid="executive-window" dir="ltr">
-            {d.window.from} → {d.window.to}
+            <PeriodText from={d.window.from} to={d.window.to} />
           </span>
         )}
       </div>

@@ -71,7 +71,7 @@ describe('the budgets board', () => {
     renderWithProviders(<BudgetsPage />, { locale: 'ar' })
 
     const item = await screen.findByTestId('budget-row-p1')
-    expect(within(item).getByTestId('period-chip')).toHaveAttribute('title', '2026-11-06 → 2026-12-05')
+    expect(within(item).getByTestId('period-chip')).toHaveAttribute('title', '6 نوفمبر – 5 ديسمبر 2026')
     expect(within(item).getByTestId('used-percent')).toHaveTextContent('74%')
     expect(within(item).getByTestId('split-snapchat').getAttribute('title')).toMatch(/5,333 \$/)
     expect(within(item).getByTestId('split-tiktok').getAttribute('title')).toMatch(/2,856 \$/)
@@ -82,7 +82,7 @@ describe('the budgets board', () => {
     renderWithProviders(<BudgetsPage />, { locale: 'ar' })
 
     const item = await screen.findByTestId('budget-row-p1')
-    expect(within(item).getByTestId('period-chip')).toHaveTextContent('∞')
+    expect(within(item).getByTestId('period-chip')).toHaveTextContent('1 أكتوبر 2026 – …')
     expect(within(item).getByTestId('split-snapchat').getAttribute('title')).toMatch(/100 € · بدون سعر صرف/)
   })
 

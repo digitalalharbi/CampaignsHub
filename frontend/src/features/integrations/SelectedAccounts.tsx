@@ -17,6 +17,7 @@ import {
 } from './api'
 import { accountHealthBadgeTone, accountHealthLabel } from './accountHealth'
 import { CopyId } from '@/components/ui/CopyId'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * INTEGRATIONS-CENTRE-001 — the accounts that were CHOSEN, and nothing else.
@@ -362,7 +363,7 @@ function LogsDialog({
                     </span>
                   )}
                   <span className="text-text-secondary">
-                    {c.run_window}: {run.window_start} → {run.window_end}
+                    {c.run_window}: <PeriodText from={run.window_start} to={run.window_end} />
                   </span>
                 </div>
 

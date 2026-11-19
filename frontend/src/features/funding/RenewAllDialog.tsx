@@ -7,6 +7,7 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { useUi } from '@/stores/ui'
 import { useApplyRenew, useRenewPreview, type RenewPreview } from './fundingApi'
 import { currencyMark } from './money'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * «جدّد كل الميزانيات للشهر القادم» — a PREVIEW first. Nothing is created until the person has seen each amount (editable) and
@@ -99,7 +100,7 @@ function PreviewForm({ data, ar, onClose }: { data: RenewPreview; ar: boolean; o
         <section className="flex flex-col gap-1.5">
           <h3 className="text-xs font-bold text-text-muted">{ar ? 'حدود الإنفاق' : 'Spend limits'}</h3>
           <ul className="flex flex-col gap-1.5">
-            {todo.limits.map((l) => row(`l:${l.id}`, l.scope === 'platform' && l.scope_id ? providerLabel(l.scope_id, locale) : (ar ? 'حد' : 'Limit'), `${l.starts_on} → ${l.ends_on}`, l.currency))}
+            {todo.limits.map((l) => row(`l:${l.id}`, l.scope === 'platform' && l.scope_id ? providerLabel(l.scope_id, locale) : (ar ? 'حد' : 'Limit'), formatPeriodRange(l.starts_on, l.ends_on, ar ? 'ar' : 'en'), l.currency))}
           </ul>
         </section>
       )}

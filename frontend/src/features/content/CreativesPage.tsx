@@ -812,7 +812,7 @@ export function CreativesPage() {
         purpose={t.subtitle}
         meta={
           <>
-            <PeriodLabel from={from} to={to} testId="content-period" />
+            <PeriodLabel inferName from={from} to={to} testId="content-period" />
             <DataFreshness
               lastSyncAt={freshestAt}
               ar={ar}

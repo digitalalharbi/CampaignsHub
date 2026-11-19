@@ -3,6 +3,7 @@ import { num } from './format'
 import type { AttributionDisagreement } from './api'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { providerLabel } from '@/features/campaigns/labels'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — when each platform's claim parted from the store.
@@ -40,7 +41,7 @@ export function AttributionDisagreementView({ data, ar }: { data: AttributionDis
 
   const rows = data.platforms
   const active = rows.find((r) => r.provider === chosen) ?? rows[0]
-  const span = (p: { from: string; to: string }) => (p.from === p.to ? p.from : `${p.from} – ${p.to}`)
+  const span = (p: { from: string; to: string }) => formatPeriodRange(p.from, p.to, 'en')
 
   return (
     <section data-testid="attribution-disagreement" className="min-w-0 border-t border-border pt-4">
