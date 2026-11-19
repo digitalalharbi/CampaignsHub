@@ -194,18 +194,93 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
       <span className="col-span-2 min-w-0 lg:col-span-1"><PlatformSplit items={row.by_platform} ar={ar} /></span>
 
       <span className="col-span-2 flex flex-wrap items-center justify-self-start gap-1 lg:col-span-1 lg:justify-self-end">
-        <Badge tone={st.tone} className="whitespace-nowrap">{ar ? st.ar : st.en}</Badge>
+        <span title={ar ? STATUS_WHY[row.status].ar : STATUS_WHY[row.status].en} data-testid="row-status"><Badge tone={st.tone} className="whitespace-nowrap">{ar ? st.ar : st.en}</Badge></span>
+        <PaceNote row={row} ar={ar} />
         {/* PROJECT-LIFECYCLE-001 §7 — what the spend excludes (no rate) and the old rate used, named; the drawer shows the full statement. */}
         {row.fx && row.fx.excluded.length > 0 && (
           <span className="max-w-[16rem] truncate text-[11px] text-warning" title={(ar ? row.fx.statement : (row.fx.statement_en ?? row.fx.statement)) ?? undefined} data-testid="row-fx-excluded">
             {row.fx.excluded.map((e) => `${e.currency ?? '?'} · ${e.account_name}`).join('، ')}
           </span>
         )}
-        {row.fx && row.fx.stale.length > 0 && row.fx.stale_label && <span className="whitespace-nowrap text-[11px] text-warning" data-testid="row-fx-stale"><bdi>{ar ? row.fx.stale_label : (row.fx.stale[0]?.label_en ?? row.fx.stale_label)}</bdi></span>}
         {off && <Badge tone="warning" className="whitespace-nowrap" data-testid="plan-diff-chip">{ar ? PLAN_DIFF.ar : PLAN_DIFF.en}</Badge>}
         <FreshnessChip freshness={row.freshness} testid="row-freshness" />
       </span>
     </button>
+  )
+}
+
+/**
+ * BUDGET-LOGIC-001 — Owner 2026-11-19: the board says WHY a budget is in its class, not only the class. Each status reads its
+ * rule (the same rule the server applies in `FundingNotifier`), shown on the badge.
+ */
+export const STATUS_WHY: Record<BudgetRow['status'], Lang> = {
+  ok: { ar: 'المتبقي فوق حد التنبيه ويكفي أكثر من 7 أيام بسرعة الصرف الحالية', en: 'Remaining is above the alert floor and lasts over 7 days at the current pace' },
+  low: { ar: 'المتبقي تحت حد التنبيه أو يخلص خلال أقل من 7 أيام بسرعة الصرف الحالية', en: 'Remaining is under the alert floor or runs out within 7 days at the current pace' },
+  over: { ar: 'الإنفاق تجاوز الميزانية المعتمدة', en: 'Spend is above the approved budget' },
+  incomplete: { ar: 'جزء من الإنفاق بعملة بلا سعر صرف، فالمتبقي غير مكتمل', en: 'Part of the spend has no exchange rate, so the remaining is incomplete' },
+  no_budget: { ar: 'المشروع ينفق ولا توجد له ميزانية معتمدة', en: 'The project spends with no approved budget' },
+  direct: { ar: 'العميل يدفع للمنصة مباشرة؛ الإنفاق للمتابعة فقط', en: 'The client pays the platform directly; spend is tracked only' },
+  unset: { ar: 'طريقة الدفع لم تُحدد بعد', en: 'The payment method is not set yet' },
+  void: { ar: 'ميزانية محذوفة', en: 'A deleted budget' },
+  credit: { ar: 'بالأجل: يُفوتر الإنفاق بعده، ولم يقترب من السقف', en: 'On credit: spend is invoiced afterwards and is not near the ceiling' },
+  credit_near: { ar: 'بالأجل: الإنفاق قريب من السقف', en: 'On credit: spend is near the ceiling' },
+  credit_over: { ar: 'بالأجل: الإنفاق تجاوز السقف', en: 'On credit: spend is above the ceiling' },
+}
+
+/** The order the classes are read in: what needs action first. */
+export const STATUS_ORDER: BudgetRow['status'][] = ['over', 'credit_over', 'low', 'credit_near', 'incomplete', 'no_budget', 'unset', 'ok', 'credit', 'direct', 'void']
+
+/**
+ * BUDGET-LOGIC-001 — the pace behind the class, under the badge: the day the balance runs out at the last 3 days' rate, and
+ * that rate. Warning-coloured when it runs out before the budget's own period ends. Nothing is shown without a real pace.
+ */
+export function PaceNote({ row, ar }: { row: BudgetRow; ar: boolean }) {
+  if (row.payment_mode === 'credit' || row.status === 'void' || row.remaining === null || row.remaining <= 0) return null
+  const pace = row.pace_3d ?? row.pace_per_day
+  if (pace === null || pace === undefined || pace <= 0) return null
+  const early = !!row.run_out_date && !!row.period_end && row.run_out_date < row.period_end
+  const when = row.run_out_date
+    ? <>{ar ? 'يخلص' : 'Runs out'} <bdi dir="ltr" className="tnum">{row.run_out_date.slice(5).replace('-', '/')}</bdi></>
+    : row.days_left !== null ? <>{ar ? `يكفي ${row.days_left} يوم` : `Lasts ${row.days_left} days`}</> : null
+
+  return (
+    <span
+      className={`whitespace-nowrap text-[11px] font-semibold ${early ? 'text-warning' : 'text-text-muted'}`}
+      data-testid="row-pace"
+      data-early={early ? 'true' : undefined}
+      title={ar ? 'بمعدل صرف آخر 3 أيام مكتملة' : 'At the last 3 full days\' pace'}
+    >
+      {when}{when && ' · '}<Money n={pace} currency="SAR" />{ar ? '/يوم' : '/day'}
+    </span>
+  )
+}
+
+/** BUDGET-LOGIC-001 — the classes on the board with their counts; pressing one shows only its budgets. */
+export function ClassStrip({ rows, value, onChange, ar }: { rows: BudgetRow[]; value: BudgetRow['status'] | null; onChange: (v: BudgetRow['status'] | null) => void; ar: boolean }) {
+  const counts = new Map<BudgetRow['status'], number>()
+  for (const r of rows) counts.set(r.status, (counts.get(r.status) ?? 0) + 1)
+  const present = STATUS_ORDER.filter((s) => counts.has(s))
+  if (present.length < 2) return null
+  const chip = (key: string, label: string, n: number, active: boolean, onClick: () => void, title?: string, tone?: string) => (
+    <button
+      key={key}
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={title}
+      data-testid={`budget-class-${key}`}
+      className={`inline-flex items-center gap-1 whitespace-nowrap rounded-[var(--radius-pill)] border px-2.5 py-0.5 text-xs font-bold transition ${active ? 'border-brand-600 bg-brand-600/10 text-text-primary' : 'border-border text-text-secondary hover:border-border-strong'}`}
+    >
+      {tone && <span className={`h-1.5 w-1.5 rounded-full ${tone}`} aria-hidden />}
+      {label} <bdi dir="ltr" className="tnum">{n}</bdi>
+    </button>
+  )
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1" role="group" aria-label={ar ? 'تصنيف الميزانيات' : 'Budget classes'} data-testid="budget-classes">
+      {chip('all', ar ? 'الكل' : 'All', rows.length, value === null, () => onChange(null))}
+      {present.map((s) => chip(s, ar ? STATUS[s].ar : STATUS[s].en, counts.get(s) ?? 0, value === s, () => onChange(value === s ? null : s), ar ? STATUS_WHY[s].ar : STATUS_WHY[s].en, TONE_BAR[STATUS[s].tone]))}
+    </div>
   )
 }
 

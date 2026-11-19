@@ -51,7 +51,6 @@ export function FxAmount({ c, ar, showOriginal = false, digits = 2, empty = '—
         </span>
       )}
       {converted && showOriginal && <span className="text-xs text-text-muted" data-testid="fx-original">(<bdi dir="ltr" className="tnum">{formatOriginal(c, digits)}</bdi>)</span>}
-      {f.stale && <StaleMark ar={ar} />}
     </span>
   )
 }
@@ -66,7 +65,6 @@ export function FxTotalAmount({ t, ar, digits = 2, testId }: { t: FxTotal | null
     <span className="inline-flex flex-wrap items-center gap-1" data-testid={testId} title={f.basis ?? undefined}>
       <bdi dir="ltr" className="tnum">{f.text}</bdi>
       {f.includesConverted && <IncludesConverted ar={ar} currencies={t.currencies} />}
-      {f.stale && <StaleMark ar={ar} label={t.stale_label ?? undefined} />}
       {(t.excluded?.length ?? 0) > 0 && <ExcludedMark ar={ar} statement={ar ? t.statement : (t.statement_en ?? t.statement)} />}
     </span>
   )
@@ -74,13 +72,12 @@ export function FxTotalAmount({ t, ar, digits = 2, testId }: { t: FxTotal | null
 
 /**
  * PROJECT-LIFECYCLE-001 §7 — the explicit statement beside a spend total: each part with no exchange rate, named
- * («سعر صرف غير متوفر: EUR — Account (400.00 EUR، 4 أيام) — مستبعد من الإجمالي.») with the rates link, and the old rate
- * used («سعر قديم — بتاريخ 2026-11-09»). The words are the backend's (`SpendLedger`), so every page says the same.
+ * («سعر صرف غير متوفر: EUR — Account (400.00 EUR، 4 أيام) — مستبعد من الإجمالي.») with the rates link. The words are the
+ * backend's (`SpendLedger`), so every page says the same. An old rate is used without a word to the client.
  */
 export function FxSpendNote({ note, ar, testId = 'fx-spend-note' }: { note: SpendNoteData | null | undefined; ar: boolean; testId?: string }) {
-  if (!note || (note.excluded.length === 0 && note.stale.length === 0)) return null
+  if (!note || note.excluded.length === 0) return null
   const statement = ar ? note.statement : (note.statement_en ?? note.statement)
-  const staleLabel = ar ? note.stale_label : (note.stale[0]?.label_en ?? note.stale_label)
 
   return (
     <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-warning" data-testid={testId}>
@@ -89,12 +86,6 @@ export function FxSpendNote({ note, ar, testId = 'fx-spend-note' }: { note: Spen
           <AlertTriangle size={11} aria-hidden className="mt-0.5 shrink-0" />
           <span className="min-w-0 break-words">{statement}</span>
           {note.rates_page && <a href={note.rates_page} className="shrink-0 underline">{ar ? 'أسعار الصرف' : 'Exchange rates'}</a>}
-        </span>
-      )}
-      {note.stale.length > 0 && staleLabel && (
-        <span className="inline-flex items-center gap-1" data-testid={`${testId}-stale`}>
-          <AlertTriangle size={11} aria-hidden className="shrink-0" />
-          <bdi>{staleLabel}</bdi>
         </span>
       )}
     </p>
@@ -112,15 +103,15 @@ function ExcludedMark({ ar, statement }: { ar: boolean; statement: string | null
 
 /**
  * The scope-level note beside totals read from `daily_metrics` (summary, comparison): which currencies were converted into
- * the reporting currency, a stale rate, and money withheld for want of a rate — with the rates link.
+ * the reporting currency and money withheld for want of a rate — with the rates link. An old rate is used silently
+ * (Owner 2026-11-19): the alert lives in /admin only.
  */
 export function FxCoverageNote({ fx, ar }: { fx: FxCoverage | null | undefined; ar: boolean }) {
-  if (!fx || (!fx.includes_converted && !fx.stale && fx.withheld_rows === 0)) return null
+  if (!fx || (!fx.includes_converted && fx.withheld_rows === 0)) return null
 
   return (
     <p className="flex flex-wrap items-center gap-2 text-[11px] text-text-muted" data-testid="fx-coverage-note">
       {fx.includes_converted && <IncludesConverted ar={ar} currencies={fx.currencies.filter((c) => c !== fx.reporting_currency)} />}
-      {fx.stale && <StaleMark ar={ar} withText />}
       {fx.withheld_rows > 0 && (
         <span className="inline-flex items-center gap-1 text-warning" data-testid="fx-coverage-withheld">
           <AlertTriangle size={11} aria-hidden />
@@ -137,16 +128,6 @@ function IncludesConverted({ ar, currencies }: { ar: boolean; currencies: string
     <span className="inline-flex items-center gap-0.5 rounded bg-surface-secondary px-1 text-[10px] text-text-muted" data-testid="fx-includes-converted" title={currencies.join(' · ')}>
       <ArrowLeftRight size={10} aria-hidden />
       {ar ? INCLUDES_CONVERTED.ar : INCLUDES_CONVERTED.en}
-    </span>
-  )
-}
-
-function StaleMark({ ar, withText = false, label: given }: { ar: boolean; withText?: boolean; label?: string }) {
-  const label = given ?? (ar ? 'سعر الصرف أقدم من 7 أيام' : 'Exchange rate older than 7 days')
-  return (
-    <span className="inline-flex items-center gap-0.5 text-warning" title={label} aria-label={label} data-testid="fx-stale">
-      <AlertTriangle size={11} aria-hidden />
-      {withText && <span>{label}</span>}
     </span>
   )
 }

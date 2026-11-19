@@ -1144,18 +1144,21 @@ final class CreativeAnalysisController extends Controller
             return null;
         }
 
-        $average = static function (string $key) use ($figures): ?float {
-            $values = array_values(array_filter(
-                array_map(static fn (array $f) => $f[$key] ?? null, $figures),
-                static fn ($v): bool => is_numeric($v),
-            ));
-
-            return $values === [] ? null : round(array_sum($values) / count($values), 4);
-        };
+        /*
+         * CONTENT-PEER-POOLED-001 — Owner 2026-11-19, «تحقق من البيانات 100%».
+         *
+         * The path's figure was the plain mean of every peer's own ratio. A peer with 40 impressions and 3 clicks
+         * weighed as much as one with 500,000, so on a real sales path the «average» read ROAS 13.65× and CTR 1.73%
+         * against a creative at 6.44× and 0.50% — a comparison nobody could act on. The path's figure is now the
+         * path's own ratio: pooled sums over the same peers (`totalsFor`, the rule CROSS-PLATFORM-ATTRIBUTION-DEPTH-001
+         * holds everywhere else: never a mean of ratios).
+         */
+        $pooled = $this->metrics->aggregate(array_values($figures)) ?? [];
 
         $out = ['count' => count($figures), 'path' => $path->value];
         foreach (['ctr', 'cpc', 'cpm', 'cpa', 'roas', 'view_rate', 'completion_rate'] as $key) {
-            $out[$key] = $average($key);
+            $v = $pooled[$key] ?? null;
+            $out[$key] = is_numeric($v) ? round((float) $v, 4) : null;
         }
 
         return $out;

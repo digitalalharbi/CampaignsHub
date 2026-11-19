@@ -64,7 +64,8 @@ export function AutomationPage() {
   const run = useMutation({ meta: { feedback: 'none' }, mutationFn: (id: string) => runRuleNow(p!, id), onSuccess: refresh })
   const dryRun = useMutation({ meta: { feedback: 'none' }, mutationFn: (r: AutomationRule) => dryRunRule(p!, r.id).then((d) => ({ rule: r, results: d.results })), onSuccess: setDry })
 
-  const title = ar ? 'القواعد الآلية' : 'Automated rules'
+  // NAV-TITLE-PARITY-001 — the page is called what the sidebar calls it.
+  const title = ar ? 'الأتمتة' : 'Automation'
   const purpose = ar
     ? 'قواعد تراقب الحملات على كل المنصات وتطلب التغيير وفق الوضع الذي تختاره: مراقبة، أو توصية للاعتماد، أو تنفيذ تلقائي حيث منحت الإذن.'
     : 'Rules that watch campaigns on every platform and ask for changes in the mode you choose: monitor, recommend for approval, or auto-execute where you granted it.'

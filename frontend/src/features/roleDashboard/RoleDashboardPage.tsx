@@ -98,7 +98,12 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
       {q.isLoading && <><Skeleton className="h-20" /><Skeleton className="h-64" /></>}
       {q.isError && <QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّر تحميل الرئيسية' : 'Could not load Home'} />}
       {d && <Body d={d} portal={portal} />}
-      {d?.can_watch === true && <WatchBoard portal={portal} days={days} />}
+      {/*
+        * FINANCE-HOME-SCOPE-001 — Owner 2026-11-19: the finance page shows finance only. The follow-up board is the
+        * campaigns' own performance; it belongs to the manager, project-manager and marketer pages, never to «المالية» —
+        * whoever opens it, including the workspace manager switching to that view.
+        */}
+      {d?.can_watch === true && d.view !== 'finance' && <WatchBoard portal={portal} days={days} />}
       {d?.can_money && <FinancialDisclaimer />}
       <AnalyticsPopup section={popup} days={days} onClose={() => setPopup(null)} />
     </div>

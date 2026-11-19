@@ -123,7 +123,7 @@ describe('the dashboard filter bar', () => {
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
     await screen.findByTestId('dashboard-intro')
 
-    fireEvent.change(screen.getByTestId('dashboard-objective'), { target: { value: 'sales' } })
+    fireEvent.click(screen.getByTestId('dashboard-objective-sales'))
 
     const chip = screen.getByTestId('dashboard-applied-objective:sales')
     expect(chip).toHaveTextContent('Sales')
@@ -150,13 +150,13 @@ describe('the dashboard filter bar', () => {
     renderWithProviders(<AnalyticsPage surface="analytics" />, { locale: 'en' })
     await screen.findByTestId('analytics-intro')
 
-    fireEvent.change(screen.getByTestId('analytics-objective'), { target: { value: 'sales' } })
+    fireEvent.click(screen.getByTestId('analytics-objective-sales'))
     expect(screen.getByTestId('metric-purchases')).toBeInTheDocument()
     expect(screen.getByTestId('metric-roas')).toBeInTheDocument()
     // Reach is a secondary concern for a sales campaign — folded, not deleted.
     expect(screen.queryByTestId('metric-reach')).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByTestId('analytics-objective'), { target: { value: 'awareness_engagement' } })
+    fireEvent.click(screen.getByTestId('analytics-objective-awareness_engagement'))
     expect(screen.getByTestId('metric-reach')).toBeInTheDocument()
     // …and no cost per order on money that was never meant to sell anything.
     expect(screen.queryByTestId('metric-cpa')).not.toBeInTheDocument()
@@ -217,8 +217,8 @@ describe('the dashboard filter bar', () => {
     await screen.findByTestId('dashboard-intro')
 
     const objectives = Array.from(
-      screen.getByTestId('dashboard-objective').querySelectorAll('option'),
-    ).map((o) => o.getAttribute('value'))
+      screen.getByTestId('dashboard-objective').querySelectorAll('button'),
+    ).map((o) => o.getAttribute('data-value'))
 
     expect(objectives).toEqual(['all', 'awareness_engagement', 'traffic', 'leads', 'app_promotion', 'sales'])
   })

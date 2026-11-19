@@ -136,7 +136,7 @@ test.describe('the dashboard KPI cards', () => {
      * OBJECTIVE-FILTERS-INCLUSIVE-001 — an objective no longer empties a scope: it picks the KPIs and keeps every campaign, so the
      * cards stay. A scope that really holds nothing comes from a PLATFORM the seed never ran on.
      */
-    await page.getByTestId('analytics-objective').selectOption('awareness_engagement')
+    await page.getByTestId('analytics-objective').locator(`[data-value="awareness_engagement"]`).click()
     await expect(page.getByTestId('kpi-picker-0')).toBeVisible({ timeout: 30000 })
     await expect(page.getByTestId('analytics-metrics-empty-scope')).toHaveCount(0)
 
