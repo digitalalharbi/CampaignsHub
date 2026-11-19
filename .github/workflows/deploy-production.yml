@@ -5,6 +5,15 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# CI-SPEED-002 — a RUNNING deploy is never cancelled (`cancel-in-progress: false`): the newer one waits for it.
+#
+# What GitHub does with the waiting ones: a concurrency group holds at most ONE pending run. When a third push arrives
+# while one deploy runs and one waits, the waiting one is replaced and finishes as `cancelled` without a single job
+# starting (measured 2026-11-18: db8db94e, 04dab5f4, ee3a0d27, cf99ccce, 0e079727 were all replaced this way, each
+# between 20 seconds and 39 minutes after being queued, by a later push). That is safe for what ships — every deploy builds the
+# commit it was triggered by and the latest pending one always runs, so main is what ends up live — but a
+# `cancelled` conclusion on a merge's own run is NOT a failure and NOT proof. Prove a merge with the newest
+# SUCCESSFUL deploy whose commit is that merge or a descendant of it (docs/ci/CI-SPEED-2026-11-19.md, «Deploy proof»).
 concurrency:
   group: production-deploy
   cancel-in-progress: false
