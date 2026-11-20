@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
 import type { DashboardUnit, RoleDashboard, WatchBoard } from './api'
 
@@ -35,7 +35,7 @@ const base = (over: Partial<RoleDashboard>): RoleDashboard => ({
 
 const page = (d: RoleDashboard, locale: 'ar' | 'en' = 'en') => {
   state.data = d
-  return renderWithProviders(<RoleDashboardPage portal="agency" />, { route: '/agency/home', locale })
+  return renderWithProviders(<RoleDashboardPage portal="agency" />, { route: '/agency/dashboard', locale })
 }
 
 describe('the role dashboards', () => {
@@ -44,9 +44,9 @@ describe('the role dashboards', () => {
   it('manager: figures open their pages, spend carries its status, the strip names alerts and integrations', () => {
     page(base({}))
     // ANALYTICS-POPUP-001 — a figure the board answers opens that section in a popup; the rest stay links.
-    expect(screen.getByTestId('dash-kpi-budget')).toHaveAttribute('data-opens', 'analytics:board')
+    // HOME-DOORS-001 — money opens «الميزانيات» itself; the campaigns figure still opens the board.
+    expect(screen.getByTestId('dash-kpi-budget')).toHaveAttribute('href', '/agency/budgets')
     expect(screen.getByTestId('dash-kpi-active')).toHaveAttribute('data-opens', 'analytics:board')
-    expect(screen.getByTestId('dash-kpi-budget')).not.toHaveAttribute('href')
     expect(screen.getByTestId('dash-kpi-alerts')).toHaveAttribute('href', '/agency/alerts')
     // 1500 of 3000 is 50%: green.
     expect(screen.getByTestId('dash-kpi-spend')).toHaveAttribute('data-status', 'within')
@@ -134,6 +134,22 @@ describe('the role dashboards', () => {
 })
 
 /** DASH-MANAGER-PERFORMANCE-001 — the manager reads the leading campaigns, the platforms and where the spend went. */
+describe('HOME-BUDGET-FALLBACK-001 — a project with no approved budget', () => {
+  beforeEach(() => { state.data = null; state.watch = null })
+
+  it('reads the platforms\' campaign budgets and the window\'s real spend instead of «—»', () => {
+    page(base({
+      money: { budget: null, spent: null, remaining: null, projected: null, pace: null, currency: null, currencies: 0, excluded: 1, unmeasured: 0, campaigns: 0, rows: 0,
+        platform_campaign_budgets: { budget: 960, spent: 923.26, remaining: 36.74, projected: 923.26, pace: 0.96, currency: 'USD', currencies: 1, excluded: 4, unmeasured: 0, campaigns: 6 } },
+      performance: { spend: 412, previous_spend: null, previous: null, withheld: 0, campaigns: 2, family: 'sales', results: 3, result_label: null, cost_per_result: 137, cost_label: null },
+    } as unknown as Partial<RoleDashboard>))
+    expect(screen.getByTestId('dash-kpi-budget')).toHaveTextContent('960')
+    expect(screen.getByTestId('dash-kpi-budget')).toHaveTextContent('Campaign budgets')
+    expect(screen.getByTestId('dash-kpi-spend')).toHaveTextContent('412')
+    expect(screen.getByTestId('dash-kpi-remaining')).toHaveTextContent('37')
+  })
+})
+
 describe('the manager performance panels', () => {
   beforeEach(() => { state.data = null; state.watch = null })
 
@@ -154,7 +170,10 @@ describe('the manager performance panels', () => {
     const rows = within(top).getAllByRole('row').slice(1)
     // The most results first.
     expect(rows[0]).toHaveTextContent('Weekend')
-    expect(within(top).getByRole('link', { name: 'Weekend' })).toHaveAttribute('href', '/agency/campaigns/p1/k2')
+    // HOME-DOORS-001 — a campaign opens a popup with its figures; the campaign page is one link inside it.
+    fireEvent.click(within(top).getByTestId('dash-top-open-k2'))
+    const popup = screen.getByTestId('dash-top-popup')
+    expect(within(popup).getByRole('link', { name: 'Details' })).toHaveAttribute('href', '/agency/campaigns/p1/k2')
     expect(screen.getByTestId('dash-compare-snapchat')).toHaveTextContent('3.6')
     expect(screen.getByTestId('dash-spend-share-legend')).toHaveTextContent(/6[23]%/)
   })
@@ -204,13 +223,24 @@ describe('the manager performance panels', () => {
     expect(within(screen.getByTestId('watch-best')).getByRole('link', { name: /Leads Snap/ })).toHaveAttribute('href', '/agency/campaigns/p1/k1')
     expect(screen.getByTestId('watch-best-k1')).toHaveTextContent('Snapchat')
     expect(screen.getByTestId('watch-worst-k3')).toHaveTextContent('Leads TikTok')
-    expect(screen.getAllByTestId('watch-content-best')).toHaveLength(2)
+    // HOME-CONTENT-REPORT-001 — the best content is the report's own section; the weakest keep their tiles.
+    const best = screen.getByTestId('watch-panel-content-best')
+    const cards = within(best).getAllByTestId('report-ad-card')
+    expect(cards.length).toBe(2)
     expect(screen.getAllByTestId('watch-content-worst')).toHaveLength(1)
+    // …and a card opens the content's full analysis in a popup over Home.
+    fireEvent.click(cards[0])
+    expect(screen.getByTestId('ad-preview-dialog')).toBeInTheDocument()
     expect(screen.getByTestId('watch-open-analytics')).toHaveAttribute('href', '/agency/analytics')
   })
 
   it('WATCH-BOARD-001 — is not offered to a member who cannot open the campaigns', () => {
     page(base({ can_watch: false }))
+    expect(screen.queryByTestId('watch-board')).not.toBeInTheDocument()
+  })
+
+  it('FINANCE-HOME-SCOPE-001 — the finance page never carries the campaigns board, even for a member who may open campaigns', () => {
+    page(base({ can_watch: true, view: 'finance' }))
     expect(screen.queryByTestId('watch-board')).not.toBeInTheDocument()
   })
 })

@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, HelpCircle } from 'lucide-react'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { metricLabel } from '@/features/analytics/metricLabels'
 
-import { diagnose, type DiagnosticFinding, type DiagnosticStage } from './diagnose'
+import { diagnose, stagesFor, STAGE_EVIDENCE, type Diagnosis, type DiagnosticFinding, type DiagnosticStage } from './diagnose'
 import { recommendedActions } from './recommendedActions'
 import { Panel } from './components'
 
@@ -183,6 +183,7 @@ export function DiagnosticPanel({
   return (
     // ANALYTICS-VISUAL-FIRST-001 — the title is the question; the line of method under it was text the reader skipped.
     <Panel title={title}>
+      {d.state !== 'not_diagnosable' && <StageChain d={d} objective={objective} ar={ar} />}
       {d.state === 'not_diagnosable' ? (
         <Note
           testId="diagnostic-not-diagnosable"
@@ -192,14 +193,9 @@ export function DiagnosticPanel({
             : 'Cannot be examined: the platforms did not report enough in this period. This is not «no problems found».'}
         />
       ) : d.findings.length === 0 ? (
-        <Note
-          testId="diagnostic-healthy"
-          tone="good"
-          icon={<CheckCircle2 size={18} />}
-          text={ar
-            ? 'فُحصت كل مرحلة تتوفر لها قياسات ولم يظهر ضعف.'
-            : 'Every stage with reported measurements was examined, and no weakness showed.'}
-        />
+        <span className="sr-only" data-testid="diagnostic-healthy">
+          {ar ? 'فُحصت كل مرحلة تتوفر لها قياسات ولم يظهر ضعف.' : 'Every stage with reported measurements was examined, and no weakness showed.'}
+        </span>
       ) : (
         <ul className="flex flex-col gap-3" data-testid="diagnostic-findings">
           {d.findings.map((f) => (
@@ -241,7 +237,7 @@ export function DiagnosticPanel({
         * told that «visit» went unread will take the absence of a visit finding as a healthy visit.
         */}
       {d.missing.length > 0 && (
-        <p className="mt-4 border-t border-border pt-3 text-xs text-text-muted" data-testid="diagnostic-missing">
+        <p className="sr-only" data-testid="diagnostic-missing">
           {ar
             ? `لم تُفحص مراحل تعتمد على قياسات لم ترسلها المنصات: ${d.missing.map((k) => metricLabel(k, true)).join('، ')}. الفراغ ليس صفرًا.`
             : `Stages depending on these unreported measurements were not examined: ${d.missing.map((k) => metricLabel(k, false)).join(', ')}. A gap is not a zero.`}
@@ -281,14 +277,74 @@ function Finding({ finding, ar }: { finding: DiagnosticFinding; ar: boolean }) {
   )
 }
 
+/**
+ * NO-OPERATOR-NOTES-001 — Owner 2026-11-20: «لا يجب إظهار تعليمات لمدراء المشاريع والمالية … كلها تحليلات». The state is a
+ * short tag (✓ سليم / قياسات غير كافية); the full sentence is the tooltip and the screen reader's.
+ */
 function Note({ text, icon, testId, tone }: { text: string; icon: React.ReactNode; testId: string; tone?: 'good' }) {
+  const ar = /[\u0600-\u06FF]/.test(text)
+  const tag = tone === 'good' ? (ar ? 'سليم' : 'Healthy') : (ar ? 'قياسات غير كافية' : 'Not enough data')
+
   return (
-    <div
-      className={`flex items-start gap-2 rounded-xl border border-border p-3 text-sm ${tone === 'good' ? 'text-text-secondary' : 'text-text-muted'}`}
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${tone === 'good' ? 'bg-success/10 text-success' : 'bg-surface-secondary text-text-muted'}`}
       data-testid={testId}
+      title={text}
     >
-      <span className={`mt-0.5 shrink-0 ${tone === 'good' ? 'text-success' : 'text-text-muted'}`}>{icon}</span>
-      <span>{text}</span>
-    </div>
+      <span className="shrink-0">{icon}</span>
+      <span>{tag}</span>
+      <span className="sr-only">{text}</span>
+    </span>
+  )
+}
+
+
+const STAGE_NAME: Record<DiagnosticStage, { ar: string; en: string }> = {
+  delivery: { ar: 'الظهور', en: 'Delivery' },
+  attraction: { ar: 'النقر', en: 'Clicks' },
+  visit: { ar: 'الزيارة', en: 'Visit' },
+  conversion: { ar: 'التحويل', en: 'Conversion' },
+  value: { ar: 'القيمة', en: 'Value' },
+  quality: { ar: 'الجودة', en: 'Quality' },
+}
+
+/**
+ * VISUAL-STAGES-001 — Owner 2026-11-20: «غيّرها», no sentences. The journey drawn as a row of stages: green where it
+ * was examined and held, amber where a finding sits, grey where the platforms sent nothing to judge it on. The reason
+ * of each stage is in its tooltip; the findings below open the evidence.
+ */
+function StageChain({ d, objective, ar }: { d: Diagnosis; objective: string | null; ar: boolean }) {
+  const stages = stagesFor(objective)
+  const weak = new Set(d.findings.map((f) => f.stage))
+
+  return (
+    <ol className="mb-3 flex flex-wrap items-center gap-1.5" data-testid="diagnostic-stages">
+      {stages.map((stage, i) => {
+        const missing = STAGE_EVIDENCE[stage].some((k) => d.missing.includes(k))
+        const state = weak.has(stage) ? 'weak' : missing ? 'missing' : 'ok'
+        const cls = state === 'weak' ? 'bg-warning/15 text-warning' : state === 'missing' ? 'bg-surface-secondary text-text-muted' : 'bg-success/10 text-success'
+        const Icon = state === 'weak' ? AlertTriangle : state === 'missing' ? HelpCircle : CheckCircle2
+        const why = state === 'weak'
+          ? (ar ? 'فيها ضعف' : 'Weak')
+          : state === 'missing'
+            ? (ar ? 'ما فيه قياس كافي' : 'Not measured')
+            : (ar ? 'سليمة' : 'Healthy')
+        return (
+          <li key={stage} className="flex items-center gap-1.5">
+            {i > 0 && <span aria-hidden className="h-px w-3 bg-border" />}
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${cls}`}
+              title={why}
+              data-testid={`diagnostic-stage-${stage}`}
+              data-state={state}
+            >
+              <Icon size={13} aria-hidden />
+              {ar ? STAGE_NAME[stage].ar : STAGE_NAME[stage].en}
+              <span className="sr-only"> — {why}</span>
+            </span>
+          </li>
+        )
+      })}
+    </ol>
   )
 }

@@ -9,7 +9,7 @@ type Pair = { ar: string; en: string }
 export const SPECIALIST: Record<SpecialistKey, Pair> = {
   campaign: { ar: 'حملات', en: 'Campaigns' },
   analyst: { ar: 'تحليل', en: 'Analysis' },
-  creative: { ar: 'إبداع', en: 'Creative' },
+  creative: { ar: 'المحتوى', en: 'Creative' },
   leads: { ar: 'عملاء محتملون', en: 'Leads' },
   reports: { ar: 'تقارير', en: 'Reports' },
   builder: { ar: 'إنشاء', en: 'Build' },

@@ -123,7 +123,7 @@ enum CampaignObjective: string
             self::AddToCart => ['ar' => 'الإضافة للسلة', 'en' => 'Add to cart'],
             self::Conversions => ['ar' => 'التحويلات', 'en' => 'Conversion'],
             self::Sales => ['ar' => 'المبيعات', 'en' => 'Sales'],
-            self::Purchases => ['ar' => 'المشتريات', 'en' => 'Purchases'],
+            self::Purchases => ['ar' => 'الطلبات', 'en' => 'Purchases'],
             self::Other => ['ar' => 'هدف مخصّص', 'en' => 'Custom objective'],
         };
     }

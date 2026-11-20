@@ -47,7 +47,7 @@ export const READY_AGENTS: ReadyAgent[] = [
   },
   {
     key: 'weak_ad', ar: 'إعلان ضعيف', en: 'Weak ad',
-    descAr: 'نسبة النقر أقل من 0.5% بعد 10,000 ظهور ← ينبّهك لتغيير المحتوى.', descEn: 'CTR under 0.5% after 10,000 impressions → alerts you to change the creative.',
+    descAr: 'معدل النقر أقل من 0.5% بعد 10,000 ظهور ← ينبّهك لتغيير المحتوى.', descEn: 'CTR under 0.5% after 10,000 impressions → alerts you to change the creative.',
     rule: { ...BASE, level: 'ad', conditions: [{ metric: 'ctr', operator: 'lt', value: 0.5, window_days: 7 }, { metric: 'impressions', operator: 'gt', value: 10000, window_days: 7 }], action: { type: 'notify' } },
   },
 ]

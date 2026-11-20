@@ -112,7 +112,7 @@ describe('one KPI set, both directions', () => {
     { label: 'Results', ar: 'النتائج', value: '1,204' },
     { label: 'CPA', ar: 'تكلفة النتيجة', value: '21 SAR' },
     { label: 'ROAS', ar: 'العائد', value: '15.36×' },
-    { label: 'CTR', ar: 'نسبة النقر', value: '2.4%' },
+    { label: 'CTR', ar: 'معدل النقر', value: '2.4%' },
   ]
 
   const renderSet = (locale: 'ar' | 'en') =>

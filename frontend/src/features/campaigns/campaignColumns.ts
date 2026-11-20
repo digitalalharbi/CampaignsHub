@@ -38,7 +38,7 @@ export const CAMPAIGN_COLUMNS: readonly CampaignColumn[] = [
   metric('reach', 'الوصول', 'Reach'),
   metric('frequency', 'التكرار', 'Frequency'),
   metric('clicks', 'النقرات', 'Clicks'),
-  metric('ctr', 'نسبة النقر', 'CTR'),
+  metric('ctr', 'معدل النقر', 'CTR'),
   metric('cpc', 'تكلفة النقرة', 'CPC'),
   metric('cpm', 'تكلفة الألف ظهور', 'CPM'),
   metric('landing_page_views', 'زيارات صفحة الهبوط', 'Landing page views'),
@@ -47,7 +47,7 @@ export const CAMPAIGN_COLUMNS: readonly CampaignColumn[] = [
   metric('leads', 'العملاء المحتملون', 'Leads'),
   metric('purchases', 'الطلبات', 'Purchases'),
   metric('revenue', 'الإيرادات', 'Revenue'),
-  metric('roas', 'العائد على الإنفاق', 'ROAS'),
+  metric('roas', 'معدل العائد', 'ROAS'),
   metric('aov', 'متوسط قيمة الطلب', 'AOV'),
   metric('conversion_rate', 'معدل التحويل', 'Conversion rate'),
 ]

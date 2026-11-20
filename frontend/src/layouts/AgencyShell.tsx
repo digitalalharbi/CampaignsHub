@@ -44,7 +44,7 @@ import { moreGroupsFrom } from './mobileTabs'
  * in More: eighteen sections is a rail, not a tab bar, and none of them is dropped.
  */
 const AGENCY_TABS: MobileTab[] = [
-  { to: '/agency/home', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard },
+  { to: '/agency/dashboard', ar: 'الرئيسية', en: 'Dashboard', icon: LayoutDashboard },
   { to: '/agency/clients', ar: 'العملاء', en: 'Clients', icon: Building2 },
   { to: '/agency/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
   { to: '/agency/requests', ar: 'الطلبات', en: 'Requests', icon: Inbox },

@@ -6,6 +6,7 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { useUi } from '@/stores/ui'
 import { useAgencyClient } from '@/stores/agencyClient'
+import { useProject } from '@/stores/project'
 import { DASHBOARD_WINDOWS, useRoleDashboard, type DashboardView, type DashboardWindow, type RoleDashboard } from './api'
 import { FinanceView } from './FinanceView'
 import { ManagerView } from './ManagerView'
@@ -62,7 +63,11 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
   const [popup, setPopup] = useState<AnalyticsSectionId | null>(null)
   // DASH-CLIENT-FILTER-001 — the client chosen in the watch board (one shared choice) narrows every figure above it too.
   const client = useAgencyClient((s) => s.currentClientId)
-  const q = useRoleDashboard(chosen, days, portal === 'agency' ? client : null)
+  // HOME-SCOPE-ISOLATION-001 — the project chosen at the top narrows Home too (the server ignores one outside the client).
+  const project = useProject((s) => s.currentProjectId)
+  // The project narrows only inside a chosen client: under «كل العملاء» the switcher still auto-picks one, and Home must not shrink to it.
+  const scopedProject = portal === 'agency' && client ? project : null
+  const q = useRoleDashboard(chosen, days, portal === 'agency' ? client : null, scopedProject)
   const { ref } = useFitViewport()
   const d = q.data
 
@@ -98,7 +103,12 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
       {q.isLoading && <><Skeleton className="h-20" /><Skeleton className="h-64" /></>}
       {q.isError && <QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّر تحميل الرئيسية' : 'Could not load Home'} />}
       {d && <Body d={d} portal={portal} />}
-      {d?.can_watch === true && <WatchBoard portal={portal} days={days} />}
+      {/*
+        * FINANCE-HOME-SCOPE-001 — Owner 2026-11-19: the finance page shows finance only. The follow-up board is the
+        * campaigns' own performance; it belongs to the manager, project-manager and marketer pages, never to «المالية» —
+        * whoever opens it, including the workspace manager switching to that view.
+        */}
+      {d?.can_watch === true && d.view !== 'finance' && <WatchBoard portal={portal} days={days} />}
       {d?.can_money && <FinancialDisclaimer />}
       <AnalyticsPopup section={popup} days={days} onClose={() => setPopup(null)} />
     </div>

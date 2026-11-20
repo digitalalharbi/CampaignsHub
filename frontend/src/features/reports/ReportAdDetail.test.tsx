@@ -171,11 +171,11 @@ describe('opening an ad from a report', () => {
       preview: preview({ kind: 'video', video_url: 'https://cdn/ad.mp4', thumbnail_url: 'https://cdn/frame.jpg', image_url: null }),
     })
 
-    const { container } = renderWithProviders(
+    renderWithProviders(
       <ReportAdDetail ad={film} currency="USD" locale="en" onClose={() => {}} />, { locale: 'en' },
     )
 
-    expect(container.querySelector('video')).toBeInTheDocument()
+    expect(document.body.querySelector('video')).toBeInTheDocument()
   })
 
   /**

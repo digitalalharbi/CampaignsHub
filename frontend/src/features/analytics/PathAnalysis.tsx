@@ -74,7 +74,7 @@ const REASON: Record<string, { ar: string; en: string }> = {
 /** The metric a path is judged by, named — never a bare key on screen. */
 const METRIC: Record<string, { ar: string; en: string }> = {
   cpm: { ar: 'تكلفة الألف ظهور', en: 'Cost per 1K impressions' },
-  ctr: { ar: 'نسبة النقر', en: 'Click-through rate' },
+  ctr: { ar: 'معدل النقر', en: 'Click-through rate' },
   cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result' },
   spend: { ar: 'الإنفاق', en: 'Spend' },
   orders: { ar: 'الطلبات', en: 'Orders' },

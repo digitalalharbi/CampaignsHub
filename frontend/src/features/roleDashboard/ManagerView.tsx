@@ -4,14 +4,16 @@ import { budgetStatus, STATUS_COLOR, STATUS_LABEL, type BudgetStatus } from '@/l
 import { PLATFORM_ORDER } from '@/lib/platforms'
 import { ProviderMark } from '@/components/ProviderMark'
 import { FxSpendNote } from '@/components/money/FxAmount'
+import { useAgencyClient } from '@/stores/agencyClient'
+import { useProject } from '@/stores/project'
+import { days as countedDays } from '@/lib/counted'
 import { metricsCurrency, useDashboardPerformance, type DashboardUnit, type DashboardWindow, type RoleDashboard } from './api'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
-import { Skeleton } from '@/components/ui/States'
-import { PlatformComparePanel, SpendSharePanel, TopCampaignsPanel, WindowKpis } from './performance'
+import { PerformanceBlock } from './performance'
 
 const T = {
-  ar: { budget: 'الميزانية', spend: 'الإنفاق', remaining: 'المتبقي', active: 'حملات نشطة', alerts: 'التنبيهات', vsBudget: 'الإنفاق والميزانية', onPlan: 'على الخطة', offPlan: 'خارج الخطة', daily: 'الإنفاق اليومي', integrations: 'التكاملات', healthy: 'سليمة', review: 'تحتاج مراجعة', pending: 'قيد الإعداد', paused: 'متوقفة', critical: 'حرجة', open: 'مفتوحة', nothing: 'لا توجد بيانات', unmeasured: 'حملة بلا قياس', of: 'من الميزانية', barBudget: 'الميزانية', barSpent: 'الإنفاق' },
-  en: { budget: 'Budget', spend: 'Spend', remaining: 'Remaining', active: 'Active campaigns', alerts: 'Alerts', vsBudget: 'Spend vs budget', onPlan: 'On plan', offPlan: 'Off plan', daily: 'Daily spend', integrations: 'Integrations', healthy: 'healthy', review: 'need review', pending: 'setting up', paused: 'Paused', critical: 'critical', open: 'open', nothing: 'No data', unmeasured: 'unmeasured', of: 'of budget', barBudget: 'Budget', barSpent: 'Spend' },
+  ar: { budget: 'الميزانية', spend: 'الإنفاق', remaining: 'المتبقي', active: 'حملات نشطة', alerts: 'التنبيهات', vsBudget: 'الإنفاق والميزانية', onPlan: 'على الخطة', offPlan: 'خارج الخطة', daily: 'الإنفاق اليومي', integrations: 'التكاملات', healthy: 'سليمة', review: 'تحتاج مراجعة', pending: 'قيد الإعداد', paused: 'متوقفة', critical: 'حرجة', open: 'مفتوحة', nothing: 'لا توجد بيانات', unmeasured: 'حملة بلا قياس', of: 'من الميزانية', barBudget: 'الميزانية', barSpent: 'الإنفاق', campaignBudgets: 'ميزانيات الحملات' },
+  en: { budget: 'Budget', spend: 'Spend', remaining: 'Remaining', active: 'Active campaigns', alerts: 'Alerts', vsBudget: 'Spend vs budget', onPlan: 'On plan', offPlan: 'Off plan', daily: 'Daily spend', integrations: 'Integrations', healthy: 'healthy', review: 'need review', pending: 'setting up', paused: 'Paused', critical: 'critical', open: 'open', nothing: 'No data', unmeasured: 'unmeasured', of: 'of budget', barBudget: 'Budget', barSpent: 'Spend', campaignBudgets: 'Campaign budgets' },
 }
 
 /** Where a client's own page is: the agency has one, the advertiser portal reads the budgets page instead. */
@@ -53,12 +55,17 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
   const m = d.money
   const cur = m?.currency ?? null
   // DASH-PERF-SPLIT-001 — the performance panels arrive on their own request; the page's own figures never wait for them.
-  const perf = useDashboardPerformance(d.window.days as DashboardWindow, d.performance_deferred === true)
+  const scopeClient = useAgencyClient((s) => s.currentClientId)
+  const scopeProject = useProject((s) => s.currentProjectId)
+  const perf = useDashboardPerformance(d.window.days as DashboardWindow, d.performance_deferred === true, portal === 'agency' ? scopeClient : null, portal === 'agency' && scopeClient ? scopeProject : null)
   const pd: RoleDashboard = d.performance_deferred ? { ...d, ...(perf.data ?? {}) } : d
-  const perfLoading = d.performance_deferred === true && perf.isLoading
   // DASH-METRICS-CURRENCY-001 — the platforms' figures in their own unit; the budgets above stay in theirs.
   const mc = metricsCurrency(pd)
   const ratio = m && m.budget && m.spent !== null ? m.spent / m.budget : null
+  const pcb = m?.platform_campaign_budgets ?? null
+  const windowSpend = pd.performance?.spend ?? null
+  const spendValue = m?.spent != null ? f.money(m.spent, cur) : windowSpend != null ? f.money(windowSpend, mc ?? cur) : f.money(pcb?.spent ?? null, pcb?.currency ?? cur)
+  const spendHint = m?.spent == null && windowSpend != null ? countedDays(d.window.days, f.ar ? 'ar' : 'en') : m?.spent == null && pcb?.spent != null ? t.campaignBudgets : undefined
   const status = budgetStatus(ratio, d.thresholds.near)
   const bars = useBoxHeight(120)
   const line = useBoxHeight(120)
@@ -76,9 +83,14 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
   return (
     <>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5 [&>*:first-child:nth-last-child(odd)]:col-span-2 lg:[&>*:first-child:nth-last-child(odd)]:col-span-1" data-testid="dash-kpis">
-        <Kpi testId="dash-kpi-budget" to={`/${portal}/budgets`} label={t.budget} value={f.money(m?.budget, cur)} />
-        <Kpi testId="dash-kpi-spend" to={`/${portal}/budgets`} label={t.spend} value={f.money(m?.spent, cur)} hint={ratio === null ? undefined : `${f.pct(ratio)} ${t.of}`} status={m ? status : undefined} />
-        <Kpi testId="dash-kpi-remaining" to={`/${portal}/budgets`} label={t.remaining} value={f.money(m?.remaining, cur)} hint={m && m.remaining === null && m.unmeasured > 0 ? `${f.count(m.unmeasured)} ${t.unmeasured}` : undefined} />
+        {/*
+          HOME-BUDGET-FALLBACK-001 — Owner 2026-11-20: a project with no approved budget read «—» for budget and spend although
+          it spent this month. With no approved budget, the tiles read the platforms' own campaign budgets (sent beside it as
+          `platform_campaign_budgets`, named «ميزانيات الحملات»), and spend falls back to the window's real spend.
+        */}
+        <Kpi testId="dash-kpi-budget" to={`/${portal}/budgets`} label={t.budget} value={f.money(m?.budget ?? pcb?.budget, m?.budget != null ? cur : (pcb?.currency ?? cur))} hint={m?.budget == null && pcb?.budget != null ? t.campaignBudgets : undefined} />
+        <Kpi testId="dash-kpi-spend" to={`/${portal}/budgets`} label={t.spend} value={spendValue} hint={ratio !== null ? `${f.pct(ratio)} ${t.of}` : spendHint} status={m && ratio !== null ? status : undefined} />
+        <Kpi testId="dash-kpi-remaining" to={`/${portal}/budgets`} label={t.remaining} value={f.money(m?.remaining ?? (m?.budget == null ? pcb?.remaining : null), m?.remaining != null ? cur : (pcb?.currency ?? cur))} hint={m?.remaining == null && m?.budget == null && pcb?.remaining != null ? t.campaignBudgets : (m && m.remaining === null && m.unmeasured > 0 ? `${f.count(m.unmeasured)} ${t.unmeasured}` : undefined)} />
         <Kpi testId="dash-kpi-active" to={`/${portal}/campaigns`} label={t.active} value={f.count(camps?.active)} hint={camps ? `${t.paused} ${f.count(camps.paused)}` : undefined} />
         {alerts && <Kpi testId="dash-kpi-alerts" to={`/${portal}/alerts`} label={t.alerts} value={f.count(alerts.open)} hint={`${f.count(alerts.critical)} ${t.critical}`} status={alerts.critical > 0 ? 'exceeded' : alerts.open > 0 ? 'near' : 'within'} />}
       </div>
@@ -89,27 +101,15 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
         money went), then the money against its budgets. One block, so the page keeps its rows.
       */}
       <div className="grid min-h-0 grid-cols-1 gap-2">
-      {perfLoading ? <Skeleton className="h-20" /> : <WindowKpis d={pd} portal={portal} />}
-      <div className="grid min-h-0 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-12" data-testid="dash-performance">
-        {perfLoading ? (
-          <>
-            <Skeleton className="h-[220px] md:col-span-2 lg:col-span-5" />
-            <Skeleton className="h-[220px] lg:col-span-4" />
-            <Skeleton className="h-[220px] lg:col-span-3" />
-          </>
-        ) : (
-          <>
-            <TopCampaignsPanel rows={pd.campaign_rows ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] md:col-span-2 lg:col-span-5" />
-            <PlatformComparePanel platforms={pd.platforms ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] lg:col-span-4" />
-            <SpendSharePanel platforms={pd.platforms ?? []} currency={mc} portal={portal} className="min-h-[220px] lg:col-span-3" />
-          </>
-        )}
-      </div>
+      {/* HOME-360-001 — one block, shared with the project manager's page (same query, deduplicated). */}
+      <PerformanceBlock d={d} portal={portal} />
 
-      <div className="grid min-h-0 grid-cols-1 gap-2 lg:grid-cols-12 lg:grid-rows-1">
-        <Panel title={t.vsBudget} to={`/${portal}/budgets`} testId="dash-panel-bars" className="min-h-[220px] lg:col-span-6">
+      {/* SHOW-AVAILABLE-001 — Owner 2026-11-20: «اعرض المتاح فقط». A panel with nothing to draw is not drawn; the rest share the row. */}
+      {(barData.length > 0 || onPlan.length > 0 || offPlan.length > 0 || d.daily_spend.length >= 2) && (
+      <div className="flex min-h-0 flex-col gap-2 lg:flex-row" data-testid="dash-budget-row">
+        {barData.length > 0 && (
+        <Panel title={t.vsBudget} to={`/${portal}/budgets`} testId="dash-panel-bars" className="min-h-[220px] min-w-0 lg:flex-[6]">
           <div ref={bars.ref} className="h-full min-h-[160px]" role="img" aria-label={`${t.vsBudget}: ${barData.map((r) => `${r.label} ${f.pct(r.ratio)}`).join(', ')}`}>
-            {barData.length === 0 ? <Nothing label={t.nothing} /> : (
               <RankingBarChart
                 horizontal
                 height={bars.height}
@@ -118,21 +118,26 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
                 bars={[{ key: 'budget', name: t.barBudget, kind: 'money', color: 'var(--border-strong)' }, { key: 'spent', name: t.barSpent, kind: 'money' }]}
                 rowColor={(row, key) => (key === 'spent' ? STATUS_COLOR[budgetStatus(row.ratio as number | null, d.thresholds.near)] : undefined)}
               />
-            )}
           </div>
         </Panel>
+        )}
 
-        <div className="grid min-h-0 grid-rows-2 gap-2 lg:col-span-3">
-          <Panel title={t.onPlan} to={`/${portal}/${portal === 'agency' ? 'clients' : 'budgets'}`} testId="dash-panel-onplan"><UnitList items={onPlan} portal={portal} testId="dash-onplan" ar={f.ar} /></Panel>
-          <Panel title={t.offPlan} to={`/${portal}/${portal === 'agency' ? 'clients' : 'budgets'}`} testId="dash-panel-offplan"><UnitList items={offPlan} portal={portal} testId="dash-offplan" ar={f.ar} /></Panel>
+        {(onPlan.length > 0 || offPlan.length > 0) && (
+        <div className="grid min-h-0 min-w-0 gap-2 lg:flex-[3]">
+          {onPlan.length > 0 && <Panel title={t.onPlan} to={`/${portal}/${portal === 'agency' ? 'clients' : 'budgets'}`} testId="dash-panel-onplan"><UnitList items={onPlan} portal={portal} testId="dash-onplan" ar={f.ar} /></Panel>}
+          {offPlan.length > 0 && <Panel title={t.offPlan} to={`/${portal}/${portal === 'agency' ? 'clients' : 'budgets'}`} testId="dash-panel-offplan"><UnitList items={offPlan} portal={portal} testId="dash-offplan" ar={f.ar} /></Panel>}
         </div>
+        )}
 
-        <Panel title={t.daily} to={`/${portal}/analytics`} testId="dash-panel-daily" className="min-h-[200px] lg:col-span-3">
+        {d.daily_spend.length >= 2 && (
+        <Panel title={t.daily} to={`/${portal}/analytics`} testId="dash-panel-daily" className="min-h-[200px] min-w-0 lg:flex-[3]">
           <div ref={line.ref} className="h-full min-h-[140px]" role="img" aria-label={t.daily}>
-            {d.daily_spend.length < 2 ? <Nothing label={t.nothing} /> : <MetricLineChart height={line.height} currency={mc ?? ''} data={d.daily_spend} series={[{ key: 'spend', name: t.spend, kind: 'money', color: 'var(--brand-600)' }]} />}
+            <MetricLineChart height={line.height} currency={mc ?? ''} data={d.daily_spend} series={[{ key: 'spend', name: t.spend, kind: 'money', color: 'var(--brand-600)' }]} />
           </div>
         </Panel>
+        )}
       </div>
+      )}
       </div>
 
       <StatusStrip>

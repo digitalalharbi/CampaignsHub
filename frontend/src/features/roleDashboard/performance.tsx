@@ -1,10 +1,16 @@
+import { Num } from '@/components/ui/Num'
+import { useState } from 'react'
+import { Modal } from '@/components/ui/Modal'
 import { Link } from 'react-router-dom'
 import { PlatformDonutChart } from '@/features/analytics/charts'
 import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
 import { Delta } from '@/components/ui/Delta'
 import { days } from '@/lib/counted'
-import { metricsCurrency, type CampaignRow, type PlatformRow, type RoleDashboard } from './api'
+import { metricsCurrency, useDashboardPerformance, type CampaignRow, type DashboardWindow, type PlatformRow, type RoleDashboard } from './api'
+import { Skeleton } from '@/components/ui/States'
+import { useAgencyClient } from '@/stores/agencyClient'
+import { useProject } from '@/stores/project'
 import { Kpi, Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
 
 /*
@@ -46,6 +52,8 @@ export function TopCampaignsPanel({ rows, family, portal, className = '' }: { ro
   const f = useFmt()
   const t = f.ar ? T.ar : T.en
   const top = topCampaigns(rows, family)
+  // HOME-DOORS-001 — Owner 2026-11-20: a campaign opens a popup with its figures here, not a jump to another page.
+  const [open, setOpen] = useState<CampaignRow | null>(null)
 
   return (
     <Panel title={t.top} to={`/${portal}/campaigns`} testId="dash-panel-top" className={className}>
@@ -63,7 +71,7 @@ export function TopCampaignsPanel({ rows, family, portal, className = '' }: { ro
             {top.map((c) => (
               <tr key={c.id} className="border-b border-border/60 last:border-0" data-testid={`dash-top-${c.id}`}>
                 <td className="truncate px-1.5 py-1.5 font-semibold text-text-primary">
-                  <Link to={c.project_id ? `/${portal}/campaigns/${c.project_id}/${c.id}` : `/${portal}/campaigns`} className="hover:underline" title={c.name}>{c.name}</Link>
+                  <button type="button" onClick={() => setOpen(c)} data-testid={`dash-top-open-${c.id}`} aria-haspopup="dialog" className="max-w-full truncate text-start hover:underline" title={c.name}>{c.name}</button>
                 </td>
                 <td className="truncate px-1.5 py-1.5 text-text-secondary">
                   <span className="inline-flex min-w-0 items-center gap-1.5"><Dot platform={c.platform} /><span className="truncate">{platformLabel(c.platform, f.ar)}</span></span>
@@ -75,6 +83,29 @@ export function TopCampaignsPanel({ rows, family, portal, className = '' }: { ro
           </tbody>
         </table>
       )}
+      <Modal open={open !== null} onClose={() => setOpen(null)} title={open?.name} size="sm">
+        {open && (
+          <div className="grid gap-3" data-testid="dash-top-popup">
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-text-secondary"><Dot platform={open.platform} />{platformLabel(open.platform, f.ar)}</span>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { k: 'spend', label: f.ar ? 'الإنفاق' : 'Spend', v: open.spend === null ? '—' : f.short(open.spend) },
+                { k: 'result', label: open.result_label ? (f.ar ? open.result_label.ar : open.result_label.en) : t.results, v: f.short(open.result) },
+                { k: 'cost', label: open.cost_label ? (f.ar ? open.cost_label.ar : open.cost_label.en) : t.cost, v: f.short(open.cost_per_result) },
+                ...(open.roas !== null ? [{ k: 'roas', label: f.ar ? 'معدل العائد' : 'ROAS', v: `${open.roas.toFixed(2)}×` }] : []),
+              ].map((x) => (
+                <div key={x.k} className="rounded-xl border border-border bg-surface-secondary/40 p-2.5">
+                  <div className="text-xs font-semibold text-text-muted">{x.label}</div>
+                  <div className="tnum text-lg font-extrabold text-text-primary"><Num>{x.v}</Num></div>
+                </div>
+              ))}
+            </div>
+            {open.project_id && (
+              <Link to={`/${portal}/campaigns/${open.project_id}/${open.id}`} className="w-fit text-xs font-bold text-brand-600 hover:underline">{f.ar ? 'التفاصيل' : 'Details'}</Link>
+            )}
+          </div>
+        )}
+      </Modal>
     </Panel>
   )
 }
@@ -194,6 +225,44 @@ export function WindowKpis({ d, portal }: { d: RoleDashboard; portal: 'agency' |
       )}
       <Kpi testId="dash-kpi-window-results" to={`/${portal}/analytics`} label={resultLabel} value={f.short(p.results)} hint={p.family ? `${t.objective}: ${familyName(p.family, f.ar)}` : undefined} />
       {d.can_money && <Kpi testId="dash-kpi-window-cost" to={`/${portal}/analytics`} label={costLabel} value={f.money(p.cost_per_result, cur)} hint={p.family ? familyName(p.family, f.ar) : undefined} />}
+    </div>
+  )
+}
+
+/**
+ * HOME-360-001 — Owner 2026-11-20: «هذي التفاصيل تهم مدير المشروع أيضًا … نظرة متكاملة 360 درجة بنظرة واحدة وبسيطة».
+ *
+ * The window's spend, results and cost per result, the leading campaigns, the platforms side by side and where the money
+ * went — one block, read from `GET /me/dashboard/performance` over the chosen client and project, so the manager's page and
+ * the project manager's (and any view that adds it) show the same 360° at a glance, from one implementation.
+ */
+export function PerformanceBlock({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'app' }) {
+  const scopeClient = useAgencyClient((s) => s.currentClientId)
+  const scopeProject = useProject((s) => s.currentProjectId)
+  const needs = d.performance_deferred === true || d.campaign_rows === undefined
+  const perf = useDashboardPerformance(d.window.days as DashboardWindow, needs, portal === 'agency' ? scopeClient : null, portal === 'agency' && scopeClient ? scopeProject : null)
+  const pd: RoleDashboard = needs ? { ...d, ...(perf.data ?? {}) } : d
+  const loading = needs && perf.isLoading
+  const mc = metricsCurrency(pd)
+
+  return (
+    <div className="grid min-h-0 grid-cols-1 gap-2" data-testid="dash-performance-block">
+      {loading ? <Skeleton className="h-20" /> : <WindowKpis d={pd} portal={portal} />}
+      <div className="grid min-h-0 grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-12" data-testid="dash-performance">
+        {loading ? (
+          <>
+            <Skeleton className="h-[220px] md:col-span-2 lg:col-span-5" />
+            <Skeleton className="h-[220px] lg:col-span-4" />
+            <Skeleton className="h-[220px] lg:col-span-3" />
+          </>
+        ) : (
+          <>
+            <TopCampaignsPanel rows={pd.campaign_rows ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] md:col-span-2 lg:col-span-5" />
+            <PlatformComparePanel platforms={pd.platforms ?? []} family={pd.rank_family ?? null} portal={portal} className="min-h-[220px] lg:col-span-4" />
+            <SpendSharePanel platforms={pd.platforms ?? []} currency={mc} portal={portal} className="min-h-[220px] lg:col-span-3" />
+          </>
+        )}
+      </div>
     </div>
   )
 }

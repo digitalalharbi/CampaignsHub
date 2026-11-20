@@ -118,9 +118,11 @@ describe('platform contribution, inside each path', () => {
     route()
     await openPlatforms()
 
-    expect(await screen.findByTestId('platform-path-conversion-not-comparable'))
-      .toHaveTextContent('Only one platform spent on this path')
-    expect(screen.queryByTestId('platform-path-awareness-not-comparable')).toBeNull()
+    // PLATFORM-PATH-CARDS-001 — drawn, not written: the one platform is its one row, with no sentence and no cheapest/dearest mark.
+    const card = await screen.findByTestId('platform-path-conversion')
+    expect(card.querySelectorAll('li')).toHaveLength(1)
+    expect(screen.queryByTestId('platform-path-conversion-not-comparable')).toBeNull()
+    expect(screen.getByTestId('path-efficiency-conversion-snapchat').className).not.toMatch(/text-(success|danger)/)
   })
 
   /**
@@ -136,7 +138,7 @@ describe('platform contribution, inside each path', () => {
     await openPlatforms()
 
     const awareness = await screen.findByTestId('path-efficiency-awareness-meta')
-    expect(awareness).toHaveTextContent(/Cost per 1,000/)
+    expect(awareness.closest('li')?.getAttribute('title')).toMatch(/Cost per 1,000/)
     // 6,000 over 900,000 impressions — 6.67 per thousand.
     expect(awareness).toHaveTextContent(/6\.6[0-9]/)
     // Never a return on a path nobody was buying returns on.
@@ -148,7 +150,7 @@ describe('platform contribution, inside each path', () => {
     expect(screen.getByTestId('platform-path-awareness')).not.toHaveTextContent('15.00')
 
     const conversion = await screen.findByTestId('path-efficiency-conversion-snapchat')
-    expect(conversion).toHaveTextContent(/Cost per result/)
+    expect(conversion.closest('li')?.getAttribute('title')).toMatch(/Cost per result/)
     // The glyph belongs to `ratio()` and is held by `formatGlyphs.test.ts`; this is about the figure.
     expect(screen.getByTestId('platform-path-conversion')).toHaveTextContent(/8\.00/)
   })
@@ -171,8 +173,9 @@ describe('platform contribution, inside each path', () => {
     })
     await openPlatforms()
 
-    expect(await screen.findByTestId('path-gap-awareness-tiktok')).toHaveTextContent('3 days missing')
-    expect(screen.queryByTestId('path-gap-awareness-meta')).toBeNull()
+    // PLATFORM-PATH-CARDS-001 — the window's gaps are the freshness strip's to state, not a chip on every platform row.
+    await screen.findByTestId('platform-path-awareness')
+    expect(screen.queryByTestId('path-gap-awareness-tiktok')).toBeNull()
   })
 
   /** And the page says outright that platforms are not compared across paths. */
@@ -180,8 +183,11 @@ describe('platform contribution, inside each path', () => {
     route()
     await openPlatforms()
 
-    expect(await screen.findByTestId('platform-paths-cross'))
-      .toHaveTextContent('not compared across paths')
+    // Each path is its own card: the comparison never crosses paths, drawn rather than written.
+    const paths = await screen.findByTestId('platform-paths')
+    expect(paths.querySelectorAll('article').length).toBeGreaterThan(1)
+    // The rule is a short tag, its sentence in the tooltip — not a paragraph.
+    expect(screen.getByTestId('platform-paths-cross').tagName).toBe('P')
   })
 })
 
@@ -206,10 +212,10 @@ describe('a path that cannot state a spread', () => {
     route()
     await openPlatforms()
 
-    // The conversion path has ONE platform, so there are not two ends to compare.
-    const silent = await screen.findByTestId('platform-path-conversion-silent')
-
-    expect(silent).toHaveTextContent(/not comparable on one metric|No platform reported the cost/)
+    // The conversion path has ONE platform, so there are not two ends to compare — and nothing is marked.
+    await screen.findByTestId('platform-path-conversion')
+    expect(screen.queryByTestId('platform-path-conversion-silent')).toBeNull()
+    expect(screen.getByTestId('path-efficiency-conversion-snapchat').className).not.toMatch(/text-(success|danger)/)
   })
 
   /**
@@ -238,6 +244,9 @@ describe('a path that cannot state a spread', () => {
     })
     await openPlatforms()
 
-    expect(await screen.findByTestId('platform-path-even-reading')).toHaveTextContent(/cost about the same/)
+    // Two platforms at the same cost: neither is marked cheapest or dearest.
+    await screen.findByTestId('platform-path-even')
+    expect(screen.getByTestId('path-efficiency-even-meta').className).not.toMatch(/text-(success|danger)/)
+    expect(screen.getByTestId('path-efficiency-even-tiktok').className).not.toMatch(/text-(success|danger)/)
   })
 })

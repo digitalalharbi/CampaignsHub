@@ -94,7 +94,7 @@ final class CreativeWorstRankingTest extends TestCase
     {
         $worst = $this->service->worst('sales', $this->items());
 
-        $this->assertStringContainsString('العائد على الإنفاق', $worst[0]['reason']);
+        $this->assertStringContainsString('معدل العائد', $worst[0]['reason']);
         $this->assertStringContainsString('0.40', $worst[0]['reason']);
     }
 }

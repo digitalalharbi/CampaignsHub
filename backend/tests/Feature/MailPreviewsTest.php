@@ -155,7 +155,7 @@ final class MailPreviewsTest extends TestCase
 
         // Owner 2026-10-22: the header neither prints a blended ratio nor explains that it does not — an absence is not content.
         $this->assertStringNotContainsString('تكلفة النتيجة', $header, 'the portfolio header mentions a blended cost per result');
-        $this->assertDoesNotMatchRegularExpression('/(ROAS|العائد على الإنفاق)/u', $header, 'the portfolio header mentions a blended return');
+        $this->assertDoesNotMatchRegularExpression('/(ROAS|معدل العائد)/u', $header, 'the portfolio header mentions a blended return');
 
         // …and it does state the sums that ARE comparable across projects.
         $this->assertStringContainsString('41,833', $header);

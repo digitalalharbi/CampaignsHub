@@ -128,11 +128,11 @@ const LABELS: Record<string, { ar: string; en: string }> = {
   // OBJECTIVE-RESULT-001 — an ad's summed conversions, not its objective's result.
   conversions: { ar: 'تحويلات المنصة', en: 'Platform conversions' },
   revenue: { ar: 'الإيراد', en: 'Revenue' },
-  ctr: { ar: 'نسبة النقر', en: 'CTR' },
+  ctr: { ar: 'معدل النقر', en: 'CTR' },
   cpc: { ar: 'تكلفة النقرة', en: 'CPC' },
   cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM' },
   cpa: { ar: 'تكلفة التحويل', en: 'Cost per conversion' },
-  roas: { ar: 'العائد على الإنفاق', en: 'ROAS' },
+  roas: { ar: 'معدل العائد', en: 'ROAS' },
   conversion_rate: { ar: 'معدل التحويل', en: 'Conversion rate' },
   frequency: { ar: 'التكرار', en: 'Frequency' },
   reach: { ar: 'الوصول', en: 'Reach' },

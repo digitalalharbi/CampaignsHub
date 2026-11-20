@@ -162,7 +162,7 @@ export const SPECS: Record<string, Spec> = {
     label: { ar: 'معدل النقر', en: 'Click-through rate' },
     format: pct2,
     derived: true,
-    hint: { ar: 'نسبة النقر = النقرات ÷ الظهور. تقيس مدى جذب الإعلان.', en: 'Click-through rate — clicks ÷ impressions. How compelling the ad is.' },
+    hint: { ar: 'معدل النقر = النقرات ÷ الظهور. تقيس مدى جذب الإعلان.', en: 'Click-through rate — clicks ÷ impressions. How compelling the ad is.' },
   },
   cpc: {
     label: { ar: 'تكلفة النقرة', en: 'Cost per click' },
@@ -308,10 +308,10 @@ export const SPECS: Record<string, Spec> = {
     hint: { ar: 'الإنفاق ÷ النتائج، لهذا الهدف وحده.', en: 'Spend ÷ results, for this objective alone.' },
   },
   roas: {
-    label: { ar: 'العائد على الإنفاق', en: 'Return on ad spend' },
+    label: { ar: 'معدل العائد', en: 'Return on ad spend' },
     format: times,
     derived: true,
-    hint: { ar: 'العائد على الإنفاق الإعلاني = الإيراد ÷ الإنفاق.', en: 'Return on ad spend — revenue ÷ spend.' },
+    hint: { ar: 'معدل العائد = الإيراد ÷ الإنفاق.', en: 'Return on ad spend — revenue ÷ spend.' },
   },
   aov: {
     label: { ar: 'متوسط قيمة الطلب', en: 'Average order value' },

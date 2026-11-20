@@ -1643,7 +1643,7 @@ function GeneralPerformanceSlide({ data }: { data: ReportData }) {
               {p.result_metrics_apply
                 ? (
                   <div>
-                    تكلفة الطلب {moneyExact(p.cpa, c ?? null)} · العائد على الإنفاق {ratio(p.roas)}
+                    تكلفة الطلب {moneyExact(p.cpa, c ?? null)} · معدل العائد {ratio(p.roas)}
                   </div>
                 )
                 : <div>لا تنطبق تكلفة الطلب على هذا الهدف</div>}
@@ -2246,8 +2246,11 @@ function DataQualitySlide({ data }: { data: ReportData }) {
 function SnapshotAge({ data }: { data: ReportData }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const live = data.mode === 'live'
-  const from = data.period?.from ?? null
-  const to = data.period?.to ?? null
+  // A date counts only when it is a real, non-blank string. A half-filled period (one date, an empty string, a placeholder)
+  // would print «الأرقام خلال الفترة –», which says nothing and looks broken, so the whole line is hidden instead.
+  const real = (v: unknown): string | null => (typeof v === 'string' && /\d{4}-\d{2}-\d{2}/.test(v.trim()) ? v.trim() : null)
+  const from = real(data.period?.from)
+  const to = real(data.period?.to)
 
   // No period recorded, nothing claimed.
   if (!live && (from === null || to === null)) return null

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Panel } from './components'
 import { AttributionModels } from './AttributionModels'
+import { CampaignAttributionView } from './CampaignAttribution'
 import { AttributionSettingsPanel } from './AttributionSettingsPanel'
 import { AttributionDisagreementView } from './AttributionDisagreementView'
 import { money, moneyExact, num, percent } from './format'
@@ -68,11 +69,6 @@ export function AttributionPanel({
   return (
     <Panel
       title={ar ? 'الإسناد ومنع التكرار' : 'Attribution & de-duplication'}
-      description={
-        ar
-          ? 'ما أبلغت به المنصات وما أكّده المتجر — رقمان مختلفان لسؤال واحد، ولا يُجمعان'
-          : 'What the platforms reported and what the store confirmed — two answers to one question, never added together'
-      }
       loading={loading}
       error={error}
       empty={!loading && platforms.length === 0 && !store?.available}
@@ -93,7 +89,8 @@ export function AttributionPanel({
           <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">
             {ar ? data?.platform_reported?.label_ar : data?.platform_reported?.label_en}
           </h4>
-          <p className="mt-1 text-text-secondary">
+          {/* QUALITY-VISUAL-001 — the basis is for screen readers and search; the bars and the table carry the reading. */}
+          <p className="sr-only">
             {ar ? data?.platform_reported?.basis_ar : data?.platform_reported?.basis_en}
           </p>
 
@@ -216,6 +213,7 @@ export function AttributionPanel({
          * invisible per platform: each figure is honest on its own terms.
          */}
         <Overlap overlap={data?.overlap} ar={ar} />
+        <CampaignAttributionView rows={data?.campaigns} currency={data?.store_confirmed?.currency ?? null} ar={ar} />
         <Reconciliation data={data?.reconciliation} ar={ar} />
         <AttributionDisagreementView data={data?.disagreement} ar={ar} />
         <AttributionModels data={data?.model_comparison} ar={ar} />
@@ -272,7 +270,10 @@ export function AttributionPanel({
               )}
             </>
           ) : (
-            <p className="mt-1 text-text-secondary">{ar ? store?.unavailable_ar : store?.unavailable_en}</p>
+            <p className="mt-1 inline-flex rounded-full bg-surface-secondary px-3 py-1 text-xs font-bold text-text-muted" title={ar ? store?.unavailable_ar : store?.unavailable_en}>
+              <span aria-hidden>{ar ? 'المتجر غير مربوط' : 'Store not linked'}</span>
+              <span className="sr-only">{ar ? store?.unavailable_ar : store?.unavailable_en}</span>
+            </p>
           )}
         </section>
 
@@ -479,11 +480,11 @@ function Overlap({ overlap, ar }: { overlap: Attribution['overlap'] | undefined;
 
   if (! overlap.available) {
     return (
-      <section data-testid="attribution-overlap-unavailable" className="min-w-0 border-t border-border pt-4">
-        <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">
-          {ar ? 'التداخل بين المنصات' : 'Overlap between platforms'}
-        </h4>
-        <p className="mt-1 text-text-secondary">{ar ? overlap.note_ar : overlap.note_en}</p>
+      <section data-testid="attribution-overlap-unavailable" className="min-w-0" title={ar ? overlap.note_ar : overlap.note_en}>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-secondary px-3 py-1 text-xs font-bold text-text-muted">
+          {ar ? 'التداخل بين المنصات: يحتاج متجر' : 'Overlap between platforms: needs a store'}
+        </span>
+        <span className="sr-only">{ar ? overlap.note_ar : overlap.note_en}</span>
       </section>
     )
   }
@@ -573,11 +574,11 @@ function Reconciliation({ data, ar }: { data: ReconciliationData | undefined; ar
 
   return (
     <section data-testid="reconciliation" className="min-w-0 border-t border-border pt-4">
-      <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted">{t.title}</h4>
-      <p className="mt-1 text-xs text-text-secondary">{ar ? data.note_ar : data.note_en}</p>
+      <h4 className="text-xs font-bold uppercase tracking-wide text-text-muted" title={ar ? data.note_ar : data.note_en}>{t.title}</h4>
+      <p className="sr-only">{ar ? data.note_ar : data.note_en}</p>
 
       {!data.available && (
-        <p data-testid="reconciliation-unavailable" className="mt-2 text-sm font-semibold text-text-primary">
+        <p data-testid="reconciliation-unavailable" className="mt-2 inline-flex rounded-full bg-surface-secondary px-3 py-1 text-xs font-bold text-text-muted">
           {t.unavailable}
         </p>
       )}

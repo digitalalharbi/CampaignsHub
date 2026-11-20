@@ -23,7 +23,7 @@ const FATIGUE: Record<string, { ar: string; en: string; tone: string }> = {
 }
 
 const T = {
-  ar: { matrix: 'مصفوفة المحتوى', x: 'حصة الإنفاق', y: 'الفرق عن المتوسط', best: 'الأقوى', weakest: 'الأضعف', freq: 'التكرار', ctr: 'نسبة النقر' },
+  ar: { matrix: 'مصفوفة المحتوى', x: 'حصة الإنفاق', y: 'الفرق عن المتوسط', best: 'الأقوى', weakest: 'الأضعف', freq: 'التكرار', ctr: 'معدل النقر' },
   en: { matrix: 'Content matrix', x: 'Spend share', y: 'Gap to average', best: 'Strongest', weakest: 'Weakest', freq: 'Frequency', ctr: 'CTR' },
 }
 

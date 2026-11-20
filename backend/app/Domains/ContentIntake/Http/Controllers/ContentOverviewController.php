@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Campaigns\Support\ObjectiveResult;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -42,7 +43,7 @@ final class ContentOverviewController extends Controller
             $request->filled('to') ? $request->string('to')->toString() : null,
         );
 
-        $query = ExternalCreative::query();
+        $query = BoundAccountVisibility::apply(ExternalCreative::query(), 'external_creatives');
         $this->rows->applyReach($query, $request->user());
         $this->rows->applyFilters($query, $request->only([
             'provider', 'providers', 'format', 'formats', 'status', 'statuses', 'campaign_ids', 'ad_set_ids', 'ad_ids',

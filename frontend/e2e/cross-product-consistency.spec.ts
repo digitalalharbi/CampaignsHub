@@ -35,7 +35,7 @@ import { AUTH, selectProject, switchToEnglish } from './helpers'
  * would be asserting against a login redirect — and passing.
  */
 const AGENCY_RAIL = [
-  '/agency/home',
+  '/agency/dashboard',
   '/agency/clients',
   '/agency/projects',
   '/agency/portfolio',
@@ -58,7 +58,7 @@ const AGENCY_RAIL = [
 ]
 
 const ADVERTISER_RAIL = [
-  '/app/home',
+  '/app/dashboard',
   '/app/projects',
   '/app/portfolio',
   '/app/campaigns',

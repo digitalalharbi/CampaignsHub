@@ -54,12 +54,12 @@ export function AiConnectPromo() {
         type="button"
         onClick={toggle}
         aria-expanded={open}
-        aria-label={tx('اسأل الذكاء الاصطناعي عن حملاتك', 'Ask AI about your campaigns')}
+        aria-label={tx('مساعدك في حملاتك', 'Ask AI about your campaigns')}
         className="relative inline-flex h-9 items-center gap-1.5 rounded-[var(--radius-pill)] border border-brand-200 bg-brand-primary-soft px-2.5 text-xs font-bold text-brand-700 hover:bg-brand-primary-soft/70"
         data-testid="ai-promo-toggle"
       >
         <Sparkles size={15} aria-hidden />
-        <span className="hidden md:inline">{tx('اسأل الذكاء', 'Ask AI')}</span>
+        <span className="hidden md:inline">{tx('مساعدك', 'Ask AI')}</span>
         {fresh && <span className="absolute -top-0.5 end-0 h-2 w-2 rounded-full bg-danger" aria-hidden data-testid="ai-promo-dot" />}
       </button>
 

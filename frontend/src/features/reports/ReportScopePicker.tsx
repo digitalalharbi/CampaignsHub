@@ -436,7 +436,7 @@ export function ReportScopePicker({
       */}
       {(value.objectives?.length ?? 0) > 0 && (
         <p className="rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary" data-testid="scope-objective-kpis-note">
-          {ar ? 'الهدف يحدد مؤشرات الأداء فقط — تبقى كل الحملات والإنفاق.' : 'The objective sets the KPIs only — every campaign and its spend stays.'}
+          {ar ? 'الهدف يحدد ملخص الأداء فقط — تبقى كل الحملات والإنفاق.' : 'The objective sets the KPIs only — every campaign and its spend stays.'}
         </p>
       )}
 

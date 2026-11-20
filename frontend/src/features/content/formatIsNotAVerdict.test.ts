@@ -65,7 +65,7 @@ describe('the creative-format winner stays removed', () => {
       Widened after the first removal shipped incomplete.
 
       The owner saw the verdict still standing on the dashboard, because `ContentReading` made the
-      same claim in different words — «الصور يحقق العائد على الإنفاق أفضل من الفيديو في هذه الفترة»
+      same claim in different words — «الصور يحقق معدل العائد أفضل من الفيديو في هذه الفترة»
       — and the first pass searched for component NAMES (`CreativeFormatComparison`, `formatVerdict`)
       rather than for the claim. A guard that only knows the one implementation it was written
       against cannot stop the second one.

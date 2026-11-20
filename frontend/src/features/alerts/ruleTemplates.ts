@@ -51,7 +51,7 @@ export const RULE_TEMPLATES: RuleTemplate[] = [
   }),
   build({
     key: 'roas_drop_25', group: 'results', type: 'roas_drop', threshold: { pct: 25, days: 7 }, severity: 'warning',
-    name: { ar: 'العائد على الإنفاق تراجع 25%', en: 'ROAS fell by 25%' },
+    name: { ar: 'معدل العائد تراجع 25%', en: 'ROAS fell by 25%' },
     why: { ar: 'يقارن آخر 7 أيام بما قبلها وينبّه عند هبوط العائد 25% أو أكثر.', en: 'Compares the last 7 days with the 7 before and warns when return on spend drops 25% or more.' },
   }),
   build({

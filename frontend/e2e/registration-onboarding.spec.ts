@@ -481,7 +481,7 @@ test('personal (agency) account: register → onboard → full menu', async ({ p
    * question (LAUNCH-PRICING-001): «لعملائي» → `/agency`, «لحملاتي وأعمالي» → `/app`. A walk that
    * asserted `/home` alone passed for either portal and so proved neither.
    */
-  await expect(page).toHaveURL(/\/agency\/home/)
+  await expect(page).toHaveURL(/\/agency\/dashboard/)
   // Personal full menu: Clients is present.
   await switchToEnglish(page)
   await openRail(page)
@@ -489,7 +489,7 @@ test('personal (agency) account: register → onboard → full menu', async ({ p
 
   // Persistence across reload — stays onboarded on the role home.
   await page.reload()
-  await expect(page).toHaveURL(/\/agency\/home/)
+  await expect(page).toHaveURL(/\/agency\/dashboard/)
 })
 
 test('company (brand) account: register → onboard → simplified menu, no agency tools', async ({ page }, testInfo) => {
@@ -510,7 +510,7 @@ test('company (brand) account: register → onboard → simplified menu, no agen
   await page.getByRole('button', { name: /Go to dashboard|الرئيسية/ }).click()
 
   // The SELF-managed path is sold `/app`, and this is where the walk proves it landed there.
-  await expect(page).toHaveURL(/\/app\/home/)
+  await expect(page).toHaveURL(/\/app\/dashboard/)
   await switchToEnglish(page)
   // Simplified menu: Campaigns present, but NO Clients / Requests (the agency tools).
   await expect(page.getByRole('link', { name: /Campaigns|الحملات/ }).first()).toBeVisible()

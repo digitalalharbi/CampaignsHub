@@ -281,7 +281,7 @@ export function LaunchPage() {
                                   </button>
                                 </li>
                               ))}
-                              {(options.data?.creatives[p.provider] ?? []).length === 0 && <li className="col-span-full text-xs text-text-muted">{ar ? 'لا إبداعات مزامَنة لهذه المنصة — تُنشأ الإعلانات من إبداع سبق مزامنته.' : 'No synced creatives on this platform — ads are made from an already-synced creative.'}</li>}
+                              {(options.data?.creatives[p.provider] ?? []).length === 0 && <li className="col-span-full text-xs text-text-muted">{ar ? 'لا محتويات محدّثة لهذه المنصة — الإعلان يُنشأ من محتوى سبق تحديثه.' : 'No synced creatives on this platform — ads are made from an already-synced creative.'}</li>}
                             </ul>
                           )}
                           {p.ad_fields === 'tiktok_ad' && (

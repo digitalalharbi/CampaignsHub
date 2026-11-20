@@ -1,3 +1,4 @@
+import { BodyPortal } from '@/components/ui/BodyPortal'
 import { useEffect, useState, type ReactNode } from 'react'
 import { AdPoster } from '@/features/content/AdPoster'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
@@ -133,12 +134,12 @@ export function ReportAdDetail({
   add(ar ? 'الظهور' : 'Impressions', n(ad.impressions))
   add(ar ? 'النقرات' : 'Clicks', n(ad.clicks))
   add(
-    ar ? 'نسبة النقر' : 'CTR',
+    ar ? 'معدل النقر' : 'CTR',
     ad.ctr === null || ad.ctr === undefined ? null : `${(ad.ctr * 100).toFixed(2)}%`,
   )
   add(ar ? 'النتائج' : 'Results', n(ad.conversions))
   add(ar ? 'تكلفة النتيجة' : 'Cost per result', ad.cpa && ad.cpa > 0 ? cash(ad.cpa, 2) : null)
-  add(ar ? 'العائد على الإنفاق' : 'ROAS', ad.roas && ad.roas > 0 ? `${ad.roas.toFixed(2)}×` : null)
+  add(ar ? 'معدل العائد' : 'ROAS', ad.roas && ad.roas > 0 ? `${ad.roas.toFixed(2)}×` : null)
 
   const facts = [
     // CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign name is gone from here too; the card that
@@ -148,20 +149,22 @@ export function ReportAdDetail({
   ].filter(Boolean)
 
   return (
+    <BodyPortal>
     <div
       role="dialog"
       aria-modal="true"
       aria-label={ad.name ?? (ar ? 'تفاصيل الإعلان' : 'Ad detail')}
       data-testid="report-ad-detail"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center sm:p-6"
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 pt-[env(safe-area-inset-top)] sm:items-center sm:p-6"
       onClick={onClose}
     >
       {/* Full height on a phone, a centred sheet above it — the shape the library's dialog uses. */}
       <div
-        className="flex max-h-[92vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-t-2xl border border-border bg-surface p-4 sm:rounded-2xl"
+        className="flex max-h-[92dvh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-t-2xl border border-border bg-surface p-4 sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3">
+        {/* MOBILE-DIALOG-001 — the title row and its close button stay pinned while the sheet scrolls. */}
+        <div className="sticky -top-4 z-10 -mx-4 -mt-4 flex items-start justify-between gap-3 border-b border-border bg-surface px-4 pb-2 pt-4">
           <div className="min-w-0">
             <h3 className="truncate text-base font-bold text-text-primary">{ad.name ?? '—'}</h3>
             {facts.length > 0 && <p className="truncate text-xs text-text-muted">{facts.join(' · ')}</p>}
@@ -265,5 +268,6 @@ export function ReportAdDetail({
         {children}
       </div>
     </div>
+    </BodyPortal>
   )
 }

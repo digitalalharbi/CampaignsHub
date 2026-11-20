@@ -434,6 +434,51 @@ final class CreativeDetailPageTest extends TestCase
         $this->assertSame(1, $peers['count'], 'the sales image was averaged into an awareness benchmark');
     }
 
+    /**
+     * CONTENT-PEER-POOLED-001 — the path's figure is the path's own ratio, never a mean of each peer's ratio.
+     *
+     * Two peers: one large (500 spend, 50,000 impressions, 250 clicks, 1,500 revenue) and one tiny (2 spend,
+     * 40 impressions, 4 clicks, 40 revenue). The mean of their ratios reads CTR 5.25% and ROAS 11.5×; the path
+     * itself spent 502 for 1,540 and took 254 clicks from 50,040 impressions: CTR 0.5076%, ROAS 3.0677×.
+     */
+    public function test_the_path_average_pools_the_peers_sums(): void
+    {
+        $subject = $this->creative(['name' => 'Subject']);
+        $large = $this->creative(['name' => 'Large peer']);
+        $tiny = $this->creative(['name' => 'Tiny peer']);
+        $day = now()->subDays(2)->toDateString();
+        $this->day($subject, $day, ['spend' => 100, 'impressions' => 10000, 'clicks' => 50, 'conversions' => 5, 'revenue' => 400]);
+        $this->day($large, $day, ['spend' => 500, 'impressions' => 50000, 'clicks' => 250, 'conversions' => 30, 'revenue' => 1500]);
+        $this->day($tiny, $day, ['spend' => 2, 'impressions' => 40, 'clicks' => 4, 'conversions' => 1, 'revenue' => 40]);
+
+        $peers = $this->open($subject)->assertOk()->json('data.peers');
+
+        $this->assertSame(2, $peers['count']);
+        $this->assertEqualsWithDelta(254 / 50040, (float) $peers['ctr'], 0.0001, 'the CTR was a mean of ratios');
+        $this->assertEqualsWithDelta(1540 / 502, (float) $peers['roas'], 0.001, 'the ROAS was a mean of ratios');
+        $this->assertEqualsWithDelta(502 / 254, (float) $peers['cpc'], 0.001);
+        $this->assertEqualsWithDelta(502 / 31, (float) $peers['cpa'], 0.001);
+    }
+
+    /** CONTENT-PEER-SAME-PLATFORM-001 — the benchmark is the same platform on the same path. */
+    public function test_peers_are_taken_from_the_same_platform_only(): void
+    {
+        $subject = $this->creative(['name' => 'Subject', 'provider' => 'tiktok']);
+        $sameTikTok = $this->creative(['name' => 'TikTok peer', 'provider' => 'tiktok']);
+        $snap = $this->creative(['name' => 'Snap peer', 'provider' => 'snapchat']);
+        $day = now()->subDays(2)->toDateString();
+        foreach ([$subject, $sameTikTok] as $c) {
+            $this->day($c, $day, ['spend' => 100, 'impressions' => 10000, 'clicks' => 50, 'conversions' => 5, 'revenue' => 500]);
+        }
+        $this->day($snap, $day, ['spend' => 100, 'impressions' => 10000, 'clicks' => 50, 'conversions' => 5, 'revenue' => 3500]);
+
+        $peers = $this->open($subject)->assertOk()->json('data.peers');
+
+        $this->assertSame(1, $peers['count'], 'a Snapchat ad was in a TikTok benchmark');
+        $this->assertEqualsWithDelta(5.0, (float) $peers['roas'], 0.001);
+        $this->assertSame('tiktok', $peers['provider']);
+    }
+
     /** The findings are §15.10's, for this creative, and they say what they were compared against. */
     public function test_the_findings_name_the_comparison_they_were_made_against(): void
     {

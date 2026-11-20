@@ -29,6 +29,6 @@ final class RoleDashboardController extends Controller
         // DASH-CLIENT-FILTER-001 — the client chosen on the page; the builder ignores one outside the member's reach.
         $client = $request->string('client')->toString() ?: null;
 
-        return ApiResponse::success($builder->build($user, $request->string('view')->toString() ?: null, $days, $client), 'Dashboard.');
+        return ApiResponse::success($builder->build($user, $request->string('view')->toString() ?: null, $days, $client, $request->string('project')->toString() ?: null), 'Dashboard.');
     }
 }

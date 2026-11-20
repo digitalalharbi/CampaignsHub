@@ -9,7 +9,7 @@ import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { DiagnosticPanel } from './DiagnosticPanel'
 import { DistributionBars } from './DistributionBars'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight, Info } from 'lucide-react'
 import { compact, money, num, ratio } from './format'
 import { plotSeries } from './timeseriesMoney'
 import { dashboardMetrics } from './metricCatalog'
@@ -208,7 +208,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
           { key: 'revenue', label: ar ? 'إيرادات المتجر' : 'Store revenue', value: commerce.revenue == null ? '—' : money(commerce.revenue, cur) },
           { key: 'orders', label: ar ? 'الطلبات' : 'Orders', value: num(commerce.orders) },
           { key: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order value', value: commerce.aov == null ? '—' : money(commerce.aov, cur) },
-          { key: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
+          { key: 'roas', label: ar ? 'معدل العائد' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
         ].map((k) => (
           <div key={k.key} data-testid={`store-kpi-${k.key}`} className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
             <p className="text-xs text-text-secondary">{k.label}</p>
@@ -320,13 +320,16 @@ export function DashboardOverview(d: OverviewData) {
          * overlap with itself, and a warning about an impossible risk trains readers to ignore warnings.
          */}
         {s.data?.conversions_basis?.may_double_count && (
-          <p
+          // NO-OPERATOR-NOTES-001 — a tag, not a paragraph: the sentence is the tooltip and the screen reader's.
+          <span
             data-testid="conversions-basis"
-            className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
+            title={ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}
+            className="inline-flex w-fit items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-text-secondary"
           >
-            <span className="font-semibold text-text-primary">{ar ? '«النتائج»: ' : 'Results: '}</span>
-            {ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}
-          </p>
+            <Info size={12} aria-hidden />
+            {ar ? 'النتائج: مجموع المنصات' : 'Results: summed across platforms'}
+            <span className="sr-only">{ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}</span>
+          </span>
         )}
         {/*
           SURFACE-SEPARATION-001, corrected — the curve, the rate trends and the store ledger STAY.
@@ -405,9 +408,9 @@ export function DashboardOverview(d: OverviewData) {
           Each gets its own panel and its own scale, so each is readable.
         */}
         <div className="grid gap-3 lg:grid-cols-3">
-          <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} />
-          <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
-          <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
+          <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} headline={periodRates(s.data?.current).roas} />
+          <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} headline={periodRates(s.data?.current).cpa} />
+          <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} headline={periodRates(s.data?.current).ctr} />
         </div>
         <StoreLedger commerce={s.data?.commerce ?? null} ar={ar} />
 
@@ -583,9 +586,9 @@ export function AnalyticsOverview(d: OverviewData) {
         beneath a headline.
       */}
       <div className="grid gap-3 lg:grid-cols-3">
-        <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} />
-        <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
-        <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
+        <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} headline={periodRates(s.data?.current).roas} />
+        <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} headline={periodRates(s.data?.current).cpa} />
+        <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} headline={periodRates(s.data?.current).ctr} />
       </div>
 
       {/*
@@ -623,13 +626,16 @@ export function AnalyticsOverview(d: OverviewData) {
 
 
         {s.data?.conversions_basis?.may_double_count && (
-          <p
+          // NO-OPERATOR-NOTES-001 — a tag, not a paragraph: the sentence is the tooltip and the screen reader's.
+          <span
             data-testid="conversions-basis"
-            className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
+            title={ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}
+            className="inline-flex w-fit items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-text-secondary"
           >
-            <span className="font-semibold text-text-primary">{ar ? '«النتائج»: ' : 'Results: '}</span>
-            {ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}
-          </p>
+            <Info size={12} aria-hidden />
+            {ar ? 'النتائج: مجموع المنصات' : 'Results: summed across platforms'}
+            <span className="sr-only">{ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}</span>
+          </span>
         )}
 
         <Panel
@@ -695,4 +701,17 @@ export function AnalyticsOverview(d: OverviewData) {
       />
     </div>
   )
+}
+
+/**
+ * RATE-TREND-HEADLINE-001 — the period's own rates for the three trend cards: ROAS and CPA as the summary states them,
+ * CTR recomputed from the period's clicks and impressions (as a percentage, the unit the daily line is drawn in).
+ */
+function periodRates(current: { roas?: number | null; cpa?: number | null; clicks?: number | null; impressions?: number | null } | null | undefined) {
+  const impressions = current?.impressions ?? 0
+  return {
+    roas: current?.roas ?? null,
+    cpa: current?.cpa ?? null,
+    ctr: impressions > 0 && current?.clicks != null ? (current.clicks / impressions) * 100 : null,
+  }
 }

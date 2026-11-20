@@ -1,4 +1,18 @@
-import type { CreativeCard, FatigueStatus } from '@/features/content/api'
+import type { FatigueStatus } from '@/features/content/api'
+
+/**
+ * What `contentWhy` reads of a content item — a card, or the light row `/content-standing` sends for the WHOLE scope.
+ * The library page holds one page of cards; a group average over one page is not the group's average, so the library asks
+ * the server for these few fields over the whole scope and runs this same function on them.
+ */
+export interface WhyInput {
+  id: string
+  name: string
+  provider: string
+  objective: string | null
+  metrics: { impressions?: number | null; clicks?: number | null; spend?: number | null; frequency?: number | null } | null
+  fatigue?: { status: FatigueStatus; signals?: Array<{ metric: string; direction: string; change: number | null }> } | null
+}
 
 /**
  * ANALYTICS-CONTENT-WHY-002 — «ليش نجح / ليش ما نجح», as figures a chart can draw.
@@ -36,8 +50,8 @@ export interface WhyRow {
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
-export function contentWhy(cards: readonly CreativeCard[]): WhyRow[] {
-  const groups = new Map<string, Array<{ cr: CreativeCard; ctr: number; spend: number }>>()
+export function contentWhy(cards: readonly WhyInput[]): WhyRow[] {
+  const groups = new Map<string, Array<{ cr: WhyInput; ctr: number; spend: number }>>()
 
   for (const cr of cards) {
     const imp = num(cr.metrics?.impressions) ?? 0
