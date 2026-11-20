@@ -10,11 +10,9 @@ import { usePortalGuard } from './usePortalGuard'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
-import { PortfolioPerformance } from './PortfolioPerformance'
+import { ClientLiveDashboard } from './ClientLiveDashboard'
+import { PortalAudience } from './PortalAudience'
 import { PortalAttention } from './PortalAttention'
-import { listClientReports } from './portalAccountApi'
-import { PublicReport } from '@/features/reports/PublicReport'
-import { portalReportToken } from '@/features/reports/sharedBase'
 
 const COPY = {
   ar: {
@@ -73,16 +71,19 @@ export function ClientDashboardPage() {
 
       <PortalAttention />
 
-      <PortfolioPerformance />
-
-      <PortalLatestReport ar={ar} />
-
+      {/* CLIENT-DASHBOARD-PARITY-001 — what is waiting on the client first, then the live dashboard (the agency's own engine). */}
       <StatGrid columns="grid-cols-2 lg:grid-cols-4">
         <PortalStat to={spaceTo('/requests')} icon={FileText} label={t.open_requests} value={openRequests} loading={loading} />
         <PortalStat to={spaceTo('/approvals')} icon={BadgeCheck} label={t.pending_quotes} value={pendingQuotes} loading={loading} tone={pendingQuotes > 0 ? 'warning' : undefined} />
         <PortalStat to={spaceTo('/invoices')} icon={Receipt} label={t.unpaid_invoices} value={unpaidInvoices} loading={loading} tone={unpaidInvoices > 0 ? 'warning' : undefined} />
         <PortalStat to={spaceTo('/messages')} icon={MessagesSquare} label={t.unread_messages} value={unreadMessages} loading={loading} tone={unreadMessages > 0 ? 'brand' : undefined} />
       </StatGrid>
+
+      <div className="mt-4">
+        <ClientLiveDashboard />
+        {/* AUDIENCE-001 — under the performance dashboard; absent unless the agency switched it on. */}
+        <PortalAudience />
+      </div>
 
       <section className="mt-3 rounded-2xl border border-border bg-surface p-4">
         <div className="mb-3 flex items-center justify-between">
@@ -149,26 +150,5 @@ function RecentRow({ r, ar, details }: { r: PortalRequestCard; ar: boolean; deta
         </div>
       </Link>
     </li>
-  )
-}
-
-/**
- * PORTAL-FULL-REPORTS-001 — the client's current report, whole, on the portal's first page: the latest shared report of their
- * own, with every section its link carries. Nothing is drawn when no report is shared with them.
- */
-function PortalLatestReport({ ar }: { ar: boolean }) {
-  const spaceTo = useClientSpacePath()
-  const q = useQuery({ queryKey: ['client', 'reports'], queryFn: listClientReports, retry: false })
-  const latest = (q.data ?? []).find((r) => r.share?.shared)
-  if (!latest) return null
-
-  return (
-    <section className="my-3 rounded-2xl border border-border bg-surface p-4" data-testid="portal-latest-report">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-bold text-text-primary">{latest.name}</h2>
-        <Link to={spaceTo('/reports')} className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700">{ar ? 'كل التقارير' : 'All reports'} <ArrowRight size={13} className="rtl:rotate-180" /></Link>
-      </div>
-      <PublicReport token={portalReportToken(latest.id)} embedded />
-    </section>
   )
 }

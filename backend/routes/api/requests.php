@@ -117,6 +117,9 @@ Route::prefix('client')->name('client.')->group(function (): void {
     // Client-facing content (read-only, client-safe, workspace-scoped to this client): files, campaigns, reports.
     Route::get('/files', [ClientPortalController::class, 'files'])->name('files.index')
         ->middleware('throttle:120,1');
+    // CLIENT-DASHBOARD-PARITY-001 — the agency dashboard's own answers for one of the client's projects.
+    Route::get('/projects/{project}/metrics/{name}', [ClientPortalController::class, 'projectMetrics'])->name('projects.metrics')
+        ->where('name', '[a-z-]+')->middleware('throttle:240,1');
     Route::get('/campaigns', [ClientPortalController::class, 'campaigns'])->name('campaigns.index')
         ->middleware('throttle:120,1');
     Route::get('/reports', [ClientPortalController::class, 'reports'])->name('reports.index')

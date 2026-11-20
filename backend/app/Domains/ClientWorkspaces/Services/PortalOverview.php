@@ -115,6 +115,11 @@ final class PortalOverview
                 'status' => $p->status,
                 'spend' => $spendWhole ? ($spendByProject[(string) $p->getKey()] ?? null) : null,
             ], static fn ($x, $k): bool => $k !== 'spend' || $x !== null, ARRAY_FILTER_USE_BOTH))->values()->all() : [],
+            /*
+             * CLIENT-DASHBOARD-PARITY-001 — the projects the client's live dashboard can open. Ids always (they are the
+             * client's own); a name only where the agency shows project names, otherwise the space's name stands in.
+             */
+            'dashboard_projects' => $projects->map(fn (Project $p): array => ['id' => (string) $p->getKey(), 'name' => $v['projects'] ? $p->name : null])->values()->all(),
             'campaigns' => $v['campaigns'] ? [
                 'total' => array_sum($byStatus),
                 'by_status' => $byStatus,

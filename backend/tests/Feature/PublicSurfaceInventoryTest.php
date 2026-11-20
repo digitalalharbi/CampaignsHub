@@ -51,6 +51,8 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/client/messages',
         'GET api/v1/client/messages/{thread}',
         'GET api/v1/client/overview',
+        // CLIENT-DASHBOARD-PARITY-001 — the agency dashboard's answers for the client's own project; the portal session is checked in the controller.
+        'GET api/v1/client/projects/{project}/metrics/{name}',
         'GET api/v1/client/quotes',
         'GET api/v1/client/quotes/{quote}',
         'GET api/v1/client/reports',
