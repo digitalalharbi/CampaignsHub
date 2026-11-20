@@ -43,6 +43,8 @@ describe('ClientLiveDashboard', () => {
       if (url.includes('/metrics/summary')) {
         return { current: { impressions: 1000, clicks: 50, ctr: 5, conversions: 7 }, previous: {}, deltas: {}, currency: null, rows_in_scope: true }
       }
+      if (url.includes('/metrics/platforms')) return [{ provider: 'snapchat', impressions: 900, clicks: 40, conversions: 6, ctr: 4.4, spend_share: null }, { provider: 'meta', impressions: 0, clicks: 0, conversions: 0, ctr: null, spend_share: null }]
+      if (url.includes('/metrics/campaigns')) return [{ campaign_id: 'c-1', campaign_name: 'Riwaq Snap', provider: 'snapchat', impressions: 900, clicks: 40, conversions: 6, ctr: 4.4 }]
 
       return []
     }
@@ -89,5 +91,16 @@ describe('ClientLiveDashboard', () => {
 
     await waitFor(() => expect(container.querySelector('[data-testid="client-live-dashboard"]')).toBeNull())
     expect(urls).toHaveLength(0)
+  })
+
+  it('shows delivery and results without a money block when the agency keeps money from the client', async () => {
+    vi.mocked(fetchPortalOverview).mockResolvedValue(overview([{ id: 'p-1', name: 'Riwaq' }]) as never)
+    renderWithProviders(<ClientLiveDashboard />, { locale: 'en', route: '/portal/nasel' })
+
+    expect(await screen.findByTestId('client-results')).toBeInTheDocument()
+    expect(screen.getByTestId('client-platform-snapchat').closest('tr')).toHaveTextContent('6')
+    expect(screen.queryByTestId('client-platform-meta')).toBeNull()
+    expect(screen.getByTestId('client-campaign-c-1')).toHaveTextContent('Riwaq Snap')
+    expect(screen.getByTestId('client-overview').textContent).not.toMatch(/\$\s?0/)
   })
 })
