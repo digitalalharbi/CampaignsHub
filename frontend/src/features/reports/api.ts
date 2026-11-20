@@ -1,3 +1,4 @@
+import { sharedBase, sharedPath } from '@/features/reports/sharedBase'
 import type { AdGroup, AdPlatformGroup, AdsReading, ReportAd } from './ReportAdsSection'
 import type { RosterRow } from './ReportCreativeRoster'
 import type { ObjectivePerformance } from './InteractiveReport'
@@ -332,7 +333,7 @@ export const createLiveLink = (p: string, body: Record<string, unknown>) =>
 
 /** Public (unauthenticated) shared report fetch. Sends the optional password via header. */
 export async function fetchSharedReport(token: string, password?: string) {
-  const res = await fetch(`/api/v1/reports/shared/${token}`, {
+  const res = await fetch(`${sharedBase(token)}`, {
     headers: { Accept: 'application/json', ...(password ? { 'X-Report-Password': password } : {}) },
   })
   const body = await res.json()
@@ -346,7 +347,7 @@ export async function fetchSharedReport(token: string, password?: string) {
  * URL and time.
  */
 export const sharedBranding = (token: string) =>
-  getData<SharedBranding>(`/reports/shared/${encodeURIComponent(token)}/branding`)
+  getData<SharedBranding>(`${sharedPath(token)}/branding`)
 
 /**
  * REPORT-IDENTITY-001 — the two identities a report for this project WILL carry.
@@ -387,7 +388,7 @@ export const removeReportIdentityLogo = (projectId: string, role: 'agency' | 'cl
 
 
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
-  `/api/v1/reports/shared/${token}/download/${format}`
+  `${sharedBase(token)}/download/${format}`
 
 /**
  * SHARED-DOWNLOAD-PASSWORD-001 — the file of a password-protected link, taken with the password.
@@ -935,7 +936,7 @@ export async function fetchLiveShared(
   opts.providers.forEach((p) => qs.append('providers[]', p))
   opts.campaigns.forEach((c) => qs.append('campaigns[]', c))
 
-  const res = await fetch(`/api/v1/reports/shared/${token}/live?${qs.toString()}`, {
+  const res = await fetch(`${sharedBase(token)}/live?${qs.toString()}`, {
     headers: {
       Accept: 'application/json',
       ...(opts.password ? { 'X-Report-Password': opts.password } : {}),
@@ -962,7 +963,7 @@ export async function fetchLiveContent(
   opts: { from: string; to: string; password?: string },
 ) {
   const qs = new URLSearchParams({ from: opts.from, to: opts.to })
-  const res = await fetch(`/api/v1/reports/shared/${token}/live/content/${encodeURIComponent(key)}?${qs.toString()}`, {
+  const res = await fetch(`${sharedBase(token)}/live/content/${encodeURIComponent(key)}?${qs.toString()}`, {
     headers: {
       Accept: 'application/json',
       ...(opts.password ? { 'X-Report-Password': opts.password } : {}),
@@ -1009,7 +1010,7 @@ export async function fetchLivePlatform(
   opts: { from: string; to: string; password?: string },
 ) {
   const qs = new URLSearchParams({ from: opts.from, to: opts.to })
-  const res = await fetch(`/api/v1/reports/shared/${token}/live/platform/${encodeURIComponent(provider)}?${qs.toString()}`, {
+  const res = await fetch(`${sharedBase(token)}/live/platform/${encodeURIComponent(provider)}?${qs.toString()}`, {
     headers: {
       Accept: 'application/json',
       ...(opts.password ? { 'X-Report-Password': opts.password } : {}),
