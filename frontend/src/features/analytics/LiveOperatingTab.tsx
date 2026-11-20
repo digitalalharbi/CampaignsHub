@@ -1,3 +1,4 @@
+import { ProviderMark } from '@/components/ProviderMark'
 import { Activity, Clock, RefreshCw, Webhook } from 'lucide-react'
 import { MetricTable } from '@/components/ui/MetricTable'
 import { Num } from '@/components/ui/Num'
@@ -83,9 +84,12 @@ export function LiveOperatingTab({ projectId }: { projectId: string | null }) {
 
   return (
     <section data-testid="live-operating-view" className="space-y-4">
-      <p data-testid="live-not-realtime" className="rounded-xl border border-border bg-surface p-3.5 text-sm text-text-secondary">
-        <Activity size={14} className="me-1.5 inline-block align-[-2px] text-text-muted" />
-        {ar ? v.realtime_statement.ar : v.realtime_statement.en}
+      {/* QUALITY-VISUAL-001 — the statement is the tag's tooltip, not a paragraph across the page. */}
+      <p data-testid="live-not-realtime" title={ar ? v.realtime_statement.ar : v.realtime_statement.en}
+        className="inline-flex w-fit items-center gap-1.5 rounded-full bg-surface-secondary px-3 py-1 text-xs font-bold text-text-secondary">
+        <Activity size={13} aria-hidden className="text-text-muted" />
+        {ar ? 'حتى آخر تحديث ناجح' : 'As of the last successful sync'}
+        <span className="sr-only">{ar ? v.realtime_statement.ar : v.realtime_statement.en}</span>
       </p>
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-surface p-3.5" data-testid="live-verdict">
@@ -111,7 +115,10 @@ export function LiveOperatingTab({ projectId }: { projectId: string | null }) {
           {v.sources.map((s) => (
             <div key={`${s.provider}-${s.name ?? ''}`} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3.5">
               <div className="flex items-center justify-between gap-2">
-                <span data-testid={`live-source-${s.provider}`} className="truncate text-sm font-bold text-text-primary">{sourceName(s, ar)}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <ProviderMark provider={s.provider} size={22} />
+                  <span data-testid={`live-source-${s.provider}`} className="truncate text-sm font-bold text-text-primary">{sourceName(s, ar)}</span>
+                </span>
                 <SyncStatusPill status={s.state} ar={ar} />
               </div>
               <div>
