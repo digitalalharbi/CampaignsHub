@@ -125,7 +125,7 @@ describe('the in-place ad preview', () => {
    * nothing on screen said which one a reader was looking at.
    */
   it('plays a video rather than showing its poster frame', () => {
-    const { container } = renderWithProviders(
+    renderWithProviders(
       <AdPreviewDialog
         creative={creative({ preview: preview({ kind: 'video', video_url: 'https://cdn.example/ad.mp4' }) })}
         locale="en"
@@ -133,7 +133,7 @@ describe('the in-place ad preview', () => {
       />,
     )
 
-    expect(container.querySelector('video')).toBeInTheDocument()
+    expect(document.body.querySelector('video')).toBeInTheDocument()
     expect(screen.queryByTestId('ad-preview-dialog-poster')).not.toBeInTheDocument()
   })
 
@@ -150,7 +150,7 @@ describe('the in-place ad preview', () => {
    * panel cannot drift from the card.
    */
   it('plays the film of a collection whose hero is one', () => {
-    const { container } = renderWithProviders(
+    renderWithProviders(
       <AdPreviewDialog
         creative={creative({
           preview: preview({
@@ -170,7 +170,7 @@ describe('the in-place ad preview', () => {
      * arms it — `CreativeVideoPlayer` does not attach a stream to an element nobody has asked to
      * play — so asserting the url here would be asserting the opposite of the design.
      */
-    expect(container.querySelector('video')).toBeInTheDocument()
+    expect(document.body.querySelector('video')).toBeInTheDocument()
 
     // Never the absence panel: this surface exists to show the ad, and the ad has a hero.
     expect(screen.queryByTestId('ad-preview-dialog-poster')).not.toBeInTheDocument()

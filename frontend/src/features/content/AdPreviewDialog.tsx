@@ -1,3 +1,4 @@
+import { BodyPortal } from '@/components/ui/BodyPortal'
 import { campaignStatusLabel } from '@/features/campaigns/labels'
 import { creativeKindLabel } from './creativeKind'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -121,12 +122,13 @@ export function AdPreviewDialog({
   }, [onClose])
 
   return (
+    <BodyPortal>
     <div
       role="dialog"
       aria-modal="true"
       aria-label={creative.name}
       data-testid="ad-preview-dialog"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center sm:p-6"
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 pt-[env(safe-area-inset-top)] sm:items-center sm:p-6"
       onClick={onClose}
     >
       {/*
@@ -166,7 +168,7 @@ export function AdPreviewDialog({
          * the creative more instead of more margin, capped so it never becomes a full-screen takeover —
          * this is a quick review surface and a modal that fills the screen stops reading as one.
          */
-        className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border lg:grid lg:max-w-[88vw] lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] lg:items-start lg:gap-x-6"
+        className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92dvh] sm:rounded-2xl sm:border lg:grid lg:max-w-[88vw] lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] lg:items-start lg:gap-x-6"
         onClick={(e) => e.stopPropagation()}
       >
         {/*
@@ -469,6 +471,7 @@ export function AdPreviewDialog({
         </div>
       </div>
     </div>
+    </BodyPortal>
   )
 }
 
