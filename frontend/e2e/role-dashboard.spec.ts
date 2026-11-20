@@ -129,7 +129,7 @@ for (const role of ROLES) {
       for (const href of hrefs) {
         await page.goto(href)
         await expect(page.getByTestId('not-found'), `${href} is a dead end`).toHaveCount(0)
-        await expect(page).not.toHaveURL(/\/agency\/home$/)
+        await expect(page).not.toHaveURL(/\/agency\/dashboard$/)
         await expect(page.locator('main h1, h1').first()).toBeVisible({ timeout: 30_000 })
       }
       expect(errors, errors.join('\n')).toEqual([])
