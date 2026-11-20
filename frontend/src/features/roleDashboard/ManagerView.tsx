@@ -7,7 +7,7 @@ import { FxSpendNote } from '@/components/money/FxAmount'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { useProject } from '@/stores/project'
 import { days as countedDays } from '@/lib/counted'
-import { metricsCurrency, useDashboardPerformance, type DashboardUnit, type DashboardWindow, type RoleDashboard } from './api'
+import { metricsCurrency, useDashboardPerformance, type DashboardUnit, type RoleDashboard } from './api'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
 import { PerformanceBlock } from './performance'
 
@@ -57,7 +57,7 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
   // DASH-PERF-SPLIT-001 — the performance panels arrive on their own request; the page's own figures never wait for them.
   const scopeClient = useAgencyClient((s) => s.currentClientId)
   const scopeProject = useProject((s) => s.currentProjectId)
-  const perf = useDashboardPerformance(d.window.days as DashboardWindow, d.performance_deferred === true, portal === 'agency' ? scopeClient : null, portal === 'agency' && scopeClient ? scopeProject : null)
+  const perf = useDashboardPerformance({ from: d.window.from, to: d.window.to }, d.performance_deferred === true, portal === 'agency' ? scopeClient : null, portal === 'agency' && scopeClient ? scopeProject : null)
   const pd: RoleDashboard = d.performance_deferred ? { ...d, ...(perf.data ?? {}) } : d
   // DASH-METRICS-CURRENCY-001 — the platforms' figures in their own unit; the budgets above stay in theirs.
   const mc = metricsCurrency(pd)
