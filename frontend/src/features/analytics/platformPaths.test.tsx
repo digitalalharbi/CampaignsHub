@@ -186,7 +186,8 @@ describe('platform contribution, inside each path', () => {
     // Each path is its own card: the comparison never crosses paths, drawn rather than written.
     const paths = await screen.findByTestId('platform-paths')
     expect(paths.querySelectorAll('article').length).toBeGreaterThan(1)
-    expect(screen.queryByTestId('platform-paths-cross')).toBeNull()
+    // The rule is a short tag, its sentence in the tooltip — not a paragraph.
+    expect(screen.getByTestId('platform-paths-cross').tagName).toBe('P')
   })
 })
 

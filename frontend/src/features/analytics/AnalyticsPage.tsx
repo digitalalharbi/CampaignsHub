@@ -1061,6 +1061,12 @@ function PlatformPaths({
         the cost the path is judged on as a bar against the dearest (the cheapest marked green, the dearest red), spend and,
         for sales, ROAS. No sentence, no sync-gap chip; a path with no spend is not drawn.
       */}
+      {/* The one rule the cards rest on, as a tag: platforms are ranked inside a path, never across paths. */}
+      <p data-testid="platform-paths-cross" className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-surface-secondary px-3 py-1 text-xs font-bold text-text-secondary"
+        title={ar ? 'كل منصة تُقارن داخل هدفها فقط — منصة تشتري الظهور ليست أسوأ من منصة تشتري المبيعات.' : 'Platforms are compared inside their objective only — a platform buying awareness is not worse than one buying sales.'}>
+        {ar ? 'المقارنة داخل كل هدف فقط' : 'Compared within each objective only'}
+        <span className="sr-only">{ar ? 'كل منصة تُقارن داخل هدفها فقط — منصة تشتري الظهور ليست أسوأ من منصة تشتري المبيعات.' : 'Platforms are compared inside their objective only — a platform buying awareness is not worse than one buying sales.'}</span>
+      </p>
       <div data-testid="platform-paths" className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
         {paths.filter((path) => (path.spend ?? 0) > 0).map((path) => {
           const rows = path.platforms.map((row) => ({ row, eff: efficiencyFor(path.path, row), ret: returnFor(path.path, row) }))
@@ -1080,7 +1086,7 @@ function PlatformPaths({
                   <span key={row.provider} style={{ width: `${(row.spend_share ?? 0) * 100}%`, background: platformColor(canonicalPlatform(row.provider)) }} />
                 ))}
               </div>
-              <ul className="grid gap-1.5">
+              <ul className="grid gap-1.5" data-testid={`platform-path-${path.path}-reading`}>
                 {rows.map(({ row, eff, ret }) => {
                   const cheapest = minCost !== null && maxCost !== minCost && eff.value === minCost
                   const dearest = minCost !== null && eff.value === maxCost && maxCost !== minCost
