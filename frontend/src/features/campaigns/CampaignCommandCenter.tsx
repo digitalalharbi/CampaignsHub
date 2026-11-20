@@ -19,7 +19,7 @@ import {
 } from './metrics'
 import type { CampaignCreative } from './metrics'
 import type { MetricTotals, PlatformRow, Range, TimePoint } from '@/features/analytics/api'
-import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, PlatformDonutChart, ProgressRing, SpendRevenueAreaChart } from '@/features/analytics/charts'
+import { ChartCard, ConversionFunnelChart, hasFunnel, shownFunnelStages, KpiSparkline, MetricLineChart, PlatformDonutChart, ProgressRing, SpendRevenueAreaChart } from '@/features/analytics/charts'
 /*
  * PERCENT-100X-001 — `percent()` multiplies by 100. This file used to as well.
  *
@@ -652,7 +652,7 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
 
   if (funnel.isLoading) return <Skeleton className="h-72" />
   if (funnel.isError) return <ErrorState error={funnel.error} title="تعذّر تحميل القمع" onRetry={() => funnel.refetch()} />
-  if (!stages.length) return <EmptyState title="لا قمع" description="لا توجد بيانات قمع لهذه الحملة في الفترة المحددة." />
+  if (!hasFunnel(stages)) return <EmptyState title="لا قمع" description="لا توجد بيانات قمع لهذه الحملة في الفترة المحددة." />
 
   return (
     <div className="space-y-4">
@@ -660,7 +660,7 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
         <ConversionFunnelChart stages={stages} currency={cur} ar />
       </ChartCard>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {stages.map((s) => (
+        {shownFunnelStages(stages).map((s) => (
           <div key={s.stage} className="rounded-xl border border-border bg-surface p-3">
             <div className="text-[11px] uppercase text-text-muted">{s.label}</div>
             {/* FUNNEL-NULL-001 — «لم تُرسل» is a different sentence from «صفر», and the card must say

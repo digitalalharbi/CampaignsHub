@@ -1,13 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, ChevronDown, Trophy } from 'lucide-react'
-import { ConversionFunnelChart, KpiSparkline, MetricLineChart } from '@/features/analytics/charts'
-import { AdPoster } from '@/features/content/AdPoster'
+import { ConversionFunnelChart, hasFunnel, KpiSparkline, MetricLineChart } from '@/features/analytics/charts'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
-import { ReportAdsSection, type AdGroup, type ReportAd } from '@/features/reports/ReportAdsSection'
+import { figuresFor, ReportAdsSection, type AdGroup, type ReportAd } from '@/features/reports/ReportAdsSection'
 import type { CreativeCard } from '@/features/content/api'
-import { Num } from '@/components/ui/Num'
-import { moneyExact } from '@/features/analytics/format'
 import { PlatformMark } from '@/components/brand/PlatformMark'
 import { StatCard, type StatTone } from '@/components/ui/StatCard'
 import { Skeleton } from '@/components/ui/States'
@@ -16,7 +13,7 @@ import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { useProject } from '@/stores/project'
-import { useWatchBoard, type DashboardWindow, type RankedCampaign, type WatchBoard as Board, type WatchContent } from './api'
+import { useWatchBoard, type DashboardRange, type RankedCampaign, type WatchBoard as Board, type WatchContent } from './api'
 import { Door, Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
 import { PlatformComparePanel, SpendSharePanel } from './performance'
 
@@ -111,73 +108,6 @@ function RankList({ rows, tone, portal, f, testId }: { rows: RankedCampaign[]; t
   )
 }
 
-/**
- * HOME-CONTENT-REPORT-CARD-001 — Owner 2026-11-19: the home's best / weakest content read like the report's content card
- * (`ReportAdsSection` → `AdCard`) and open in a popup, not as tall posters with two loose figures.
- *
- * A filled cover, the name, the platform's logo and name, then three small figure boxes in the order that answers «did it
- * work»: the figure it was RANKED on (the board's own basis — ROAS, cost per result…), spend, and the results only where the
- * ranking family counts them. That last rule is the fix for «التحويلات 35.9K» under an awareness video: views counted as
- * conversions by its platform were printed under a sales ranking.
- */
-function ContentTile({ c, f, currency, tone, rank, basis, onOpen }: {
-  c: WatchContent; f: Fmt; currency: string | null; tone: 'best' | 'worst'; rank: number
-  basis: { metric: string | null; label_ar: string | null; label_en: string | null; family: string | null } | null
-  onOpen: (c: WatchContent) => void
-}) {
-  const provider = c.provider ?? ''
-  const figures = contentFigures(c, f, currency, basis)
-
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(c)}
-      data-testid={`watch-content-${tone}`}
-      aria-label={f.ar ? `تفاصيل ${c.name ?? ''}` : `Details for ${c.name ?? ''}`}
-      className="relative flex min-w-0 flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-surface p-2.5 text-start transition-colors hover:border-brand-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
-    >
-      <span aria-hidden className={`absolute start-3.5 top-3.5 z-10 grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-xs font-extrabold text-white shadow-[var(--shadow-small)] ${tone === 'best' ? 'bg-success' : 'bg-danger'}`}>{rank}</span>
-      <AdPoster preview={c.preview} name={c.name ?? ''} provider={provider} className="h-28 w-full rounded-xl" fit="cover" />
-      <span className="min-w-0">
-        <span dir="auto" className="block truncate text-start text-sm font-bold text-text-primary" title={c.name ?? ''}>{c.name ?? '—'}</span>
-        <span className="flex items-center gap-1 truncate text-xs text-text-muted">
-          <PlatformMark platform={provider} size={13} />
-          <span className="truncate">{platformLabel(provider, f.ar)}</span>
-        </span>
-      </span>
-      <dl className="grid grid-cols-3 gap-1.5 text-center" data-testid="watch-content-figures">
-        {figures.map((x) => (
-          <div key={x.key} className={`rounded-lg p-1.5 ${x.key === 'basis' ? (tone === 'best' ? 'bg-[var(--positive-background)]' : 'bg-[var(--warning-background)]') : 'bg-surface-secondary'}`}>
-            <dt className="truncate text-xs font-semibold text-text-muted">{x.label}</dt>
-            <dd className="text-xs font-bold text-text-primary"><Num>{x.value}</Num></dd>
-          </div>
-        ))}
-      </dl>
-    </button>
-  )
-}
-
-const CONVERSION_FAMILIES = new Set(['sales', 'conversion', 'leads', 'app_promotion', 'app'])
-
-/** The three figures of a content card: the ranked-on figure first, then spend, then results only where they mean results. */
-function contentFigures(c: WatchContent, f: Fmt, currency: string | null, basis: { metric: string | null; label_ar: string | null; label_en: string | null; family: string | null } | null) {
-  const t = f.ar ? T.ar : T.en
-  const out: { key: string; label: string; value: string }[] = []
-  const metric = basis?.metric ?? null
-  const label = basis ? (f.ar ? basis.label_ar : basis.label_en) : null
-  const val = metric === 'roas' ? (c.roas === null ? null : `${c.roas.toFixed(2)}×`)
-    : metric === 'cpa' ? (c.cpa === null ? null : moneyExact(c.cpa, currency))
-      : metric === 'ctr' ? (c.ctr === null ? null : f.pct(c.ctr > 1 ? c.ctr / 100 : c.ctr))
-        : null
-  if (metric && label) out.push({ key: 'basis', label, value: val ?? '—' })
-  if (c.spend !== null) out.push({ key: 'spend', label: t.spend, value: f.money(c.spend, currency) })
-  const counts = basis?.family ? CONVERSION_FAMILIES.has(basis.family) : true
-  if (counts && c.conversions !== null) out.push({ key: 'results', label: t.conversions, value: f.short(c.conversions) })
-  else out.push({ key: 'clicks', label: t.clicks, value: f.short(c.clicks) })
-
-  return out.slice(0, 3)
-}
-
 function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) {
   const t = f.ar ? T.ar : T.en
   const p = b.performance ?? null
@@ -259,14 +189,25 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
           />
         </div>
       )}
+      {/*
+        HOME-CONTENT-PARITY-001 — Owner 2026-11-20: the weakest content is drawn exactly like the best (same card, same grid,
+        same figures by the objective it was ranked in), so the two rows line up and fill the width alike.
+      */}
       {b.content !== null && b.content.worst.length > 0 && (
-        <Panel title={t.worstContent} to={`/${portal}/content`} testId="watch-panel-content-worst">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {b.content.worst.map((c, i) => <ContentTile key={c.id ?? i} c={c} f={f} currency={cur} tone="worst" rank={i + 1} basis={basis ?? null} onOpen={setOpenContent} />)}
-          </div>
-        </Panel>
+        <div className="rounded-2xl border border-border bg-surface p-3" data-testid="watch-panel-content-worst">
+          <ReportAdsSection
+            ads={b.content.worst as ReportAd[]}
+            currency={cur}
+            locale={f.ar ? 'ar' : 'en'}
+            title={t.worstContent}
+            limit={6}
+            browsable={false}
+            family={basis?.family ?? null}
+            onOpen={(ad) => setOpenContent(ad as WatchContent)}
+          />
+        </div>
       )}
-      {(b.funnel ?? []).some((s) => (s.count ?? 0) > 0) && (
+      {hasFunnel(b.funnel ?? []) && (
         <Panel title={f.ar ? 'قمع المنصات الإعلانية' : 'Ad platforms funnel'} to={`/${portal}/analytics`} testId="watch-panel-funnel">
           <ConversionFunnelChart stages={b.funnel ?? []} currency={cur ?? ''} ar={f.ar} />
         </Panel>
@@ -276,7 +217,7 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
         <AdPreviewDialog
           creative={{ id: openContent.id, name: openContent.name ?? '', provider: openContent.provider ?? '', preview: openContent.preview, metrics: { spend: openContent.spend, impressions: openContent.impressions, clicks: openContent.clicks, conversions: openContent.conversions, ctr: openContent.ctr, cpa: openContent.cpa, roas: openContent.roas } } as unknown as CreativeCard}
           locale={f.ar ? 'ar' : 'en'}
-          figures={contentFigures(openContent, f, cur, basis ?? null).map((x) => ({ key: x.key, label: x.label, value: x.value }))}
+          figures={figuresFor(openContent as unknown as ReportAd, f.ar, cur, { family: basis?.family ?? null }).map((x, i) => ({ key: String(i), label: x.label, value: x.value }))}
           detailsTo={`/${portal}/content/${openContent.id}`}
           period={{ from: b.window.from, to: b.window.to }}
           currency={cur}
@@ -293,7 +234,7 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
   )
 }
 
-export function WatchBoard({ portal, days }: { portal: 'agency' | 'app'; days: DashboardWindow }) {
+export function WatchBoard({ portal, range }: { portal: 'agency' | 'app'; range: DashboardRange }) {
   const f = useFmt()
   const t = f.ar ? T.ar : T.en
   /*
@@ -315,7 +256,7 @@ export function WatchBoard({ portal, days }: { portal: 'agency' | 'app'; days: D
   }
   // HOME-SCOPE-ISOLATION-001 — the project chosen at the top narrows the board inside its unit.
   const project = useProject((s) => s.currentProjectId)
-  const q = useWatchBoard(days, unit, true, portal === 'agency' && stored ? project : null)
+  const q = useWatchBoard(range, unit, true, portal === 'agency' && stored ? project : null)
   const b = q.data
   const units = b?.units ?? []
   const shown = b ? b.unit : unit

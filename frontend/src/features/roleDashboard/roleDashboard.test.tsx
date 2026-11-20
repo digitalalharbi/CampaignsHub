@@ -178,15 +178,16 @@ describe('the manager performance panels', () => {
     expect(screen.getByTestId('dash-spend-share-legend')).toHaveTextContent(/6[23]%/)
   })
 
-  it('DASH-PERIOD-001 — reads the window\'s spend against the window before it, and offers the windows', () => {
+  it('DASH-PERIOD-001 — reads the window\'s spend against the window before it, and offers the shared date picker', () => {
     page(base({
       performance: { spend: 450, previous_spend: 600, previous: { from: '2026-11-02', to: '2026-11-08' }, withheld: 0, campaigns: 2, family: 'sales', results: 130, result_label: null, cost_per_result: 3.46, cost_label: null },
     }))
     expect(screen.getByTestId('dash-window-kpis')).toBeInTheDocument()
     expect(screen.getByTestId('dash-window-spend-delta')).toHaveTextContent('25%')
     expect(screen.getByTestId('dash-kpi-window-results-value')).toHaveTextContent('130')
-    expect(screen.getByTestId('role-window-30')).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByTestId('role-window-7')).toBeInTheDocument()
+    // DASH-DATE-RANGE-001 — the shared date picker replaces the fixed day chips.
+    expect(screen.getByTestId('role-dashboard-range')).toBeInTheDocument()
+    expect(screen.queryByTestId('role-window-30')).not.toBeInTheDocument()
   })
 
   it('says there is nothing yet instead of drawing empty tables', () => {
@@ -223,11 +224,11 @@ describe('the manager performance panels', () => {
     expect(within(screen.getByTestId('watch-best')).getByRole('link', { name: /Leads Snap/ })).toHaveAttribute('href', '/agency/campaigns/p1/k1')
     expect(screen.getByTestId('watch-best-k1')).toHaveTextContent('Snapchat')
     expect(screen.getByTestId('watch-worst-k3')).toHaveTextContent('Leads TikTok')
-    // HOME-CONTENT-REPORT-001 — the best content is the report's own section; the weakest keep their tiles.
+    // HOME-CONTENT-PARITY-001 — best and weakest are the same report section, drawn alike.
     const best = screen.getByTestId('watch-panel-content-best')
     const cards = within(best).getAllByTestId('report-ad-card')
     expect(cards.length).toBe(2)
-    expect(screen.getAllByTestId('watch-content-worst')).toHaveLength(1)
+    expect(within(screen.getByTestId('watch-panel-content-worst')).getAllByTestId('report-ad-card')).toHaveLength(1)
     // …and a card opens the content's full analysis in a popup over Home.
     fireEvent.click(cards[0])
     expect(screen.getByTestId('ad-preview-dialog')).toBeInTheDocument()

@@ -72,8 +72,8 @@ const GROUPS: Array<{
       { key: 'image_zoom', ar: 'تكبير الصور', en: 'Zoom images' },
       {
         key: 'download',
-        ar: 'تحميل الأصل',
-        en: 'Download the asset',
+        ar: 'تحميل الإعلان',
+        en: 'Download the ad',
         note: [
           'إيقافه يزيل الزر ورابط الملف. لمنع الوصول إلى إعلان فعليًا، استبعده أعلاه.',
           'Turning this off removes the button and the file URL. To truly withhold a ad, exclude it above.',
