@@ -470,6 +470,38 @@ final class AttributionTransparencyTest extends TestCase
         $this->assertEqualsWithDelta(5.0, $meta['ratio'], 0.001);
     }
 
+    /** ATTRIB-CAMPAIGN-001 — per campaign, the claim beside the store's matched orders, with the verdict read from the gap. */
+    public function test_each_campaign_shows_its_claim_beside_the_store_and_a_verdict(): void
+    {
+        $account = $this->storeAccount();
+        $campaign = $this->campaign('meta');
+
+        $this->conversions('meta', 10, revenue: 5000);
+        $this->order('2001', 400.0, $account, $campaign);
+        $this->order('2002', 600.0, $account, $campaign);
+
+        $row = collect($this->build()['campaigns'])->firstWhere('id', (string) $campaign->getKey());
+
+        $this->assertNotNull($row);
+        $this->assertEquals(10.0, $row['platform_orders']);
+        $this->assertSame(2, $row['store_orders']);
+        $this->assertEqualsWithDelta(1000.0, $row['store_revenue'], 0.01);
+        $this->assertSame('over', $row['verdict']);
+        $this->assertSame('meta', $row['provider']);
+    }
+
+    /** ATTRIB-CAMPAIGN-001 — with no store the campaign's store half is null and no verdict is given. */
+    public function test_without_a_store_a_campaign_has_no_store_half_and_no_verdict(): void
+    {
+        $this->conversions('meta', 4, revenue: 800);
+
+        $row = collect($this->build()['campaigns'])->first();
+
+        $this->assertNotNull($row);
+        $this->assertNull($row['store_orders']);
+        $this->assertNull($row['verdict']);
+    }
+
     /** With no store connected there is nothing to compare against, and null says exactly that. */
     public function test_with_no_store_connected_the_confirmed_figures_are_null_not_zero(): void
     {

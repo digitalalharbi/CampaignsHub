@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Panel } from './components'
 import { AttributionModels } from './AttributionModels'
+import { CampaignAttributionView } from './CampaignAttribution'
 import { AttributionSettingsPanel } from './AttributionSettingsPanel'
 import { AttributionDisagreementView } from './AttributionDisagreementView'
 import { money, moneyExact, num, percent } from './format'
@@ -212,6 +213,7 @@ export function AttributionPanel({
          * invisible per platform: each figure is honest on its own terms.
          */}
         <Overlap overlap={data?.overlap} ar={ar} />
+        <CampaignAttributionView rows={data?.campaigns} currency={data?.store_confirmed?.currency ?? null} ar={ar} />
         <Reconciliation data={data?.reconciliation} ar={ar} />
         <AttributionDisagreementView data={data?.disagreement} ar={ar} />
         <AttributionModels data={data?.model_comparison} ar={ar} />
