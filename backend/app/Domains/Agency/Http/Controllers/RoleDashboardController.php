@@ -25,6 +25,8 @@ final class RoleDashboardController extends Controller
 
         // DASH-PERIOD-001 — the window the performance figures are read over: 7, 14, 30 (default) or 90 days to today.
         $days = (int) $request->integer('days', RoleDashboardBuilder::DEFAULT_DAYS);
+        // DASH-DATE-RANGE-001 — an explicit from–to from the shared date picker wins over the days.
+        $builder->withRange($request->string('from')->toString() ?: null, $request->string('to')->toString() ?: null);
 
         // DASH-CLIENT-FILTER-001 — the client chosen on the page; the builder ignores one outside the member's reach.
         $client = $request->string('client')->toString() ?: null;
