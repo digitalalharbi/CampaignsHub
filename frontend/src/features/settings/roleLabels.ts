@@ -21,7 +21,7 @@ export const SYSTEM_ROLE_LABELS: Record<string, { ar: string; en: string }> = {
   'analyst': { ar: 'محلل', en: 'Analyst' },
   'project-manager': { ar: 'مدير مشروع', en: 'Project manager' },
   'finance': { ar: 'المالية', en: 'Finance' },
-  'media-buyer': { ar: 'مشتري إعلانات', en: 'Media buyer' },
+  'media-buyer': { ar: 'مسؤول الحملات', en: 'Campaign manager' },
   'reporter': { ar: 'معدّ تقارير', en: 'Report builder' },
   'viewer': { ar: 'مطّلع', en: 'Viewer' },
   'account-manager': { ar: 'مدير حساب', en: 'Account Manager' },

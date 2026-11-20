@@ -10,8 +10,8 @@ import { toApiError } from '@/lib/api/client'
 
 /** Bilingual copy kept local to the feature (never in the global i18n dictionary). */
 const CE_COPY = {
-  ar: { tags: 'الوسوم', enabledServices: 'الخدمات المفعّلة', tagsHint: 'ابحث أو أضف وسمًا', servicesHint: 'اختر الخدمات المقدَّمة لهذا العميل', errTitle: 'يرجى تصحيح الأخطاء التالية' },
-  en: { tags: 'Tags', enabledServices: 'Enabled services', tagsHint: 'Search or add a tag', servicesHint: 'Services provided to this client', errTitle: 'Please fix the following errors' },
+  ar: { tags: 'تصنيفات داخلية (وسوم)', enabledServices: 'الخدمات التي تقدّمها له', tagsHint: 'كلمات تجمع بها عملاءك وتبحث عنهم، مثل: متاجر، عقار، مطاعم. لا يراها العميل.', servicesHint: 'ما تقدّمه الوكالة لهذا العميل، مثل: إدارة الحملات، التقارير، صناعة المحتوى. تظهر في ملفه وتحدّد أقسامه.', errTitle: 'يرجى تصحيح الأخطاء التالية' },
+  en: { tags: 'Internal tags', enabledServices: 'Services you provide', tagsHint: 'Words to group and find your clients by, e.g. retail, real estate. The client never sees them.', servicesHint: 'What the agency provides this client, e.g. campaign management, reporting, content.', errTitle: 'Please fix the following errors' },
 } as const
 
 /** Server field name → input id, so the ErrorSummary can focus the offending control. */
