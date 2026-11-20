@@ -670,20 +670,20 @@ export function periodRates(current: { roas?: number | null; cpa?: number | null
 }
 
 /** The day-by-day curve of the Overview, shared by the agency dashboard and the client's (CLIENT-DASHBOARD-PARITY-001). */
-export function TrendPanel(d: OverviewData) {
+export function TrendPanel(d: OverviewData & { title?: string; description?: string }) {
   const { ar, series, ts, chartCurrency } = d
 
   return (
     <Panel
-      title={ar ? 'الإنفاق وتحويلات المنصة والإيرادات' : 'Spend, platform conversions and revenue'}
-      description={
+      title={d.title ?? (ar ? 'الإنفاق وتحويلات المنصة والإيرادات' : 'Spend, platform conversions and revenue')}
+      description={d.description ?? (
         series.basis === 'original'
           ? ar
             ? `المال معروض بعملة المنصة (${series.currency}) — ${series.note ?? ''}`
             : `Money shown in the platform's own currency (${series.currency}) — ${series.note ?? ''}`
           : ar
             ? 'الاتجاه اليومي للإنفاق والإيرادات والنتائج'
-            : 'Spend, revenue and results, day by day'
+            : 'Spend, revenue and results, day by day')
       }
       loading={ts.isLoading}
       error={ts.isError}
