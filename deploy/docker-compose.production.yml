@@ -101,7 +101,7 @@ services:
         VITE_API_URL: https://api.campaignshub.io/api/v1
         VITE_BRAND_NAME: CampaignsHub
         VITE_BRAND_DOMAIN: campaignshub.io
-        VITE_INFLUENCERS_UGC: "false"
+        VITE_INFLUENCERS_UGC: "true"
     restart: unless-stopped
     depends_on:
       backend:

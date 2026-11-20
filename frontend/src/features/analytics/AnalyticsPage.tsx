@@ -2,6 +2,7 @@ import { useFitCompact } from '@/components/fit/AgencyFit'
 import { InfoTip } from '@/components/fit/InfoTip'
 import { ConsumptionBar } from './ConsumptionBar'
 import { ProviderMark } from '@/components/ProviderMark'
+import { Num } from '@/components/ui/Num'
 import { createContext, Fragment, type ReactNode, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeftRight, Eye, Gauge, Globe, Image as ImageIcon, Layers, LayoutDashboard, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
@@ -2091,14 +2092,14 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
         reader looking at one platform's chip above a table covering four had no way to know.
       */}
       <ScopeNote scope={f.data?.scope} testid="freshness-scope" />
-      <Panel title={ar ? 'جودة البيانات والإسناد' : 'Data quality & attribution'} description={ar ? 'آخر مزامنة، حداثة البيانات، والأيام الناقصة لكل منصة' : 'Last sync, how fresh the data is, and the missing days per platform'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
+      <Panel title={ar ? 'حداثة كل منصة' : 'Freshness by platform'} loading={f.isLoading} error={f.isError} empty={!f.isLoading && rows.length === 0}>
       <MetricTable
         head={ar ? ['المنصة', 'آخر تاريخ', 'آخر مزامنة', 'أيام ببيانات', 'أيام ناقصة', 'الحالة'] : ['Platform', 'Latest date', 'Last sync', 'Days with data', 'Missing days', 'Status']}
         rows={rows.map((r) => [
           <PlatformCell key="p" provider={r.provider} />,
           r.latest_metric_date ?? '—',
           r.last_sync_at ? fmtDateTime(r.last_sync_at) : '—',
-          num(r.days_with_data),
+          <CoverageBar key="d" have={r.days_with_data} missing={r.missing_days} />,
           r.missing_days === null ? '—'
             : r.missing_days > 0 ? <span key="m" className="font-semibold text-warning">{r.missing_days}</span> : '0',
           /*
@@ -2170,50 +2171,88 @@ export function QualityTab({ projectId, range, filters }: TabProps) {
 /** The counted forms of «source», which this line says twice. */
 const SOURCE_AR = { one: 'مصدر', two: 'مصدران', few: 'مصادر', many: 'مصدرًا' }
 
+/** QUALITY-VISUAL-001 — days with data against the window, as a bar beside the number. */
+function CoverageBar({ have, missing }: { have: number | null | undefined; missing: number | null }) {
+  if (have === null || have === undefined) return <>—</>
+  const total = have + (missing ?? 0)
+  const pct = total > 0 ? Math.round((have / total) * 100) : 0
+  return (
+    <span className="inline-flex min-w-[7rem] items-center gap-2">
+      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-secondary"><span className={`block h-full rounded-full ${pct >= 80 ? 'bg-success' : pct >= 40 ? 'bg-warning' : 'bg-danger'}`} style={{ width: `${Math.max(2, pct)}%` }} /></span>
+      <Num>{have}</Num>
+    </span>
+  )
+}
+
 function WindowConfidenceLine({ c, windowDays, ar }: { c: WindowConfidence; windowDays: number; ar: boolean }) {
-  const LEVEL: Record<WindowConfidence['level'], { ar: string; en: string; tone: string }> = {
-    high: { ar: 'عالية', en: 'High', tone: 'border-success/30 bg-success/5 text-success' },
-    moderate: { ar: 'متوسطة', en: 'Moderate', tone: 'border-warning/40 bg-warning/5 text-warning' },
-    low: { ar: 'منخفضة', en: 'Low', tone: 'border-danger/40 bg-danger/5 text-danger' },
+  const LEVEL: Record<WindowConfidence['level'], { ar: string; en: string; tone: string; stroke: string }> = {
+    high: { ar: 'عالية', en: 'High', tone: 'text-success', stroke: 'var(--success)' },
+    moderate: { ar: 'متوسطة', en: 'Moderate', tone: 'text-warning', stroke: 'var(--warning)' },
+    low: { ar: 'منخفضة', en: 'Low', tone: 'text-danger', stroke: 'var(--danger)' },
   }
 
   const level = LEVEL[c.level]
+  const pct = c.coverage === null ? null : Math.round(c.coverage * 100)
   const worst = c.worst === null ? null : (c.worst.name ?? providerLabel(c.worst.provider, ar ? 'ar' : 'en'))
+  // QUALITY-VISUAL-001 — the sentence travels as the card's tooltip and its screen-reader text, never as a paragraph.
+  const said = [
+    `${ar ? 'الثقة في أرقام هذه الفترة: ' : 'Confidence in this window: '}${ar ? level.ar : level.en}`,
+    c.coverage === null
+      ? (ar ? 'لا مصدر تُقاس تغطيته بالأيام في هذه الفترة.' : 'No source in this window is measured in days.')
+      : (ar
+          ? `${c.daysWithData} من ${countedDays(c.daysExpected, 'ar')} عبر ${countedAr(c.sourcesCounted, SOURCE_AR)} (${countedDays(windowDays, 'ar')} لكل مصدر).`
+          : `${c.daysWithData} of ${countedDays(c.daysExpected, 'en')} across ${countedEn(c.sourcesCounted, 'source', 'sources')} (${countedDays(windowDays, 'en')} each).`),
+    worst !== null ? (ar ? `الأثر الأكبر: ${worst}.` : `Most of the gap: ${worst}.`) : '',
+    c.sourcesNotCountable > 0
+      ? (ar
+          ? `${countedAr(c.sourcesNotCountable, SOURCE_AR)} لا تُقاس تغطيته بالأيام (المتاجر) وخارج هذه النسبة.`
+          : `${countedEn(c.sourcesNotCountable, 'source', 'sources')} are not measured in days (stores) and are outside this figure.`)
+      : '',
+  ].filter(Boolean).join(' ')
 
   return (
-    <div
-      data-testid="quality-confidence"
-      data-level={c.level}
-      className={`mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border p-3.5 text-sm ${level.tone}`}
-    >
-      <span className="font-bold">
-        {ar ? 'الثقة في أرقام هذه الفترة: ' : 'Confidence in this window: '}{ar ? level.ar : level.en}
-      </span>
-
-      <span className="text-text-secondary">
-        {c.coverage === null
-          ? (ar
-              ? 'لا مصدر تُقاس تغطيته بالأيام في هذه الفترة.'
-              : 'No source in this window is measured in days.')
-          : (ar
-              ? `${c.daysWithData} من ${countedDays(c.daysExpected, 'ar')} عبر ${countedAr(c.sourcesCounted, SOURCE_AR)} (${countedDays(windowDays, 'ar')} لكل مصدر).`
-              : `${c.daysWithData} of ${countedDays(c.daysExpected, 'en')} across ${countedEn(c.sourcesCounted, 'source', 'sources')} (${countedDays(windowDays, 'en')} each).`)}
-      </span>
-
-      {worst !== null && (
-        <span className="text-text-secondary">
-          {ar ? `الأثر الأكبر: ${worst}.` : `Most of the gap: ${worst}.`}
-        </span>
+    <div data-testid="quality-confidence" data-level={c.level} title={said}
+      className="mb-3 flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-surface p-4">
+      <Ring pct={pct} stroke={level.stroke} size={64} />
+      <div className="min-w-0">
+        <div className="text-xs font-semibold text-text-muted">{ar ? 'الثقة في الأرقام' : 'Confidence'}</div>
+        <div className={`text-2xl font-extrabold ${level.tone}`}>{ar ? level.ar : level.en}</div>
+      </div>
+      {c.coverage !== null && (
+        <div className="min-w-0">
+          <div className="text-xs font-semibold text-text-muted">{ar ? 'أيام بالبيانات' : 'Days with data'}</div>
+          <div className="tnum text-lg font-bold text-text-primary"><Num>{c.daysWithData}</Num><span className="text-sm text-text-muted"> / <Num>{c.daysExpected}</Num></span></div>
+        </div>
       )}
-
-      {c.sourcesNotCountable > 0 && (
-        <span className="text-text-muted">
-          {ar
-            ? `${countedAr(c.sourcesNotCountable, SOURCE_AR)} لا تُقاس تغطيته بالأيام (المتاجر) وخارج هذه النسبة.`
-            : `${countedEn(c.sourcesNotCountable, 'source', 'sources')} are not measured in days (stores) and are outside this figure.`}
-        </span>
+      {c.worst !== null && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-text-muted">{ar ? 'الأثر الأكبر' : 'Biggest gap'}</span>
+          <ProviderMark provider={c.worst.provider} size={22} />
+          <span className="text-sm font-bold text-text-primary">{worst}</span>
+        </div>
       )}
+      <span className="sr-only">{said}</span>
     </div>
+  )
+}
+
+/** QUALITY-VISUAL-001 — a coverage ring: drawn, never sentenced. Absent coverage draws an empty track and «—». */
+function Ring({ pct, stroke, size = 44 }: { pct: number | null; stroke: string; size?: number }) {
+  const r = (size - 6) / 2
+  const c = 2 * Math.PI * r
+  const shown = pct === null ? 0 : Math.max(0, Math.min(100, pct))
+
+  return (
+    <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: size, height: size }} aria-hidden>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={5} />
+        {pct !== null && (
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={stroke} strokeWidth={5} strokeLinecap="round"
+            strokeDasharray={`${(shown / 100) * c} ${c}`} />
+        )}
+      </svg>
+      <span className="tnum absolute text-xs font-extrabold text-text-primary">{pct === null ? '—' : `${pct}%`}</span>
+    </span>
   )
 }
 
@@ -2248,21 +2287,21 @@ function AttributionFindings({
 
   if (!examined) {
     return (
-      <p data-testid="attribution-findings-unavailable" className="mb-4 rounded-xl border border-border bg-surface-secondary p-3.5 text-sm text-text-secondary">
-        {ar
+      <Tag testId="attribution-findings-unavailable" tone="muted"
+        label={ar ? 'الإسناد: ما انقرأ' : 'Attribution: not read'}
+        said={ar
           ? 'تعذّر فحص طريقة العدّ: لم تُقرأ بيانات الإسناد لهذه الفترة. هذا ليس «لا يوجد اختلاف».'
-          : 'How the platforms counted could not be examined: no attribution data was read for this period. This is not «no disagreement».'}
-      </p>
+          : 'How the platforms counted could not be examined: no attribution data was read for this period. This is not «no disagreement».'} />
     )
   }
 
   if (findings.length === 0) {
     return (
-      <p data-testid="attribution-findings-clear" className="mb-4 rounded-xl border border-success/30 bg-success/5 p-3.5 text-sm text-text-secondary">
-        {ar
+      <Tag testId="attribution-findings-clear" tone="good"
+        label={ar ? 'الإسناد سليم' : 'Attribution consistent'}
+        said={ar
           ? 'فُحصت طريقة العدّ لكل منصة أرسلت إسنادًا، ولم يظهر اختلاف يستدعي الانتباه.'
-          : 'How each reporting platform counted was examined, and no disagreement needs your attention.'}
-      </p>
+          : 'How each reporting platform counted was examined, and no disagreement needs your attention.'} />
     )
   }
 
@@ -2290,26 +2329,27 @@ function AttributionFindings({
   }
 
   return (
-    <ul data-testid="attribution-findings" className="mb-4 grid gap-2 lg:grid-cols-2">
+    <ul data-testid="attribution-findings" className="mb-4 flex flex-wrap gap-2">
       {[...groups.values()].map((group) => {
         const finding = group[0]
+        const said = [ar ? finding.what.ar : finding.what.en, ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en].join(' — ')
         return (
-          <li key={finding.key} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {group.map((g) => (
-                <span key={g.key} data-testid={`attribution-finding-${g.key}`} className="rounded-full bg-surface px-2 py-0.5 text-xs font-bold text-text-primary">
-                  {g.provider === null ? (ar ? 'عبر المنصات' : 'Across platforms') : providerLabel(g.provider, ar ? 'ar' : 'en')}
-                </span>
-              ))}
-              <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-semibold text-text-secondary">
-                {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
-              </span>
-            </div>
-            <p className="mt-1.5 text-sm font-semibold text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
-            <details className="mt-1 text-xs">
-              <summary className="cursor-pointer select-none font-semibold text-brand-600">{ar ? 'ما الذي يتأثر' : 'What this affects'}</summary>
-              <p className="mt-1 text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
-              <p className="mt-0.5 text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+          <li key={finding.key} className="min-w-0">
+            <details className={`group rounded-xl border px-3 py-2 ${TONE[finding.severity]}`}>
+              <summary className="flex cursor-pointer list-none items-center gap-1.5" title={said}>
+                <SeverityDot severity={finding.severity} />
+                {group.map((g) => (
+                  <span key={g.key} data-testid={`attribution-finding-${g.key}`} className="inline-flex items-center gap-1 text-xs font-bold text-text-primary">
+                    {g.provider === null ? (ar ? 'عبر المنصات' : 'Across platforms') : <><ProviderMark provider={g.provider} size={18} />{providerLabel(g.provider, ar ? 'ar' : 'en')}</>}
+                  </span>
+                ))}
+                <span className="sr-only">{said}</span>
+              </summary>
+              <div className="mt-2 max-w-sm space-y-1 border-t border-border pt-2 text-xs">
+                <p className="font-semibold text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+                <p className="text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
+                <p className="text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+              </div>
             </details>
           </li>
         )
@@ -2339,7 +2379,9 @@ function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]
 
   if (findings.length === 0) {
     return (
-      <p data-testid="quality-findings-clear" className="mb-4 rounded-xl border border-success/30 bg-success/5 p-3.5 text-sm text-text-secondary">
+      <p data-testid="quality-findings-clear" className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-bold text-success">
+        <span aria-hidden>✓</span>{ar ? 'كل المصادر محدّثة' : 'All sources current'}
+        <span className="sr-only">
         {/*
           «لا يوجد شيء» would read as a page that failed to load. Every source being current IS the
           answer, and saying which sources were checked is what makes it believable.
@@ -2347,12 +2389,13 @@ function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]
         {ar
           ? 'كل مصدر في هذه الفترة محدَّث ومكتمل — ما فيه تنبيهات هنا.'
           : 'Every source in this window is current and complete — nothing here needs your attention.'}
+        </span>
       </p>
     )
   }
 
   return (
-    <ul data-testid="quality-findings" className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+    <ul data-testid="quality-findings" className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
       {findings.map((finding) => (
         <QualityFindingRow key={finding.key} finding={finding} ar={ar} />
       ))}
@@ -2382,61 +2425,57 @@ function QualityFindings({ findings, ar, loading }: { findings: QualityFinding[]
 function QualityFindingRow({ finding, ar }: { finding: QualityFinding; ar: boolean }) {
   const [open, setOpen] = useState(false)
   const pct = finding.coverage === null ? null : Math.round(finding.coverage * 100)
+  const name = finding.name ?? providerLabel(finding.provider, ar ? 'ar' : 'en')
+  const said = [ar ? finding.what.ar : finding.what.en, ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en].join(' — ')
 
+  // QUALITY-VISUAL-001 — a tile: the platform, its coverage ring and a severity dot. The sentence is the tooltip; the details open on tap.
   return (
-    <li data-testid={`quality-finding-${finding.provider}`} className={`rounded-xl border p-3.5 ${TONE[finding.severity]}`}>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-bold text-text-primary">{finding.name ?? finding.provider}</span>
-        <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-          {ar ? OWNER[finding.owner].ar : OWNER[finding.owner].en}
+    <li data-testid={`quality-finding-${finding.provider}`} className={`rounded-2xl border p-3 ${TONE[finding.severity]}`} title={said}>
+      <button type="button" onClick={() => setOpen((v) => !v)} data-testid={`quality-finding-toggle-${finding.provider}`}
+        aria-expanded={open} className="flex w-full items-center gap-3 text-start">
+        {pct !== null
+          ? <span data-testid={`quality-coverage-${finding.provider}`} className="contents"><Ring pct={pct} stroke={RING_STROKE[finding.severity]} /><span className="sr-only">{ar ? `التغطية ${pct}%` : `${pct}% covered`}</span></span>
+          : <SeverityDot severity={finding.severity} />}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <ProviderMark provider={finding.provider} size={20} />
+          <span className="truncate text-sm font-bold text-text-primary">{name}</span>
         </span>
-      </div>
-
-      {/*
-        The coverage bar. Absent — not drawn at zero — when the finding carries no coverage figure:
-        an empty bar reads as «this source covered none of the window», which is a different and
-        much worse claim than «coverage was not measured for this finding».
-      */}
-      {pct !== null && (
-        <div className="mt-2 flex items-center gap-2" data-testid={`quality-coverage-${finding.provider}`}>
-          <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface">
-            <span
-              className={`block h-full rounded-full ${COVERAGE_FILL[finding.severity]}`}
-              style={{ width: `${Math.max(2, pct)}%` }}
-            />
-          </span>
-          <span className="tnum w-24 shrink-0 text-end text-[11px] font-semibold text-text-secondary" dir="ltr">
-            {ar ? `التغطية ${pct}%` : `${pct}% covered`}
-          </span>
-        </div>
-      )}
-
-      <p className="mt-2 text-sm text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+        <span className="sr-only">{said}</span>
+      </button>
 
       {open && (
-        <div className="mt-2 space-y-1 border-t border-border pt-2">
-          <p className="text-xs text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
-          <p className="text-xs text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
+        <div className="mt-2 space-y-1 border-t border-border pt-2 text-xs">
+          <p className="font-semibold text-text-primary">{ar ? finding.what.ar : finding.what.en}</p>
+          <p className="text-text-secondary">{ar ? finding.affects.ar : finding.affects.en}</p>
+          <p className="text-text-muted">{ar ? finding.check.ar : finding.check.en}</p>
         </div>
       )}
-
-      <button
-        onClick={() => setOpen((v) => !v)}
-        data-testid={`quality-finding-toggle-${finding.provider}`}
-        className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
-      >
-        {open ? (ar ? 'إخفاء التفاصيل' : 'Hide details') : (ar ? 'ما الذي يتأثر' : 'What this affects')}
-      </button>
     </li>
   )
 }
 
-/** The bar's fill, by the finding's own severity — «how much» and «how bad», read together. */
-const COVERAGE_FILL: Record<QualityFinding['severity'], string> = {
-  critical: 'bg-danger',
-  attention: 'bg-warning',
-  watch: 'bg-brand-500',
+const RING_STROKE: Record<QualityFinding['severity'], string> = {
+  critical: 'var(--danger)',
+  attention: 'var(--warning)',
+  watch: 'var(--brand-500)',
 }
+
+function SeverityDot({ severity }: { severity: 'critical' | 'attention' | 'watch' }) {
+  const cls = severity === 'critical' ? 'bg-danger' : severity === 'attention' ? 'bg-warning' : 'bg-text-muted'
+  return <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full ${cls}`} />
+}
+
+/** QUALITY-VISUAL-001 — a status as a tag; what it means rides in the tooltip and for screen readers. */
+function Tag({ label, said, tone, testId }: { label: string; said: string; tone: 'good' | 'muted'; testId: string }) {
+  return (
+    <p data-testid={testId} title={said}
+      className={`mb-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${tone === 'good' ? 'bg-success/10 text-success' : 'bg-surface-secondary text-text-muted'}`}>
+      <span aria-hidden>{tone === 'good' ? '✓' : '?'}</span>{label}
+      <span className="sr-only">{said}</span>
+    </p>
+  )
+}
+
 
 function AttributionSection({ projectId, range, filters }: TabProps) {
   const locale = useUi((u) => u.locale)
@@ -2514,17 +2553,14 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
   return (
     <Panel
       title={ar ? 'أساس الأرقام' : 'How these numbers were produced'}
-      description={ar
-        ? 'العملة والمنطقة الزمنية ونافذة الإسناد ومصدر كل رقم قبل عرضه'
-        : 'The currency, timezone, attribution window and source behind every figure above'}
       loading={n.isLoading}
       error={n.isError}
       className="mt-4"
     >
-      <div data-testid="normalization" className="grid gap-3 text-sm">
-        <ScopeNote scope={d?.filter_scope} testid="normalization-scope" />
+      <div data-testid="normalization" className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <div className="sm:col-span-2 lg:col-span-3"><ScopeNote scope={d?.filter_scope} testid="normalization-scope" /></div>
         {/* Currency. Silence here is a claim: a converted figure that says nothing reads as native. */}
-        <Basis label={ar ? 'العملة' : 'Currency'}>
+        <Basis label={ar ? 'العملة' : 'Currency'} glance={converted.length > 0 ? converted.map((c) => `${c.from}→${c.to}`).join(' · ') : (d?.project_currency ?? '—')} warn={withheld > 0 || (d?.project_currencies?.length ?? 0) > 1}>
           {converted.length > 0
             ? converted.map((c) => (
                 <span key={`${c.from}-${c.to}`} className="block">
@@ -2560,7 +2596,7 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
         </Basis>
 
         {/* Timezone — what "a day" means. A row dated by the platform's midnight is not the project's. */}
-        <Basis label={ar ? 'حدود اليوم' : 'Where a day starts'}>
+        <Basis label={ar ? 'حدود اليوم' : 'Where a day starts'} glance={shifted.length > 0 ? shifted.map((t) => `${t.from}→${t.to}`).join(' · ') : (ar ? 'توقيت واحد' : 'One clock')} warn={false} good={shifted.length === 0}>
           {shifted.length > 0
             ? shifted.map((t) => (
                 <span key={`${t.from}-${t.to}`} className="block">
@@ -2573,7 +2609,7 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
         </Basis>
 
         {/* Attribution — more than one window in a range is a comparability defect, not a detail. */}
-        <Basis label={ar ? 'نافذة الإسناد' : 'Attribution window'}>
+        <Basis label={ar ? 'نافذة الإسناد' : 'Attribution window'} glance={windows.length === 0 ? '—' : windows.length === 1 ? windows[0].window : `${num(windows.length)} ${ar ? 'نوافذ' : 'windows'}`} warn={windows.length > 1} good={windows.length === 1}>
           {windows.length === 0
             ? (ar ? 'لا توجد بيانات في هذه الفترة.' : 'There is no data in this period.')
             : windows.map((w) => (
@@ -2593,7 +2629,7 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
 
         {/* Objective comparability: name the metrics that survive, rather than allow or refuse silently. */}
         {objectives && objectives.present.length > 0 && (
-          <Basis label={ar ? 'المقارنة بين الأهداف' : 'Comparing across objectives'}>
+          <Basis label={ar ? 'المقارنة بين الأهداف' : 'Comparing across objectives'} glance={`${num(objectives.present.length)} ${ar ? (objectives.present.length === 1 ? 'هدف' : 'أهداف') : (objectives.present.length === 1 ? 'objective' : 'objectives')}`} warn={objectives.mixed} good={!objectives.mixed}>
             {objectives.mixed ? (
               <>
                 <span className="block">
@@ -2618,7 +2654,7 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
         )}
 
         {/* Demo rows are labelled here too, not only by a badge in the corner of the page. */}
-        <Basis label={ar ? 'المصدر' : 'Source'}>
+        <Basis label={ar ? 'المصدر' : 'Source'} glance={demoRows > 0 ? (ar ? 'بيانات تجريبية' : 'demo data') : (d?.sources ?? []).length === 0 ? (ar ? 'لا توجد بيانات' : 'no data in this period') : sourceLabel([...(d?.sources ?? [])].sort((x, y) => y.rows - x.rows)[0].source_type, ar)} warn={demoRows > 0} good={demoRows === 0 && (d?.sources ?? []).length > 0}>
           {(d?.sources ?? []).length === 0
             ? (ar ? 'لا توجد بيانات في هذه الفترة.' : 'There is no data in this period.')
             : (d?.sources ?? []).map((s) => (
@@ -2638,7 +2674,7 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
         </Basis>
 
         {/* Stored but read by nothing. An empty answer is stated, never left as an empty space. */}
-        <Basis label={ar ? 'مقاييس غير محسوبة' : 'Metrics nothing reads'}>
+        <Basis label={ar ? 'مقاييس غير محسوبة' : 'Metrics nothing reads'} glance={num(d?.unread_metric_keys?.length ?? 0)} warn={(d?.unread_metric_keys?.length ?? 0) > 0} good={(d?.unread_metric_keys?.length ?? 0) === 0}>
           {(d?.unread_metric_keys?.length ?? 0) === 0
             ? (ar ? 'كل مقياس في بياناتك يدخل في مؤشر واحد على الأقل.' : 'Every metric key in your data feeds at least one KPI.')
             : (ar
@@ -2648,7 +2684,7 @@ function NormalizationPanel({ projectId, range, filters }: TabProps) {
 
         {/* The catalogue: what a metric means and whether it may be summed at all. */}
         {d?.catalogue?.available && (
-          <details className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
+          <details className="rounded-xl border border-border bg-surface-secondary px-4 py-3 sm:col-span-2 lg:col-span-3">
             <summary className="cursor-pointer text-sm font-semibold text-text-primary">
               {ar ? `تعريفات المقاييس (${num(d.catalogue.metrics.length)})` : `Metric definitions (${num(d.catalogue.metrics.length)})`}
             </summary>
@@ -2686,26 +2722,25 @@ function sourceLabel(source: string, ar: boolean): string {
   return table[source] ? (ar ? table[source].ar : table[source].en) : source
 }
 
-function Basis({ label, children }: { label: string; children: React.ReactNode }) {
+/**
+ * QUALITY-VISUAL-001 — one tile per basis: its name, the answer at a glance, a status dot. The sentences behind it open
+ * on tap (and stay in the page for search and screen readers) instead of filling the panel.
+ */
+function Basis({ label, glance, warn, good, children }: { label: string; glance: string; warn: boolean; good?: boolean; children: React.ReactNode }) {
   return (
-    <div className="grid gap-0.5 border-b border-border pb-3 last:border-0 last:pb-0 sm:grid-cols-[180px_1fr] sm:gap-4">
-      <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{label}</span>
-      <div className="text-text-secondary">{children}</div>
-    </div>
+    <details className={`group rounded-xl border p-3 ${warn ? 'border-warning/40 bg-warning/5' : 'border-border bg-surface'}`}>
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-2">
+        <span className="min-w-0">
+          <span className="block text-xs font-bold text-text-muted">{label}</span>
+          <span className="tnum mt-0.5 block truncate text-lg font-extrabold text-text-primary" dir="auto">{glance}</span>
+        </span>
+        <span aria-hidden className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${warn ? 'bg-warning' : good ? 'bg-success' : 'bg-text-muted/40'}`} />
+      </summary>
+      <div className="mt-2 border-t border-border pt-2 text-xs text-text-secondary">{children}</div>
+    </details>
   )
 }
 
-/**
- * PLATFORM-CELL-001 — the cell whose entire job is to name a platform printed its key.
- *
- * Three tables use this — platforms, campaign ranking and data quality — so «meta» appeared as the
- * platform name beside an accounts table on the next tab reading «ميتا», and in the filter chips
- * above them, which have always used `providerLabel`. The dot was localized and the word was not.
- *
- * The same reader as everywhere else. `canonicalPlatform` first, because the breakdowns return the
- * provider as stored (`google_ads`) while the labels are keyed canonically (`google`) — a mismatch
- * that would have fallen back to the key and looked exactly like the defect being fixed.
- */
 function PlatformCell({ provider }: { provider: string }) {
   const ar = useAr()
 
