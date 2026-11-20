@@ -670,7 +670,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   const verified = ad.verified_result
   if (verified !== undefined) {
     out.push({ label: verified?.label ?? (ar ? 'النتائج' : 'Results'), value: verified?.value === null || verified?.value === undefined ? (ar ? 'غير متاح' : 'Not available') : (n(verified.value) ?? '—') })
-    if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
+    if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'معدل النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
     const impressions = n(ad.impressions)
     if (opts.resultsOnly && impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })
 
@@ -699,7 +699,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
    * all — the same rule as before, unchanged.
    */
   if (opts.resultsOnly) {
-    if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
+    if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'معدل النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
     const impressions = n(ad.impressions)
     if (impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })
     const clicks = n(ad.clicks)
@@ -728,7 +728,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   /* Delivery, for an ad with no result to show — never instead of one. Owner 2026-10-29: its clicks lead, as the result would have. */
   if (!countIsStated && (familyCount === null || opts.family === 'traffic')) {
     if (ad.ctr !== null && ad.ctr !== undefined) {
-      out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
+      out.push({ label: ar ? 'معدل النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
     } else {
       const impressions = n(ad.impressions)
       if (impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })

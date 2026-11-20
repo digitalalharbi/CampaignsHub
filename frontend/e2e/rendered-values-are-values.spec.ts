@@ -66,11 +66,11 @@ function portal(label: string, storageState: string, paths: string[]) {
 }
 
 portal('advertiser', AUTH.advertiser, [
-    '/app/home', '/app/analytics', '/app/content', '/app/reports', '/app/campaigns', '/app/portfolio',
+    '/app/dashboard', '/app/analytics', '/app/content', '/app/reports', '/app/campaigns', '/app/portfolio',
 ])
 
 portal('agency', AUTH.owner, [
-    '/agency/home', '/agency/clients', '/agency/portfolio', '/agency/reports',
+    '/agency/dashboard', '/agency/clients', '/agency/portfolio', '/agency/reports',
     '/agency/content', '/agency/analytics', '/agency/campaigns',
 ])
 

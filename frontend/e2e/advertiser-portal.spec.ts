@@ -71,11 +71,11 @@ test.describe('the advertiser portal', () => {
    * second board: its address lands on the analysis, the rail no longer offers «لوحة التحليلات», and the analysis carries
    * the section bar. In a real browser: the old address redirects, the tab bar is there, and the rail has one entry.
    */
-  test('the old dashboard address lands on the one analytics board', async ({ page }) => {
-    await page.goto('/app/dashboard')
-    await expect(page).toHaveURL(/\/app\/analytics/)
+  // DASHBOARD-PATH-001 — the landing is `/app/dashboard`; the old `/app/home` lands there.
+  test('the old home address lands on the dashboard', async ({ page }) => {
+    await page.goto('/app/home')
+    await expect(page).toHaveURL(/\/app\/dashboard/)
     await expect(page.locator('main')).toBeVisible()
-    await expect(page.getByRole('tablist').first()).toBeVisible()
     await expect(page.getByRole('link', { name: /لوحة التحليلات|Analytics board/ })).toHaveCount(0)
   })
 
@@ -163,7 +163,7 @@ test.describe('the advertiser portal', () => {
       expect(await roas.count(), `the ROAS card is absent and the strip is in «${state}»`).toBeGreaterThan(0)
     }).toPass({ timeout: 20000 })
 
-    await expect(roas).toContainText('العائد على الإنفاق', { timeout: 20000 })
+    await expect(roas).toContainText('معدل العائد', { timeout: 20000 })
 
     /*
      * FILTER-LOCALE-EMPTY-STATE-OBS — watch EVERY state the strip passes through, not the last one.
@@ -198,7 +198,7 @@ test.describe('the advertiser portal', () => {
 
     await toggleLanguage(page)
     await expect(roas).toContainText('Return on ad spend', { timeout: 20000 })
-    await expect(roas).not.toContainText('العائد على الإنفاق')
+    await expect(roas).not.toContainText('معدل العائد')
 
     const states = await page.evaluate(() => (window as unknown as { __stripStates: string[] }).__stripStates)
 
@@ -241,7 +241,7 @@ test.describe('the advertiser portal', () => {
 
   /** Every rail link opens a page with content — the advertiser's own sections, not the agency's. */
   test('every rail link opens a page that is not empty', async ({ page }) => {
-    await page.goto('/app/home')
+    await page.goto('/app/dashboard')
     await expect(page.getByRole('navigation').first()).toBeVisible()
 
     const hrefs = await page.getByRole('navigation').first().locator('a[href^="/app"]')
@@ -269,7 +269,7 @@ test.describe('the advertiser portal', () => {
    * Arabic inside `<code>`/`<pre>`, and the language toggle's own «ع» label, are not content.
    */
   test('no section is left in Arabic when the language is English', async ({ page }) => {
-    await page.goto('/app/home')
+    await page.goto('/app/dashboard')
     await expect(page.getByRole('navigation').first()).toBeVisible()
 
     const hrefs = await page.getByRole('navigation').first().locator('a[href^="/app"]')
@@ -317,7 +317,7 @@ test.describe('the advertiser portal', () => {
       'sar', 'usd', 'aed', 'demo', 'all', 'none', 'beta', 'utc', 'vat', 'ok',
     ])
 
-    await page.goto('/app/home')
+    await page.goto('/app/dashboard')
     await expect(page.getByRole('navigation').first()).toBeVisible()
 
     const hrefs = await page.getByRole('navigation').first().locator('a[href^="/app"]')
@@ -370,7 +370,7 @@ test.describe('the advertiser portal', () => {
 
   test('the dashboard holds together on a phone', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
-    await page.goto('/app/home')
+    await page.goto('/app/dashboard')
     await expect(page.locator('main')).toBeVisible()
 
     const overflow = await page.evaluate(
@@ -395,7 +395,7 @@ test.describe('remembered preferences', () => {
   test.use({ storageState: AUTH.advertiser })
 
   test('the chosen language survives a full page load', async ({ page }) => {
-    await page.goto('/app/home')
+    await page.goto('/app/dashboard')
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
 
     await page.getByRole('button', { name: 'Toggle language' }).first().click()
@@ -411,7 +411,7 @@ test.describe('remembered preferences', () => {
   })
 
   test('the chosen theme survives a full page load', async ({ page }) => {
-    await page.goto('/app/home')
+    await page.goto('/app/dashboard')
     const before = await page.locator('html').getAttribute('data-theme')
 
     await page.getByRole('button', { name: 'Toggle theme' }).first().click()

@@ -38,7 +38,7 @@ const COPY = {
     title: 'أداء حساباتك', period: (d: number) => `آخر ${days(d, 'ar')}`, synced: 'آخر مزامنة', stale: 'قد تكون البيانات متأخرة',
     platforms: 'المنصات', projects: 'المشاريع', campaigns: 'الحملات', all: 'عرض الكل', none: 'لا توجد بيانات لهذه الفترة بعد.',
     total: 'الإجمالي',
-    k: { impressions: 'مرات الظهور', clicks: 'النقرات', conversions: 'تحويلات المنصة', ctr: 'نسبة النقر', spend: 'الإنفاق', cpa: 'تكلفة التحويل', revenue: 'الإيرادات', roas: 'العائد على الإنفاق' } as Record<string, string>,
+    k: { impressions: 'مرات الظهور', clicks: 'النقرات', conversions: 'تحويلات المنصة', ctr: 'معدل النقر', spend: 'الإنفاق', cpa: 'تكلفة التحويل', revenue: 'الإيرادات', roas: 'معدل العائد' } as Record<string, string>,
     st: { active: 'نشطة', paused: 'متوقفة', draft: 'مسودة', ended: 'منتهية', completed: 'مكتملة', archived: 'مؤرشفة' } as Record<string, string>,
   },
   en: {

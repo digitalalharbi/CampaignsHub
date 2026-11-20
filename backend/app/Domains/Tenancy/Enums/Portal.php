@@ -115,8 +115,8 @@ enum Portal: string
     {
         return match ($this) {
             self::Admin => '/admin',
-            self::App => '/app/home',
-            self::Agency => '/agency/home',
+            self::App => '/app/dashboard',
+            self::Agency => '/agency/dashboard',
             self::Influencers => '/influencers',
             self::ClientPortal => '/portal',
         };

@@ -130,7 +130,7 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     spend: { ar: 'الإنفاق', en: 'Spend', invertGood: true, format: (t, p) => asReading(liveMoneyFromTotals(t as MoneyTotals, 'spend', ar, p.currency)) },
     impressions: { ar: 'الظهور', en: 'Impressions', format: (t, _p, _m, count) => count(t.impressions) },
     clicks: { ar: 'النقرات', en: 'Clicks', format: (t, _p, _m, count) => count(t.clicks) },
-    ctr: { ar: 'نسبة النقر', en: 'CTR', format: (t) => plain(rateText(t.ctr)) },
+    ctr: { ar: 'معدل النقر', en: 'CTR', format: (t) => plain(rateText(t.ctr)) },
     // The platform's own optimised-for conversion. Never called «Results»: that name belongs to an event the link defined (RESULT-EVENTS-001).
     conversions: { ar: 'تحويلات المنصة', en: 'Platform conversions', format: (t, _p, _m, count) => count(t.conversions) },
     /*
@@ -150,7 +150,7 @@ export function useLiveMetricReader(currency: string, ar: boolean) {
     checkout: { ar: 'بدء الدفع', en: 'Checkout', format: (_t, p, _m, count) => count(stageCount(p, 'checkout')) },
     purchases: { ar: 'الطلبات', en: 'Purchases', format: (t, _p, _m, count) => count(t.purchases) },
     revenue: { ar: 'الإيرادات', en: 'Revenue', format: (t, p) => asReading(liveMoneyFromTotals(t as MoneyTotals, 'revenue', ar, p.currency)) },
-    roas: { ar: 'العائد على الإنفاق', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return plain(ratio(r.value)) } },
+    roas: { ar: 'معدل العائد', en: 'ROAS', format: (t) => { const r = readRoas(t as MoneyTotals, ar); return plain(ratio(r.value)) } },
     // NASEL 2026-10-29 — Results and their cost as the link DEFINED them (`results`), never the platform's generic conversion.
     results: { ar: 'النتائج', en: 'Results', format: (_t, p, _m, count) => (p.results?.configured !== true || p.results.total == null ? plain(ar ? 'غير متاح' : 'Not available') : count(p.results.total)) },
     cost_per_result: { ar: 'تكلفة النتيجة', en: 'Cost per result', invertGood: true, format: (_t, p) => (p.results?.configured !== true || p.results.cost == null ? plain(ar ? 'غير متاح' : 'Not available') : plain(asExactMoney(p.results.cost))) },

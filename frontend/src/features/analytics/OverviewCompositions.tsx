@@ -208,7 +208,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
           { key: 'revenue', label: ar ? 'إيرادات المتجر' : 'Store revenue', value: commerce.revenue == null ? '—' : money(commerce.revenue, cur) },
           { key: 'orders', label: ar ? 'الطلبات' : 'Orders', value: num(commerce.orders) },
           { key: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order value', value: commerce.aov == null ? '—' : money(commerce.aov, cur) },
-          { key: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
+          { key: 'roas', label: ar ? 'معدل العائد' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
         ].map((k) => (
           <div key={k.key} data-testid={`store-kpi-${k.key}`} className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
             <p className="text-xs text-text-secondary">{k.label}</p>
@@ -626,13 +626,16 @@ export function AnalyticsOverview(d: OverviewData) {
 
 
         {s.data?.conversions_basis?.may_double_count && (
-          <p
+          // NO-OPERATOR-NOTES-001 — a tag, not a paragraph: the sentence is the tooltip and the screen reader's.
+          <span
             data-testid="conversions-basis"
-            className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
+            title={ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}
+            className="inline-flex w-fit items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-text-secondary"
           >
-            <span className="font-semibold text-text-primary">{ar ? '«النتائج»: ' : 'Results: '}</span>
-            {ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}
-          </p>
+            <Info size={12} aria-hidden />
+            {ar ? 'النتائج: مجموع المنصات' : 'Results: summed across platforms'}
+            <span className="sr-only">{ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}</span>
+          </span>
         )}
 
         <Panel

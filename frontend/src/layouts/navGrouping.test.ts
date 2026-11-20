@@ -24,7 +24,7 @@ import { navLeaves, type NavGroup } from './SidebarNav'
 const APP_BEFORE = [
   // ANALYTICS-ONE-BOARD-001 (Owner, 2026-11-19): `/app/dashboard` («لوحة التحليلات») is retired on purpose — its address redirects to
   // `/app/analytics` (pinned in `src/app/analyticsBoardRedirect.test.tsx`), so it is not «lost», it is one board now.
-  '/app/home', '/app/requests', '/app/clients', '/app/projects', '/app/campaigns',
+  '/app/dashboard', '/app/requests', '/app/clients', '/app/projects', '/app/campaigns',
   '/app/content', '/app/analytics', '/app/reports', '/app/tasks', '/app/integrations',
   '/app/files', '/app/alerts', '/app/messages', '/app/billing', '/app/subscriptions',
   '/app/settings',
@@ -39,7 +39,7 @@ const APP_BEFORE = [
  */
 const AGENCY_BEFORE = [
   // ANALYTICS-ONE-BOARD-001 — `/agency/dashboard` redirects to `/agency/analytics`; see the note above.
-  '/agency/home', '/agency/clients', '/agency/requests',
+  '/agency/dashboard', '/agency/clients', '/agency/requests',
   '/agency/campaigns', '/agency/content', '/agency/reports', '/agency/tasks',
   '/agency/files', '/agency/alerts', '/agency/messages', '/agency/billing',
   '/agency/subscriptions', '/agency/team', '/agency/settings',

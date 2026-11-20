@@ -50,7 +50,8 @@ const PAGE_PERMISSION: ReadonlyArray<readonly [RegExp, string]> = [
   [/^\/content(\/|$)/, 'content.view'],
   [/^\/files(\/|$)/, 'drive.view'],
   // FINANCE-ONLY-NAV-001 — the analytics board reads the same analytics; a finance member (budgets and invoices only) was offered it.
-  [/^\/(analytics|dashboard)(\/|$)/, 'analytics.view'],
+  // DASHBOARD-PATH-001 — `/dashboard` is the role landing now, open to every member; only «التحليلات» needs analytics.view.
+  [/^\/analytics(\/|$)/, 'analytics.view'],
   [/^\/launch(\/|$)/, 'campaigns.launch'],
   [/^\/portfolio(\/|$)/, 'clients.view'],
   [/^\/(reports|delivery)(\/|$)/, 'reports.view'],

@@ -34,7 +34,7 @@ test.describe('the manifest and icons', () => {
     const res = await request.get('/manifest.webmanifest')
     expect(res.ok()).toBeTruthy()
     const m = await res.json()
-    expect(m).toMatchObject({ name: 'كمبينز هب', lang: 'ar', dir: 'rtl', display: 'standalone', start_url: '/agency/home' })
+    expect(m).toMatchObject({ name: 'كمبينز هب', lang: 'ar', dir: 'rtl', display: 'standalone', start_url: '/agency/dashboard' })
     expect(m.theme_color).toMatch(/^#[0-9a-f]{6}$/i)
 
     const seen = new Set<string>()
@@ -54,7 +54,7 @@ test.describe('the manifest and icons', () => {
   })
 
   test('opening the start URL signed out lands on the sign-in page', async ({ page }) => {
-    await page.goto('/agency/home')
+    await page.goto('/agency/dashboard')
 
     await expect(page).toHaveURL(/\/login/)
   })
@@ -65,12 +65,12 @@ test.describe('signed in', () => {
 
   test('the start URL opens the role home, the bare portal address lands there, and the analytics board is still reachable', async ({ page }) => {
     // AF1: the role dashboard is the landing (the Owner's order), and the installed app's start URL is that landing.
-    await page.goto('/agency/home')
-    await expect(page).toHaveURL(/\/agency\/home/)
+    await page.goto('/agency/dashboard')
+    await expect(page).toHaveURL(/\/agency\/dashboard/)
     await expect(page.getByTestId('role-dashboard')).toBeVisible({ timeout: 30_000 })
 
     await page.goto('/agency')
-    await expect(page).toHaveURL(/\/agency\/home/)
+    await expect(page).toHaveURL(/\/agency\/dashboard/)
     // Let the landing finish drawing before the next address: Firefox aborts a `goto` issued while the previous navigation is
     // still settling (NS_BINDING_ABORTED), which says nothing about the app.
     await expect(page.getByTestId('role-dashboard')).toBeVisible({ timeout: 30_000 })
@@ -83,7 +83,7 @@ test.describe('signed in', () => {
     await page.goto('/agency/analytics')
     await workerReady(page)
     // Use the app so it makes its API calls through a controlled page.
-    await page.goto('/agency/home')
+    await page.goto('/agency/dashboard')
     await expect(page.getByRole('button', { name: 'الإشعارات' })).toBeVisible({ timeout: 20_000 })
     await page.waitForTimeout(1500)
 

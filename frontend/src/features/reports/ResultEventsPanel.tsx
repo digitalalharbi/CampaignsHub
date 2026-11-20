@@ -26,7 +26,7 @@ const METRIC_LABEL: Record<string, [string, string]> = {
   qualified_leads: ['عملاء مؤهلون', 'Qualified leads'],
   conversions: ['تحويلات المنصة (الحدث المُحسَّن له)', 'Platform conversions (optimised-for event)'],
   registrations: ['تسجيلات', 'Registrations'],
-  purchases: ['مشتريات', 'Purchases'],
+  purchases: ['الطلبات', 'Purchases'],
   add_to_cart: ['إضافات للسلة', 'Add to cart'],
   checkout: ['بدء الدفع', 'Checkout'],
   installs: ['تثبيتات', 'Installs'],

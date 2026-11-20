@@ -32,7 +32,7 @@ describe('permissionOfPath', () => {
     expect(permissionOfPath('/agency/agents/approvals')).toBe('ai.view')
     expect(permissionOfPath('/agency/automation')).toBe('automations.view')
     expect(permissionOfPath('/app/campaigns/123')).toBe('campaigns.view')
-    expect(permissionOfPath('/agency/dashboard')).toBe('analytics.view')
+    expect(permissionOfPath('/agency/dashboard')).toBeNull()
     expect(permissionOfPath('/app/launch')).toBe('campaigns.launch')
     expect(permissionOfPath('/agency/portfolio')).toBe('clients.view')
     // NAV-PAGE-PERMISSION-002 — the projects list and the team page; a project's own pages answer to its capability.
@@ -45,13 +45,13 @@ describe('permissionOfPath', () => {
     const finance = ['clients.view', 'clients.view_all', 'budget.view', 'budget.manage', 'billing.view', 'billing.manage', 'funding.view', 'funding.manage']
     const leaves = [...agencyNavGroups, agencySettingsGroup].flatMap((g) => g.leaves)
     const offered = leaves.filter((l) => { const p = permissionOfPath(l.to); return p === null || finance.includes(p) }).map((l) => l.to)
-    expect(offered).toEqual(expect.arrayContaining(['/agency/billing', '/agency/budgets', '/agency/clients', '/agency/home']))
-    for (const t of ['/agency/campaigns', '/agency/ads', '/agency/analytics', '/agency/dashboard', '/agency/content', '/agency/reports']) expect(offered).not.toContain(t)
+    expect(offered).toEqual(expect.arrayContaining(['/agency/billing', '/agency/budgets', '/agency/clients', '/agency/dashboard']))
+    for (const t of ['/agency/campaigns', '/agency/ads', '/agency/analytics', '/agency/content', '/agency/reports']) expect(offered).not.toContain(t)
   })
 
   it('gives every agency rail page except home a permission', () => {
     const leaves = [...agencyNavGroups, agencySettingsGroup].flatMap((g) => g.leaves)
     const open = leaves.filter((l) => permissionOfPath(l.to) === null).map((l) => l.to)
-    expect(open.sort()).toEqual(['/agency/home'])
+    expect(open.sort()).toEqual(['/agency/dashboard'])
   })
 })

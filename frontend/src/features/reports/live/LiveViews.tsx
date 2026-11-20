@@ -790,7 +790,7 @@ function ContentBody({ payload, currency, locale, onOpenContent }: Omit<Common, 
                 {/* REPORT-FILTERS-FUNCTIONAL-001 — an order by a figure the link does not carry is not offered (the server refuses it too). */}
                 {carries(payload.totals, 'spend') && <option value="spend">{ar ? 'الإنفاق' : 'Spend'}</option>}
                 {carries(payload.totals, 'conversions') && <option value="conversions">{ar ? 'النتائج' : 'Results'}</option>}
-                {carries(payload.totals, 'ctr') && <option value="ctr">{ar ? 'نسبة النقر' : 'CTR'}</option>}
+                {carries(payload.totals, 'ctr') && <option value="ctr">{ar ? 'معدل النقر' : 'CTR'}</option>}
               </select>
             </label>
           )}

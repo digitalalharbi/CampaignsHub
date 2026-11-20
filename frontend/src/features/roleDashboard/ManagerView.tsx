@@ -104,10 +104,12 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
       {/* HOME-360-001 — one block, shared with the project manager's page (same query, deduplicated). */}
       <PerformanceBlock d={d} portal={portal} />
 
-      <div className="grid min-h-0 grid-cols-1 gap-2 lg:grid-cols-12 lg:grid-rows-1">
-        <Panel title={t.vsBudget} to={`/${portal}/budgets`} testId="dash-panel-bars" className="min-h-[220px] lg:col-span-6">
+      {/* SHOW-AVAILABLE-001 — Owner 2026-11-20: «اعرض المتاح فقط». A panel with nothing to draw is not drawn; the rest share the row. */}
+      {(barData.length > 0 || onPlan.length > 0 || offPlan.length > 0 || d.daily_spend.length >= 2) && (
+      <div className="flex min-h-0 flex-col gap-2 lg:flex-row" data-testid="dash-budget-row">
+        {barData.length > 0 && (
+        <Panel title={t.vsBudget} to={`/${portal}/budgets`} testId="dash-panel-bars" className="min-h-[220px] min-w-0 lg:flex-[6]">
           <div ref={bars.ref} className="h-full min-h-[160px]" role="img" aria-label={`${t.vsBudget}: ${barData.map((r) => `${r.label} ${f.pct(r.ratio)}`).join(', ')}`}>
-            {barData.length === 0 ? <Nothing label={t.nothing} /> : (
               <RankingBarChart
                 horizontal
                 height={bars.height}
@@ -116,21 +118,26 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
                 bars={[{ key: 'budget', name: t.barBudget, kind: 'money', color: 'var(--border-strong)' }, { key: 'spent', name: t.barSpent, kind: 'money' }]}
                 rowColor={(row, key) => (key === 'spent' ? STATUS_COLOR[budgetStatus(row.ratio as number | null, d.thresholds.near)] : undefined)}
               />
-            )}
           </div>
         </Panel>
+        )}
 
-        <div className="grid min-h-0 grid-rows-2 gap-2 lg:col-span-3">
-          <Panel title={t.onPlan} to={`/${portal}/${portal === 'agency' ? 'clients' : 'budgets'}`} testId="dash-panel-onplan"><UnitList items={onPlan} portal={portal} testId="dash-onplan" ar={f.ar} /></Panel>
-          <Panel title={t.offPlan} to={`/${portal}/${portal === 'agency' ? 'clients' : 'budgets'}`} testId="dash-panel-offplan"><UnitList items={offPlan} portal={portal} testId="dash-offplan" ar={f.ar} /></Panel>
+        {(onPlan.length > 0 || offPlan.length > 0) && (
+        <div className="grid min-h-0 min-w-0 gap-2 lg:flex-[3]">
+          {onPlan.length > 0 && <Panel title={t.onPlan} to={`/${portal}/${portal === 'agency' ? 'clients' : 'budgets'}`} testId="dash-panel-onplan"><UnitList items={onPlan} portal={portal} testId="dash-onplan" ar={f.ar} /></Panel>}
+          {offPlan.length > 0 && <Panel title={t.offPlan} to={`/${portal}/${portal === 'agency' ? 'clients' : 'budgets'}`} testId="dash-panel-offplan"><UnitList items={offPlan} portal={portal} testId="dash-offplan" ar={f.ar} /></Panel>}
         </div>
+        )}
 
-        <Panel title={t.daily} to={`/${portal}/analytics`} testId="dash-panel-daily" className="min-h-[200px] lg:col-span-3">
+        {d.daily_spend.length >= 2 && (
+        <Panel title={t.daily} to={`/${portal}/analytics`} testId="dash-panel-daily" className="min-h-[200px] min-w-0 lg:flex-[3]">
           <div ref={line.ref} className="h-full min-h-[140px]" role="img" aria-label={t.daily}>
-            {d.daily_spend.length < 2 ? <Nothing label={t.nothing} /> : <MetricLineChart height={line.height} currency={mc ?? ''} data={d.daily_spend} series={[{ key: 'spend', name: t.spend, kind: 'money', color: 'var(--brand-600)' }]} />}
+            <MetricLineChart height={line.height} currency={mc ?? ''} data={d.daily_spend} series={[{ key: 'spend', name: t.spend, kind: 'money', color: 'var(--brand-600)' }]} />
           </div>
         </Panel>
+        )}
       </div>
+      )}
       </div>
 
       <StatusStrip>

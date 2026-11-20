@@ -175,7 +175,7 @@ export function LivePlatformComparison({
     costName,
     ar ? 'الظهور' : 'Impressions',
     ar ? 'النقرات' : 'Clicks',
-    ar ? 'نسبة النقر' : 'CTR',
+    ar ? 'معدل النقر' : 'CTR',
   ]
 
   const { numberOf, spendOf, spendValue, full } = moneyHelpers(ar, currency)

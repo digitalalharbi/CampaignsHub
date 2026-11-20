@@ -34,7 +34,7 @@ final class OperationalDigestModel
         'spend' => ['الإنفاق', 'Spend', 'money'],
         'purchases' => ['الطلبات', 'Purchases', 'count'],
         'revenue' => ['الإيرادات', 'Revenue', 'money'],
-        'roas' => ['العائد على الإنفاق', 'ROAS', 'ratio'],
+        'roas' => ['معدل العائد', 'ROAS', 'ratio'],
         'leads' => ['العملاء المحتملون', 'Leads', 'count'],
         'cpl' => ['تكلفة العميل المحتمل', 'CPL', 'money', true],
         'clicks' => ['النقرات', 'Clicks', 'count'],
@@ -48,7 +48,7 @@ final class OperationalDigestModel
         'engagement_rate' => ['معدل التفاعل', 'Engagement rate', 'percent'],
         'video_views' => ['مشاهدات الفيديو', 'Video views', 'count'],
         'video_completion_rate' => ['معدل الإكمال', 'Completion rate', 'percent'],
-        'ctr' => ['نسبة النقر', 'CTR', 'percent'],
+        'ctr' => ['معدل النقر', 'CTR', 'percent'],
         'conversions' => ['تحويلات المنصة', 'Platform conversions', 'count'],
         'cpa' => ['تكلفة تحويل المنصة', 'Cost per platform conversion', 'money', true],
         'frequency' => ['التكرار', 'Frequency', 'decimal'],
@@ -890,7 +890,7 @@ final class OperationalDigestModel
         $c = (array) ($block['change'] ?? []);
         $versus = $p->comparedWith();
         $out = [];
-        foreach (['spend' => ['الإنفاق', 'Spend'], 'conversions' => ['النتائج', 'Results'], 'roas' => ['العائد على الإنفاق', 'Return on ad spend'], 'cpa' => ['تكلفة النتيجة', 'Cost per result']] as $key => $names) {
+        foreach (['spend' => ['الإنفاق', 'Spend'], 'conversions' => ['النتائج', 'Results'], 'roas' => ['معدل العائد', 'Return on ad spend'], 'cpa' => ['تكلفة النتيجة', 'Cost per result']] as $key => $names) {
             if (isset($c[$key]) && abs((float) $c[$key]) >= 0.05) {
                 $out[] = $names[$ar ? 0 : 1].' '.($c[$key] > 0 ? ($ar ? 'زاد' : 'rose') : ($ar ? 'نزل' : 'fell')).' '.number_format(abs((float) $c[$key]) * 100, 0).'% '.($ar ? 'عن ' : 'against ').$versus;
             }

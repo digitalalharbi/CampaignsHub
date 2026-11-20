@@ -144,11 +144,11 @@ export function buildFindings(rows: CampaignRow[], platforms: Array<{ provider: 
     const lang = ar ? 'ar' : 'en'
     out.push({
       key: 'ctr-leader', icon: Trophy, tone: 'good',
-      title: ar ? 'الأقوى في نسبة النقر' : 'Click-through leader',
+      title: ar ? 'الأقوى في معدل النقر' : 'Click-through leader',
       figure: percent(top.ctr, 2),
       line: ar ? `${providerLabel(canonicalPlatform(top.p.provider), lang)} — ${(top.ctr / low.ctr).toFixed(1)}× ${providerLabel(canonicalPlatform(low.p.provider), lang)}` : `${providerLabel(canonicalPlatform(top.p.provider), lang)} — ${(top.ctr / low.ctr).toFixed(1)}× ${providerLabel(canonicalPlatform(low.p.provider), lang)}`,
       evidence: rated.map((x) => ({ label: providerLabel(canonicalPlatform(x.p.provider), lang), value: percent(x.ctr, 2) })),
-      basis: ar ? 'المنصات التي تجاوزت ألف ظهور في الفترة. نسبة النقر لا تقيس المبيعات.' : 'Platforms above 1,000 impressions in the period. Click-through does not measure sales.',
+      basis: ar ? 'المنصات التي تجاوزت ألف ظهور في الفترة. معدل النقر لا يقيس المبيعات.' : 'Platforms above 1,000 impressions in the period. Click-through does not measure sales.',
       bars: rated.map((x, i) => ({ label: providerLabel(canonicalPlatform(x.p.provider), lang), value: x.ctr, text: percent(x.ctr, 2), provider: canonicalPlatform(x.p.provider), mark: i === 0 ? 'good' as const : undefined })),
     })
   }

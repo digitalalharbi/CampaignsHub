@@ -22,6 +22,8 @@ use App\Domains\Funding\Services\FundingSpendRefresher;
 use App\Domains\Funding\Services\FundingStatement;
 use App\Domains\Funding\Support\FundingDisclaimer;
 use App\Domains\Funding\Support\FundingMoney;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -90,10 +92,15 @@ final class FundingController extends Controller
             $fundings = $fundings->filter(static fn (ProjectFunding $f): bool => (string) $f->client_workspace_id === $client)->values();
         }
 
+        $live = $this->delivering($fundings->pluck('project_id')->filter()->unique()->values()->all());
+
         $rows = $fundings
             ->map(fn (ProjectFunding $f): array => [
                 'project_name' => $f->project?->name,
                 'client_name' => $names[$f->client_workspace_id] ?? null,
+                // BUDGET-LIVE-001 — is anything running under this budget: spend AND impressions in the last 3 days.
+                'delivering' => ($live[(string) $f->project_id] ?? []) !== [] && in_array(true, $live[(string) $f->project_id], true),
+                'delivering_platforms' => $live[(string) $f->project_id] ?? [],
             ] + $this->balance->of($f))
             ->sortBy(fn (array $r): array => [self::NEED[$r['status']] ?? 9, $r['remaining'] ?? PHP_FLOAT_MAX])
             ->values();
@@ -117,6 +124,45 @@ final class FundingController extends Controller
             'can_manage' => $user->hasPermission('funding.manage'),
             'deleted_count' => $deleted ? $rows->count() : $this->reachable($user, true)[0]->count(),
         ]);
+    }
+
+    /**
+     * BUDGET-LIVE-001 — Owner 2026-11-20: a budget with money left can sit under campaigns that stopped. A platform is
+     * «running» for a project when it reported both spend and impressions in the last 3 days (today and the two before);
+     * otherwise it is «stopped». One grouped read for every project on the board.
+     *
+     * @param  list<string>  $projectIds
+     * @return array<string, array<string, bool>> project id → provider → running
+     */
+    private function delivering(array $projectIds): array
+    {
+        if ($projectIds === []) {
+            return [];
+        }
+
+        // Only the accounts the project still selects count — the one visibility rule every figure reader asks.
+        $rows = BoundAccountVisibility::apply(DailyMetric::query(), 'daily_metrics')
+            ->whereIn('daily_metrics.project_id', $projectIds)
+            ->where('daily_metrics.metric_date', '>=', now()->subDays(2)->toDateString())
+            ->whereIn('daily_metrics.metric_key', ['spend', 'impressions'])
+            ->where('daily_metrics.value', '>', 0)
+            ->groupBy('daily_metrics.project_id', 'daily_metrics.provider', 'daily_metrics.metric_key')
+            ->get(['daily_metrics.project_id', 'daily_metrics.provider', 'daily_metrics.metric_key']);
+
+        $seen = [];
+        foreach ($rows as $r) {
+            $seen[(string) $r->project_id][(string) $r->provider][(string) $r->metric_key] = true;
+        }
+
+        $out = [];
+        foreach ($seen as $project => $providers) {
+            foreach ($providers as $provider => $keys) {
+                $out[$project][$provider] = isset($keys['spend'], $keys['impressions']);
+            }
+            ksort($out[$project]);
+        }
+
+        return $out;
     }
 
     /** GET funding/projects/{project} — one project's figures and every amount added, newest first. */

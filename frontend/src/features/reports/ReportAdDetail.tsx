@@ -133,12 +133,12 @@ export function ReportAdDetail({
   add(ar ? 'الظهور' : 'Impressions', n(ad.impressions))
   add(ar ? 'النقرات' : 'Clicks', n(ad.clicks))
   add(
-    ar ? 'نسبة النقر' : 'CTR',
+    ar ? 'معدل النقر' : 'CTR',
     ad.ctr === null || ad.ctr === undefined ? null : `${(ad.ctr * 100).toFixed(2)}%`,
   )
   add(ar ? 'النتائج' : 'Results', n(ad.conversions))
   add(ar ? 'تكلفة النتيجة' : 'Cost per result', ad.cpa && ad.cpa > 0 ? cash(ad.cpa, 2) : null)
-  add(ar ? 'العائد على الإنفاق' : 'ROAS', ad.roas && ad.roas > 0 ? `${ad.roas.toFixed(2)}×` : null)
+  add(ar ? 'معدل العائد' : 'ROAS', ad.roas && ad.roas > 0 ? `${ad.roas.toFixed(2)}×` : null)
 
   const facts = [
     // CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign name is gone from here too; the card that

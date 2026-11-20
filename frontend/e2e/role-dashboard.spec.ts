@@ -82,7 +82,7 @@ for (const role of ROLES) {
 
       for (const [w, h] of SIZES) {
         await page.setViewportSize({ width: w, height: h })
-        await page.goto('/agency/home')
+        await page.goto('/agency/dashboard')
         const root = page.getByTestId('role-dashboard')
         await expect(root, `${role.key} @${w}`).toHaveAttribute('data-view', role.key, { timeout: 30_000 })
         await expect(page.getByTestId('dash-kpis')).toBeVisible()
@@ -107,7 +107,7 @@ for (const role of ROLES) {
       const context = await browser.newContext({ storageState: role.category ? stateFile(role) : AUTH.owner, baseURL: E2E_ORIGIN, viewport: { width: 1366, height: 768 } })
       const page = await context.newPage()
       const errors = await guarded(page)
-      await page.goto('/agency/home')
+      await page.goto('/agency/dashboard')
       await expect(page.getByTestId('role-dashboard')).toHaveAttribute('data-view', role.key, { timeout: 30_000 })
       const hrefs = await page.locator('[data-testid="dash-kpis"] a[href]').evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute('href') as string))])
       /*
@@ -129,7 +129,7 @@ for (const role of ROLES) {
       for (const href of hrefs) {
         await page.goto(href)
         await expect(page.getByTestId('not-found'), `${href} is a dead end`).toHaveCount(0)
-        await expect(page).not.toHaveURL(/\/agency\/home$/)
+        await expect(page).not.toHaveURL(/\/agency\/dashboard$/)
         await expect(page.locator('main h1, h1').first()).toBeVisible({ timeout: 30_000 })
       }
       expect(errors, errors.join('\n')).toEqual([])

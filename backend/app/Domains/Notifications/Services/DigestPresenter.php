@@ -308,7 +308,7 @@ final class DigestPresenter
         'purchases' => ['ar' => 'الطلبات', 'en' => 'Orders', 'kind' => 'count'],
         'revenue' => ['ar' => 'قيمة الطلبات', 'en' => 'Order value', 'kind' => 'money'],
         'cpa' => ['ar' => 'تكلفة النتيجة', 'en' => 'Cost per result', 'kind' => 'money', 'lower_is_better' => true],
-        'roas' => ['ar' => 'العائد على الإنفاق', 'en' => 'Return on ad spend', 'kind' => 'ratio'],
+        'roas' => ['ar' => 'معدل العائد', 'en' => 'Return on ad spend', 'kind' => 'ratio'],
         'aov' => ['ar' => 'متوسط قيمة الطلب', 'en' => 'Average order value', 'kind' => 'money'],
 
         /*

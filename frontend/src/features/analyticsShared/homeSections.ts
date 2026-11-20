@@ -13,7 +13,7 @@ const BY_SEGMENT: ReadonlyArray<readonly [RegExp, AnalyticsSectionId]> = [
   [/^\/(?:app|agency)\/campaigns(?:[/?#]|$)/, 'board'],
   [/^\/(?:app|agency)\/(?:ad-groups|ads)(?:[/?#]|$)/, 'board'],
   [/^\/(?:app|agency)\/content(?:[/?#]|$)/, 'creative'],
-  [/^\/(?:app|agency)\/(?:budgets|spend-limits)(?:[/?#]|$)/, 'board'],
+  // HOME-DOORS-001 — Owner 2026-11-20: money panels open «الميزانيات» itself, not the performance popup.
 ]
 
 export function analyticsSectionFor(to: string): AnalyticsSectionId | null {

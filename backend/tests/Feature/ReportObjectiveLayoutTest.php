@@ -168,7 +168,7 @@ final class ReportObjectiveLayoutTest extends TestCase
         $this->assertSame('meta', $data['best']['platform'], 'the higher return did not win');
         $this->assertSame('meta', $data['best']['platform_by_roas']);
         // METRIC-NAMES-001 — the summary names the return in the words a client reads, not «ROAS».
-        $this->assertStringContainsString('العائد على الإنفاق', $data['summary'][0]);
+        $this->assertStringContainsString('معدل العائد', $data['summary'][0]);
     }
 
     /**

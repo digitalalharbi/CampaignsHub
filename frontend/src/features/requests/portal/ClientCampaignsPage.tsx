@@ -22,7 +22,7 @@ const COPY = {
     title: 'الحملات', subtitle: 'متابعة مباشرة لأداء حملاتك — المؤشرات الرئيسية.',
     none: 'لا توجد حملات بعد.', noMatch: 'لا توجد حملات تطابق هذا البحث.', error: 'تعذّر تحميل الحملات.',
     search: 'ابحث باسم الحملة', allStatus: 'كل الحالات', allObjective: 'كل الأهداف', allProjects: 'كل المشاريع',
-    period: 'الفترة', to: '←', impressions: 'الظهور', clicks: 'النقرات', conversions: 'تحويلات المنصة', ctr: 'نسبة النقر',
+    period: 'الفترة', to: '←', impressions: 'الظهور', clicks: 'النقرات', conversions: 'تحويلات المنصة', ctr: 'معدل النقر',
     unnamed: 'حملة', prev: 'السابق', next: 'التالي', of: 'من', showing: 'تعرض',
   },
   en: {
