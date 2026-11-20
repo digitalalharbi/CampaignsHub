@@ -113,6 +113,26 @@ final class RoleDashboardTest extends TestCase
         return (array) $this->getJson('/api/v1/me/dashboard'.$part.$query)->assertOk()->json('data');
     }
 
+    /** DASH-DATE-RANGE-001 — the page reads the from–to chosen in the shared date picker; a bad range falls back to the days. */
+    public function test_the_dashboard_reads_the_chosen_range_and_ignores_a_bad_one(): void
+    {
+        $owner = $this->member(WorkspaceRolePresets::OWNER, null);
+        $today = PeriodResolver::today();
+        $from = $today->copy()->startOfMonth()->toDateString();
+
+        $d = $this->dash($owner, '?from='.$from.'&to='.$today->toDateString());
+        $this->assertSame($from, $d['window']['from']);
+        $this->assertSame($today->toDateString(), $d['window']['to']);
+
+        $future = $this->dash($owner, '?from='.$from.'&to='.$today->copy()->addDays(9)->toDateString());
+        $this->assertSame($today->toDateString(), $future['window']['to'], 'a range never ends after today');
+
+        $reversed = $this->dash($owner, '?from='.$today->toDateString().'&to='.$from.'&days=7');
+        if ($from !== $today->toDateString()) {
+            $this->assertSame(7, $reversed['window']['days']);
+        }
+    }
+
     public function test_the_manager_sees_every_client_with_budget_reading_and_a_run_out_date_from_the_last_three_days(): void
     {
         // Alpha: 1000 budget, 700 spent in total (400 earlier + 3 x 100); remaining 300 at 100 a day = 3 days left.
