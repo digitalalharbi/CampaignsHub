@@ -455,7 +455,18 @@ export type FunnelStageRow = {
   rate_partial?: boolean
 }
 
-export function ConversionFunnelChart({ stages, currency = '', ar = false, differLabel }: { differLabel?: string; stages: FunnelStageRow[]; currency?: string; ar?: boolean }) {
+/**
+ * SHOW-AVAILABLE-002 — Owner 2026-11-20: «أي جزء بدل صفر أو لا توجد بيانات لا يظهر بالأساس». A funnel stage is drawn only
+ * when it holds a figure above zero; a stage the platform never sent, or one at zero, is left out (a «زيارات صفحة الهبوط»
+ * row on a campaign whose goal is not visits, «0 · تسرّب 100%» under it). Fewer than two stages left is not a funnel.
+ */
+export const shownFunnelStages = <T extends { count: number | null | undefined }>(stages: T[]): T[] =>
+  stages.filter((s) => s.count !== null && s.count !== undefined && s.count > 0)
+export const hasFunnel = (stages: Array<{ count: number | null | undefined }>): boolean => shownFunnelStages(stages).length >= 2
+
+export function ConversionFunnelChart({ stages: all, currency = '', ar = false, differLabel }: { differLabel?: string; stages: FunnelStageRow[]; currency?: string; ar?: boolean }) {
+  const stages = shownFunnelStages(all)
+  if (stages.length < 2) return null
   const counts = stages.map((s) => s.count).filter((c): c is number => c !== null && c !== undefined)
   const top = counts.length > 0 ? Math.max(...counts) : 1
   // FUNNEL-ALIGNED-001 — a stage reported by fewer platforms than the funnel spans names them; a full stage says nothing.

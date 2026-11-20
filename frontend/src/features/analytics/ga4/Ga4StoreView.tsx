@@ -6,7 +6,7 @@ import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { FixedPageTable, type FixedColumn } from '@/components/ui/FixedPageTable'
 import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
-import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, PlatformDonutChart, RankingBarChart } from '../charts'
+import { ChartCard, ConversionFunnelChart, hasFunnel, KpiSparkline, MetricLineChart, PlatformDonutChart, RankingBarChart } from '../charts'
 import { money, num, percent } from '../format'
 import type { StoreBreakdownMeta, StoreFunnelStep, StoreGap, StoreKpi, StoreProductRow, StoreSeriesDay, StoreSessionRow, StoreSlice, StoreTableKey, StoreTables } from './storeTypes'
 
@@ -291,11 +291,11 @@ export function Ga4Acquisition({ channels, devices, funnel, ar, channelsMeta, de
       <Donut testId="ga4-channels" title={ar ? 'القنوات' : 'Channels'} slices={channels} labels={CHANNEL} ar={ar} meta={channelsMeta} />
       <Donut testId="ga4-devices" title={ar ? 'الأجهزة' : 'Devices'} slices={devices} labels={DEVICE} ar={ar} meta={devicesMeta} />
       {/* The funnel takes the full row: in a third of it the bars had no room for their figures. */}
-      <ChartCard className={frozen ? '' : 'lg:col-span-2'} title={ar ? 'قمع الموقع' : 'Website funnel'}>
+      {hasFunnel(funnel) && <ChartCard className={frozen ? '' : 'lg:col-span-2'} title={ar ? 'قمع الموقع' : 'Website funnel'}>
         <div data-testid="ga4-funnel">
           <ConversionFunnelChart ar={ar} differLabel={ar ? 'تعريفات مختلفة' : 'Definitions differ'} stages={funnel.map((s) => ({ stage: s.stage, label: t(FUNNEL[s.stage] ?? { ar: s.stage, en: s.stage }, ar), count: s.count, step_rate: s.step_rate, cost_per: null, exceeds_previous: s.exceeds_previous }))} />
         </div>
-      </ChartCard>
+      </ChartCard>}
     </div>
   )
 }

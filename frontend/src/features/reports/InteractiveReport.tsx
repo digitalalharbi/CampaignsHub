@@ -27,7 +27,7 @@ import { fmtDateTime } from '@/lib/datetime'
 import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck, Image as ImageIcon, Info, LayoutGrid, OctagonAlert, Rows, TriangleAlert, Trophy } from 'lucide-react'
 import {
   ChartCard,
-  ConversionFunnelChart,
+  ConversionFunnelChart, hasFunnel,
   KpiSparkline,
   MetricLineChart,
   PlatformDonutChart,
@@ -1716,7 +1716,7 @@ function FunnelSlide({ data }: { data: ReportData }) {
   return (
     <div>
       <Title sub="من الظهور إلى الشراء — معدل الانتقال وتكلفة كل مرحلة">قمع التحويل</Title>
-      {stages.length > 0 ? (
+      {hasFunnel(stages) ? (
         <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
           <ChartCard title="مراحل القمع" subtitle="العدد ومعدل الانتقال وتكلفة كل مرحلة"><ConversionFunnelChart stages={stages} currency={data.currency} ar /></ChartCard>
           <div className="space-y-3">

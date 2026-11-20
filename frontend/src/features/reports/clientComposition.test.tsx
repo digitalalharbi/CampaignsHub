@@ -35,7 +35,7 @@ const payload = {
   platforms: [{ provider: 'meta', spend: 600, conversions: 24, impressions: 90000, clicks: 700 }],
   campaigns: [{ campaign_name: 'Eid', spend: 600, conversions: 24, objective: 'sales' }],
   ad_sets: [],
-  funnel: [{ key: 'impressions', label: 'Impressions', value: 90000, reported: true }],
+  funnel: [{ stage: 'impressions', label: 'Impressions', count: 90000, step_rate: null, cost_per: null, reported: true }, { stage: 'clicks', label: 'Clicks', count: 900, step_rate: 0.01, cost_per: null, reported: true }],
   funnel_spend: 1000,
   ads: [],
   ads_groups: [],

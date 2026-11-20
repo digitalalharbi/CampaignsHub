@@ -225,7 +225,7 @@ export function ReportAdDetail({
             )}
             {download && (
               <a href={download} download target="_blank" rel="noopener noreferrer" data-testid="report-ad-detail-download" className="ms-auto rounded-lg border border-border px-2 py-1 font-semibold text-brand-700 hover:bg-surface-hover">
-                {ar ? 'حمّل الأصل' : 'Download the asset'}
+                {ar ? 'تحميل الإعلان' : 'Download the ad'}
               </a>
             )}
           </div>
