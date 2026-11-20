@@ -131,7 +131,7 @@ final class ProjectBudgetReader
      * The exclusions and old rates of several budgets, merged: the same statement on every surface that adds them.
      *
      * @param  list<array<string, mixed>>  $notes  `FundingBalance::of()['fx']`
-     * @return array{complete: bool, excluded: list<array<string, mixed>>, excluded_label: ?string, statement: ?string, statement_en: ?string, stale: list<array<string, mixed>>, stale_label: ?string, rates_page: ?string}
+     * @return array{complete: bool, excluded: list<array<string, mixed>>, excluded_label: ?string, statement: ?string, statement_en: ?string, stale: list<array<string, mixed>>, rates_page: ?string}
      */
     public static function fxNote(array $notes): array
     {
@@ -147,7 +147,6 @@ final class ProjectBudgetReader
             'statement' => $statements === [] ? null : implode(' ', $statements),
             'statement_en' => $statementsEn === [] ? null : implode(' ', $statementsEn),
             'stale' => $stale,
-            'stale_label' => $stale === [] ? null : (string) ($stale[0]['label'] ?? ''),
             'rates_page' => $excluded === [] ? null : FxConversion::RATES_PAGE,
         ];
     }

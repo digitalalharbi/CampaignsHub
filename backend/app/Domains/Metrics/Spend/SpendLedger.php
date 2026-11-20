@@ -214,7 +214,7 @@ final class SpendLedger
             if ($c->stale) {
                 $sk = $row->projectId.'|'.$row->currency.'|'.$c->rateDate;
                 $stale[$sk] ??= ['project_id' => $row->projectId, 'currency' => (string) $row->currency, 'rate_date' => $c->rateDate,
-                    'expired' => $c->expired, 'label' => $c->staleLabel(), 'label_en' => $c->staleLabel(false), 'days' => 0];
+                    'expired' => $c->expired, 'days' => 0];
                 $stale[$sk]['days']++;
             }
         }
@@ -275,7 +275,6 @@ final class SpendLedger
             'statement' => $statement,
             'statement_en' => self::statement($excluded, false),
             'stale' => $stale,
-            'stale_label' => $stale === [] ? null : (string) $stale[0]['label'],
             'rates_page' => $excluded === [] ? null : FxConversion::RATES_PAGE,
             'via' => 'fx.convert',
         ];

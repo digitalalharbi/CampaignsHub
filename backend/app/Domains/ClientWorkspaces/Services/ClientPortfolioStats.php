@@ -197,7 +197,6 @@ final class ClientPortfolioStats
             'statement_en' => $reading['statement_en'],
             'stale' => $total['stale'] || $reading['stale'] !== [],
             'stale_parts' => $reading['stale'],
-            'stale_label' => $reading['stale_label'],
             'pending_label' => $excluded === [] ? null : SpendLedger::EXCLUDED_AR.($named === [] ? '' : ' ('.implode('، ', $named).')'),
             'rates_page' => $excluded === [] ? null : FxConversion::RATES_PAGE,
             'currencies' => $originals,

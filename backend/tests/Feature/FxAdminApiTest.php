@@ -174,8 +174,12 @@ final class FxAdminApiTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'fx.policy.updated']);
     }
 
-    /** The FREE automatic source: off by default; switched on, `fx:rates` records each used floating currency against USD. */
-    public function test_the_free_automatic_source_is_off_by_default_and_records_used_currencies_when_switched_on(): void
+    /**
+     * The FREE automatic source. Owner decision 2026-11-19: the ECB reference rates are the DEFAULT driver (`fx.rates.driver`),
+     * so a fresh deployment records rates with no setting. With the driver disabled (`FX_RATE_DRIVER=none`) the admin policy
+     * switch is the only way to turn the same source on, and `fx:rates` then records each used floating currency against USD.
+     */
+    public function test_the_free_automatic_source_is_the_default_driver_and_the_policy_switch_still_enables_it_when_the_driver_is_off(): void
     {
         Carbon::setTestNow('2026-11-04 10:00:00');
         Http::fake(['www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml' => Http::response((string) file_get_contents(__DIR__.'/../Fixtures/ecb/eurofxref-daily-2026-11-04.xml'))]);
@@ -183,8 +187,16 @@ final class FxAdminApiTest extends TestCase
         $this->fxAdAccount('GBP');
 
         $this->artisan('fx:rates')->assertSuccessful();
-        $this->assertSame(0, CurrencyRate::query()->where('kind', 'automatic')->count(), 'off by default: nothing fetched');
+        $this->assertSame(2, CurrencyRate::query()->where('kind', 'automatic')->count(), 'the default driver is the ECB source: both used currencies recorded');
+
+        CurrencyRate::query()->where('kind', 'automatic')->delete();
+        config(['fx.rates.driver' => null]);
+        $this->app->forgetScopedInstances();
+        Http::fake();
+        $this->artisan('fx:rates')->assertSuccessful();
+        $this->assertSame(0, CurrencyRate::query()->where('kind', 'automatic')->count(), 'driver disabled and policy off: nothing fetched');
         Http::assertNothingSent();
+        Http::fake(['www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml' => Http::response((string) file_get_contents(__DIR__.'/../Fixtures/ecb/eurofxref-daily-2026-11-04.xml'))]);
 
         $this->actingAs($this->fxAdmin())->putJson(self::BASE.'/policy', ['auto_source_enabled' => true])->assertOk();
         $this->app->forgetScopedInstances();
