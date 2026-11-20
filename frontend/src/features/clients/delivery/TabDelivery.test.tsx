@@ -148,14 +148,14 @@ describe('TabDelivery', () => {
     vi.mocked(api.saveDeliverySettings).mockImplementation(async (_id, body) => settings({ ...body, next_period: { from: '2026-10-01', to: '2026-10-31' } }))
     mount()
     const card = await screen.findByTestId('delivery-settings')
-    expect(card.textContent).toContain('2026-10-12')
+    expect(card.textContent).toContain('Oct 12 – Oct 18, 2026')
 
     fireEvent.click(within(card).getByTestId('delivery-auto'))
     await waitFor(() => expect(api.saveDeliverySettings).toHaveBeenCalledWith('c1', { enabled: true }))
 
     fireEvent.click(within(card).getByTestId('delivery-cadence-monthly'))
     await waitFor(() => expect(api.saveDeliverySettings).toHaveBeenCalledWith('c1', { cadence: 'monthly' }))
-    await waitFor(() => expect(screen.getByTestId('delivery-settings').textContent).toContain('2026-10-31'))
+    await waitFor(() => expect(screen.getByTestId('delivery-settings').textContent).toContain('Oct 1 – Oct 31, 2026'))
     fireEvent.click(within(screen.getByTestId('delivery-settings')).getByTestId('delivery-mode-live'))
     await waitFor(() => expect(api.saveDeliverySettings).toHaveBeenCalledWith('c1', { mode: 'live' }))
   })

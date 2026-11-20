@@ -19,6 +19,7 @@ use App\Domains\Reports\Models\ReportAnnotation;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
 use App\Models\User;
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 
@@ -75,7 +76,7 @@ final class DeliveryPackService
         $report->forceFill([
             'tenant_id' => $project->tenant_id,
             'project_id' => $project->getKey(),
-            'name' => $workspace->name.' — '.$from->toDateString().' → '.$to->toDateString(),
+            'name' => $workspace->name.' — '.PeriodLabel::range($from, $to, 'ar'),
             'type' => $settings['cadence'] === 'monthly' ? 'monthly' : 'weekly',
             'audience' => 'client',
             'mode' => $settings['mode'],
@@ -99,7 +100,7 @@ final class DeliveryPackService
             'components' => $this->componentsFor($workspace),
             'created_by' => $by?->id,
         ]);
-        $this->audit->log('delivery_pack.prepared', 'delivery_pack', (string) $pack->id, null, ['period' => $from->toDateString().' → '.$to->toDateString()]);
+        $this->audit->log('delivery_pack.prepared', 'delivery_pack', (string) $pack->id, null, ['period' => PeriodLabel::range($from, $to, 'en')]);
         DeliveryTasks::ensureFor($pack);
 
         return $pack;
@@ -284,7 +285,7 @@ final class DeliveryPackService
         $data = $report === null ? [] : (array) $report->data;
         $totals = (array) ($data['totals'] ?? []);
         $workspace = ClientWorkspace::query()->find($pack->client_workspace_id);
-        $period = $pack->period_start->toDateString().' → '.$pack->period_end->toDateString();
+        $period = PeriodLabel::range($pack->period_start, $pack->period_end, 'ar');
         $num = static fn ($v): string => number_format((float) $v, 0, '.', ',');
 
         $lines = [];

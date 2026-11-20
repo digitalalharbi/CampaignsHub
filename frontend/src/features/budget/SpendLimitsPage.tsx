@@ -34,6 +34,8 @@ import { useAuth } from '@/stores/auth'
 import { RenewAllButton } from '@/features/funding/RenewAllDialog'
 import { useEffect, useState } from 'react'
 import { withMark } from '@/lib/money/mark'
+import { PeriodText } from '@/components/ui/PeriodText'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * BUDGET-GOVERNANCE-001 — the workspace's own spend limits, and the sentence that keeps them honest.
@@ -222,7 +224,7 @@ function SpendLimitsFit({ projectId, locale, ar, limits, counts, suggestedCurren
         <FreshnessChip freshness={l.freshness} testid={`spend-limit-${l.id}-freshness`} />
       </span>
     ) },
-    { key: 'period', header: ar ? 'الفترة' : 'Period', width: '8.5rem', cell: (l) => <span dir="ltr" title={`${l.period.from} → ${l.period.to}`} className="tnum text-xs text-text-muted">{shortDay(l.period.from)} → {shortDay(l.period.to)}</span> },
+    { key: 'period', header: ar ? 'الفترة' : 'Period', width: '8.5rem', cell: (l) => <PeriodText from={l.period.from} to={l.period.to} className="text-xs text-text-muted" /> },
     { key: 'amount', header: ar ? 'الحد' : 'Amount', width: '6.5rem', align: 'end', cell: (l) => (
       <span data-testid={`spend-limit-${l.id}-amount`} title={moneyExact(l.amount, l.currency ?? null)} className="tnum font-bold" dir="ltr">{money(l.amount, l.currency)}</span>
     ) },
@@ -253,7 +255,7 @@ function SpendLimitsFit({ projectId, locale, ar, limits, counts, suggestedCurren
         <Fig label={ar ? 'المتبقي' : 'Remaining'}><span dir="ltr" className={l.remaining !== null && l.remaining < 0 ? 'text-danger' : ''}>{l.remaining === null ? '—' : money(l.remaining, l.currency)}</span></Fig>
         <Fig label={ar ? 'نسبة الإنفاق' : 'Utilisation'}><span data-testid={`spend-limit-${l.id}-utilisation`} dir="ltr">{pct(l)}</span></Fig>
       </div>
-      <p className="mt-1 text-[11px] text-text-muted" dir="ltr">{l.period.from} → {l.period.to}</p>
+      <p className="mt-1 text-[11px] text-text-muted" dir="ltr"><PeriodText from={l.period.from} to={l.period.to} /></p>
     </div>
   )
 
@@ -365,7 +367,6 @@ function SpendLimitsFit({ projectId, locale, ar, limits, counts, suggestedCurren
 }
 
 /** «26/11/16» — the short form of a day for a one-line row; the full dates are in the title. */
-const shortDay = (d: string) => d.slice(2).replaceAll('-', '/')
 
 function StateChip({ limit, ar }: { limit: SpendLimitReading; ar: boolean }) {
   return (
@@ -455,7 +456,7 @@ function LimitDetails({
     <div data-testid={`spend-limit-${limit.id}-details-body`} className="flex flex-col gap-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] text-text-muted" dir="ltr">
-          {limit.period.from} → {limit.period.to}
+          <PeriodText from={limit.period.from} to={limit.period.to} />
         </span>
       </div>
 
@@ -566,8 +567,8 @@ function LimitActions({ limit, ar, locale, projectId }: { limit: SpendLimitReadi
     mutationFn: (a: LimitAction) => proposeChange(projectId!, {
       provider: a.provider, external_account_id: a.external_account_id, target_type: 'campaign', target_external_id: a.target_external_id, action: 'pause',
       reason: ar
-        ? `تجاوز حد الإنفاق: ${limit.consumed ?? '—'} من ${withMark(String(limit.amount), limit.currency)} للفترة ${limit.period.from} → ${limit.period.to}.`
-        : `Spend limit ${limit.state === 'over' ? 'passed' : 'approaching'}: ${limit.consumed ?? '—'} of ${withMark(String(limit.amount), limit.currency)} for ${limit.period.from} → ${limit.period.to}.`,
+        ? `تجاوز حد الإنفاق: ${limit.consumed ?? '—'} من ${withMark(String(limit.amount), limit.currency)} للفترة ${formatPeriodRange(limit.period.from, limit.period.to, 'ar')}.`
+        : `Spend limit ${limit.state === 'over' ? 'passed' : 'approaching'}: ${limit.consumed ?? '—'} of ${withMark(String(limit.amount), limit.currency)} for ${formatPeriodRange(limit.period.from, limit.period.to, 'en')}.`,
     }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['agent-proposals'] }),
   })

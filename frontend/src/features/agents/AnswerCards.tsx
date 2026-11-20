@@ -4,6 +4,7 @@ import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { formatMoney } from '@/features/funding/money'
 import type { AnswerCard, MessageMeta } from './api'
 import { toolText } from './agentCopy'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * AGENTS-ASSISTANT-001 — the data beside an answer, drawn from the cards the SERVER cut from the tool results.
@@ -15,7 +16,7 @@ import { toolText } from './agentCopy'
 const amount = (n: number | null, currency: string | null) => (n === null ? '—' : currency ? formatMoney(n, currency, n < 100 ? 2 : 0) : compact(n))
 
 const period = (w: { from?: string; to?: string }, ar: boolean) =>
-  w.from && w.to ? (w.from === w.to ? w.from : `${w.from} → ${w.to}`) : ar ? 'الفترة غير محددة' : 'period not stated'
+  w.from && w.to ? formatPeriodRange(w.from, w.to, ar ? 'ar' : 'en') : ar ? 'الفترة غير محددة' : 'period not stated'
 
 const VERDICT: Record<string, { ar: string; en: string; tone: string }> = {
   on_target: { ar: 'على الهدف', en: 'On target', tone: 'bg-[var(--positive-background)] text-success' },

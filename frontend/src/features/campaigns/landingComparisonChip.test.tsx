@@ -48,8 +48,7 @@ describe('the landing comparison explains itself', () => {
     const evidence = within(chip).getByTestId('landing-comparison-evidence')
 
     const scope = within(evidence).getByTestId('landing-comparison-scope').textContent ?? ''
-    expect(scope).toContain(range.from)
-    expect(scope).toContain(range.to)
+    expect(scope).toContain(ar ? '1 أكتوبر – 28 أكتوبر 2026' : 'Oct 1 – Oct 28, 2026')
     expect(scope).toContain(CURRENCY)
     expect(scope).toContain(String(minResults))
     expect(evidence.textContent).toContain(ar ? LABEL.ar : LABEL.en)

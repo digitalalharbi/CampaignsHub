@@ -17,6 +17,7 @@ import { AttributionTable, Buckets, GapReasonsBlock, MatchBars, campaignRows, pl
 import { CLASSIFY_GROUPS, type ClassificationPayload, type ClassificationRow, type ClassifyGroup, type GapReason, type GapReasonsPayload, type MatchPayload } from './matchTypes'
 import { hideParam } from './visibility'
 import { promptDialog } from '@/stores/dialogs'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * GA4-ATTRIBUTION-MATCH-001 — the Analytics GA4 tab as one workbench: a visibility control, a filter bar of chips,
@@ -91,7 +92,7 @@ function FilterBar({ ar, range, f, setF, platforms }: { ar: boolean; range: { fr
 
   return (
     <div data-testid="ga4-filter-bar" className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-border bg-surface p-3">
-      <Badge tone="neutral" data-testid="ga4-filter-period"><Num>{range.from} → {range.to}</Num></Badge>
+      <Badge tone="neutral" data-testid="ga4-filter-period"><Num><PeriodText from={range.from} to={range.to} /></Num></Badge>
       <button type="button" aria-pressed={f.compare} data-testid="ga4-filter-compare" className={chip(f.compare)} onClick={() => setF({ ...f, compare: !f.compare })}>{ar ? 'مقارنة بالسابق' : 'vs previous'}</button>
       <span className="flex flex-wrap items-center gap-1" role="group" aria-label={ar ? 'المنصة' : 'Platform'}>
         <button type="button" aria-pressed={f.platform === null} className={chip(f.platform === null)} data-testid="ga4-filter-platform-all" onClick={() => setF({ ...f, platform: null })}>{ar ? 'كل المنصات' : 'All platforms'}</button>
@@ -119,7 +120,7 @@ function MatchSection({ q, ar, drill, setDrill, projectId, range, hidden, compar
   }
 
   return (
-    <ChartCard title={ar ? 'مطابقة الإسناد' : 'Attribution match'} action={<span className="inline-flex items-center gap-1.5"><Badge tone="info" data-testid="match-basis">{ar ? 'الموقع' : 'Website'}</Badge>{compare && d.previous && <Badge tone="neutral" data-testid="match-previous"><Num>{d.previous.period.from} → {d.previous.period.to}</Num></Badge>}</span>}>
+    <ChartCard title={ar ? 'مطابقة الإسناد' : 'Attribution match'} action={<span className="inline-flex items-center gap-1.5"><Badge tone="info" data-testid="match-basis">{ar ? 'الموقع' : 'Website'}</Badge>{compare && d.previous && <Badge tone="neutral" data-testid="match-previous"><Num><PeriodText from={d.previous.period.from} to={d.previous.period.to} /></Num></Badge>}</span>}>
       <div data-testid="ga4-match" className="flex min-w-0 flex-col gap-3">
         <Breadcrumb ar={ar} drill={drill} onBack={() => setDrill(drill?.campaign ? { platform: drill.platform, campaign: null } : null)} onHome={() => setDrill(null)} />
         {drill?.campaign ? (

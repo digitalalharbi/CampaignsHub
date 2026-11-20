@@ -107,7 +107,7 @@ function sane(x: unknown): Selection | null {
     return { key: 'custom', from: o.from, to: o.to, compare, ...(compare === 'custom' && typeof o.cfrom === 'string' && typeof o.cto === 'string' && isValidYmd(o.cfrom) && isValidYmd(o.cto) ? { cfrom: o.cfrom, cto: o.cto } : {}) }
   }
   if (typeof o.key !== 'string') return null
-  const known: PresetKey[] = ['today', 'yesterday', 'today_yesterday', 'last_7', 'last_14', 'last_28', 'last_30', 'last_90', 'this_week', 'last_week', 'this_month', 'last_month', 'last_3m', 'last_6m', 'last_12m', 'ytd', 'lifetime']
+  const known: PresetKey[] = ['today', 'yesterday', 'today_yesterday', 'last_7', 'last_14', 'last_28', 'last_30', 'last_90', 'this_week', 'last_week', 'this_month', 'last_month', 'last_3m', 'last_6m', 'last_12m', 'ytd', 'this_year', 'lifetime']
   if (!known.includes(o.key as PresetKey)) return null
 
   return { key: o.key as PresetKey, compare: compare === 'custom' ? 'none' : compare }

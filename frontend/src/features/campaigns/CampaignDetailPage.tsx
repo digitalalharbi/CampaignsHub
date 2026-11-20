@@ -63,6 +63,7 @@ import { RelatedEntitiesPanel } from './RelatedEntitiesPanel'
 import { CampaignWriteControl } from './CampaignWriteControl'
 import { CampaignControlPanel } from './CampaignControlPanel'
 import { useProjectFromPath } from '@/features/projects/useProjectFromUrl'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /*
  * CAMPAIGN-PAGE-LEAN-001 — Owner 2026-11-19: sixteen tabs were too many, and the last ones were only reached by scrolling
@@ -321,7 +322,7 @@ export function CampaignDetailPage() {
         {(() => {
           const owner = c.owner_id != null ? ((usersQ.data ?? []).find((u) => String(u.id) === String(c.owner_id))?.name ?? null) : null
           const facts = [
-            c.starts_on || c.ends_on ? { key: 'period', label: t('period_label'), value: <span className="tnum text-xs">{`${c.starts_on ?? '…'} → ${c.ends_on ?? '…'}`}</span> } : null,
+            c.starts_on || c.ends_on ? { key: 'period', label: t('period_label'), value: <span className="tnum text-xs"><PeriodText from={c.starts_on} to={c.ends_on} /></span> } : null,
             c.total_budget !== null ? {
               key: 'budget', label: t('budget_label'),
               // FX-APPLY-001 — BOTH currencies on the campaign page: converted (display) and the platform's own.

@@ -12,6 +12,7 @@ import {
 } from './clientInvoiceApi'
 import { withMark } from '@/lib/money/mark'
 import { getClient } from '../api'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * INV-PROFILE-001, INV-LIFECYCLE-001, INV-IMMUTABLE-001, INV-PDF-001 — how this client is billed, and the
@@ -242,7 +243,7 @@ function InvoiceRow({ invoice, t, canManage, onChange }: { invoice: FeeInvoice; 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span>
           <span className="block font-mono text-xs font-semibold text-brand-600" dir="ltr">{invoice.number}</span>
-          <span className="text-xs text-text-muted" dir="ltr"><Num>{invoice.period_start} → {invoice.period_end}</Num></span>
+          <span className="text-xs text-text-muted" dir="ltr"><Num><PeriodText from={invoice.period_start} to={invoice.period_end} /></Num></span>
         </span>
         <span className="flex items-center gap-2">
           <span data-testid={`fee-status-${invoice.id}`} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{t.status[shown] ?? shown}</span>

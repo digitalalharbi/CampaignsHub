@@ -20,6 +20,7 @@ import { comparableWindows, coverageNote, readCoverage, windowsUnlikeNote } from
 import { providerLabel } from '@/features/campaigns/labels'
 import { headline as alertHeadline } from '@/features/recommendations/findingCopy'
 import { campaigns, countedEn } from '@/lib/counted'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * DASHBOARD-FIRST-SCREEN-001 — the agency dashboard answers «what is happening» before it counts.
@@ -103,7 +104,7 @@ export function AgencyPeriodBar({ ar }: { ar: boolean }) {
       {comparable && (
         <span data-testid="agency-compared-with">
           {ar ? 'مقارنةً بـ ' : 'Compared with '}
-          <span dir="ltr">{d.previous_period.from} → {d.previous_period.to}</span>
+          <span dir="ltr"><PeriodText from={d.previous_period.from} to={d.previous_period.to} /></span>
         </span>
       )}
       {currency === null && current !== undefined && (

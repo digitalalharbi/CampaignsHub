@@ -390,6 +390,8 @@ export interface Meta { reportName: string; clientName?: string; agencyName?: st
 // The audience test lives in `reportAudience.ts` (no renderer) and is re-exported here for every existing import.
 export { isClientAudience } from './reportAudience'
 import { isClientAudience } from './reportAudience'
+import { PeriodText } from '@/components/ui/PeriodText'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /** Single slide renderer shared by the interactive deck AND the print/PDF route — identical output. */
 export function SlideBody({ slide, data, meta, paged = false }: {
@@ -841,7 +843,7 @@ export function CoverSlide({ data, meta }: { data: ReportData; meta: Meta }) {
             {meta.clientName !== undefined && <span className="ms-2 text-text-primary">{meta.clientName}</span>}
           </div>
           <h1 data-testid="report-cover-title" className={`mt-2 line-clamp-2 text-balance font-extrabold leading-tight ${long ? 'text-4xl' : 'text-5xl'}`}>{meta.reportName}</h1>
-          <p className="tnum mt-4 text-xl font-medium text-text-secondary"><bdi dir="ltr">{data.period.from} → {data.period.to}</bdi></p>
+          <p className="tnum mt-4 text-xl font-medium text-text-secondary"><PeriodText from={data.period.from} to={data.period.to} /></p>
           {meta.platforms.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2">{meta.platforms.map((p) => <span key={p} className="inline-flex items-center rounded-full border border-border bg-surface-secondary px-2.5 py-1 text-xs font-semibold"><ProviderName provider={canonicalPlatform(p)} locale="ar" size={16} /></span>)}</div>
           )}
@@ -1998,7 +2000,7 @@ function DailyRecordsSlide({ data, range }: { data: ReportData; range?: [number,
 function EvidenceSlide({ data, index }: { data: ReportData; index: number }) {
   const e = (data.platform_evidence ?? [])[index]
   if (!e) return null
-  const period = e.period_start && e.period_end ? (e.period_start === e.period_end ? e.period_start : `${e.period_start} → ${e.period_end}`) : null
+  const period = e.period_start && e.period_end ? formatPeriodRange(e.period_start, e.period_end, 'ar') : null
 
   return (
     <div data-testid={`report-evidence-${e.id}`} className="flex h-full min-h-0 flex-col gap-3">
@@ -2262,11 +2264,11 @@ function SnapshotAge({ data }: { data: ReportData }) {
       ) : ar ? (
         <>
           الأرقام خلال الفترة{' '}
-          <bdi className="tnum font-semibold text-text-primary" dir="ltr">{from}</bdi> – <bdi className="tnum font-semibold text-text-primary" dir="ltr">{to}</bdi>
+          <PeriodText from={from} to={to} className="font-semibold text-text-primary" />
         </>
       ) : (
         <>
-          Figures for <bdi className="tnum font-semibold text-text-primary" dir="ltr">{from}</bdi> – <bdi className="tnum font-semibold text-text-primary" dir="ltr">{to}</bdi>
+          Figures for <PeriodText from={from} to={to} className="font-semibold text-text-primary" />
         </>
       )}
       {/* ATTRIBUTION-WINDOW-001 — the reader of this footer cannot decode a platform's parameter name. */}

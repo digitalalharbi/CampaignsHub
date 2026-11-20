@@ -6,8 +6,9 @@ import { useUi } from '@/stores/ui'
 import { RangeCalendar, stepForKey } from '@/components/ui/RangeCalendar'
 import { PeriodStatus } from '@/components/ui/PeriodStatus'
 import { usePeriod } from '@/lib/period/usePeriod'
+import { formatPeriodLabel, formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 import {
-  COMPARE_LABEL, MONTHS_AR, MONTHS_EN, PRESETS, addDays, formatSpan, isValidYmd, parseYmd, periodSummary, presetLabel,
+  COMPARE_LABEL, MONTHS_AR, MONTHS_EN, PRESETS, addDays, isValidYmd, parseYmd, presetLabel,
   type CompareMode, type PresetKey,
 } from '@/lib/period/periodMath'
 import { resolveSelection, type Selection } from '@/lib/period/periodState'
@@ -73,10 +74,10 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
         >
           <CalendarDays className="h-4 w-4 shrink-0 text-text-secondary" aria-hidden />
           <span className="min-w-0 flex-1">
-            <span className="block truncate" data-testid={`${testId}-summary`}>{periodSummary(period, ar)}</span>
+            <span className="block truncate" data-testid={`${testId}-summary`}>{formatPeriodLabel({ key: period.key, from: period.from, to: period.to, locale: ar ? 'ar' : 'en' })}</span>
             {comparison && (
               <span className="block truncate text-xs font-normal text-info" data-testid={`${testId}-compare-summary`}>
-                {ar ? 'مقارنة بـ ' : 'Compared with '}{formatSpan(comparison, ar)}
+                {ar ? 'مقارنة بـ ' : 'Compared with '}{formatPeriodRange(comparison.from, comparison.to, ar ? 'ar' : 'en')}
               </span>
             )}
           </span>
@@ -327,7 +328,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
   const calendars = (
     <div className="min-w-0 flex-1">
       <div className="mb-1.5 rounded-lg bg-surface-secondary px-2 py-1 text-center text-xs font-bold text-text-primary" data-testid={`${testId}-draft-span`} aria-live="polite">
-        {formatSpan(resolved.period, ar)}
+        {formatPeriodRange(resolved.period.from, resolved.period.to, ar ? 'ar' : 'en')}
       </div>
       <div className="mb-1 flex items-center justify-between gap-2">
         <button type="button" onClick={() => setView((v) => prevMonth(v))} aria-label={ar ? 'الشهر السابق' : 'Previous month'} data-testid={`${testId}-prev`}
@@ -395,7 +396,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
                 <button key={`${s.key}-${i}`} type="button" onClick={() => applyRecent(s)} data-testid={`${testId}-recent-${i}`}
                   className="min-h-11 shrink-0 rounded-lg border border-border bg-surface-secondary px-3 py-1.5 text-start text-xs font-semibold text-text-primary hover:bg-surface-hover sm:min-h-0 sm:px-2 sm:py-1">
                   <span className="block">{presetLabel(r.period.key, ar)}</span>
-                  <span className="block font-normal text-text-secondary">{formatSpan(r.period, ar)}</span>
+                  <span className="block font-normal text-text-secondary">{formatPeriodRange(r.period.from, r.period.to, ar ? 'ar' : 'en')}</span>
                 </button>
               )
             })}
@@ -415,7 +416,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
                     const r = resolveSelection(s, ctx)
 
                     return (
-                      <button key={`${s.key}-${i}`} type="button" onClick={() => applyRecent(s)} data-testid={`${testId}-recent-${i}`} title={formatSpan(r.period, ar)}
+                      <button key={`${s.key}-${i}`} type="button" onClick={() => applyRecent(s)} data-testid={`${testId}-recent-${i}`} title={formatPeriodRange(r.period.from, r.period.to, ar ? 'ar' : 'en')}
                         className="block min-h-7 w-full truncate rounded-lg px-2 py-1 text-start text-xs font-semibold text-text-primary hover:bg-surface-hover">
                         {presetLabel(r.period.key, ar)}
                       </button>
@@ -446,7 +447,7 @@ export function PickerPanel({ ar, anchor, initial, ctx, recent, testId, onCancel
                 className="h-11 w-full rounded-lg border border-border-strong bg-surface px-2 text-base text-text-primary sm:h-8 sm:text-xs">
                 {(['previous', 'last_year', 'custom'] as const).map((m) => <option key={m} value={m}>{ar ? COMPARE_LABEL[m].ar : COMPARE_LABEL[m].en}</option>)}
               </select>
-              {resolved.comparison && <div className="text-xs text-text-secondary" data-testid={`${testId}-compare-range`}>{formatSpan(resolved.comparison, ar)}</div>}
+              {resolved.comparison && <div className="text-xs text-text-secondary" data-testid={`${testId}-compare-range`}>{formatPeriodRange(resolved.comparison.from, resolved.comparison.to, ar ? 'ar' : 'en')}</div>}
               {draft.compare === 'custom' && (
                 <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label={ar ? 'ما الذي يُحدَّد في التقويم' : 'What the calendar edits'}>
                   {(['main', 'compare'] as const).map((t) => (

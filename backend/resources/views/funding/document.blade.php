@@ -105,7 +105,7 @@
     <div class="box">
       <div class="k">{{ $t['subject'] }}</div><div class="v">{{ $subject }}</div>
       @if (! empty($st['mode']))<div class="meta"><span>{{ $t['mode'] }}: <b>{{ $t['modes'][$st['mode']] ?? $st['mode'] }}</b></span>
-        @if (! empty($st['budget_period']))<span>{{ $t['period'] }}: <b><bdi class="n">{{ $st['budget_period'][0] ?? '—' }} → {{ $st['budget_period'][1] ?? $t['open'] }}</bdi></b></span>@endif</div>@endif
+        @if (! empty($st['budget_period']))<span>{{ $t['period'] }}: <b><bdi class="n">{{ ! empty($st['budget_period'][0]) ? \App\Support\PeriodLabel::bounds($st['budget_period'][0], $st['budget_period'][1] ?? null, $lang) : '—' }}</bdi></b></span>@endif</div>@endif
     </div>
     <div class="box">
       <div class="k">{{ $t['stmt_period'] }}</div><div class="v"><bdi class="n">{{ $st['period'] }}</bdi></div>
@@ -139,7 +139,7 @@
       <tr>
         <td><div class="proj">{{ $r['project'] }}</div><div class="client">{{ $r['client'] }}</div></td>
         <td><span class="chip soft">{{ $t['modes'][$r['payment_mode'] ?? 'direct'] ?? '' }}</span>@if (! empty($r['planned']))<br><span class="chip soft" style="margin-top:.6mm">{{ $t['planned_chip'] }}</span>@endif</td>
-        <td><bdi class="n">{{ $r['period_start'] ?? '—' }} → {{ $r['period_end'] ?? $t['open'] }}</bdi></td>
+        <td><bdi class="n">{{ ! empty($r['period_start']) ? \App\Support\PeriodLabel::bounds($r['period_start'], $r['period_end'] ?? null, $lang) : '—' }}</bdi></td>
         <td class="n">{{ $money($amount) }}</td>
         <td class="n">{{ $money($r['spent']) }}</td>
         <td class="n">{{ $money($r['remaining']) }}</td>
@@ -208,7 +208,7 @@
     <tbody>
     @foreach ($invoiceRows as $m)
       <tr>
-        <td>{{ $m['project'] }}</td><td><bdi class="n">{{ $m['month'] }}</bdi></td><td><bdi class="n">{{ $m['from'] }} → {{ $m['to'] }}</bdi></td>
+        <td>{{ $m['project'] }}</td><td><bdi class="n">{{ $m['month'] }}</bdi></td><td><bdi class="n">{{ \App\Support\PeriodLabel::range($m['from'], $m['to'], $lang) }}</bdi></td>
         <td><span class="chip {{ $m['closed'] ? '' : 'soft' }}" style="{{ $m['closed'] ? 'background:#0d8a6f' : '' }}">{{ $m['closed'] ? $t['closed'] : $t['running'] }}</span></td>
         <td class="n">{{ $money($m['spent']) }}</td>
       </tr>

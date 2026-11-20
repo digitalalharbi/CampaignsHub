@@ -285,7 +285,7 @@ export function PortfolioPage({ home = false, onOpenProject }: { home?: boolean;
           purpose={agency ? t.lead : t.leadApp}
           meta={
             <>
-              <PeriodLabel from={data.period.from} to={data.period.to} testId="portfolio-period" />
+              <PeriodLabel inferName from={data.period.from} to={data.period.to} testId="portfolio-period" />
               <DataFreshness lastSyncAt={freshest} ar={ar} staleAfterHours={STALE_AFTER_HOURS} testid="portfolio-freshness" />
             </>
           }

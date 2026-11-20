@@ -9,6 +9,7 @@ import { useSwrQuery } from '@/lib/query/swr'
 import { ChartCard, RankingBarChart } from './charts'
 import { money, num } from './format'
 import type { ThreeSourcesPayload } from './storeAnalyticsApi'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * GA4-PLATFORM-COMPARE-001 — platform-reported, store-confirmed and GA4-measured, side by side and never added.
@@ -98,7 +99,7 @@ export function ThreeSourcesPanel({ projectId, range, ar }: { projectId: string;
           </p>
         )}
         <p className="text-[11px] text-text-muted" dir="auto">
-          {ar ? 'الفترة' : 'Period'}: <span dir="ltr" className="tnum">{d.period?.from} → {d.period?.to} · {d.period?.timezone}</span>
+          {ar ? 'الفترة' : 'Period'}: <span dir="ltr" className="tnum"><PeriodText from={d.period?.from} to={d.period?.to} /> · {d.period?.timezone}</span>
         </p>
       </div>
     </ChartCard>

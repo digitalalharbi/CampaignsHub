@@ -95,7 +95,7 @@ describe('the agent center', () => {
     const bubble = screen.getByTestId('agent-message-assistant')
     expect(within(bubble).getByTestId('specialist-chip')).toHaveTextContent('تحليل')
     expect(within(bubble).getByTestId('card-campaigns')).toHaveTextContent('ر.س')
-    expect(within(bubble).getByTestId('answer-sources')).toHaveTextContent('2026-11-08 → 2026-11-14')
+    expect(within(bubble).getByTestId('answer-sources')).toHaveTextContent('8 نوفمبر – 14 نوفمبر 2026')
     expect(within(bubble).getByTestId('financial-disclaimer')).toBeInTheDocument()
     expect(within(bubble).getByTestId('agent-retry')).toBeInTheDocument()
   })

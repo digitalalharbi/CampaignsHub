@@ -18,6 +18,7 @@ import { Explainer } from '@/components/ui/Explainer'
 import { OrderSourcesPanel } from './OrderSourcesPanel'
 import { StoreDepthPanel } from './StoreDepthPanel'
 import { ThreeSourcesPanel } from './ThreeSourcesPanel'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * FUNNEL-001 — «الفانل والمتجر»: impression to riyal, with the source of every number on the row.
@@ -182,7 +183,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
   const { stages, steps, totals, derived, comparisons, coverage } = q.data
   const note = (
     <RefreshNote ar={ar} isRefreshing={q.isRefreshing} isShowingPrevious={q.isShowingPrevious} refreshFailed={q.refreshFailed}
-      updatedAt={q.updatedAt} shownPeriod={`${q.data.window.from} → ${q.data.window.to}`} onRetry={() => void q.refetch()} />
+      updatedAt={q.updatedAt} shownPeriod={formatPeriodRange(q.data.window.from, q.data.window.to, ar ? 'ar' : 'en')} onRetry={() => void q.refetch()} />
   )
   // One currency for the whole page, named by the server. Falling back to SAR keeps an older payload
   // rendering, but nothing on this page decides a currency for itself any more.

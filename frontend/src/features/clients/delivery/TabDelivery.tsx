@@ -17,6 +17,7 @@ import {
   type DeliveryPack, type PackDetail, type PackRecommendation,
 } from './deliveryApi'
 import { withMark } from '@/lib/money/mark'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * WD-PACK-001, WD-DRAFTS-001, WD-WHATSAPP-001, WD-EVIDENCE-001 — the periodic delivery, as the Owner works it.
@@ -124,7 +125,7 @@ function PackCard({ pack, t, active, onOpen }: { pack: DeliveryPack; t: typeof C
           <span className="text-xs text-text-muted">{t.week}</span>
           <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{pack.status === 'draft' ? (pack.readiness.ready_to_approve ? t.ready : t.draft) : pack.status === 'approved' ? t.approved : t.sent}</span>
         </div>
-        <div className="mt-1 font-semibold text-text-primary" dir="ltr"><Num>{pack.period.from} → {pack.period.to}</Num></div>
+        <div className="mt-1 font-semibold text-text-primary" dir="ltr"><Num><PeriodText from={pack.period.from} to={pack.period.to} /></Num></div>
       </button>
     </li>
   )

@@ -91,7 +91,8 @@ describe('readCreative — why it worked, why it did not, from real figures only
     const csv = readingCsv(detail(), readCreative(detail(), true), true)
     expect(csv.startsWith('﻿')).toBe(true)
     expect(csv).toContain('"نقاط القوة"')
-    expect(csv).toContain('"2026-10-21 → 2026-11-19"')
+    // PERIOD-LABEL-001 — the exported period reads like every other period in the product, not as two ISO dates.
+    expect(csv).toContain('"21 أكتوبر – 19 نوفمبر 2026"')
   })
 
   it('names the ratio from the pixels when the platform did not', () => {

@@ -7,6 +7,7 @@ namespace App\Domains\Delivery\Services;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Delivery\Models\DeliveryPack;
 use App\Domains\Tasks\Models\Task;
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 
 /**
@@ -43,7 +44,7 @@ final class DeliveryTasks
         }
 
         $workspace = ClientWorkspace::withoutGlobalScopes()->find($pack->client_workspace_id);
-        $period = $pack->period_start->toDateString().' → '.$pack->period_end->toDateString();
+        $period = PeriodLabel::range($pack->period_start, $pack->period_end, 'ar');
 
         $task = new Task;
         $task->forceFill([

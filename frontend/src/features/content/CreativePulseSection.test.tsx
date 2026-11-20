@@ -691,7 +691,7 @@ describe('CreativePulseSection', () => {
       'Suggested action',
     )
     expect(screen.getByText('Confidence: High confidence')).toBeInTheDocument()
-    expect(screen.getByText(/Previous period: 2026-06-08/)).toBeInTheDocument()
+    expect(screen.getByText(/Previous period:/).textContent).toContain('Jun 8 – Jul 7, 2026')
     // A truncated list says so, rather than reading as «this is everything».
     expect(screen.getByText('1/3')).toBeInTheDocument()
     // And the finding links into the ad it names, carrying the dashboard's own window.

@@ -33,6 +33,8 @@ import { useUi } from '@/stores/ui'
 import type { CreativeCard, CreativeMetrics } from '@/features/content/api'
 import type { CreativePulse, FatigueAlert, PulseList } from '@/features/content/pulse'
 import { Num } from '@/components/ui/Num'
+import { PeriodText } from '@/components/ui/PeriodText'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /** A winner card takes either shape; only `objective` distinguishes them, and only one of them has it. */
 type SharedWinner = SharedObjectiveWinner | SharedKindWinner
@@ -282,7 +284,7 @@ export function SharedCreativeSection({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-heading text-lg font-extrabold tracking-tight">{t.heading}</h2>
         <p className="tnum flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-          <Num>{data.period.from} → {data.period.to}</Num>
+          <Num><PeriodText from={data.period.from} to={data.period.to} /></Num>
           {/*
             §17 — the client is the reader most likely to mistake a provider's silence for a fault.
 
@@ -749,7 +751,7 @@ function InsightList({
               {item.path && <Pair k={t.path} v={item.path} />}
               {item.provider && <Pair k={t.platform} v={providerLabel(item.provider, ar ? 'ar' : 'en')} />}
               {item.campaign_name && <Pair k={t.campaign} v={item.campaign_name} />}
-              <Pair k={t.period} v={`${item.period.from} → ${item.period.to}`} />
+              <Pair k={t.period} v={formatPeriodRange(item.period.from, item.period.to, ar ? 'ar' : 'en')} />
             </dl>
             {permissions.recommendations && (ar ? item.action_ar : item.action_en) && (
               <p className="mt-1.5 rounded bg-surface-secondary px-2 py-1 text-text-primary">
@@ -927,8 +929,8 @@ function SharedCreativeDetail({
           <Pair k={t.campaign} v={creative.campaign_name ?? t.notProvided} />
           <Pair k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} />
           <Pair k={t.path} v={marketingPathLabel(creative.path, locale)} />
-          <Pair k={t.period} v={`${data.period.from} → ${data.period.to}`} />
-          <Pair k={t.previousPeriod} v={`${data.previous_period.from} → ${data.previous_period.to}`} />
+          <Pair k={t.period} v={formatPeriodRange(data.period.from, data.period.to, ar ? 'ar' : 'en')} />
+          <Pair k={t.previousPeriod} v={formatPeriodRange(data.previous_period.from, data.previous_period.to, ar ? 'ar' : 'en')} />
           {/*
             Our clock was here too, twice, among the facts of one ad — «آخر مزامنة» and «آخر تحديث
             من المصدر». Removed for the same reason, and because sitting in a list of campaign facts

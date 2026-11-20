@@ -9,6 +9,7 @@ import type { CreativePreview } from '@/features/content/api'
 import { PrintFilmFrame, printChatText, printFilm } from './printCover'
 import type { LiveObjectiveBlock, LivePlatformPayload, LiveShare } from './api'
 import type { ReportAd } from './ReportAdsSection'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * REPORT-DRILLDOWN-001 — the PDF's optional platform drill-down section.
@@ -123,7 +124,7 @@ function Trend({ block, color, ar, currency }: { block: PrintPlatformDrilldown; 
 
   const metric = ar ? METRIC_LABELS[key].ar : METRIC_LABELS[key].en
   const unit = key === 'spend' ? currency : null
-  const period = `${block.period.from} → ${block.period.to}`
+  const period = formatPeriodRange(block.period.from, block.period.to, ar ? 'ar' : 'en')
 
   return (
     <figure className="pdd-trend-figure" data-testid="print-drilldown-trend-figure">

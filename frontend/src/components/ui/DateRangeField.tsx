@@ -2,7 +2,8 @@ import { useCallback, useRef, useState } from 'react'
 import { CalendarDays } from 'lucide-react'
 import { useUi } from '@/stores/ui'
 import { PickerPanel } from '@/components/ui/DateRangePicker'
-import { formatSpan, isValidYmd, riyadhToday } from '@/lib/period/periodMath'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
+import { isValidYmd, riyadhToday } from '@/lib/period/periodMath'
 import { resolveSelection } from '@/lib/period/periodState'
 
 /**
@@ -33,7 +34,7 @@ export function DateRangeField({ from, to, onChange, id, testId = 'range-field' 
         className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-border-strong bg-surface px-3 py-1.5 text-start text-sm font-semibold text-text-primary hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 sm:min-h-10"
       >
         <CalendarDays className="h-4 w-4 shrink-0 text-text-secondary" aria-hidden />
-        <span className="truncate" data-testid={`${testId}-summary`}>{valid ? formatSpan({ from, to }, ar) : (ar ? 'اختر الفترة' : 'Choose the period')}</span>
+        <span className="truncate" data-testid={`${testId}-summary`}>{valid ? formatPeriodRange(from, to, ar ? 'ar' : 'en') : (ar ? 'اختر الفترة' : 'Choose the period')}</span>
       </button>
       {open && (
         <PickerPanel

@@ -7,6 +7,7 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { fmtClock } from '@/lib/datetime'
 import { NO_ACTIVITY_LABEL } from '@/lib/syncStatus'
 import { useUi } from '@/stores/ui'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * SYNC-001 — the run log the pipeline has always kept, on the page that asks about it.
@@ -90,7 +91,7 @@ function Run({ run, ar }: { run: SyncRun; ar: boolean }) {
               under Arabic the range lands on the opposite edge from «الفترة» — which is what
               `ltrNumeralAlignment` catches by name, and it caught this one.
             */}
-            <dd className="inline"><Num className="tnum">{run.window_start} → {run.window_end}</Num></dd>
+            <dd className="inline"><Num className="tnum"><PeriodText from={run.window_start} to={run.window_end} /></Num></dd>
           </div>
         )}
         {rows.map(([label, value]) => (

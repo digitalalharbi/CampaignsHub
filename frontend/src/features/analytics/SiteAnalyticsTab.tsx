@@ -13,6 +13,7 @@ import { SiteKpis, type SiteKpi } from './SiteKpis'
 import { ThreeSourcesPanel } from './ThreeSourcesPanel'
 import { TrafficExplorer } from './TrafficExplorer'
 import { Ga4Workbench } from './ga4/Ga4Workbench'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * GA4-ANALYTICS-PRODUCT-001 — what the SITE measured, from the project's own GA4 property.
@@ -69,7 +70,7 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
   const d = q.data
   const note = (
     <RefreshNote ar={ar} isRefreshing={q.isRefreshing} isShowingPrevious={q.isShowingPrevious} refreshFailed={q.refreshFailed}
-      updatedAt={q.updatedAt} shownPeriod={`${d.period.from} → ${d.period.to}`} onRetry={() => void q.refetch()} />
+      updatedAt={q.updatedAt} shownPeriod={formatPeriodRange(d.period.from, d.period.to, ar ? 'ar' : 'en')} onRetry={() => void q.refetch()} />
   )
   if (d.state !== 'ready') {
     // A short chip and one action — the Owner's rule: no paragraph where a chip says it.

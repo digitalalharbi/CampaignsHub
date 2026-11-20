@@ -1,3 +1,4 @@
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 import { useState } from 'react'
 import { Check, Copy, ExternalLink, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -25,7 +26,7 @@ export function ReportFromViewButton({ projectId, range }: { projectId: string; 
   const create = useCreateReportFromView()
   if (!allowed) return null
 
-  const name = `${ar ? 'تقرير من التحليلات' : 'Analytics report'} ${range.from} → ${range.to}`
+  const name = `${ar ? 'تقرير من التحليلات' : 'Analytics report'} ${formatPeriodRange(range.from, range.to, ar ? 'ar' : 'en')}`
   const run = () => create.mutate({ projectId, range, providers, campaigns, name }, { onSuccess: (r) => setUrl(r.url) })
   const failure = create.isError
     ? (create.error instanceof Error && create.error.message === 'no-accounts'

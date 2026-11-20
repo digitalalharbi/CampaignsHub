@@ -304,8 +304,8 @@ final class AlertDispatchTest extends TestCase
             $text = preg_replace('/\s+/u', ' ', strip_tags($html));
             $this->assertMatchesRegularExpression('/معدل النقر نزل\s*\S*\d+%/u', $text, 'title: the metric and its % change');
             $this->assertStringContainsString('data-viz="before_now"', $html, 'the before/after bars');
-            $this->assertStringContainsString('الخميس 6 أغسطس', $text, 'the «before» bar names its day');
-            $this->assertStringContainsString('الجمعة 7 أغسطس', $text, 'the «after» bar names its day');
+            $this->assertStringContainsString('أمس: 6 أغسطس 2026', $text, 'the «before» bar names its day');
+            $this->assertStringContainsString('اليوم (جاري): 7 أغسطس 2026', $text, 'the «after» bar names its day');
             $this->assertStringNotContainsString('الفترة السابقة', $text, 'never the vague «previous period»');
             $this->assertStringContainsString('data-block="steps"', $html, 'the numbered action chips');
             $this->assertMatchesRegularExpression('/1<\/span>\s*راجع المحتوى.*2<\/span>\s*جدّد الأقل أداءً/us', $html, '1 راجع المحتوى ← 2 جدّد الأقل أداءً');

@@ -73,7 +73,7 @@ describe('the dashboard opened from a link that already carries filters', () => 
     await screen.findByTestId('dashboard-intro')
 
     // DATE-RANGE-001 — a shared link carries the two DATES; the button says them.
-    expect(screen.getByTestId('dashboard-period-summary')).toHaveTextContent('3 Sep – 9 Sep 2026')
+    expect(screen.getByTestId('dashboard-period-summary')).toHaveTextContent('Sep 3 – Sep 9, 2026')
   })
 
   /* A period that is not a period is not obeyed — it would ask for a window ending before it starts. */

@@ -25,15 +25,14 @@ describe('a report states the period its figures cover', () => {
     const line = screen.getByTestId('report-snapshot-age')
 
     expect(line).toHaveTextContent('الأرقام خلال الفترة')
-    expect(line).toHaveTextContent('2026-10-20')
-    expect(line).toHaveTextContent('2026-11-18')
+    expect(line).toHaveTextContent('20 أكتوبر – 18 نوفمبر 2026')
   })
 
   it('says «Figures for {from} – {to}» in English', () => {
     useUi.setState({ locale: 'en' })
     render(<InteractiveReport data={{ ...(base as object), mode: 'snapshot' } as never} meta={{ ...(meta as object), locale: 'en' } as never} />)
 
-    expect(screen.getByTestId('report-snapshot-age')).toHaveTextContent(/Figures for\s*2026-10-20\s*–\s*2026-11-18/)
+    expect(screen.getByTestId('report-snapshot-age')).toHaveTextContent(/Figures for\s*Oct 20 – Nov 18, 2026/)
     useUi.setState({ locale: 'ar' })
   })
 

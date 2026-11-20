@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Integrations\Status\LinkHealth;
 use App\Support\AdPlatforms;
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 
 /**
@@ -511,7 +512,7 @@ final class AlertEventText
         }
         $parts[] = $success !== null
             ? ($ar ? 'آخر مزامنة ناجحة ' : 'Last successful sync ').self::ltr(Carbon::parse((string) $success['finished_at'])->setTimezone('Asia/Riyadh')->format('Y-m-d H:i'))
-                .($ar ? ' للفترة ' : ' for ').self::ltr($success['window_start'].' → '.$success['window_end'])
+                .($ar ? ' للفترة ' : ' for ').self::ltr(PeriodLabel::range((string) $success['window_start'], (string) $success['window_end'], $ar ? 'ar' : 'en'))
             : ($ar ? 'لا مزامنة ناجحة مسجلة' : 'No successful sync on record');
 
         return [

@@ -8,6 +8,7 @@ import { canonicalPlatform } from '@/lib/platforms'
 import { compact, money, moneyExact, num } from '@/features/analytics/format'
 import { useUi } from '@/stores/ui'
 import type { Decomposition, DriverRow, DriversPayload, TimePoint, TimelinePoint } from './api'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * ANALYTICS-DIFFERENTIATION-001 — the block that makes Analytics a different product.
@@ -438,7 +439,7 @@ export function ChangeDiagnosis({
           </h3>
           <span className="text-xs text-text-muted">
             {ar ? 'مقابل ' : 'vs '}
-            {data.previous?.from ?? '—'} → {data.previous?.to ?? '—'}
+            {data.previous?.from && data.previous?.to ? <PeriodText from={data.previous.from} to={data.previous.to} /> : '—'}
           </span>
         </div>
 

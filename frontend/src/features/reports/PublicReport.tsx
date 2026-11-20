@@ -15,6 +15,7 @@ import { useUi } from '@/stores/ui'
 import { CampaignsHubBrandFooter } from '@/components/brand/CampaignsHubBrandFooter'
 import { ReportWatermark } from './ReportWatermark'
 import { setCodeMarks } from '@/lib/money/mark'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /*
  * PERF-RECOVERY-001 — the live link loads only what the live dashboard draws.
@@ -117,7 +118,7 @@ export function PublicReport({ token: tokenProp, embedded = false }: { token?: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
-  const filesPeriod = report?.period?.from && report.period.to ? `${report.period.from} → ${report.period.to}` : null
+  const filesPeriod = report?.period?.from && report.period.to ? formatPeriodRange(report.period.from, report.period.to, 'ar') : null
   const platforms = ((report?.data?.platforms as Array<Record<string, unknown>>) ?? []).map((p) => String(p.provider))
 
   /*

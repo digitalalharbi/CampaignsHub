@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, Info } from 'lucide-react'
 import { objectiveLabel } from '@/features/campaigns/labels'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * REPORT-FOOTER-001 — the ONE footer every report surface ends with.
@@ -57,7 +58,7 @@ export function reportFooterItems(facts: ReportFooterFacts, locale: 'ar' | 'en')
   const t = LABELS[locale]
   const items: Array<[string, string | null]> = [
     [t.updated, facts.updatedAt ? formatStamp(facts.updatedAt, facts.timezone) : null],
-    [t.period, facts.period?.from && facts.period?.to ? (facts.period.from === facts.period.to ? facts.period.from : `${facts.period.from} → ${facts.period.to}`) : null],
+    [t.period, facts.period?.from && facts.period?.to ? formatPeriodRange(facts.period.from, facts.period.to, locale) : null],
     [t.currency, facts.currency || null],
     [t.timezone, facts.timezone || null],
     [t.objective, facts.objective ? objectiveLabel(facts.objective, locale) : null],

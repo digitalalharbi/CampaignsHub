@@ -135,7 +135,7 @@ describe('the printed drill-down trend reads through the one sparkline rule', ()
     const label = screen.getByTestId('print-drilldown-trend-label')
     expect(label).toHaveTextContent('Daily trend — Spend')
     expect(label).toHaveTextContent('SAR')
-    expect(label).toHaveTextContent('2026-07-01 → 2026-07-31')
+    expect(label).toHaveTextContent('Jul 1 – Jul 31, 2026')
     expect(label).toHaveTextContent('Gaps are unreported days')
   })
 

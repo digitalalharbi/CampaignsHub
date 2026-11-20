@@ -11,6 +11,7 @@ import { fmtDateTime } from '@/lib/datetime'
 import { useUi } from '@/stores/ui'
 import { DELIVERY_LABEL } from '@/features/reports/scheduleDeliveryWords'
 import { getDeliveryOverview, type DeliveryOverviewRow, type NextAction } from './deliveryApi'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * DELIV-DASH-001 — every client's weekly delivery and billing on one screen.
@@ -96,7 +97,7 @@ function Row({ r, ar, inList = false }: { r: DeliveryOverviewRow; ar: boolean; i
         <div className="truncate font-bold text-text-primary">{r.client}</div>
         <div className="mt-0.5 text-xs text-text-muted">
           {r.pack !== null
-            ? `${r.pack.period.from} → ${r.pack.period.to}`
+            ? formatPeriodRange(r.pack.period.from, r.pack.period.to, ar ? 'ar' : 'en')
             : sched === null
               ? (ar ? 'لا توجد حزمة بعد' : 'No pack yet')
               : null}

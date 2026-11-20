@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\External\Content;
 
 use App\Domains\Notifications\External\Unsubscribe\UnsubscribeLinks;
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 
 /**
@@ -255,7 +256,7 @@ final class ReportView
 
     public static function periodLabel(ExternalContext $c): string
     {
-        return $c->from === $c->to ? $c->from : $c->from.' – '.$c->to;
+        return PeriodLabel::range($c->from, $c->to, $c->locale);
     }
 
     public static function providerLabel(string $provider): string

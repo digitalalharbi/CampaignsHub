@@ -17,6 +17,7 @@ use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
 use App\Support\AdPlatforms;
 use App\Support\Frontend;
+use App\Support\PeriodLabel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -114,7 +115,7 @@ final class DailyDigestMail extends Mailable
         $tz = ReportingTimezone::DEFAULT;
         $from = (string) ($this->digest['date'] ?? '');
         $to = (string) ($this->digest['to_date'] ?? $from);
-        $period = $from === '' ? null : ($from === $to ? $from : "{$from} → {$to}");
+        $period = $from === '' ? null : PeriodLabel::inferred($from, $to, $ar ? 'ar' : 'en');
         // The unit the web states for these rows; with mixed units (null) the line says so rather than naming one.
         $unit = array_key_exists('currency', $this->digest) ? $this->digest['currency'] : ReportingCurrency::DEFAULT;
         $items = array_values(array_filter([
@@ -483,8 +484,8 @@ final class DailyDigestMail extends Mailable
                     'url' => MailChart::url($token),
                     'width' => 320,
                     'height' => 64,
-                    'alt' => ($ar ? 'الإنفاق اليومي من ' : 'Daily spend from ').$first.' → '.$last.': '.$p->money(min($present)).' – '.$p->money(max($present)),
-                    'caption' => ($ar ? 'الإنفاق يومًا بيوم، ' : 'Spend day by day, ').$first.' → '.$last,
+                    'alt' => ($ar ? 'الإنفاق اليومي، ' : 'Daily spend, ').PeriodLabel::range($first, $last, $ar ? 'ar' : 'en').': '.$p->money(min($present)).' – '.$p->money(max($present)),
+                    'caption' => ($ar ? 'الإنفاق يومًا بيوم، ' : 'Spend day by day, ').PeriodLabel::range($first, $last, $ar ? 'ar' : 'en'),
                 ];
             }
         }
@@ -586,7 +587,7 @@ final class DailyDigestMail extends Mailable
         $from = (string) ($this->digest['date'] ?? '');
 
         if ($this->kind === 'daily') {
-            return ($ar ? 'الملخص اليومي · ' : 'Daily digest · ').$from;
+            return ($ar ? 'الملخص اليومي · ' : 'Daily digest · ').PeriodLabel::inferred($from, $from, $ar ? 'ar' : 'en');
         }
 
         $to = (string) ($this->digest['to_date'] ?? $from);
@@ -595,7 +596,7 @@ final class DailyDigestMail extends Mailable
             ? ($ar ? 'الملخص الشهري · ' : 'Monthly digest · ')
             : ($ar ? 'الملخص الأسبوعي · ' : 'Weekly digest · ');
 
-        return $label."{$from} → {$to}";
+        return $label.PeriodLabel::inferred($from, $to, $ar ? 'ar' : 'en');
     }
 
     /**

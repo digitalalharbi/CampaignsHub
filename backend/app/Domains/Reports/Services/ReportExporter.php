@@ -14,6 +14,7 @@ use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\ReportFxFacts;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Support\AdPlatforms;
+use App\Support\PeriodLabel;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -479,7 +480,7 @@ final class ReportExporter
         $put = fn (array $row) => fputcsv($fh, $row, ',', '"', '');
         $put(["Report: {$report->name}", $report->type]);
         // The currency the figures are IN — a live report's figures come from the page, which names its own.
-        $put(['Period', ($data['period']['from'] ?? '').' → '.($data['period']['to'] ?? ''), 'Currency', (string) ($data['currency'] ?? $report->currency)]);
+        $put(['Period', is_string($data['period']['from'] ?? null) && is_string($data['period']['to'] ?? null) ? PeriodLabel::range($data['period']['from'], $data['period']['to'], 'en') : '', 'Currency', (string) ($data['currency'] ?? $report->currency)]);
         // FX-APPLY-001 — the rates behind the figures: original currencies, rate, dates, kind, withheld.
         $fx = $this->fxFacts($report, $data);
         $put(['Exchange rates / أسعار الصرف', $fx['header']]);

@@ -5,7 +5,7 @@ import { FileText, Globe, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { canonicalPlatform, isAdPlatform, sortPlatforms } from '@/lib/platforms'
-import { formatSpan } from '@/lib/period/periodMath'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 import { providerLabel } from '@/features/campaigns/labels'
 import { useUi } from '@/stores/ui'
 import type { ReportAd } from './ReportAdsSection'
@@ -64,7 +64,7 @@ const LivePlatformDrawer = lazy(() => import('./live/LivePlatformDrawer').then((
 const DEFAULT_DAYS = 30
 
 /* The period in the system's own date style («10 نوفمبر – 16 نوفمبر 2026»), the one the picker prints. */
-const periodText = (from: string, to: string, ar: boolean): string => formatSpan({ from, to }, ar)
+const periodText = (from: string, to: string, ar: boolean): string => formatPeriodRange(from, to, ar ? 'ar' : 'en')
 
 const MODE_ICONS: Record<LiveMode, typeof LayoutDashboard> = {
   summary: FileText,

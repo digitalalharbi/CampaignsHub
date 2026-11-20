@@ -16,7 +16,7 @@ final class ShareCardRollingPeriodTest extends TestCase
 {
     public function test_a_fixed_link_states_its_dates(): void
     {
-        $this->assertSame('2026-11-04 — 2026-11-17', ReportPeriod::cardLabel('fixed', null, '2026-11-04', '2026-11-17', 'ar'));
+        $this->assertSame('4 نوفمبر – 17 نوفمبر 2026', ReportPeriod::cardLabel('fixed', null, '2026-11-04', '2026-11-17', 'ar'));
     }
 
     public function test_a_rolling_link_states_its_window_and_that_it_moves(): void

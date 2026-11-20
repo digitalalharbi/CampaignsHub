@@ -2,6 +2,7 @@ import type { CreativeDetail } from './api'
 import { formatMetric, metricLabel } from './metrics'
 import { providerLabel } from '@/features/campaigns/labels'
 import { days as countedDays } from '@/lib/counted'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * CONTENT-WHY-DETAIL-001 — Owner 2026-11-19: the content page reads like the report reads a content item: why it worked,
@@ -290,7 +291,7 @@ export function readingCsv(data: CreativeDetail, reading: CreativeReading, ar: b
     row(L('الإعلان', 'Ad'), data.creative.name),
     row(L('المنصة', 'Platform'), providerLabel(data.creative.provider, ar ? 'ar' : 'en')),
     row(L('الحملة', 'Campaign'), data.creative.campaign_name ?? ''),
-    row(L('الفترة', 'Period'), `${data.period.from} → ${data.period.to}`),
+    row(L('الفترة', 'Period'), formatPeriodRange(data.period.from, data.period.to, ar ? 'ar' : 'en')),
     row(L('العملة', 'Currency'), data.currency ?? ''),
     row(L('الحكم', 'Verdict'), reading.verdictLabel),
     row(L('الخلاصة', 'Summary'), reading.headline),

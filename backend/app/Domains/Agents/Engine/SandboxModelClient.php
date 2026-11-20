@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Agents\Engine;
 
+use App\Support\PeriodLabel;
+
 /**
  * AGENTS-SANDBOX-001 — a model that never leaves the machine, for the E2E gate and local walk-throughs.
  *
@@ -59,9 +61,9 @@ final class SandboxModelClient implements StreamingModelClient
         $window = (array) ($campaigns['window'] ?? []);
         $text = $first === []
             ? 'لا توجد بيانات للحملات في هذه الفترة.'
-            : sprintf('الحملة: %s — الإنفاق %s %s من %s إلى %s.',
+            : sprintf('الحملة: %s — الإنفاق %s %s للفترة %s.',
                 (string) ($first['campaign_name'] ?? '—'), $this->fig($first['spend'] ?? null), (string) ($campaigns['currency'] ?? ''),
-                (string) ($window['from'] ?? '—'), (string) ($window['to'] ?? '—'));
+                isset($window['from'], $window['to']) ? PeriodLabel::range((string) $window['from'], (string) $window['to'], 'ar') : '—');
         if ($proposed !== null) {
             $text .= ' اقترحت إيقافها، وهو بانتظار موافقتك.';
         }

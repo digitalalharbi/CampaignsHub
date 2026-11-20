@@ -17,6 +17,7 @@ use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Models\User;
 use App\Support\Frontend;
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -149,7 +150,7 @@ final class ScheduledReportMailer
         return new ScheduledReportMail(
             reportTitle: $title,
             context: (string) ($project->name ?? $report->name),
-            period: $report->period_start?->toDateString().' → '.$report->period_end?->toDateString(),
+            period: $report->period_start !== null && $report->period_end !== null ? PeriodLabel::range($report->period_start, $report->period_end, $locale) : '',
             cards: $figures['cards'],
             bestContent: $figures['best'],
             improveContent: $figures['improve'],

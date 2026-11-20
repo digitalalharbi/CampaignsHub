@@ -29,6 +29,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
+use App\Support\PeriodLabel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -418,7 +419,7 @@ final class FundingController extends Controller
         })->all();
 
         $today = now('Asia/Riyadh')->toDateString();
-        $period = ($data['from'] ?? 'start').' .. '.($data['to'] ?? $today);
+        $period = PeriodLabel::bounds($data['from'] ?? null, $data['to'] ?? $today, (string) ($data['lang'] ?? 'ar'));
         $audit->log(action: 'funding.exported', entityType: ProjectFunding::class, entityId: null,
             after: ['format' => $data['format'], 'sheet' => $data['sheet'] ?? null, 'projects' => count($summary), 'movements' => count($movements),
                 'client_id' => $data['client_id'] ?? null, 'project_id' => $data['project_id'] ?? null, 'period' => $period]);

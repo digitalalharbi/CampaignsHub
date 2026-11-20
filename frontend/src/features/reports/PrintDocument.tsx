@@ -22,6 +22,7 @@ import type { CreativeMetrics, CreativePreview } from '@/features/content/api'
 import { PrintPlatformDrilldowns } from './PrintPlatformDrilldowns'
 import { PrintFilmFrame, printChatText, printFilm, settlePrintFilms } from './printCover'
 import { reportPageTitle } from './sharedBranding'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * English, LTR, A4-portrait DOCUMENT rendering of a report (distinct from the RTL 16:9 slide
@@ -96,9 +97,6 @@ const nfmt = (n: number | null | undefined, opts?: Intl.NumberFormatOptions) =>
  * read once and kept: the precise figure is what somebody checks against an invoice.
  */
 const money = (n: number | null | undefined, currency: string) => moneyExact(n, currency || null)
-
-const dateFmt = (s?: string) =>
-  s ? new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(s)) : '—'
 
 // RESULT-EVENTS-001 — the platform's generic conversion and its cost carry their own names; «Results» is the link's defined event only.
 const KPI_LABELS: Record<string, string> = {
@@ -585,7 +583,7 @@ export function PrintDocument({
           {clientName === undefined ? 'Client Report' : `Prepared for ${clientName}`}
         </div>
         <dl className="doc-facts">
-          <div><dt>Period</dt><dd>{dateFmt(data.period?.from)} → {dateFmt(data.period?.to)}</dd></div>
+          <div><dt>Period</dt><dd>{data.period?.from && data.period?.to ? formatPeriodRange(data.period.from, data.period.to, 'en') : '—'}</dd></div>
           <div><dt>Currency</dt><dd>{currency}</dd></div>
           <div><dt>Objective</dt><dd>{data.objective ?? '—'}</dd></div>
           <div><dt>Platforms</dt><dd>{(data.platforms ?? []).map((p: Row) => String(p.provider ?? p.platform ?? p.name ?? '')).filter(Boolean).join(', ') || '—'}</dd></div>
@@ -989,7 +987,7 @@ export function PrintDocument({
               {e.image && e.url ? <img src={e.url} alt={`${providerLabel(e.provider, 'en')} screenshot`} style={{ maxWidth: '100%', maxHeight: '180mm', objectFit: 'contain' }} /> : <p>PDF attachment: {e.name ?? '—'}</p>}
               <figcaption>
                 {providerLabel(e.provider, 'en')}
-                {e.period_start && e.period_end ? ` · ${e.period_start} → ${e.period_end}` : ''}
+                {e.period_start && e.period_end ? ` · ${formatPeriodRange(e.period_start, e.period_end, 'en')}` : ''}
                 {e.note ? ` · ${e.note}` : ''}
               </figcaption>
             </figure>
