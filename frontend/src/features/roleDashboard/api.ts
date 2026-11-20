@@ -34,6 +34,10 @@ export interface DashboardUnit extends BudgetReading {
   daily_rate_3d: number | null
   days_left: number | null
   run_out_on: string | null
+  /** DELIVERY-STATE-001 — spend AND impressions in the last 3 days on any platform. */
+  delivering?: boolean
+  /** provider → running in the last 3 days (a provider that did not spend is absent). */
+  delivering_platforms?: Record<string, boolean>
 }
 
 /** The words for a figure travel with it, in both languages (`ObjectiveResult`). */

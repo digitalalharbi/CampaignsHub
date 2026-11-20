@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Notifications\Engine\Migration\LegacyNotificationImporter;
 use App\Domains\Notifications\Mail\SpendSummaryMail;
 use App\Domains\Notifications\Models\ExternalDigestRecipient;
@@ -95,6 +96,11 @@ final class SpendSummaryDispatcher
             if ($projectIds === []) {
                 return $this->finishInternal($user, $key, 'skipped', 'no_projects_in_scope');
             }
+            // DELIVERY-QUIET-001 — a project that did not move in this period (no spend, no impression) is left out; none moved, none sent.
+            $projectIds = app(DeliveryState::class)->watched($projectIds, $from->toDateString(), $to->toDateString());
+            if ($projectIds === []) {
+                return $this->finishInternal($user, $key, 'skipped', 'no_delivery');
+            }
             if (! $this->providers->isConfigured('email')) {
                 return $this->finishInternal($user, $key, 'awaiting_credentials', 'no_email_provider');
             }
@@ -143,8 +149,9 @@ final class SpendSummaryDispatcher
                 ->where('tenant_id', $tenantId)->whereIn('id', $recipient->projectIds())
                 ->live() // PROJECT-LIFECYCLE-001 — active + paused only
                 ->pluck('id')->map(static fn ($id): string => (string) $id)->all();
+            $projectIds = app(DeliveryState::class)->watched($projectIds, $from->toDateString(), $to->toDateString());
             if ($projectIds === []) {
-                return $this->finishExternal($recipient, $key, 'skipped', 'no_projects');
+                return $this->finishExternal($recipient, $key, 'skipped', 'no_delivery');
             }
             if (! $this->providers->isConfigured('email')) {
                 return $this->finishExternal($recipient, $key, 'awaiting_credentials', 'no_email_provider');

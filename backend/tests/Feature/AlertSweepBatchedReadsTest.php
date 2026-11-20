@@ -269,8 +269,10 @@ final class AlertSweepBatchedReadsTest extends TestCase
          * RELEASE-INTEGRATION (project-lifecycle + notifications-v2), measured on the merged tree: 561 before, 599 after (+38). The
          * lifecycle side's live-project read and the bell side's closing UPDATEs add up without overlapping; the before-bound stays at 562,
          * the growth bound is the bell side's +6 (four closings), nothing raised beyond what each side measured on its own.
+         * DELIVERY-QUIET-001 — 562 → 564: performance findings about a project that delivered before and has been silent for 3
+         * days are dropped, from at most two reads per tenant per sweep (memoised), never per rule or per campaign.
          */
-        $this->assertLessThan(562, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
+        $this->assertLessThan(564, $before, 'a sweep of ~50 campaigns is hundreds of statements, not the thousands it was');
         $this->assertLessThan($before + 18 * 2 + 6, $after, 'cost per campaign is back');
     }
 
