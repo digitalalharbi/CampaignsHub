@@ -22,6 +22,7 @@ use App\Domains\Funding\Services\FundingSpendRefresher;
 use App\Domains\Funding\Services\FundingStatement;
 use App\Domains\Funding\Support\FundingDisclaimer;
 use App\Domains\Funding\Support\FundingMoney;
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -139,13 +140,14 @@ final class FundingController extends Controller
             return [];
         }
 
-        $rows = DailyMetric::query()
-            ->whereIn('project_id', $projectIds)
-            ->where('metric_date', '>=', now()->subDays(2)->toDateString())
-            ->whereIn('metric_key', ['spend', 'impressions'])
-            ->where('value', '>', 0)
-            ->groupBy('project_id', 'provider', 'metric_key')
-            ->get(['project_id', 'provider', 'metric_key']);
+        // Only the accounts the project still selects count — the one visibility rule every figure reader asks.
+        $rows = BoundAccountVisibility::apply(DailyMetric::query(), 'daily_metrics')
+            ->whereIn('daily_metrics.project_id', $projectIds)
+            ->where('daily_metrics.metric_date', '>=', now()->subDays(2)->toDateString())
+            ->whereIn('daily_metrics.metric_key', ['spend', 'impressions'])
+            ->where('daily_metrics.value', '>', 0)
+            ->groupBy('daily_metrics.project_id', 'daily_metrics.provider', 'daily_metrics.metric_key')
+            ->get(['daily_metrics.project_id', 'daily_metrics.provider', 'daily_metrics.metric_key']);
 
         $seen = [];
         foreach ($rows as $r) {
