@@ -353,54 +353,7 @@ export function DashboardOverview(d: OverviewData) {
           lines are drawn from the same reading, in whatever currency that reading is honestly in, and
           the axis says which.
         */}
-        <Panel
-          title={ar ? 'الإنفاق وتحويلات المنصة والإيرادات' : 'Spend, platform conversions and revenue'}
-          description={
-            series.basis === 'original'
-              ? ar
-                ? `المال معروض بعملة المنصة (${series.currency}) — ${series.note ?? ''}`
-                : `Money shown in the platform's own currency (${series.currency}) — ${series.note ?? ''}`
-              : ar
-                ? 'الاتجاه اليومي للإنفاق والإيرادات والنتائج'
-                : 'Spend, revenue and results, day by day'
-          }
-          loading={ts.isLoading}
-          error={ts.isError}
-          empty={!ts.isLoading && series.rows.length === 0}
-        >
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={series.rows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="date" tick={axis} tickFormatter={(v) => String(v).slice(5)} minTickGap={24} />
-                {/*
-                  Money and counts are different units, so they get different axes. Drawing 4,787 USD
-                  and 218 results against one scale flattens the smaller series onto the floor — which
-                  is the shape the old chart had even before the money went missing.
-                */}
-                <YAxis yAxisId="money" tick={axis} tickFormatter={(v) => compact(Number(v))} width={52} />
-                <YAxis yAxisId="count" orientation={ar ? 'left' : 'right'} tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
-                <Tooltip
-                  {...tooltipProps}
-                  formatter={(v: number, name: string) =>
-                    name === (ar ? 'تحويلات المنصة' : 'Platform conversions') ? num(v) : money(v, chartCurrency)
-                  }
-                />
-                <Legend wrapperStyle={{ fontSize: 13 }} />
-                {series.hasMoney && series.basis !== 'mixed' && (
-                  <Line yAxisId="money" name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} connectNulls />
-                )}
-                {series.hasMoney && series.basis !== 'mixed' && (
-                  <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
-                )}
-                <Line yAxisId="count" name={ar ? 'تحويلات المنصة' : 'Platform conversions'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          {series.basis === 'mixed' && (
-            <p data-testid="series-currency-mixed" className="mt-2 text-xs text-text-secondary">{series.note}</p>
-          )}
-        </Panel>
+        <TrendPanel {...d} />
         {/*
           Three metrics, three units — «3.20x», «21.96 USD» and «0.72%» share no axis. On one scale the
           two small numbers lie flat on the floor and the chart says nothing, which is what shipped:
@@ -707,11 +660,67 @@ export function AnalyticsOverview(d: OverviewData) {
  * RATE-TREND-HEADLINE-001 — the period's own rates for the three trend cards: ROAS and CPA as the summary states them,
  * CTR recomputed from the period's clicks and impressions (as a percentage, the unit the daily line is drawn in).
  */
-function periodRates(current: { roas?: number | null; cpa?: number | null; clicks?: number | null; impressions?: number | null } | null | undefined) {
+export function periodRates(current: { roas?: number | null; cpa?: number | null; clicks?: number | null; impressions?: number | null } | null | undefined) {
   const impressions = current?.impressions ?? 0
   return {
     roas: current?.roas ?? null,
     cpa: current?.cpa ?? null,
     ctr: impressions > 0 && current?.clicks != null ? (current.clicks / impressions) * 100 : null,
   }
+}
+
+/** The day-by-day curve of the Overview, shared by the agency dashboard and the client's (CLIENT-DASHBOARD-PARITY-001). */
+export function TrendPanel(d: OverviewData) {
+  const { ar, series, ts, chartCurrency } = d
+
+  return (
+    <Panel
+      title={ar ? 'الإنفاق وتحويلات المنصة والإيرادات' : 'Spend, platform conversions and revenue'}
+      description={
+        series.basis === 'original'
+          ? ar
+            ? `المال معروض بعملة المنصة (${series.currency}) — ${series.note ?? ''}`
+            : `Money shown in the platform's own currency (${series.currency}) — ${series.note ?? ''}`
+          : ar
+            ? 'الاتجاه اليومي للإنفاق والإيرادات والنتائج'
+            : 'Spend, revenue and results, day by day'
+      }
+      loading={ts.isLoading}
+      error={ts.isError}
+      empty={!ts.isLoading && series.rows.length === 0}
+    >
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={series.rows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="date" tick={axis} tickFormatter={(v) => String(v).slice(5)} minTickGap={24} />
+            {/*
+              Money and counts are different units, so they get different axes. Drawing 4,787 USD
+              and 218 results against one scale flattens the smaller series onto the floor — which
+              is the shape the old chart had even before the money went missing.
+            */}
+            <YAxis yAxisId="money" tick={axis} tickFormatter={(v) => compact(Number(v))} width={52} />
+            <YAxis yAxisId="count" orientation={ar ? 'left' : 'right'} tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
+            <Tooltip
+              {...tooltipProps}
+              formatter={(v: number, name: string) =>
+                name === (ar ? 'تحويلات المنصة' : 'Platform conversions') ? num(v) : money(v, chartCurrency)
+              }
+            />
+            <Legend wrapperStyle={{ fontSize: 13 }} />
+            {series.hasMoney && series.basis !== 'mixed' && (
+              <Line yAxisId="money" name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} connectNulls />
+            )}
+            {series.hasMoney && series.basis !== 'mixed' && (
+              <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
+            )}
+            <Line yAxisId="count" name={ar ? 'تحويلات المنصة' : 'Platform conversions'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      {series.basis === 'mixed' && (
+        <p data-testid="series-currency-mixed" className="mt-2 text-xs text-text-secondary">{series.note}</p>
+      )}
+    </Panel>
+  )
 }

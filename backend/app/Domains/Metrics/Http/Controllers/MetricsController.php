@@ -1419,6 +1419,15 @@ final class MetricsController extends Controller
         $user = $request->user();
         $projectId = (string) app(ProjectContext::class)->projectId();
 
+        /*
+         * CLIENT-DASHBOARD-PARITY-001 — the client portal reads this answer for one of the client's own projects. The grant
+         * is a request attribute only the portal controller sets, after it has checked the session, the space's dashboard
+         * switch and that the project is the client's; a header or query cannot set it.
+         */
+        if ($projectId !== '' && $request->attributes->get('portal_project') === $projectId) {
+            return;
+        }
+
         abort_unless(
             $user !== null
                 && $projectId !== ''

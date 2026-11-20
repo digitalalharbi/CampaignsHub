@@ -7,7 +7,6 @@ import { BrandMark } from '@/components/brand/BrandMark'
 import { coverMeta, headerIdentity, reportPageTitle, type SharedBranding } from './sharedBranding'
 import { LiveSharedReport } from './LiveSharedReport'
 import { clientBlurb } from './reportProduct'
-import { SharedWidgetsSection } from '@/features/widgets/SharedWidgetsSection'
 import { lazyPage } from '@/app/lazyPage'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
@@ -28,6 +27,8 @@ import { setCodeMarks } from '@/lib/money/mark'
 const InteractiveReport = lazyPage(() => import('./InteractiveReport'), 'InteractiveReport')
 const SharedAttributionSection = lazyPage(() => import('./SharedAttributionSection'), 'SharedAttributionSection')
 const SharedCreativeSection = lazyPage(() => import('./SharedCreativeSection'), 'SharedCreativeSection')
+// Loaded when the report draws it, like the sections above: most links carry no widget, and the route stays inside its budget.
+const SharedWidgetsSection = lazyPage(() => import('@/features/widgets/SharedWidgetsSection'), 'SharedWidgetsSection')
 
 interface Shared {
   name: string

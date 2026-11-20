@@ -138,6 +138,8 @@ describe('the live link asks the network once (PERF-REFETCH-001)', () => {
   it('re-renders of the page re-request nothing', async () => {
     const { rerender } = renderWithProviders(<PublicReport />, { route: '/r/tok', path: '/r/:token' })
     await screen.findByTestId('live-report')
+    // The widgets section is loaded on demand and makes its one request when it arrives; count from after that.
+    await waitFor(() => expect(requests(network).some((url) => /\/widgets/.test(url))).toBe(true))
     const before = requests(network).length
 
     rerender(<PublicReport />)

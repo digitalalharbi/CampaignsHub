@@ -20,6 +20,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Models\ContentApproval;
 use App\Domains\ClientWorkspaces\Services\ClientPortalUsers;
 use App\Domains\ClientWorkspaces\Services\ContentApprovals;
+use App\Domains\ClientWorkspaces\Services\PortalMetricsFilter;
 use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
@@ -31,11 +32,13 @@ use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
 use App\Domains\Metrics\Audience\AudienceCenter;
+use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\TransactionalMailer;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Http\Controllers\PublicReportController;
 use App\Domains\Reports\Models\Report;
@@ -1177,6 +1180,58 @@ final class ClientPortalController
             count($parts) === 2 && $parts[0] === 'creatives' => $call('creative', ['creative' => $parts[1]]),
             default => abort(404),
         };
+    }
+
+    /** CLIENT-DASHBOARD-PARITY-001 — the agency's metrics answers a client may read, by path. */
+    private const PORTAL_METRICS = [
+        'summary' => ['summary', null],
+        'timeseries' => ['timeseries', null],
+        'platforms' => ['platforms', null],
+        'freshness' => ['freshness', null],
+        'funnel' => ['funnel', null],
+        'objective-performance' => ['objectivePerformance', null],
+        'platform-objectives' => ['platformObjectives', null],
+        'objective-trend' => ['objectiveTrend', null],
+        // These name campaigns: only where the agency lets this client see campaign names.
+        'campaigns' => ['campaigns', 'campaign_names'],
+        'objective-leaders' => ['objectiveLeaders', 'campaign_names'],
+    ];
+
+    /**
+     * GET /client/projects/{project}/metrics/{name} — CLIENT-DASHBOARD-PARITY-001.
+     *
+     * The client's dashboard reads the agency dashboard's own answers (one engine, one set of numbers), for one of
+     * the client's own projects, under the agency's switches for that space: the dashboard must be on, a project-
+     * restricted contact reaches only their projects, names need `campaign_names`, and money leaves only where
+     * `spend` / `revenue` are on ({@see PortalMetricsFilter}). Read-only: nothing here writes.
+     */
+    public function projectMetrics(Request $request, string $project, string $name): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        abort_unless(array_key_exists($name, self::PORTAL_METRICS), 404);
+        abort_unless(Str::isUuid($project), 404);
+
+        $model = Project::query()->live()->whereKey($project)->whereIn('id', $this->ownedProjectIds($token, 'dashboard'))->first();
+        abort_if($model === null, 404);
+        $workspace = ClientWorkspace::query()->whereKey($model->client_workspace_id)->first();
+        abort_if($workspace === null, 404);
+
+        [$method, $needs] = self::PORTAL_METRICS[$name];
+        $visibility = PortalVisibility::visibilityFor($workspace);
+        abort_if($needs !== null && ! ($visibility[$needs] ?? false), 403, 'Not available for this space.');
+
+        app(ProjectContext::class)->setProjectId((string) $model->getKey());
+        $request->attributes->set('portal_project', (string) $model->getKey());
+
+        $response = app()->call([app(MetricsController::class), $method], ['request' => $request]);
+        abort_unless($response instanceof JsonResponse, 500);
+        $payload = $response->getData(true);
+        if (is_array($payload) && array_key_exists('data', $payload)) {
+            $payload['data'] = PortalMetricsFilter::apply($payload['data'], $visibility);
+        }
+
+        return response()->json($payload, $response->getStatusCode());
     }
 
     // ---- client-facing scoping + shapes ----
