@@ -1138,14 +1138,21 @@ final class ClientPortalController
         abort_if($projectIds === [], 404);
         $model = Report::query()->whereKey($report)->whereIn('project_id', $projectIds)->where('audience', 'client')->first();
         abort_if($model === null, 404);
-        $share = $this->activeShareQuery()->where('report_id', $model->getKey())->whereNotNull('token_encrypted')
-            ->whereNull('paused_at')->orderByDesc('created_at')->first();
+        // The newest active link of this report. A link made before links kept a sealed token is used all the same: the share
+        // itself is handed to the shared-report controller, so no token is needed.
+        $share = $this->activeShareQuery()->where('report_id', $model->getKey())->orderByDesc('created_at')->get()
+            ->first(fn (ReportShare $s): bool => $s->isActive());
         abort_if($share === null, 404);
-        try {
-            $raw = Crypt::decryptString((string) $share->getAttribute('token_encrypted'));
-        } catch (Throwable) {
-            abort(404);
+        $raw = '';
+        $sealed = $share->getAttribute('token_encrypted');
+        if (is_string($sealed) && $sealed !== '') {
+            try {
+                $raw = Crypt::decryptString($sealed);
+            } catch (Throwable) {
+                $raw = '';
+            }
         }
+        $request->attributes->set('portal_share', $share);
         $request->attributes->set('portal_share_id', (string) $share->getKey());
 
         $public = app(PublicReportController::class);
