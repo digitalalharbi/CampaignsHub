@@ -96,6 +96,49 @@ final class MetaEntityGrainsTest extends TestCase
     }
 
     /**
+     * METRIC-COVERAGE-001 — the four watch quartiles Meta publishes reach `entity_daily_metrics` at both grains, so the
+     * completion rate of an ad set or an ad is computed from Meta's own counts instead of reading «—». The figures below are
+     * built from the documented `video_pNN_watched_actions` shape; live proof still needs a Meta credential.
+     */
+    public function test_meta_video_quartiles_reach_the_entity_table(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        $account = $this->liveMetaAccount();
+
+        $this->fakeMetaInsights(withQuartiles: true);
+
+        app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-01'));
+
+        foreach (['ad_set', 'ad'] as $grain) {
+            $row = DB::table('entity_daily_metrics')->where('entity_type', $grain)->first();
+
+            $this->assertNotNull($row, "{$grain} grain is empty.");
+            $this->assertEqualsWithDelta(900, (float) $row->video_p25, 0.01, "{$grain} p25");
+            $this->assertEqualsWithDelta(600, (float) $row->video_p50, 0.01, "{$grain} p50");
+            $this->assertEqualsWithDelta(350, (float) $row->video_p75, 0.01, "{$grain} p75");
+            $this->assertEqualsWithDelta(200, (float) $row->video_p100, 0.01, "{$grain} p100");
+        }
+    }
+
+    /** Quartiles Meta did not send are ABSENT, not zero — an ad with no video never «completed 0%». */
+    public function test_absent_meta_quartiles_stay_null(): void
+    {
+        $this->seed(MetricDefinitionSeeder::class);
+        $account = $this->liveMetaAccount();
+
+        $this->fakeMetaInsights();
+
+        app(AccountMetricsSyncer::class)->sync($account, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-01'));
+
+        $adSet = DB::table('entity_daily_metrics')->where('entity_type', 'ad_set')->first();
+
+        $this->assertNotNull($adSet);
+        foreach (['video_p25', 'video_p50', 'video_p75', 'video_p100'] as $column) {
+            $this->assertNull($adSet->{$column}, "{$column} was stored as a measured zero.");
+        }
+    }
+
+    /**
      * A row naming an ad set we have never discovered is skipped, never invented.
      *
      * The structure sweep owns identity and this owns numbers. Creating the entity here would put a
@@ -139,7 +182,7 @@ final class MetaEntityGrainsTest extends TestCase
      * same endpoint and two URL patterns would both match — the first would then answer for both,
      * and the test would pass while asking for one thing twice.
      */
-    private function fakeMetaInsights(bool $withActions = true, string $adSetId = 'adset-1'): void
+    private function fakeMetaInsights(bool $withActions = true, string $adSetId = 'adset-1', bool $withQuartiles = false): void
     {
         $actions = $withActions
             ? [
@@ -148,7 +191,16 @@ final class MetaEntityGrainsTest extends TestCase
             ]
             : [];
 
-        Http::fake(function ($request) use ($actions, $adSetId) {
+        $quartiles = $withQuartiles
+            ? [
+                'video_p25_watched_actions' => [['action_type' => 'video_view', 'value' => '900']],
+                'video_p50_watched_actions' => [['action_type' => 'video_view', 'value' => '600']],
+                'video_p75_watched_actions' => [['action_type' => 'video_view', 'value' => '350']],
+                'video_p100_watched_actions' => [['action_type' => 'video_view', 'value' => '200']],
+            ]
+            : [];
+
+        Http::fake(function ($request) use ($actions, $adSetId, $quartiles) {
             $url = $request->url();
 
             if (! str_contains($url, '/insights')) {
@@ -166,12 +218,12 @@ final class MetaEntityGrainsTest extends TestCase
             ];
 
             if (str_contains($url, 'level=adset')) {
-                return Http::response(['data' => [[...$row, 'adset_id' => $adSetId]]], 200);
+                return Http::response(['data' => [[...$row, ...$quartiles, 'adset_id' => $adSetId]]], 200);
             }
 
             if (str_contains($url, 'level=ad&') || str_contains($url, 'level=ad%')) {
                 return Http::response(['data' => [[
-                    ...$row, 'ad_id' => 'ad-1', 'adset_id' => $adSetId, 'impressions' => '25000',
+                    ...$row, ...$quartiles, 'ad_id' => 'ad-1', 'adset_id' => $adSetId, 'impressions' => '25000',
                 ]]], 200);
             }
 
