@@ -1141,7 +1141,7 @@ final class ClientPortalController
         // The newest active link of this report. A link made before links kept a sealed token is used all the same: the share
         // itself is handed to the shared-report controller, so no token is needed.
         $share = $this->activeShareQuery()->where('report_id', $model->getKey())->orderByDesc('created_at')->get()
-            ->first(fn (ReportShare $s): bool => $s->isActive());
+            ->first(fn ($s): bool => $s instanceof ReportShare && $s->isActive());
         abort_if($share === null, 404);
         $raw = '';
         $sealed = $share->getAttribute('token_encrypted');
