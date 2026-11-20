@@ -1,3 +1,4 @@
+import type { FunnelStageRow } from '@/features/analytics/charts'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
 import type { CreativePreview } from '@/features/content/api'
@@ -223,7 +224,16 @@ export interface WatchBoard {
   can_money: boolean
   currency: string | null
   trend: { date: string; spend: number | null; impressions: number; clicks: number; conversions: number | null }[]
-  content: { best: WatchContent[]; worst: WatchContent[]; basis: { metric: string | null; label_ar: string | null; label_en: string | null; family: string | null } | null; in_scope: number } | null
+  content: {
+    best: WatchContent[]
+    worst: WatchContent[]
+    basis: { metric: string | null; label_ar: string | null; label_en: string | null; family: string | null } | null
+    in_scope: number
+    /** HOME-CONTENT-REPORT-001 — the report's per-objective shelves. */
+    groups?: { family: string; label_ar: string; label_en: string; metric: string | null; metric_label_ar: string | null; metric_label_en: string | null; ranked: boolean; total: number; ads: WatchContent[] }[]
+  } | null
+  /** HOME-CONTENT-REPORT-001 — the ad platforms' funnel over the scope. */
+  funnel?: FunnelStageRow[]
   campaigns?: CampaignCounts
   campaign_rows?: CampaignRow[]
   families?: { family: string; campaigns: number; spend: number | null }[]

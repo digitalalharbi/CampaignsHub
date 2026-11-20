@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, ChevronDown, Trophy } from 'lucide-react'
-import { KpiSparkline, MetricLineChart } from '@/features/analytics/charts'
+import { ConversionFunnelChart, KpiSparkline, MetricLineChart } from '@/features/analytics/charts'
 import { AdPoster } from '@/features/content/AdPoster'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
+import { ReportAdsSection, type AdGroup, type ReportAd } from '@/features/reports/ReportAdsSection'
 import type { CreativeCard } from '@/features/content/api'
 import { Num } from '@/components/ui/Num'
 import { moneyExact } from '@/features/analytics/format'
@@ -190,7 +191,6 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
   const chart = useBoxHeight(220)
   const resultLabel = p?.result_label?.[f.ar ? 'ar' : 'en'] ?? t.results
   const basis = b.content?.basis
-  const basisLabel = basis ? (f.ar ? basis.label_ar : basis.label_en) : null
   // HOME-CONTENT-REPORT-CARD-001 — a content opens in the library's own popup, over Home; «التفاصيل» goes to its page.
   const [openContent, setOpenContent] = useState<WatchContent | null>(null)
 
@@ -240,24 +240,36 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
         </Panel>
       </div>
 
-      {b.content !== null && (
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
-          <Panel title={t.bestContent} to={`/${portal}/content`} testId="watch-panel-content-best" className="lg:col-span-8">
-            {basisLabel && <p className="mb-1.5 text-xs text-text-muted">{t.rankedBy}: {basisLabel}</p>}
-            {b.content.best.length === 0 ? <Nothing label={t.nothing} /> : (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {b.content.best.map((c, i) => <ContentTile key={c.id ?? i} c={c} f={f} currency={cur} tone="best" rank={i + 1} basis={basis ?? null} onOpen={setOpenContent} />)}
-              </div>
-            )}
-          </Panel>
-          <Panel title={t.worstContent} to={`/${portal}/content`} testId="watch-panel-content-worst" className="lg:col-span-4">
-            {b.content.worst.length === 0 ? <Nothing label={t.nothing} /> : (
-              <div className="grid grid-cols-2 gap-2">
-                {b.content.worst.map((c, i) => <ContentTile key={c.id ?? i} c={c} f={f} currency={cur} tone="worst" rank={i + 1} basis={basis ?? null} onOpen={setOpenContent} />)}
-              </div>
-            )}
-          </Panel>
+      {/*
+        HOME-CONTENT-REPORT-001 — Owner 2026-11-20: «أفضل المحتويات» as the report draws it — one shelf per objective
+        (sales by return, traffic by click rate …), the weakest after, then the ad platforms' funnel. Every card opens the
+        content's full analysis.
+      */}
+      {b.content !== null && (b.content.best.length > 0 || (b.content.groups ?? []).length > 0) && (
+        <div className="rounded-2xl border border-border bg-surface p-3" data-testid="watch-panel-content-best">
+          <ReportAdsSection
+            ads={b.content.best as ReportAd[]}
+            groups={(b.content.groups ?? []).map((g) => ({ ...g, ads: g.ads as ReportAd[] })) as unknown as AdGroup[]}
+            currency={cur}
+            locale={f.ar ? 'ar' : 'en'}
+            title={t.bestContent}
+            limit={6}
+            browsable={false}
+            onOpen={(ad) => setOpenContent(ad as WatchContent)}
+          />
         </div>
+      )}
+      {b.content !== null && b.content.worst.length > 0 && (
+        <Panel title={t.worstContent} to={`/${portal}/content`} testId="watch-panel-content-worst">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {b.content.worst.map((c, i) => <ContentTile key={c.id ?? i} c={c} f={f} currency={cur} tone="worst" rank={i + 1} basis={basis ?? null} onOpen={setOpenContent} />)}
+          </div>
+        </Panel>
+      )}
+      {(b.funnel ?? []).some((s) => (s.count ?? 0) > 0) && (
+        <Panel title={f.ar ? 'قمع المنصات الإعلانية' : 'Ad platforms funnel'} to={`/${portal}/analytics`} testId="watch-panel-funnel">
+          <ConversionFunnelChart stages={b.funnel ?? []} currency={cur ?? ''} ar={f.ar} />
+        </Panel>
       )}
 
       {openContent && openContent.id && (
@@ -266,6 +278,8 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
           locale={f.ar ? 'ar' : 'en'}
           figures={contentFigures(openContent, f, cur, basis ?? null).map((x) => ({ key: x.key, label: x.label, value: x.value }))}
           detailsTo={`/${portal}/content/${openContent.id}`}
+          period={{ from: b.window.from, to: b.window.to }}
+          currency={cur}
           onClose={() => setOpenContent(null)}
         />
       )}

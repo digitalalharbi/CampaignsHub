@@ -220,15 +220,13 @@ describe('the manager performance panels', () => {
     expect(within(screen.getByTestId('watch-best')).getByRole('link', { name: /Leads Snap/ })).toHaveAttribute('href', '/agency/campaigns/p1/k1')
     expect(screen.getByTestId('watch-best-k1')).toHaveTextContent('Snapchat')
     expect(screen.getByTestId('watch-worst-k3')).toHaveTextContent('Leads TikTok')
-    expect(screen.getAllByTestId('watch-content-best')).toHaveLength(2)
+    // HOME-CONTENT-REPORT-001 — the best content is the report's own section; the weakest keep their tiles.
+    const best = screen.getByTestId('watch-panel-content-best')
+    const cards = within(best).getAllByTestId('report-ad-card')
+    expect(cards.length).toBe(2)
     expect(screen.getAllByTestId('watch-content-worst')).toHaveLength(1)
-    // HOME-CONTENT-REPORT-CARD-001 — the report's card: the ranked-on figure first (cost per result here), then spend, then results.
-    const first = screen.getAllByTestId('watch-content-best')[0]
-    const figs = within(first).getByTestId('watch-content-figures')
-    expect(figs.querySelectorAll('dt')[0]).toHaveTextContent('Cost per result')
-    expect(figs.querySelectorAll('dt')[1]).toHaveTextContent('Spend')
-    // …and it opens in a popup over Home, with a way to the full page.
-    fireEvent.click(first)
+    // …and a card opens the content's full analysis in a popup over Home.
+    fireEvent.click(cards[0])
     expect(screen.getByTestId('ad-preview-dialog')).toBeInTheDocument()
     expect(screen.getByTestId('watch-open-analytics')).toHaveAttribute('href', '/agency/analytics')
   })
