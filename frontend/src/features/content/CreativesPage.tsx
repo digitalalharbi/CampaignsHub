@@ -1531,6 +1531,8 @@ export function CreativesPage() {
         <AdPreviewDialog
           creative={creatives[viewerIndex]}
           locale={ar ? 'ar' : 'en'}
+          period={{ from, to }}
+          currency={data?.currency ?? null}
           /* This library's own window and currency — the popup never decides what «this period» is. */
           figures={creativeDialogFigures(creatives[viewerIndex].metrics ?? undefined, data?.currency ?? null, ar, creatives[viewerIndex].headline_metrics ?? [], creatives[viewerIndex].results_not_attributable === true)}
           trend={currentProjectId

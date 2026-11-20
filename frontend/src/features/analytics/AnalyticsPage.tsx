@@ -3184,6 +3184,7 @@ function CreativeTab({ projectId, range, filters }: TabProps) {
           <AdPreviewDialog
             creative={openCreative}
             locale={ar ? 'ar' : 'en'}
+            period={{ from: range.from, to: range.to }}
             /*
               AD-PREVIEW-FIGURES-001 — read by the SAME readers the row above is read by.
 
@@ -3738,6 +3739,7 @@ export function EntityTab({ projectId, range, filters, level, workspace, part = 
               <AdPreviewDialog
                 creative={openAd.creative}
                 locale={ar ? 'ar' : 'en'}
+                period={{ from: range.from, to: range.to }}
                 figures={openAd.figures}
                 /*
                   AD-PREVIEW-DEFAULT-001 — and this one had no way out at all.

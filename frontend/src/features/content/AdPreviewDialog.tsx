@@ -11,6 +11,11 @@ import { providerLabel } from '@/features/campaigns/labels'
 import type { CreativeCard } from './api'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { useQuery } from '@tanstack/react-query'
+import { getCreativeInReach } from './api'
+import { ReportAdDeepFigures } from '@/features/reports/ReportAdDeepFigures'
+import type { ReportAd } from '@/features/reports/ReportAdsSection'
+import { MetricLineChart } from '@/features/analytics/charts'
 
 /**
  * AD-PREVIEW-001 — one ad, opened where the reader is standing.
@@ -49,6 +54,8 @@ export function AdPreviewDialog({
   figures,
   trend,
   detailsTo,
+  period,
+  currency,
   onClose,
 }: {
   creative: CreativeCard
@@ -66,10 +73,30 @@ export function AdPreviewDialog({
   trend?: ReactNode
   /** Where the full page is, when the reader does want to leave. */
   detailsTo?: string
+  /**
+   * CONTENT-FULL-ANALYSIS-001 — the window the opening surface already reads (never decided here). Given it, the popup
+   * reads the creative's own full figures for that window and its daily trend, so every content popup in the product
+   * carries the report's full analysis.
+   */
+  period?: { from?: string; to?: string }
+  currency?: string | null
   onClose: () => void
 }) {
   const ar = locale === 'ar'
   const reading = readPreview(creative.preview, ar)
+  const detail = useQuery({
+    queryKey: ['creative-detail', creative.id, period?.from ?? '', period?.to ?? ''],
+    queryFn: () => getCreativeInReach(creative.id, { from: period?.from, to: period?.to }),
+    enabled: period !== undefined && creative.id !== '',
+    staleTime: 60_000,
+  })
+  const deepMetrics = detail.data?.metrics ?? creative.metrics ?? null
+  const deepCurrency = detail.data?.currency ?? currency ?? null
+  const deepAd = { ...(deepMetrics ?? {}), id: creative.id, name: creative.name, provider: creative.provider, objective: creative.objective, preview: creative.preview } as unknown as ReportAd
+  const ownTrend = trend ?? (detail.data && detail.data.trend.length > 1
+    ? <MetricLineChart data={detail.data.trend} currency={deepCurrency ?? ''} height={180} rightAxisFor="clicks"
+        series={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: 'var(--brand-600)', kind: 'money' }, { key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' }]} />
+    : null)
   /*
    * The shape the STAGE is sized for — the platform's word first, the asset's own dimensions where
    * it said nothing. One expression, because the stage's height and the fit inside it must not be
@@ -372,10 +399,17 @@ export function AdPreviewDialog({
           It was last, under eight metadata rows, which on a phone put it off the screen entirely in
           the panel somebody opened to judge a creative.
         */}
-        {trend && (
+        {/* CONTENT-FULL-ANALYSIS-001 — the report's full reading of the content: score, figures, funnel, retention. */}
+        {deepMetrics && (
+          <div className="mt-3" data-testid="ad-preview-dialog-deep">
+            <ReportAdDeepFigures ad={deepAd} currency={deepCurrency} ar={ar} />
+          </div>
+        )}
+
+        {ownTrend && (
           <div data-testid="ad-preview-dialog-trend" className="mt-4">
-            <h4 className="mb-1 text-xs font-bold text-text-secondary">{ar ? 'الاتجاه الزمني' : 'Trend over time'}</h4>
-            {trend}
+            <h4 className="mb-1 text-xs font-bold text-text-secondary">{ar ? 'الأداء يوميًا' : 'Daily performance'}</h4>
+            {ownTrend}
           </div>
         )}
 

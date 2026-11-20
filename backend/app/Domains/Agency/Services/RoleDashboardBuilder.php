@@ -654,6 +654,8 @@ final class RoleDashboardBuilder
                 'currency' => $agg === null ? null : $agg->currencyBasis($from, $to)['currency'],
                 'trend' => $agg === null ? [] : $this->trend($agg, $from, $to, $money),
                 'content' => $projectIds === [] ? null : $this->content($projectIds, $from, $to, $money),
+                // HOME-CONTENT-REPORT-001 — the ad platforms' funnel over the scope, as the report draws it (cost per stage only with the money key).
+                'funnel' => $agg === null ? [] : array_map(static fn (array $st): array => $money ? $st : ['cost_per' => null] + $st, (array) ($agg->funnel($from, $to)['stages'] ?? [])),
             ] + array_intersect_key($perf, array_flip(['campaigns', 'families', 'rank_family', 'best', 'worst', 'platforms', 'performance', 'campaign_rows']));
         });
     }
@@ -714,6 +716,18 @@ final class RoleDashboardBuilder
             )),
             'basis' => isset($built['basis']) && is_array($built['basis']) ? array_intersect_key($built['basis'], array_flip(['metric', 'label_ar', 'label_en', 'family'])) : null,
             'in_scope' => (int) ($built['creatives_in_scope'] ?? 0),
+            // HOME-CONTENT-REPORT-001 — the report's own per-objective shelves (sales by ROAS, traffic by CTR …), lean rows.
+            'groups' => array_values(array_map(static fn (array $g): array => [
+                'family' => $g['family'] ?? null,
+                'label_ar' => $g['label_ar'] ?? null,
+                'label_en' => $g['label_en'] ?? null,
+                'metric' => $g['metric'] ?? null,
+                'metric_label_ar' => $g['metric_label_ar'] ?? null,
+                'metric_label_en' => $g['metric_label_en'] ?? null,
+                'ranked' => (bool) ($g['ranked'] ?? false),
+                'total' => (int) ($g['total'] ?? count((array) ($g['ads'] ?? []))),
+                'ads' => array_map($lean, array_slice((array) ($g['ads'] ?? []), 0, 3)),
+            ], array_filter((array) ($built['groups'] ?? []), 'is_array'))),
         ];
     }
 
