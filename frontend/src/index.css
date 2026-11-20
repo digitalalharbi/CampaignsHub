@@ -260,3 +260,82 @@ body {
     overflow: hidden;
   }
 }
+
+/*
+ * FIELD-CLARITY-001 — Owner 2026-11-20: «وضوح مربعات النص مثل أبشر». Every text field, select and box in the product, in one
+ * place and outside every layer, so a field written anywhere with the faint `border-border` still draws a clear edge:
+ *
+ * - the edge is a real grey (`--field-border`, ≥3:1), darker under the pointer;
+ * - focus draws a firm underline in the text colour beside the brand halo — the field you are typing in is unmistakable;
+ * - checkboxes and radios are drawn boxes with a clear edge and a solid brand fill when chosen.
+ *
+ * Fields written borderless on purpose (`border-0`, `border-transparent`, `border-none`) keep that: only the faint border
+ * classes are re-drawn.
+ */
+:is(input, select, textarea):is(.border-border, .border-border-strong, .border) {
+  border-color: var(--field-border);
+}
+:is(input, select, textarea):is(.border-border, .border-border-strong, .border):hover:not(:disabled):not(:focus) {
+  border-color: var(--field-border-hover);
+}
+:is(input, select, textarea):is(.border-border, .border-border-strong, .border):focus,
+:is(input, select, textarea):is(.border-border, .border-border-strong, .border):focus-visible {
+  border-color: var(--field-border-hover);
+  border-bottom-color: var(--field-focus);
+  box-shadow: inset 0 -1px 0 var(--field-focus), 0 0 0 3px color-mix(in srgb, var(--brand-500) 15%, transparent);
+  outline: none;
+}
+:is(input, select, textarea)[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+:is(input, select, textarea)::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']) {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  border: 1.5px solid var(--field-border);
+  border-radius: 5px;
+  background: var(--surface) center / 75% no-repeat;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+input[type='radio']:not(.sr-only):not([class*='opacity-0']) {
+  border-radius: 9999px;
+}
+input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']):hover:not(:disabled) {
+  border-color: var(--field-border-hover);
+}
+input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']):checked {
+  border-color: var(--brand-600);
+  background-color: var(--brand-600);
+}
+input[type='checkbox']:not(.sr-only):not([class*='opacity-0']):not([role='switch']):checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+}
+input[type='checkbox']:not(.sr-only):not([class*='opacity-0']):not([role='switch']):indeterminate {
+  border-color: var(--brand-600);
+  background-color: var(--brand-600);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' stroke='white' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+}
+input[type='radio']:not(.sr-only):not([class*='opacity-0']):checked {
+  background-color: var(--surface);
+  box-shadow: inset 0 0 0 4px var(--brand-600);
+}
+input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-500) 25%, transparent);
+}
+input[type='radio']:not(.sr-only):not([class*='opacity-0']):checked:focus-visible {
+  box-shadow: inset 0 0 0 4px var(--brand-600), 0 0 0 3px color-mix(in srgb, var(--brand-500) 25%, transparent);
+}
+input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
