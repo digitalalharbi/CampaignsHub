@@ -1,6 +1,6 @@
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
-import { num } from '@/features/analytics/format'
+import { compact, num } from '@/features/analytics/format'
 import { Num } from '@/components/ui/Num'
 import type { PlatformCardModel } from './platforms'
 
@@ -10,6 +10,12 @@ import type { PlatformCardModel } from './platforms'
  * The markup is the report's own (moved from `ExecutiveSummary`, test ids unchanged under the default prefix); only the
  * source of the figures is shared logic — `platformCards()` — so the two surfaces cannot draw different numbers.
  */
+/*
+ * Seven digits is where the product compacts a count (owner-defect-sweep: «no surface writes a seven-figure count at full
+ * width»); below it the exact figure stays, as everywhere else. The exact value travels as the element's title.
+ */
+const shown = (n: number | null): string => (n !== null && Math.abs(n) >= 1_000_000 ? compact(n) : num(n))
+
 export function PlatformCardsView({ models, resultName, ar, selected, onSelect, testPrefix = 'exec', title }: {
   models: PlatformCardModel[]
   resultName: string
@@ -43,10 +49,10 @@ export function PlatformCardsView({ models, resultName, ar, selected, onSelect, 
           <span className="flex min-w-0 text-xs font-bold text-text-primary">
             {m.key === null ? <span className="truncate">{m.title}</span> : <ProviderName provider={m.key} locale={ar ? 'ar' : 'en'} size={16} />}
           </span>
-          <span className="tnum truncate text-lg font-extrabold leading-tight text-text-primary"><Num>{num(m.value)}</Num></span>
+          <span className="tnum truncate text-lg font-extrabold leading-tight text-text-primary"><Num>{shown(m.value)}</Num></span>
           <span className="truncate text-[11px] font-semibold text-text-muted">{resultName}</span>
           <span className="tnum mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-text-secondary">
-            {m.impressions !== null && <span>{ar ? 'الظهور' : 'Impr.'} <Num>{num(m.impressions)}</Num></span>}
+            {m.impressions !== null && <span>{ar ? 'الظهور' : 'Impr.'} <Num>{shown(m.impressions)}</Num></span>}
             {m.rate !== null && <span>{ar ? 'معدل النقر' : 'CTR'} <Num>{m.rate}</Num></span>}
           </span>
           {m.share !== null && (
