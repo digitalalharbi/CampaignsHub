@@ -1,3 +1,4 @@
+import { Num } from '@/components/ui/Num'
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Link } from 'react-router-dom'
@@ -95,7 +96,7 @@ export function TopCampaignsPanel({ rows, family, portal, className = '' }: { ro
               ].map((x) => (
                 <div key={x.k} className="rounded-xl border border-border bg-surface-secondary/40 p-2.5">
                   <div className="text-xs font-semibold text-text-muted">{x.label}</div>
-                  <div className="tnum text-lg font-extrabold text-text-primary" dir="ltr">{x.v}</div>
+                  <div className="tnum text-lg font-extrabold text-text-primary"><Num>{x.v}</Num></div>
                 </div>
               ))}
             </div>
