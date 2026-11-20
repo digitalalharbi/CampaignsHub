@@ -20,6 +20,8 @@ use App\Domains\Tenancy\Models\Tenant;
 use Database\Seeders\RequestCatalogSeeder;
 use Database\Seeders\TaxonomyEngineSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -231,6 +233,35 @@ final class ClientPortalContentTest extends TestCase
      * Both languages, because the locale is the reader's, chosen in their browser: the server has
      * no way to know which one this person is looking at.
      */
+    /**
+     * PORTAL-FULL-REPORTS-001 — the client opens their own report whole inside the portal: the shared report's answer, through the
+     * portal session, without the link and without its password. Another client's report, or one with no active link, is 404.
+     */
+    public function test_the_client_opens_their_own_report_inside_the_portal_and_no_one_elses(): void
+    {
+        $mine = $this->provisionClient('owner@x.test', '+966500000001');
+        $theirs = $this->provisionClient('stranger@x.test', '+966500000002');
+        $report = $this->addReport($mine, 'My Client Report', audience: 'client', shared: false);
+        $raw = Str::random(48);
+        ReportShare::create([
+            'tenant_id' => $this->tenant->id, 'report_id' => $report->id, 'token_hash' => hash('sha256', $raw),
+            'token_encrypted' => Crypt::encryptString($raw), 'password_hash' => Hash::make('secret-pass'), 'allow_download' => false,
+        ]);
+        $other = $this->addReport($theirs, 'Their Client Report', audience: 'client', shared: true);
+        $unshared = $this->addReport($mine, 'My Unshared Report', audience: 'client', shared: false);
+
+        $token = $this->portalLogin('owner@x.test');
+        $this->getJson("/api/v1/client/reports/{$report->id}/view", $this->auth($token))
+            ->assertOk()->assertJsonPath('data.name', 'My Client Report');
+        $this->getJson("/api/v1/client/reports/{$other->id}/view", $this->auth($token))->assertNotFound();
+        $this->getJson("/api/v1/client/reports/{$unshared->id}/view", $this->auth($token))->assertNotFound();
+        $this->getJson("/api/v1/client/reports/{$report->id}/view/nothing-here", $this->auth($token))->assertNotFound();
+        // The public link itself still asks for its password.
+        $this->getJson("/api/v1/reports/shared/{$raw}")->assertStatus(401);
+        // And nobody without a portal session gets through.
+        $this->getJson("/api/v1/client/reports/{$report->id}/view")->assertUnauthorized();
+    }
+
     public function test_a_report_type_reaches_the_client_as_a_word(): void
     {
         $this->seed(TaxonomyEngineSeeder::class);

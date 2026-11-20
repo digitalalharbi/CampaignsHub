@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { useClientSpacePath } from './clientSpace'
 import { BarChart3, Download, Eye, ShieldCheck } from 'lucide-react'
 import { formatDate, listClientReports, type PortalReport } from './portalAccountApi'
 import { PortalShell } from './PortalShell'
@@ -12,14 +14,14 @@ const COPY = {
     none: 'لا توجد تقارير مُتاحة لك بعد.', error: 'تعذّر تحميل التقارير.',
     period: 'الفترة', generated: 'صدر في', to: '←',
     can_download: 'مُتاح للتنزيل', view_only: 'للعرض فقط', watermark: 'يحمل علامة مائية',
-    expires: 'ينتهي في', shared_note: 'تُشارك التقارير عبر رابط آمن يُرسَل إليك؛ لا يُعرض الرابط هنا.',
+    expires: 'ينتهي في', shared_note: 'افتح أي تقرير هنا بكل تفاصيله، دون الحاجة لرابط.', open: 'فتح التقرير كاملًا',
   },
   en: {
     title: 'Reports', subtitle: 'Performance reports shared with you over a secure link.',
     none: 'No reports available to you yet.', error: 'Could not load reports.',
     period: 'Period', generated: 'Generated', to: '→',
     can_download: 'Available to download', view_only: 'View only', watermark: 'Watermarked',
-    expires: 'Expires', shared_note: 'Reports are shared via a secure link sent to you; the link is not exposed here.',
+    expires: 'Expires', shared_note: 'Open any report here with every detail, no link needed.', open: 'Open the full report',
   },
 }
 
@@ -57,6 +59,7 @@ export function ClientReportsPage() {
 }
 
 function ReportCard({ report, t, ar }: { report: PortalReport; t: typeof COPY.ar; ar: boolean }) {
+  const spaceTo = useClientSpacePath()
   const share = report.share
   const canDownload = share?.allow_download ?? false
 
@@ -93,6 +96,12 @@ function ReportCard({ report, t, ar }: { report: PortalReport; t: typeof COPY.ar
         )}
         {share?.watermark && <span className="rounded-md bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-muted">{t.watermark}</span>}
         {share?.expires_at && <span className="text-[11px] text-text-muted"><span className="tnum">{t.expires}: {formatDate(share.expires_at)}</span></span>}
+        {/* PORTAL-FULL-REPORTS-001 — the whole report, inside the portal. */}
+        {share?.shared && (
+          <Link to={spaceTo(`/reports/${report.id}`)} data-testid="portal-report-open" className="ms-auto inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-700">
+            <BarChart3 size={13} aria-hidden /> {t.open}
+          </Link>
+        )}
       </div>
     </div>
   )

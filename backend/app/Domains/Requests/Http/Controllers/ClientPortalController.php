@@ -37,6 +37,7 @@ use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Http\Controllers\PublicReportController;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Requests\Journey\RequestStage;
@@ -71,6 +72,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -79,6 +81,7 @@ use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 /**
  * External Client Portal — a single place for a verified client to see ALL their requests, track status,
@@ -1116,6 +1119,57 @@ final class ClientPortalController
             'total' => $page['total'],
             'withheld' => $page['withheld'],
         ]]);
+    }
+
+    /**
+     * PORTAL-FULL-REPORTS-001 — Owner 2026-11-20: «البوابة يجب أن تحتوي على كل تفاصيل التقارير». A signed-in client opens a
+     * report of their own INSIDE the portal, with everything its shared page carries (performance, platforms, content, funnel,
+     * website, attribution, downloads where allowed), without being handed the link.
+     *
+     * Gates: the portal session, the report's project inside the client's workspaces with «reports» visible, a client-audience
+     * report, and an ACTIVE link. The link's own settings (what it hides, downloads) still apply — the same controller answers.
+     * Only the link's password is not asked again, because the session already proved who this is.
+     */
+    public function reportView(Request $request, string $report, ?string $path = null): mixed
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $projectIds = $this->ownedProjectIds($token, 'reports');
+        abort_if($projectIds === [], 404);
+        $model = Report::query()->whereKey($report)->whereIn('project_id', $projectIds)->where('audience', 'client')->first();
+        abort_if($model === null, 404);
+        $share = $this->activeShareQuery()->where('report_id', $model->getKey())->whereNotNull('token_encrypted')
+            ->whereNull('paused_at')->orderByDesc('created_at')->first();
+        abort_if($share === null, 404);
+        try {
+            $raw = Crypt::decryptString((string) $share->getAttribute('token_encrypted'));
+        } catch (Throwable) {
+            abort(404);
+        }
+        $request->attributes->set('portal_share_id', (string) $share->getKey());
+
+        $public = app(PublicReportController::class);
+        $path = trim((string) $path, '/');
+        $parts = $path === '' ? [] : explode('/', $path);
+        $call = fn (string $method, array $more = []) => app()->call([$public, $method], ['request' => $request, 'token' => $raw] + $more);
+
+        return match (true) {
+            $parts === [] => $call('show'),
+            $parts === ['live'] => $call('live'),
+            count($parts) === 3 && $parts[0] === 'live' && $parts[1] === 'content' => $call('liveContent', ['key' => $parts[2]]),
+            count($parts) === 3 && $parts[0] === 'live' && $parts[1] === 'platform' && preg_match('/^[a-z_]{2,32}$/', $parts[2]) === 1 => $call('livePlatform', ['provider' => $parts[2]]),
+            count($parts) === 2 && $parts[0] === 'download' => $call('download', ['format' => $parts[1]]),
+            $parts === ['branding'] => $call('sharedBranding'),
+            $parts === ['branding', 'logo'] => $call('sharedBrandingLogo'),
+            count($parts) === 3 && $parts[0] === 'branding' && $parts[1] === 'logo' => $call('sharedBrandingLogo', ['role' => $parts[2]]),
+            $parts === ['attribution'] => $call('attribution'),
+            $parts === ['widgets'] => $call('widgets'),
+            $parts === ['creatives'] => $call('creatives'),
+            $parts === ['creatives', 'summary'] => $call('creativeSummary'),
+            $parts === ['creatives', 'comparison'] => $call('creativeComparison'),
+            count($parts) === 2 && $parts[0] === 'creatives' => $call('creative', ['creative' => $parts[1]]),
+            default => abort(404),
+        };
     }
 
     // ---- client-facing scoping + shapes ----

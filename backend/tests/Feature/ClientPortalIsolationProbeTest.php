@@ -53,7 +53,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
         'api/v1/client/approvals', 'api/v1/client/audience', 'api/v1/client/branding', 'api/v1/client/branding/logo', 'api/v1/client/campaigns', 'api/v1/client/files',
         'api/v1/client/invoices', 'api/v1/client/invoices/{invoice}', 'api/v1/client/invoices/{invoice}/pdf',
         'api/v1/client/messages', 'api/v1/client/messages/{thread}', 'api/v1/client/overview',
-        'api/v1/client/quotes', 'api/v1/client/quotes/{quote}', 'api/v1/client/reports', 'api/v1/client/requests',
+        'api/v1/client/quotes', 'api/v1/client/quotes/{quote}', 'api/v1/client/reports', 'api/v1/client/reports/{report}/view/{path?}', 'api/v1/client/requests',
         'api/v1/client/requests/{reference}', 'api/v1/client/requests/{reference}/files/{file}',
         'api/v1/client/requests/{reference}/journey', 'api/v1/client/session', 'api/v1/client/spaces', 'api/v1/client/team', 'api/v1/client/visibility',
     ];
@@ -109,7 +109,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
         // CLIENT-CONTENT-APPROVAL-001 — an open content approval, titled with the label so a leak names itself.
         $approval = ContentApproval::create(['tenant_id' => $this->tenant->id, 'client_workspace_id' => $w->id, 'project_id' => $project->id, 'title' => $label.' content', 'status' => 'pending']);
 
-        return ['invoice' => (string) $invoice->id, 'quote' => (string) $quote->id, 'thread' => (string) $thread->id, 'reference' => $request->reference, 'approval' => (string) $approval->id];
+        return ['report' => (string) $report->id, 'invoice' => (string) $invoice->id, 'quote' => (string) $quote->id, 'thread' => (string) $thread->id, 'reference' => $request->reference, 'approval' => (string) $approval->id];
     }
 
     private function signInAsAlpha(): void
@@ -148,6 +148,8 @@ final class ClientPortalIsolationProbeTest extends TestCase
         $probes = [
             "invoices/{$t['invoice']}", "invoices/{$t['invoice']}/pdf", "messages/{$t['thread']}", "quotes/{$t['quote']}",
             "requests/{$t['reference']}", "requests/{$t['reference']}/journey", "requests/{$t['reference']}/files/1",
+            // PORTAL-FULL-REPORTS-001 — the other client's report, whole or in part, is never opened.
+            "reports/{$t['report']}/view", "reports/{$t['report']}/view/live", "reports/{$t['report']}/view/creatives",
         ];
 
         foreach ($probes as $path) {
