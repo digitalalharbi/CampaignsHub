@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Analytics\Http\Controllers;
 
 use App\Domains\Analytics\Services\AnalyticsReads;
+use App\Domains\Analytics\Services\AnalyticsReportView;
 use App\Domains\Analytics\Services\InfluencerPerformance;
 use App\Domains\Analytics\Services\SiteReadModel;
 use App\Domains\Analytics\Support\AnalyticsWindow;
@@ -31,6 +32,31 @@ use InvalidArgumentException;
 final class AnalyticsReadController extends Controller
 {
     public function __construct(private readonly AnalyticsReads $reads, private readonly SiteReadModel $site) {}
+
+    /**
+     * ANALYTICS-REPORT-LOGIC-001 — the report's own payload for this project, period and filters.
+     *
+     * The same builder the /r/ live report runs ({@see AnalyticsReportView}), so the board and the report cannot differ.
+     * Project-vs-project comparison is two calls of THIS route, one per project: `project.can` and the tenant scope
+     * refuse a project of another workspace before this method runs.
+     */
+    public function reportView(Request $request, AnalyticsReportView $view): JsonResponse
+    {
+        [$tenantId, $projectId] = $this->scope();
+        [$from, $to, $period] = $this->window($request);
+        $v = $request->validate([
+            'providers' => ['sometimes', 'array', 'max:20'],
+            'providers.*' => ['string', 'regex:/^[a-z_]{2,32}$/'],
+            'campaigns' => ['sometimes', 'array', 'max:200'],
+            'campaigns.*' => ['uuid'],
+        ]);
+
+        return ApiResponse::success(
+            $view->payload($tenantId, $projectId, $from, $to, array_values($v['providers'] ?? []), array_values($v['campaigns'] ?? [])),
+            'Report view.',
+            meta: ['period' => $period],
+        );
+    }
 
     public function binding(): JsonResponse
     {
