@@ -293,6 +293,7 @@ export function RateTrend({
   loading,
   error,
   format,
+  headline,
 }: {
   title: string
   data: Array<Record<string, unknown>>
@@ -301,9 +302,15 @@ export function RateTrend({
   loading?: boolean
   error?: boolean
   format: (v: number) => string
+  /**
+   * RATE-TREND-HEADLINE-001 — Owner 2026-11-20: «ROAS 0.30× · CPA 0 $ … غير منطقية وسلبية». The printed figure was the
+   * LAST DAY's value — today's incomplete day, or a day that barely spent — under a card the reader takes for the period.
+   * The caller passes the period's own figure (the summary's, the KPI strip's); the last day is only a fallback.
+   */
+  headline?: number | null
 }) {
   const values = data.map((r) => r[dataKey]).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-  const latest = values.length > 0 ? values[values.length - 1] : null
+  const latest = headline !== undefined ? headline : (values.length > 0 ? values[values.length - 1] : null)
 
   return (
     <Panel title={title} loading={loading} error={error} empty={!loading && values.length === 0}>

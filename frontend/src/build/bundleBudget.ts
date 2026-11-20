@@ -21,7 +21,10 @@ export const ENTRY_BUDGET_BYTES = 600_000
  * so a drift of a page's worth shows up as a failed build rather than a slower report.
  */
 export const PUBLIC_REPORT_FACADE = '/features/reports/PublicReport.tsx'
-export const PUBLIC_REPORT_BUDGET_BYTES = 1_327_000
+// 2026-11-20 — raised on purpose from 1,327,000: main measured 1,327,060 after the content popup gained the report's
+// full analysis and a body portal (MOBILE-DIALOG-001) — 60 bytes, not a page's graph. Headroom kept small so a real drift
+// still fails the build. The ceiling stays inside the measured figure × 1.15 (1,327,650).
+export const PUBLIC_REPORT_BUDGET_BYTES = 1_327_600
 
 export interface BudgetChunk {
   fileName: string

@@ -55,7 +55,7 @@ describe('the campaigns table columns', () => {
     expect(table.queryByTestId('campaigns-head-ctr')).toBeNull()
 
     fireEvent.click(screen.getByTestId('campaigns-preset-engagement'))
-    expect(table.getByTestId('campaigns-head-ctr')).toHaveTextContent('نسبة النقر')
+    expect(table.getByTestId('campaigns-head-ctr')).toHaveTextContent('معدل النقر')
     expect(table.queryByTestId('campaigns-head-cost')).toBeNull()
     expect(JSON.parse(localStorage.getItem('ch-campaign-columns') ?? '[]')).toContain('ctr')
   })
@@ -75,7 +75,7 @@ describe('the campaigns table columns', () => {
     renderWithProviders(<CampaignsPage />, { locale: 'ar' })
     const table = await openTable()
     fireEvent.click(screen.getByTestId('campaign-view-v1'))
-    expect(table.getByTestId('campaigns-head-roas')).toHaveTextContent('العائد على الإنفاق')
+    expect(table.getByTestId('campaigns-head-roas')).toHaveTextContent('معدل العائد')
     expect(table.queryByTestId('campaigns-head-cost')).toBeNull()
     await waitFor(() => expect(listCampaigns).toHaveBeenLastCalledWith('p1', expect.objectContaining({ sort: 'spend', dir: 'asc' })))
   })

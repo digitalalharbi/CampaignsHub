@@ -42,7 +42,7 @@ const COPY = {
   ar: {
     ads: /^الإعلانات$/,
     spend: 'الإنفاق',
-    roas: 'العائد على الإنفاق',
+    roas: 'معدل العائد',
     costPerResult: 'تكلفة النتيجة',
     reach: 'الوصول',
     mixed: /أهدافًا مختلفة/,
@@ -86,7 +86,7 @@ async function openRung(page: Page, locale: 'ar' | 'en', rung: (typeof RUNGS)[nu
  * locales, where the option LABELS differ.
  */
 async function narrowObjective(page: Page, value: string) {
-  await page.getByTestId('analytics-objective').selectOption(value)
+  await page.getByTestId('analytics-objective').locator(`[data-value="${value}"]`).click()
   await page.waitForLoadState('networkidle')
 }
 

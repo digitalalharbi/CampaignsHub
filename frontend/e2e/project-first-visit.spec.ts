@@ -16,7 +16,7 @@ import { AUTH } from './helpers'
 test.use({ storageState: AUTH.owner })
 
 async function freshVisit(page: import('@playwright/test').Page, path: string) {
-  await page.goto('/agency/home')
+  await page.goto('/agency/dashboard')
   await page.evaluate(() => { localStorage.removeItem('campaign-hub-project-storage'); localStorage.removeItem('campaign-hub-agency-client') })
   await page.goto(path)
 }

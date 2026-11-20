@@ -1,3 +1,4 @@
+import { sharedBase } from '@/features/reports/sharedBase'
 import { useQuery } from '@tanstack/react-query'
 import { AttributionCreditView, type CreditModels } from './AttributionCreditWidget'
 import { LinkActivityView, type TrackingSummary } from './LinkActivityWidget'
@@ -25,7 +26,7 @@ export function SharedWidgetsSection({ token, password }: { token: string; passw
   const q = useQuery({
     queryKey: ['shared-widgets', token],
     queryFn: async (): Promise<SharedWidget[]> => {
-      const res = await fetch(`/api/v1/reports/shared/${token}/widgets`, {
+      const res = await fetch(`${sharedBase(token)}/widgets`, {
         headers: { Accept: 'application/json', ...(password ? { 'X-Report-Password': password } : {}) },
       })
       const body = await res.json().catch(() => ({}))

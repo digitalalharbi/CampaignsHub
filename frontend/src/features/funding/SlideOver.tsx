@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { CloseButton } from '@/components/ui/CloseButton'
 
 /**
  * A panel that slides in from the reading-end edge over the board, so a project opens WITHOUT moving the page.
  * Escape and the scrim close it; focus goes in on open and returns to the row on close. Opacity only, no slide:
  * a panel whose buttons move while it opens is a click that misses.
  */
-export function SlideOver({ open, onClose, title, closeLabel, children, testid, center = false }: {
+export function SlideOver({ open, onClose, title, closeLabel, children, testid, center: _center = true }: {
   open: boolean
   onClose: () => void
   title: ReactNode
@@ -38,6 +38,9 @@ export function SlideOver({ open, onClose, title, closeLabel, children, testid, 
     }
   }, [open])
 
+  // POPUP-CENTER-001 — Owner 2026-11-20: every window opens in the middle of the page.
+  const center = true
+  void _center
   if (!open) return null
 
   return (
@@ -54,9 +57,7 @@ export function SlideOver({ open, onClose, title, closeLabel, children, testid, 
       >
         <div className="flex min-w-0 items-center justify-between gap-2">
           <div className="min-w-0 flex-1">{title}</div>
-          <button type="button" onClick={onClose} aria-label={closeLabel} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-hover" data-testid="slideover-close">
-            <X className="h-4 w-4" aria-hidden />
-          </button>
+          <CloseButton onClose={onClose} label={closeLabel} testid="slideover-close" />
         </div>
         {children}
       </aside>

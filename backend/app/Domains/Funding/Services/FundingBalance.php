@@ -158,7 +158,7 @@ final class FundingBalance
          * the budget keeps its history, so this ledger is not narrowed to live projects (the budgets list itself is).
          */
         $reading = $from === null ? null : $this->ledger->read([(string) $funding->project_id], $from, $to, 'SAR', liveOnly: false);
-        $fx = $reading === null ? null : array_intersect_key($reading, array_flip(['amount', 'complete', 'partial', 'excluded', 'excluded_label', 'statement', 'statement_en', 'stale', 'stale_label', 'rates_page', 'currencies', 'includes_converted']));
+        $fx = $reading === null ? null : array_intersect_key($reading, array_flip(['amount', 'complete', 'partial', 'excluded', 'excluded_label', 'statement', 'statement_en', 'stale', 'rates_page', 'currencies', 'includes_converted']));
 
         return [
             'project_id' => $funding->project_id,
@@ -360,7 +360,7 @@ final class FundingBalance
                 'complete' => $withoutRate === 0,
                 'last_spend_day' => $s->last_day ?? null,
                 'status' => $this->statusOf($funding, $approved, $spent, $withoutRate, $credit, $remaining, $ceiling, $ceilingRatio),
-                'fx' => $reading === null ? null : array_intersect_key($reading, array_flip(['amount', 'complete', 'partial', 'excluded', 'excluded_label', 'statement', 'statement_en', 'stale', 'stale_label', 'rates_page', 'currencies', 'includes_converted'])),
+                'fx' => $reading === null ? null : array_intersect_key($reading, array_flip(['amount', 'complete', 'partial', 'excluded', 'excluded_label', 'statement', 'statement_en', 'stale', 'rates_page', 'currencies', 'includes_converted'])),
             ];
         }
 

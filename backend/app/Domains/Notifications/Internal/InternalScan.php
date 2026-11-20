@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Internal;
 
 use App\Domains\Agents\Models\ActionProposal;
 use App\Domains\Funding\Services\ProjectBudgetReader;
+use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Notifications\Engine\Contracts\EntitlementGate;
 use App\Domains\Notifications\Engine\Contracts\UsageCounter;
 use App\Domains\Notifications\Engine\Enums\EntitlementKey;
@@ -77,7 +78,8 @@ final class InternalScan
 
     private function budgets(string $tenantId, Carbon $now): int
     {
-        $ids = ActiveProjects::liveIds($tenantId);
+        // DELIVERY-QUIET-001 — a project that neither spent nor showed one impression in 3 days raises no budget notice.
+        $ids = app(DeliveryState::class)->watched(ActiveProjects::liveIds($tenantId), $now->copy()->subDays(DeliveryState::DAYS - 1)->toDateString(), $now->toDateString());
         $n = 0;
         foreach ($this->budgets->forProjects($ids, $now) as $projectId => $r) {
             if (($r['has_budget'] ?? false) !== true) {
@@ -141,7 +143,7 @@ final class InternalScan
     private function recommendations(string $tenantId, Carbon $now): int
     {
         $n = 0;
-        $live = ActiveProjects::liveIds($tenantId);
+        $live = app(DeliveryState::class)->watched(ActiveProjects::liveIds($tenantId), $now->copy()->subDays(DeliveryState::DAYS - 1)->toDateString(), $now->toDateString());
         if ($live === []) {
             return 0;
         }

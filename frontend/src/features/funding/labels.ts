@@ -90,7 +90,6 @@ export const L = {
   fxRate: { ar: 'سعر الدولار', en: 'Dollar rate' },
   fxPegged: { ar: 'مثبّت — من إعدادات المنصة', en: 'Pegged — platform setting' },
   fxPlatform: { ar: 'من إعدادات المنصة', en: 'Platform setting' },
-  fxStale: { ar: 'سعر قديم', en: 'Stale rate' },
   fxWithheld: { ar: 'بانتظار سعر صرف', en: 'Awaiting exchange rate' },
   periodFirstSpend: { ar: 'من أول إنفاق', en: 'From first spend' },
 } as const

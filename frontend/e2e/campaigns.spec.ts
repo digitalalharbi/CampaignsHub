@@ -152,7 +152,8 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
    * resolved. So the wait is now on the settled COMPONENT — Playwright polls until the chart is
    * there — rather than on one packet arriving.
    */
-  await page.getByRole('tab', { name: /Performance|الأداء/ }).click()
+  // CAMPAIGN-PAGE-LEAN-001 — the performance charts are read on the overview now; an old `?tab=performance` lands there.
+  await page.goto(`${page.url().split('?')[0]}?tab=performance`)
 
   /*
    * The tab lives in the URL (`?tab=`), so this is asserted BEFORE the chart.
@@ -167,6 +168,7 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
    * rather than guessed at here.
    */
   await expect(page).toHaveURL(/[?&]tab=performance/)
+  await expect(page.getByRole('tab', { name: /Overview|نظرة عامة/ })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByText(/الإنفاق مقابل الإيرادات|Spend vs revenue/)).toBeVisible()
 
   // Platforms tab lists linked external campaigns (or an empty state).

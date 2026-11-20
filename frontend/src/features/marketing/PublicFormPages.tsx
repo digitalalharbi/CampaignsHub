@@ -66,7 +66,7 @@ export function SupportForm() {
         { value: 'general', label: ar ? 'عام' : 'General' },
         { value: 'account', label: ar ? 'الحساب والدخول' : 'Account & sign-in' },
         { value: 'billing', label: ar ? 'الفوترة والاشتراك' : 'Billing & subscription' },
-        { value: 'integrations', label: ar ? 'الربط والمزامنة' : 'Connections & syncing' },
+        { value: 'integrations', label: ar ? 'الربط وتحديث البيانات' : 'Connections & syncing' },
         { value: 'reports', label: ar ? 'التقارير' : 'Reports' },
         { value: 'bug', label: ar ? 'خلل في المنتج' : 'Product defect' },
       ],

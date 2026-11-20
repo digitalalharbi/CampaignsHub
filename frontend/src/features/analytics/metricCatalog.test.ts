@@ -23,7 +23,7 @@ describe('metric vocabulary', () => {
     expect(SPECS.purchases.label.ar).toBe('الطلبات')
     expect(SPECS.revenue.label.ar).toBe('قيمة الطلبات')
     expect(SPECS.add_to_cart.label.ar).toBe('الإضافة للسلة')
-    expect(SPECS.roas.label.ar).toBe('العائد على الإنفاق')
+    expect(SPECS.roas.label.ar).toBe('معدل العائد')
   })
 
   it('spells out the acronyms a client would have to look up', () => {

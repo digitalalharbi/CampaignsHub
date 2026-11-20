@@ -47,7 +47,7 @@ export function PlatformCardsView({ models, resultName, ar, selected, onSelect, 
           <span className="truncate text-[11px] font-semibold text-text-muted">{resultName}</span>
           <span className="tnum mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-text-secondary">
             {m.impressions !== null && <span>{ar ? 'الظهور' : 'Impr.'} <Num>{num(m.impressions)}</Num></span>}
-            {m.rate !== null && <span>{ar ? 'نسبة النقر' : 'CTR'} <Num>{m.rate}</Num></span>}
+            {m.rate !== null && <span>{ar ? 'معدل النقر' : 'CTR'} <Num>{m.rate}</Num></span>}
           </span>
           {m.share !== null && (
             <span className="mt-auto block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? `الحصة من ${resultName}` : `Share of ${resultName}`}>

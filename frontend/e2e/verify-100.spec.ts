@@ -373,7 +373,7 @@ test.describe('UX-DASH-001 — the advertiser dashboard', () => {
     await page.goto('/app/analytics')
     await expect(page.getByTestId('analytics-filters')).toBeVisible({ timeout: 20000 })
 
-    await page.getByTestId('analytics-objective').selectOption('sales')
+    await page.getByTestId('analytics-objective').locator(`[data-value="sales"]`).click()
 
     const chip = page.getByTestId('analytics-applied-objective:sales')
     await expect(chip, 'the page does not say what is narrowing it').toBeVisible({ timeout: 20000 })

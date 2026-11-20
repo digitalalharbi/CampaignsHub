@@ -53,7 +53,7 @@ test('owner invites with a category and «المالية» switched off → invi
 })
 
 test('the rail names the ad-group level «المجموعات»', async ({ page }, testInfo) => {
-  await page.goto('/agency/home')
+  await page.goto('/agency/dashboard')
   await openRail(page)
   const rail = page.locator('aside').first()
   await expect(rail.getByRole('link', { name: /^المجموعات$|^Ad groups$/ }).first()).toBeAttached({ timeout: 30_000 })

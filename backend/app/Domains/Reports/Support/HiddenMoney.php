@@ -199,7 +199,7 @@ final class HiddenMoney
                 'الإنفاق' => 'spend', 'الإيرادات' => 'revenue', 'النتائج' => 'conversions',
                 // ReportObjectiveLens words for the same figures.
                 'تكلفة العميل المحتمل' => 'cpa', 'تكلفة التحميل' => 'cpa', 'تكلفة النقرة' => 'cpc',
-                'تكلفة الألف ظهور' => 'cpm', 'نسبة النقر' => 'ctr', 'العائد على الإنفاق' => 'roas',
+                'تكلفة الألف ظهور' => 'cpm', 'معدل النقر' => 'ctr', 'معدل العائد' => 'roas',
             ];
             foreach (['impressions', 'reach', 'cpm', 'clicks', 'landing_page_views', 'ctr', 'cpc', 'engagements', 'engagement_rate', 'cpe',
                 'video_views', 'video_completions', 'video_completion_rate', 'cost_per_view', 'leads', 'qualified_leads', 'cpl',

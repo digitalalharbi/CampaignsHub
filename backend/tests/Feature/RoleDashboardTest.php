@@ -113,6 +113,26 @@ final class RoleDashboardTest extends TestCase
         return (array) $this->getJson('/api/v1/me/dashboard'.$part.$query)->assertOk()->json('data');
     }
 
+    /** DASH-DATE-RANGE-001 — the page reads the from–to chosen in the shared date picker; a bad range falls back to the days. */
+    public function test_the_dashboard_reads_the_chosen_range_and_ignores_a_bad_one(): void
+    {
+        $owner = $this->member(WorkspaceRolePresets::OWNER, null);
+        $today = PeriodResolver::today();
+        $from = $today->copy()->startOfMonth()->toDateString();
+
+        $d = $this->dash($owner, '?from='.$from.'&to='.$today->toDateString());
+        $this->assertSame($from, $d['window']['from']);
+        $this->assertSame($today->toDateString(), $d['window']['to']);
+
+        $future = $this->dash($owner, '?from='.$from.'&to='.$today->copy()->addDays(9)->toDateString());
+        $this->assertSame($today->toDateString(), $future['window']['to'], 'a range never ends after today');
+
+        $reversed = $this->dash($owner, '?from='.$today->toDateString().'&to='.$from.'&days=7');
+        if ($from !== $today->toDateString()) {
+            $this->assertSame(7, $reversed['window']['days']);
+        }
+    }
+
     public function test_the_manager_sees_every_client_with_budget_reading_and_a_run_out_date_from_the_last_three_days(): void
     {
         // Alpha: 1000 budget, 700 spent in total (400 earlier + 3 x 100); remaining 300 at 100 a day = 3 days left.
@@ -304,6 +324,42 @@ final class RoleDashboardTest extends TestCase
         $finance = $this->member(WorkspaceRolePresets::FINANCE, WorkspaceRolePresets::all()[WorkspaceRolePresets::FINANCE]['permissions']);
         $this->assertFalse($this->dash($finance)['can_watch']);
         $this->getJson('/api/v1/me/dashboard/watch')->assertForbidden();
+    }
+
+    /**
+     * HOME-SCOPE-ISOLATION-001 — Owner 2026-11-20: with one client and project chosen, Home printed $23.5K of spend, 1.83K
+     * orders and other clients' leading campaigns. The deferred performance panels read the whole reach; they follow the
+     * chosen client and project now, as the page and the watch board do — and a project of another client is ignored.
+     */
+    public function test_the_performance_panels_follow_the_chosen_client_and_project(): void
+    {
+        $a = $this->campaign($this->alpha, 1000, 400, 100);
+        $b = $this->campaign($this->beta, 5000, 200, 50);
+        $owner = $this->member(WorkspaceRolePresets::OWNER, null);
+
+        $all = $this->dash($owner, '', '/performance');
+        $this->assertEqualsWithDelta(700 + 350, $all['performance']['spend'] ?? 0, 0.01);
+
+        $alpha = $this->dash($owner, '?client='.$this->alpha->id, '/performance');
+        $this->assertEqualsWithDelta(700, $alpha['performance']['spend'] ?? 0, 0.01, 'another client\'s spend reached the chosen client');
+        $ids = array_merge(array_column($alpha['best'] ?? [], 'id'), array_column($alpha['worst'] ?? [], 'id'), array_column($alpha['campaign_rows'] ?? [], 'id'));
+        $this->assertNotContains((string) $b->id, $ids);
+        $this->assertContains((string) $a->id, $ids);
+
+        $project = $this->dash($owner, '?client='.$this->alpha->id.'&project='.$a->project_id, '/performance');
+        $this->assertEqualsWithDelta(700, $project['performance']['spend'] ?? 0, 0.01);
+
+        // A project of another client than the one chosen widens nothing.
+        $crossed = $this->dash($owner, '?client='.$this->alpha->id.'&project='.$b->project_id, '/performance');
+        $this->assertEqualsWithDelta(700, $crossed['performance']['spend'] ?? 0, 0.01);
+
+        // The page itself follows the project too.
+        $page = $this->dash($owner, '?client='.$this->alpha->id.'&project='.$a->project_id);
+        $this->assertSame(1, $page['scope']['projects']);
+
+        // And the watch board.
+        $watch = $this->dash($owner, '?unit='.$this->alpha->id.'&project='.$a->project_id, '/watch');
+        $this->assertSame([(string) $a->id], array_column($watch['campaign_rows'], 'id'));
     }
 
     public function test_another_tenants_figures_never_appear(): void

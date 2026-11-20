@@ -131,8 +131,13 @@ function findingFor(row: FreshnessRow, today: Date): QualityFinding[] | null {
       severity: 'attention',
       owner: 'system',
       what: {
-        ar: `لم تصل بيانات من هذه المنصة منذ ${countedDays(silent ?? STALE_DAYS, 'ar')}.`,
-        en: `No data has arrived from this platform for ${countedDays(silent ?? STALE_DAYS, 'en')}.`,
+        // A platform that sent data today is late on its schedule, not silent: «منذ 0 يومًا» was the defect.
+        ar: silent !== null && silent < 1
+          ? 'المزامنة متأخرة عن موعدها.'
+          : `آخر بيانات من هذه المنصة قبل ${countedDays(silent ?? STALE_DAYS, 'ar')}.`,
+        en: silent !== null && silent < 1
+          ? 'The sync is behind its schedule.'
+          : `No data has arrived from this platform for ${countedDays(silent ?? STALE_DAYS, 'en')}.`,
       },
       affects: {
         ar: 'الأيام الأخيرة في هذه الفترة ناقصة، فالإجماليات أقل مما ستكون عليه بعد اللحاق.',

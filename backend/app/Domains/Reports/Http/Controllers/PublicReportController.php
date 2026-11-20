@@ -42,6 +42,17 @@ final class PublicReportController extends Controller
 {
     public function __construct(private readonly ShareService $shares) {}
 
+    /**
+     * PORTAL-FULL-REPORTS-001 — a signed-in client opening their own report inside the portal has already been verified by the
+     * portal session (the report is in their workspace, visible to them, and its link is active). The portal controller marks the
+     * request with the share it resolved; only then is the link's password not asked again. A request attribute is set by the
+     * server only — nothing a browser sends can set it.
+     */
+    private static function portalVerified(Request $request, ReportShare $share): bool
+    {
+        return $request->attributes->get('portal_share_id') === (string) $share->getKey();
+    }
+
     public function show(Request $request, string $token): JsonResponse
     {
         $this->throttle($request);
@@ -49,7 +60,7 @@ final class PublicReportController extends Controller
         if (! $share) {
             return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
         }
-        if ($share->password_hash !== null) {
+        if ($share->password_hash !== null && ! self::portalVerified($request, $share)) {
             $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
             if (! Hash::check($provided, $share->password_hash)) {
                 $this->shares->log($share, 'denied', $request, 'bad password');
@@ -256,7 +267,7 @@ final class PublicReportController extends Controller
         if (! $share) {
             return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
         }
-        if ($share->password_hash !== null) {
+        if ($share->password_hash !== null && ! self::portalVerified($request, $share)) {
             $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
             if (! Hash::check($provided, $share->password_hash)) {
                 $this->shares->log($share, 'denied', $request, 'bad password');
@@ -527,7 +538,7 @@ final class PublicReportController extends Controller
             return [null, ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404)];
         }
 
-        if ($share->password_hash !== null) {
+        if ($share->password_hash !== null && ! self::portalVerified($request, $share)) {
             $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
             if (! Hash::check($provided, $share->password_hash)) {
                 $this->shares->log($share, 'denied', $request, 'bad password');

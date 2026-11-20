@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowDownRight, ArrowUpRight, BarChart3, Building2, ChevronDown, Trophy } from 'lucide-react'
-import { KpiSparkline, MetricLineChart } from '@/features/analytics/charts'
-import { AdPoster } from '@/features/content/AdPoster'
+import { ConversionFunnelChart, hasFunnel, KpiSparkline, MetricLineChart } from '@/features/analytics/charts'
+import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
+import { figuresFor, ReportAdsSection, type AdGroup, type ReportAd } from '@/features/reports/ReportAdsSection'
+import type { CreativeCard } from '@/features/content/api'
 import { PlatformMark } from '@/components/brand/PlatformMark'
 import { StatCard, type StatTone } from '@/components/ui/StatCard'
 import { Skeleton } from '@/components/ui/States'
@@ -10,7 +12,8 @@ import { campaigns as countedCampaigns, days as countedDays } from '@/lib/counte
 import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
 import { useAgencyClient } from '@/stores/agencyClient'
-import { useWatchBoard, type DashboardWindow, type RankedCampaign, type WatchBoard as Board, type WatchContent } from './api'
+import { useProject } from '@/stores/project'
+import { useWatchBoard, type DashboardRange, type RankedCampaign, type WatchBoard as Board, type WatchContent } from './api'
 import { Door, Nothing, Panel, familyName, times, useBoxHeight, useFmt } from './parts'
 import { PlatformComparePanel, SpendSharePanel } from './performance'
 
@@ -31,7 +34,7 @@ import { PlatformComparePanel, SpendSharePanel } from './performance'
 const T = {
   ar: {
     title: 'لوحة المتابعة', all: 'كل العملاء', spend: 'الإنفاق', results: 'النتائج', impressions: 'الظهور', clicks: 'النقرات',
-    vsPrevious: 'مقارنة بالفترة السابقة', ctr: 'نسبة النقر', daily: 'الأداء اليومي', best: 'أفضل الحملات', worst: 'أضعف الحملات',
+    vsPrevious: 'مقارنة بالفترة السابقة', ctr: 'معدل النقر', daily: 'الأداء اليومي', best: 'أفضل الحملات', worst: 'أضعف الحملات',
     bestContent: 'أفضل المحتويات', worstContent: 'أضعف المحتويات', analytics: 'التفاصيل في التحليلات', nothing: 'لا توجد بيانات بعد',
     rankedBy: 'الترتيب حسب', cost: 'التكلفة', roas: 'العائد', conversions: 'التحويلات', clients: 'العملاء', loadFailed: 'تعذّر تحميل لوحة المتابعة',
   },
@@ -105,33 +108,6 @@ function RankList({ rows, tone, portal, f, testId }: { rows: RankedCampaign[]; t
   )
 }
 
-/** A content as it ran: the creative itself, its platform, and the two figures it is judged on. */
-function ContentTile({ c, f, currency, tone }: { c: WatchContent; f: Fmt; currency: string | null; tone: 'best' | 'worst' }) {
-  const t = f.ar ? T.ar : T.en
-  const provider = c.provider ?? ''
-  const primary = (c.conversions ?? 0) > 0 ? { label: t.conversions, value: f.short(c.conversions) } : { label: t.clicks, value: f.short(c.clicks) }
-  const secondary = c.spend !== null ? { label: t.spend, value: f.money(c.spend, currency) } : { label: t.ctr, value: c.ctr === null ? '—' : f.pct(c.ctr > 1 ? c.ctr / 100 : c.ctr) }
-
-  return (
-    <figure data-testid={`watch-content-${tone}`} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-surface">
-      <div className="relative">
-        <AdPoster preview={c.preview} name={c.name ?? ''} provider={provider} className="aspect-square h-auto w-full" />
-        <span title={platformLabel(provider, f.ar)} className="absolute start-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-surface/90 shadow-[var(--shadow-small)]">
-          <PlatformMark platform={provider} size={14} />
-          <span className="sr-only">{platformLabel(provider, f.ar)}</span>
-        </span>
-      </div>
-      <figcaption className="flex min-w-0 flex-col gap-1 p-2">
-        <span className="truncate text-xs font-semibold text-text-primary" title={c.name ?? ''}>{c.name ?? '—'}</span>
-        <span className="grid grid-cols-2 gap-1 text-xs text-text-muted">
-          <span className="flex min-w-0 flex-col"><span className="truncate">{primary.label}</span><span className="tnum truncate text-xs font-bold text-text-primary">{primary.value}</span></span>
-          <span className="flex min-w-0 flex-col"><span className="truncate">{secondary.label}</span><span className="tnum truncate text-xs font-bold text-text-primary">{secondary.value}</span></span>
-        </span>
-      </figcaption>
-    </figure>
-  )
-}
-
 function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) {
   const t = f.ar ? T.ar : T.en
   const p = b.performance ?? null
@@ -145,7 +121,8 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
   const chart = useBoxHeight(220)
   const resultLabel = p?.result_label?.[f.ar ? 'ar' : 'en'] ?? t.results
   const basis = b.content?.basis
-  const basisLabel = basis ? (f.ar ? basis.label_ar : basis.label_en) : null
+  // HOME-CONTENT-REPORT-CARD-001 — a content opens in the library's own popup, over Home; «التفاصيل» goes to its page.
+  const [openContent, setOpenContent] = useState<WatchContent | null>(null)
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-2">
@@ -193,24 +170,59 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
         </Panel>
       </div>
 
-      {b.content !== null && (
-        <div className="grid grid-cols-1 gap-2 lg:grid-cols-12">
-          <Panel title={t.bestContent} to={`/${portal}/content`} testId="watch-panel-content-best" className="lg:col-span-8">
-            {basisLabel && <p className="mb-1.5 text-xs text-text-muted">{t.rankedBy}: {basisLabel}</p>}
-            {b.content.best.length === 0 ? <Nothing label={t.nothing} /> : (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {b.content.best.map((c, i) => <ContentTile key={c.id ?? i} c={c} f={f} currency={cur} tone="best" />)}
-              </div>
-            )}
-          </Panel>
-          <Panel title={t.worstContent} to={`/${portal}/content`} testId="watch-panel-content-worst" className="lg:col-span-4">
-            {b.content.worst.length === 0 ? <Nothing label={t.nothing} /> : (
-              <div className="grid grid-cols-2 gap-2">
-                {b.content.worst.map((c, i) => <ContentTile key={c.id ?? i} c={c} f={f} currency={cur} tone="worst" />)}
-              </div>
-            )}
-          </Panel>
+      {/*
+        HOME-CONTENT-REPORT-001 — Owner 2026-11-20: «أفضل المحتويات» as the report draws it — one shelf per objective
+        (sales by return, traffic by click rate …), the weakest after, then the ad platforms' funnel. Every card opens the
+        content's full analysis.
+      */}
+      {b.content !== null && (b.content.best.length > 0 || (b.content.groups ?? []).length > 0) && (
+        <div className="rounded-2xl border border-border bg-surface p-3" data-testid="watch-panel-content-best">
+          <ReportAdsSection
+            ads={b.content.best as ReportAd[]}
+            groups={(b.content.groups ?? []).map((g) => ({ ...g, ads: g.ads as ReportAd[] })) as unknown as AdGroup[]}
+            currency={cur}
+            locale={f.ar ? 'ar' : 'en'}
+            title={t.bestContent}
+            limit={6}
+            browsable={false}
+            onOpen={(ad) => setOpenContent(ad as WatchContent)}
+          />
         </div>
+      )}
+      {/*
+        HOME-CONTENT-PARITY-001 — Owner 2026-11-20: the weakest content is drawn exactly like the best (same card, same grid,
+        same figures by the objective it was ranked in), so the two rows line up and fill the width alike.
+      */}
+      {b.content !== null && b.content.worst.length > 0 && (
+        <div className="rounded-2xl border border-border bg-surface p-3" data-testid="watch-panel-content-worst">
+          <ReportAdsSection
+            ads={b.content.worst as ReportAd[]}
+            currency={cur}
+            locale={f.ar ? 'ar' : 'en'}
+            title={t.worstContent}
+            limit={6}
+            browsable={false}
+            family={basis?.family ?? null}
+            onOpen={(ad) => setOpenContent(ad as WatchContent)}
+          />
+        </div>
+      )}
+      {hasFunnel(b.funnel ?? []) && (
+        <Panel title={f.ar ? 'قمع المنصات الإعلانية' : 'Ad platforms funnel'} to={`/${portal}/analytics`} testId="watch-panel-funnel">
+          <ConversionFunnelChart stages={b.funnel ?? []} currency={cur ?? ''} ar={f.ar} />
+        </Panel>
+      )}
+
+      {openContent && openContent.id && (
+        <AdPreviewDialog
+          creative={{ id: openContent.id, name: openContent.name ?? '', provider: openContent.provider ?? '', preview: openContent.preview, metrics: { spend: openContent.spend, impressions: openContent.impressions, clicks: openContent.clicks, conversions: openContent.conversions, ctr: openContent.ctr, cpa: openContent.cpa, roas: openContent.roas } } as unknown as CreativeCard}
+          locale={f.ar ? 'ar' : 'en'}
+          figures={figuresFor(openContent as unknown as ReportAd, f.ar, cur, { family: basis?.family ?? null }).map((x, i) => ({ key: String(i), label: x.label, value: x.value }))}
+          detailsTo={`/${portal}/content/${openContent.id}`}
+          period={{ from: b.window.from, to: b.window.to }}
+          currency={cur}
+          onClose={() => setOpenContent(null)}
+        />
       )}
 
       <PlatformComparePanel platforms={b.platforms ?? []} family={b.rank_family ?? null} portal={portal} />
@@ -222,7 +234,7 @@ function Body({ b, portal, f }: { b: Board; portal: 'agency' | 'app'; f: Fmt }) 
   )
 }
 
-export function WatchBoard({ portal, days }: { portal: 'agency' | 'app'; days: DashboardWindow }) {
+export function WatchBoard({ portal, range }: { portal: 'agency' | 'app'; range: DashboardRange }) {
   const f = useFmt()
   const t = f.ar ? T.ar : T.en
   /*
@@ -242,7 +254,9 @@ export function WatchBoard({ portal, days }: { portal: 'agency' | 'app'; days: D
     }
     setLocal(id)
   }
-  const q = useWatchBoard(days, unit)
+  // HOME-SCOPE-ISOLATION-001 — the project chosen at the top narrows the board inside its unit.
+  const project = useProject((s) => s.currentProjectId)
+  const q = useWatchBoard(range, unit, true, portal === 'agency' && stored ? project : null)
   const b = q.data
   const units = b?.units ?? []
   const shown = b ? b.unit : unit

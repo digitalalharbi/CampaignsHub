@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { CheckCircle2, CircleDashed, Clock, Lightbulb, Sparkles, TrendingUp, Trophy } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { KpiCard, TrendPill, platformColor } from '@/features/analytics/components'
-import { ChartCard, ConversionFunnelChart, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
+import { ChartCard, ConversionFunnelChart, hasFunnel, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
 import { moneyExact, num } from '@/features/analytics/format'
 import { canonicalPlatform, isAdPlatform } from '@/lib/platforms'
 import { Num } from '@/components/ui/Num'
@@ -309,7 +309,7 @@ function PlatformComparison({
         <div className="min-w-0 text-xs" data-testid="exec-platform-table">
           <MetricTable
           pageSize={8}
-            head={[ar ? 'المنصة' : 'Platform', source.name, ...extra.map((k) => metricName(reader, k, ar, payload)), ...(ctrShown ? [ar ? 'نسبة النقر' : 'CTR'] : [])]}
+            head={[ar ? 'المنصة' : 'Platform', source.name, ...extra.map((k) => metricName(reader, k, ar, payload)), ...(ctrShown ? [ar ? 'معدل النقر' : 'CTR'] : [])]}
             rows={model.map((m) => {
               const key = m.key
 
@@ -434,6 +434,7 @@ function LeadSummary({ payload, reader, ar, currency }: { payload: LivePayload; 
 function FunnelPanel({ payload, ar, narrow = false, wide = false }: { payload: LivePayload; ar: boolean; narrow?: boolean; wide?: boolean }) {
   // The stages without their cost: the client's funnel shows how far people went, not what each step cost.
   const stages = funnelStages(payload)
+  if (!hasFunnel(stages)) return null
 
   return (
     /*

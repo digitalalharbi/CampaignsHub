@@ -134,6 +134,6 @@ describe('NASEL report controls reach the page', () => {
     serve({ metrics: ['spend', 'revenue', 'roas', 'clicks'], report_sections: ALL })
     open('summary', 'executive_summary')
     const row = await screen.findByTestId('live-kpis')
-    expect(row.textContent).not.toMatch(/الإيرادات|العائد على الإنفاق/)
+    expect(row.textContent).not.toMatch(/الإيرادات|معدل العائد/)
   })
 })

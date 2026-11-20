@@ -80,7 +80,7 @@ describe('AccessCenter', () => {
     expect(within(buyer).getByTestId('row-category')).toHaveTextContent('مشتري إعلانات')
     expect(within(buyer).getByTestId('row-category')).toHaveTextContent('مخصّص')
     expect(buyer).toHaveTextContent('Acme')
-    expect(within(screen.getByTestId('access-row-member-client@acme.test')).getByTestId('row-category')).toHaveTextContent('مطّلع')
+    expect(within(screen.getByTestId('access-row-member-client@acme.test')).getByTestId('row-category')).toHaveTextContent('عميل')
     expect(within(screen.getByTestId('access-row-invitation-late@a.test')).getByTestId('status-expired')).toBeInTheDocument()
     expect(screen.getByTestId('access-row-revoked')).toHaveTextContent('gone@a.test')
   })

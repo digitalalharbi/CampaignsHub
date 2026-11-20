@@ -84,7 +84,7 @@ TXT;
                 'job' => 'analyse', 'autonomy' => 'suggests', 'job_ar' => 'يقرأ الأداء مقابل الأهداف ويحدد ما تحسّن وما تراجع.', 'job_en' => 'Reads performance against targets: what improved and what slipped.', 'effort' => 'medium',
             ],
             'creative' => [
-                'ar' => 'وكيل الإبداع', 'en' => 'Creative Agent', 'tools' => [...$read, 'list_creatives'], 'enabled' => true, 'why_disabled' => null,
+                'ar' => 'وكيل المحتوى', 'en' => 'Creative Agent', 'tools' => [...$read, 'list_creatives'], 'enabled' => true, 'why_disabled' => null,
                 'brief' => 'You review the ads with list_creatives: name the fatigued ones with their figures, and write new copy, hooks and video ideas as DRAFTS, each tied to the ad it replaces. Never use the client\'s forbidden words (get_rules). Drafts only: you publish nothing and change no ad.',
                 'job' => 'content', 'autonomy' => 'suggests', 'job_ar' => 'يكشف الإعلانات المُجهدة ويكتب نصوصًا وأفكارًا بديلة كمسودات.', 'job_en' => 'Spots tired ads and drafts new copy and ideas.', 'effort' => 'low',
             ],

@@ -246,7 +246,7 @@ function columns(ar: boolean, currency: string | null): Column[] {
     { key: 'impressions', label: ar ? 'الظهور' : 'Impressions', kind: 'number' },
     { key: 'clicks', label: ar ? 'النقرات' : 'Clicks', kind: 'number' },
     { key: 'conversions', label: ar ? 'النتائج' : 'Results', kind: 'number' },
-    { key: 'ctr', label: ar ? 'نسبة النقر' : 'CTR', kind: 'percent', digits: 2 },
+    { key: 'ctr', label: ar ? 'معدل النقر' : 'CTR', kind: 'percent', digits: 2 },
   ]
 }
 

@@ -20,7 +20,7 @@ const DESKTOP = [[1366, 768], [1440, 900], [1920, 1080]] as const
  * proves nothing against a seed that fits on any screen.
  */
 const PAGES: Array<{ name: string; path: string; project?: boolean }> = [
-  { name: 'home', path: '/agency/home' },
+  { name: 'home', path: '/agency/dashboard' },
   { name: 'budgets', path: '/agency/budgets' },
   { name: 'spend limits · chooser', path: '/agency/spend-limits' },
   { name: 'spend limits · limits', path: '/agency/spend-limits', project: true },

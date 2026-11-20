@@ -106,7 +106,7 @@ final class PlatformConsoleTest extends TestCase
         $tenant = $this->tenant('Brand Co');
         $user = $this->tenantAdmin($tenant);
 
-        $this->assertSame('/app/home', app(PortalResolver::class)->landingPathFor($user));
+        $this->assertSame('/app/dashboard', app(PortalResolver::class)->landingPathFor($user));
     }
 
     /** Counting across tenants is the whole point, and the one thing no other surface may do. */

@@ -68,8 +68,14 @@ interface Shared {
 }
 
 /** Client-facing report at /reports/share/:token — no app chrome, token-gated, optional password. */
-export function PublicReport() {
-  const { token = '' } = useParams()
+/**
+ * PORTAL-FULL-REPORTS-001 — `token` / `embedded`: the same report, opened inside the client portal. The token is then
+ * `portal:{reportId}` (see sharedBase.ts), the portal's own shell carries the identity, and the page drops its full-screen frame.
+ */
+export function PublicReport({ token: tokenProp, embedded = false }: { token?: string; embedded?: boolean } = {}) {
+  const params = useParams()
+  const token = tokenProp ?? params.token ?? ''
+  const Body = embedded ? 'div' : 'main'
   // REPORT-CURRENCY-CODE-001 — the shared report names its currency by code (USD, SAR), set before any figure renders.
   setCodeMarks(true)
   useEffect(() => () => setCodeMarks(false), [])
@@ -122,6 +128,7 @@ export function PublicReport() {
   const [branding, setBranding] = useState<SharedBranding | undefined>(undefined)
   useEffect(() => {
     let alive = true
+    if (embedded) return () => { alive = false }
     sharedBranding(token)
       .then((b) => alive && setBranding(b))
       // A failed branding lookup must never take the report down with it: `headerIdentity`
@@ -161,8 +168,8 @@ export function PublicReport() {
   }, [report])
 
   return (
-    <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-background text-text-primary">
-      <header className="sticky top-0 z-10 border-b border-border bg-surface/85 px-4 py-3 backdrop-blur-md sm:px-8">
+    <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className={embedded ? 'text-text-primary' : 'min-h-screen bg-background text-text-primary'} data-embedded={embedded ? 'true' : undefined}>
+      <header className={embedded ? 'pb-2' : 'sticky top-0 z-10 border-b border-border bg-surface/85 px-4 py-3 backdrop-blur-md sm:px-8'}>
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3">
           {/*
             BRANDING-HIERARCHY-001 — the client's own identity, or the agency's, or the product's.
@@ -172,7 +179,7 @@ export function PublicReport() {
             chain is resolved by the backend, which alone knows the tenant; `logoUrl` is null rather
             than a URL that 404s, because a broken image here reads as a broken report.
           */}
-          <span className="flex min-w-0 items-center gap-2">
+          <span className={embedded ? 'hidden' : 'flex min-w-0 items-center gap-2'}>
             {/*
               REPORT-IDENTITY-PROPORTION-001 — the subject's mark and the preparer's share one plate
               size, so the header reads as two identities rather than as two unrelated images. They
@@ -242,7 +249,8 @@ export function PublicReport() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1240px] px-4 py-6 sm:px-8 sm:py-8">
+      {/* A page has one <main>: embedded in the portal, the portal's own shell owns it. */}
+      <Body className={embedded ? '' : 'mx-auto max-w-[1240px] px-4 py-6 sm:px-8 sm:py-8'}>
         {/* A shape rather than a sentence: the page is about to be a dashboard, so it looks like one while it loads. */}
         {state === 'loading' && (
           <div data-testid="shared-report-loading" aria-busy="true" aria-label={locale === 'ar' ? 'جارٍ التحميل' : 'Loading'} className="grid gap-4">
@@ -355,7 +363,7 @@ export function PublicReport() {
             cta
           />
         </div>
-      </main>
+      </Body>
     </div>
   )
 }

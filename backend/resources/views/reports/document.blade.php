@@ -35,7 +35,7 @@
   </div>
 
   @php $k = $data['kpis'] ?? []; @endphp
-  <h2>مؤشرات الأداء الرئيسية</h2>
+  <h2>ملخص الأداء</h2>
   <table class="kpis">
     <tr>
       <td><div class="label">الإنفاق</div><div class="val">{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($k['spend'] ?? 0), $report->currency) }}</div></td>

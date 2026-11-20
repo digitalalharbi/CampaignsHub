@@ -25,8 +25,10 @@ final class RoleDashboardWatchController extends Controller
         abort_unless($user->hasPermission('campaigns.view'), 403);
 
         $days = (int) $request->integer('days', RoleDashboardBuilder::DEFAULT_DAYS);
+        // DASH-DATE-RANGE-001 — an explicit from–to from the shared date picker wins over the days.
+        $builder->withRange($request->string('from')->toString() ?: null, $request->string('to')->toString() ?: null);
         $unit = $request->query('unit');
 
-        return ApiResponse::success($builder->watchFor($user, $days, is_string($unit) && $unit !== '' ? $unit : null), 'Dashboard watch board.');
+        return ApiResponse::success($builder->watchFor($user, $days, is_string($unit) && $unit !== '' ? $unit : null, $request->string('project')->toString() ?: null), 'Dashboard watch board.');
     }
 }

@@ -115,19 +115,21 @@ describe('the conversion funnel tells silence from zero', () => {
    * previous version drew the minimum-width bar with «—» inside it for a stage nobody sent — a bar
    * being, to any reader, a measurement.
    */
-  it('the shared chart draws no bar for a null count', () => {
-    renderWithProviders(
+  /** SHOW-AVAILABLE-002 — a stage the platform never sent, or at zero, is not drawn; one stage left is not a funnel. */
+  it('the shared chart leaves out an unreported or zero stage, and draws nothing with one stage left', () => {
+    const { container } = renderWithProviders(
       <ConversionFunnelChart
         stages={[
           { label: 'Impressions', count: 1000, step_rate: null, cost_per: null },
           { label: 'Add to Cart', count: null, step_rate: null, cost_per: null },
+          { label: 'Purchase', count: 0, step_rate: null, cost_per: null },
         ]}
       />,
       { locale: 'en' },
     )
 
-    expect(screen.getByText('This stage was never reported')).toBeInTheDocument()
-    expect(screen.queryByText('—')).not.toBeInTheDocument()
+    expect(screen.queryByText('This stage was never reported')).not.toBeInTheDocument()
+    expect(container.querySelectorAll('[data-row="funnel"]')).toHaveLength(0)
   })
 
   /** The same chart, scaled against the largest REPORTED count — an unreported first stage would
@@ -137,6 +139,7 @@ describe('the conversion funnel tells silence from zero', () => {
       <ConversionFunnelChart
         stages={[
           { label: 'Impressions', count: null, step_rate: null, cost_per: null },
+          { label: 'Reach', count: 900, step_rate: null, cost_per: null },
           { label: 'Clicks', count: 400, step_rate: null, cost_per: null },
         ]}
         ar
@@ -144,7 +147,7 @@ describe('the conversion funnel tells silence from zero', () => {
       { locale: 'ar' },
     )
 
-    expect(screen.getByText('لم ترسل المنصة هذه المرحلة')).toBeInTheDocument()
+    expect(screen.queryByText('لم ترسل المنصة هذه المرحلة')).not.toBeInTheDocument()
     expect(screen.getByText('400')).toBeInTheDocument()
   })
 
@@ -179,7 +182,7 @@ describe('the conversion funnel tells silence from zero', () => {
   it('falls back to the payload label for an unknown stage', () => {
     renderWithProviders(
       <ConversionFunnelChart
-        stages={[{ stage: 'subscriptions', label: 'Subscriptions', count: 7, step_rate: null, cost_per: null }]}
+        stages={[{ stage: 'impressions', label: 'Impressions', count: 70, step_rate: null, cost_per: null }, { stage: 'subscriptions', label: 'Subscriptions', count: 7, step_rate: null, cost_per: null }]}
         ar
       />,
       { locale: 'ar' },

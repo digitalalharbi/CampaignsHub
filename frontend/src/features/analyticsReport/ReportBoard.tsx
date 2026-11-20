@@ -90,7 +90,7 @@ const SORTS: Array<{ key: RankSort; ar: string; en: string }> = [
   { key: 'result', ar: 'النتيجة', en: 'Result' },
   { key: 'impressions', ar: 'الظهور', en: 'Impressions' },
   { key: 'clicks', ar: 'النقرات', en: 'Clicks' },
-  { key: 'ctr', ar: 'نسبة النقر', en: 'CTR' },
+  { key: 'ctr', ar: 'معدل النقر', en: 'CTR' },
 ]
 
 export function BoardPlatformRanking({ projectId, range }: { projectId: string; range: Range }) {

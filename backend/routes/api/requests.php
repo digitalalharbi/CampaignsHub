@@ -121,6 +121,9 @@ Route::prefix('client')->name('client.')->group(function (): void {
         ->middleware('throttle:120,1');
     Route::get('/reports', [ClientPortalController::class, 'reports'])->name('reports.index')
         ->middleware('throttle:120,1');
+    // PORTAL-FULL-REPORTS-001 — the whole report, inside the portal, through the same shared-report controller.
+    Route::get('/reports/{report}/view/{path?}', [ClientPortalController::class, 'reportView'])->name('reports.view')
+        ->where('report', '[0-9a-fA-F-]{36}')->where('path', '.*')->middleware('throttle:240,1');
 
     // Client-facing Billing (reuses the Billing domain; every read/write is workspace-scoped to this client).
     Route::get('/quotes', [ClientPortalController::class, 'quotes'])->name('quotes.index')

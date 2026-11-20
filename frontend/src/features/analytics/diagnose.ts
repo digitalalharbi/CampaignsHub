@@ -64,7 +64,14 @@ const CHAIN: Record<string, DiagnosticStage[]> = {
 }
 
 /** What each stage needs before it may be judged at all. */
-const EVIDENCE: Record<DiagnosticStage, string[]> = {
+/** VISUAL-STAGES-001 — the stages an objective is judged on, in order, so the panel can draw them. */
+export function stagesFor(objective: string | null): DiagnosticStage[] {
+  const canonical = objective ? (CHAIN[objective] !== undefined ? objective : canonicalOfRaw(objective)) : null
+  return CHAIN[canonical ?? ''] ?? ['delivery', 'attraction']
+}
+
+/** Which metric keys each stage needs. */
+export const STAGE_EVIDENCE: Record<DiagnosticStage, string[]> = {
   delivery: ['impressions'],
   attraction: ['impressions', 'clicks'],
   visit: ['clicks', 'landing_page_views'],
@@ -78,6 +85,8 @@ const EVIDENCE: Record<DiagnosticStage, string[]> = {
    */
   quality: ['leads', 'qualified_leads'],
 }
+
+const EVIDENCE = STAGE_EVIDENCE
 
 const n = (v: number | null | undefined): number => (typeof v === 'number' ? v : 0)
 

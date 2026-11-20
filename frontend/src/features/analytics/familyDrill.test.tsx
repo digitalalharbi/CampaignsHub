@@ -45,6 +45,12 @@ function route() {
     if (url.includes('/campaigns')) return CAMPAIGNS
     if (url.includes('/summary')) return { current: {}, previous: {}, delta: {}, currency: 'SAR' }
     if (url.includes('disclaimer')) return null
+    // OBJECTIVE-CARDS-001 — the drill now starts from the card's strongest / weakest chip, read from the leaders.
+    if (url.includes('objective-leaders')) {
+      return { cross_path_comparison: false, paths: [{ path: 'conversion', label_ar: 'التحويل', label_en: 'Conversion', metric: 'roas', comparable: true, comparable_reason: '', campaigns: 2,
+        strongest: { id: 'c-ramadan', name: 'Ramadan', objective: 'sales', metric: 'roas', value: 6 },
+        weakest: { id: 'c-eid', name: 'Eid', objective: 'sales', metric: 'roas', value: 2 } }] }
+    }
     return []
   }
 

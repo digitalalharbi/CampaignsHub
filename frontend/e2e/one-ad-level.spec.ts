@@ -37,6 +37,8 @@ test.describe('ads and content are named for what they are', () => {
     await page.goto('/agency/analytics')
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
 
+    // Ads live in the «لوحة الأداء» section of the one board; content in its own «المحتوى» section.
+    await page.getByRole('button', { name: /^(لوحة الأداء|Performance)$/ }).click()
     await expect(page.getByRole('tab', { name: ADS })).toHaveCount(1)
     await expect(
       page.getByRole('tab', { name: AD_SINGULAR }),
@@ -44,6 +46,7 @@ test.describe('ads and content are named for what they are', () => {
     ).toHaveCount(0)
 
     /* And the content level still has a surface — this correction removed a NAME, not a capability. */
+    await page.getByRole('button', { name: /^(المحتوى|Content)$/ }).click()
     await expect(
       page.getByRole('tab', { name: CONTENT }),
       'the content analytics surface is missing',
@@ -62,6 +65,7 @@ test.describe('ads and content are named for what they are', () => {
       page.getByRole('tab', { name: CONTENT }),
       'a link that has always meant content did not open content',
     ).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByRole('tab', { name: ADS })).toHaveAttribute('aria-selected', 'false')
+    // Ads is in another section now, so the bar may not offer it at all; what must hold is that it is not the open one.
+    await expect(page.getByRole('tab', { name: ADS, selected: true })).toHaveCount(0)
   })
 })

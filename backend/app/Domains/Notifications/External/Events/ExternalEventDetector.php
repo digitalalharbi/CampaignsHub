@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\External\Events;
 
 use App\Domains\Funding\Services\ProjectBudgetReader;
+use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Notifications\Engine\Data\DeliveryIntent;
 use App\Domains\Notifications\Engine\NotificationEngine;
 use App\Domains\Notifications\Engine\Scheduling\DigestPeriods;
@@ -57,6 +58,11 @@ final class ExternalEventDetector
         }
 
         foreach ($wanted as $tenant => $projects) {
+            // DELIVERY-QUIET-001 — nothing is sent to an outside recipient about a project that did not move in 3 days.
+            $projects = array_intersect_key($projects, array_flip(app(DeliveryState::class)->watched(array_map('strval', array_keys($projects)), $now->copy()->subDays(DeliveryState::DAYS - 1)->toDateString(), $now->toDateString())));
+            if ($projects === []) {
+                continue;
+            }
             $cfg = $this->settings->for($tenant)['external'];
             $tz = $this->settings->workspace($tenant)->timezone;
             $local = $now->copy()->setTimezone($tz);

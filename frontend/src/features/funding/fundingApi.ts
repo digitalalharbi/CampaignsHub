@@ -91,6 +91,9 @@ export interface BudgetRow {
   platform_plan: PlanShare[] | null
   plan: PlanRow[] | null
   plan_alerts: number
+  /** BUDGET-LIVE-001 — spend AND impressions in the last 3 days: running (green) or stopped (grey); per platform too. */
+  delivering?: boolean
+  delivering_platforms?: Record<string, boolean>
 }
 
 export interface BudgetPayment {

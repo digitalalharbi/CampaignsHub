@@ -126,6 +126,7 @@ final class ProjectPurgePlan
         'project_archive_effects' => self::KEEP_LOG,
         'app_notifications' => self::KEEP_LOG,          // → notification_deliveries (CASCADE)
         'funding_notices' => self::KEEP_LOG,
+        'content_intake_items' => self::KEEP_LOG,       // → content_intake_events (CASCADE): the intake decision trail is an audit log, never deleted
         'conversion_deliveries' => self::KEEP_LOG,
         'conversion_destinations' => self::KEEP_LOG,    // → conversion_deliveries (CASCADE); switched off by the soft delete
         'notification_delivery_log' => self::KEEP_LOG,  // immutable proof of notice (a trigger refuses UPDATE/DELETE); no FK

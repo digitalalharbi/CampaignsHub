@@ -45,7 +45,7 @@ export const appNavGroups: readonly NavGroup[] = [
   {
     key: 'home',
     ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard,
-    leaves: [{ to: '/app/home', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard }],
+    leaves: [{ to: '/app/dashboard', ar: 'الرئيسية', en: 'Dashboard', icon: LayoutDashboard }],
   },
   {
     key: 'campaigns',
