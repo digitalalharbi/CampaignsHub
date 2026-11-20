@@ -1024,7 +1024,7 @@ final class AlertEvaluator
                     .($state['last_sync_at'] ? ' Last figures dated '.$state['last_sync_at'].'.' : ' No figures have ever arrived.'),
                 'context' => [
                     // The reader's language, beside the English the rest of the engine carries.
-                    'title_ar' => $failed ? 'انقطاع مزامنة البيانات' : 'البيانات متأخرة',
+                    'title_ar' => $failed ? 'انقطاع تحديث البيانات' : 'البيانات متأخرة',
                     'message_ar' => ($failed
                         ? 'فشلت آخر مزامنة لـ: '.$names.'.'
                         : 'لا أرقام حديثة من: '.$names.'.')

@@ -171,7 +171,7 @@ final class DigestMailRenderTest extends TestCase
             $this->assertStringNotContainsString('لا تُجمَع تكلفة النتيجة', $html);
             $text = (string) preg_replace('/\s+/u', ' ', (string) strip_tags($html));
             $header = mb_substr($text, 0, (int) mb_strpos($text, 'Nakheel'));
-            $this->assertDoesNotMatchRegularExpression('/(Cost per result|تكلفة النتيجة|ROAS|العائد على الإنفاق)/u', $header, "[$locale] the account line carries no blended ratio");
+            $this->assertDoesNotMatchRegularExpression('/(Cost per result|تكلفة النتيجة|ROAS|معدل العائد)/u', $header, "[$locale] the account line carries no blended ratio");
         }
     }
 

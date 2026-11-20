@@ -234,7 +234,7 @@ export function AccountVisualDeck({ rows, currency, ar }: { rows: AccountRow[]; 
             ? <Declined testid="deck-account-empty" text={ar ? 'لا يوجد إنفاق في هذه الفترة.' : 'No spend in this period.'} />
             : <PlatformDonutChart colorBy="series" currency={currency ?? ''} data={share} centerLabel={ar ? 'الحسابات' : 'Accounts'} centerValue={String(share.length)} height={240} />}
       </ChartCard>
-      <ChartCard title={ar ? 'نسبة النقر لكل حساب' : 'Click-through rate per account'} subtitle={ar ? 'الخط المتقطع: متوسط كل الحسابات' : 'Dashed line: all accounts together'}>
+      <ChartCard title={ar ? 'معدل النقر لكل حساب' : 'Click-through rate per account'} subtitle={ar ? 'الخط المتقطع: متوسط كل الحسابات' : 'Dashed line: all accounts together'}>
         {imp > 0 ? (
           <RatioBars
             ar={ar}
@@ -294,7 +294,7 @@ export function EntityVisualDeck({ rows, currency, level, ar }: { rows: EntityRo
             ? <Declined testid="deck-entity-empty" text={ar ? 'لا يوجد إنفاق في هذه الفترة.' : 'No spend in this period.'} />
             : <RankingBarChart horizontal colorByPlatform currency={currency ?? ''} data={top} bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }]} height={Math.max(180, top.length * 34)} />}
       </ChartCard>
-      <ChartCard title={ar ? `نسبة النقر في ${noun}` : `Click-through rate across ${noun}`} subtitle={ar ? 'الأكثر ظهورًا (ألف ظهور فأكثر) مقابل المتوسط' : 'The most seen (1,000+ impressions) against the average'}>
+      <ChartCard title={ar ? `معدل النقر في ${noun}` : `Click-through rate across ${noun}`} subtitle={ar ? 'الأكثر ظهورًا (ألف ظهور فأكثر) مقابل المتوسط' : 'The most seen (1,000+ impressions) against the average'}>
         {imp > 0 && ctrRows.length > 0 ? (
           <RatioBars
             ar={ar}

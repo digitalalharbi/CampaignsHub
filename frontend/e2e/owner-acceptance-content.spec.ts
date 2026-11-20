@@ -25,7 +25,7 @@ import { AUTH, seededProject, selectProject, switchToEnglish } from './helpers'
 const GARBAGE = /\b(undefined|NaN|\[object Object\])\b/
 
 /** «12.5%» attached to a cost or a return — the unit defect, as a reader meets it. */
-const MONEY_AS_PERCENT = /\b(CPC|CPM|CPA|ROAS|تكلفة النقرة|تكلفة الألف ظهور|تكلفة النتيجة|العائد على الإنفاق)\b[^%\n]{0,24}\d[\d,.]*\s*%/
+const MONEY_AS_PERCENT = /\b(CPC|CPM|CPA|ROAS|تكلفة النقرة|تكلفة الألف ظهور|تكلفة النتيجة|معدل العائد)\b[^%\n]{0,24}\d[\d,.]*\s*%/
 
 async function surfaceText(page: Page, selector: string): Promise<string> {
   return (await page.locator(selector).first().innerText()).replace(/\s+/g, ' ')

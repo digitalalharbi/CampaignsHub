@@ -241,7 +241,7 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
             <p className="mt-4 mb-1 text-xs font-bold text-text-muted">{ar ? 'الأرقام المالية في الرابط' : 'Financial figures on this link'}</p>
             <ul className="divide-y divide-border" data-testid="section-link-money">
               {([
-                ['hide_spend', ar ? 'الإنفاق والتكاليف والعائد على الإنفاق' : 'Spend, costs and return on spend'],
+                ['hide_spend', ar ? 'الإنفاق والتكاليف ومعدل العائد' : 'Spend, costs and return on spend'],
                 ['hide_revenue', ar ? 'الإيراد' : 'Revenue'],
               ] as const).map(([flag, label]) => (
                 <li key={flag} className="flex items-center justify-between gap-3 py-1.5">

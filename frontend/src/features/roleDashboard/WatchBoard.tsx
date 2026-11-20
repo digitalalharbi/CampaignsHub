@@ -36,7 +36,7 @@ import { PlatformComparePanel, SpendSharePanel } from './performance'
 const T = {
   ar: {
     title: 'لوحة المتابعة', all: 'كل العملاء', spend: 'الإنفاق', results: 'النتائج', impressions: 'الظهور', clicks: 'النقرات',
-    vsPrevious: 'مقارنة بالفترة السابقة', ctr: 'نسبة النقر', daily: 'الأداء اليومي', best: 'أفضل الحملات', worst: 'أضعف الحملات',
+    vsPrevious: 'مقارنة بالفترة السابقة', ctr: 'معدل النقر', daily: 'الأداء اليومي', best: 'أفضل الحملات', worst: 'أضعف الحملات',
     bestContent: 'أفضل المحتويات', worstContent: 'أضعف المحتويات', analytics: 'التفاصيل في التحليلات', nothing: 'لا توجد بيانات بعد',
     rankedBy: 'الترتيب حسب', cost: 'التكلفة', roas: 'العائد', conversions: 'التحويلات', clients: 'العملاء', loadFailed: 'تعذّر تحميل لوحة المتابعة',
   },

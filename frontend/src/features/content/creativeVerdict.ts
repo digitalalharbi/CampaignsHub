@@ -153,7 +153,7 @@ export function readCreative(data: CreativeDetail, ar: boolean): CreativeReading
 
   if (ctrGap !== null && ctrGap <= -NOTABLE && viewRate !== null && viewRate >= 0.5) {
     diagnosis.push({ id: 'seen-not-clicked', tone: 'bad', text: L(
-      `يُشاهَد ولا يُنقر: ${pct(viewRate)} ممّن ظهر لهم شاهدوه، لكن نسبة النقر ${fmt('ctr', ctr as number)} مقابل ${fmt('ctr', avgCtr as number)} للمسار. الوصول ليس المشكلة؛ الدعوة للإجراء أو وضوح العرض هي ما يحتاج مراجعة.`,
+      `يُشاهَد ولا يُنقر: ${pct(viewRate)} ممّن ظهر لهم شاهدوه، لكن معدل النقر ${fmt('ctr', ctr as number)} مقابل ${fmt('ctr', avgCtr as number)} للمسار. الوصول ليس المشكلة؛ الدعوة للإجراء أو وضوح العرض هي ما يحتاج مراجعة.`,
       `Watched but not clicked: ${pct(viewRate)} of those reached watched it, yet CTR is ${fmt('ctr', ctr as number)} vs ${fmt('ctr', avgCtr as number)} on the path. Reach is not the problem; the call to action or the offer's clarity is.`) })
   }
   if (path === 'conversion' && ctrGap !== null && ctrGap <= -NOTABLE && costCmp && costCmp.gap >= 0 && conv !== null) {
@@ -163,7 +163,7 @@ export function readCreative(data: CreativeDetail, ar: boolean): CreativeReading
   }
   if (path === 'conversion' && ctrGap !== null && ctrGap >= NOTABLE && costCmp && costCmp.gap <= -NOTABLE) {
     diagnosis.push({ id: 'clicks-no-buy', tone: 'bad', text: L(
-      `ينقرون ولا يشترون: نسبة النقر أفضل من المسار بـ ${pct(ctrGap)}، لكن ${costCmp.label} أضعف بـ ${pct(costCmp.gap)}. الخلل بعد النقر: صفحة الهبوط أو السعر أو العرض.`,
+      `ينقرون ولا يشترون: معدل النقر أفضل من المسار بـ ${pct(ctrGap)}، لكن ${costCmp.label} أضعف بـ ${pct(costCmp.gap)}. الخلل بعد النقر: صفحة الهبوط أو السعر أو العرض.`,
       `They click but do not buy: CTR beats the path by ${pct(ctrGap)}, yet ${costCmp.label} is ${pct(costCmp.gap)} weaker. The leak is after the click: landing page, price or offer.`) })
   }
   const cpmCmp = comparisons.find((c) => c.key === 'cpm')
@@ -252,15 +252,15 @@ export function readCreative(data: CreativeDetail, ar: boolean): CreativeReading
     if (ctrA && ctrB) {
       const ch = ctrB / ctrA - 1
       if (Math.abs(ch) >= 0.2) timeline.push({ id: 'ctr-trend', tone: ch > 0 ? 'good' : 'bad', text: ch > 0
-        ? L(`نسبة النقر في آخر ${countedDays(half, 'ar')} نشاط أعلى بـ ${pct(ch)} من أولها — الإعلان يتحسن ولم يظهر عليه إجهاد.`, `CTR in the last ${countedDays(half, 'en')} of activity is ${pct(ch)} higher than the first — improving, no fatigue.`)
-        : L(`نسبة النقر في آخر ${countedDays(half, 'ar')} نشاط أقل بـ ${pct(ch)} من أولها — أول علامات الإجهاد؛ جهّز نسخة بديلة.`, `CTR in the last ${countedDays(half, 'en')} of activity is ${pct(ch)} lower than the first — early fatigue; prepare a replacement.`) })
+        ? L(`معدل النقر في آخر ${countedDays(half, 'ar')} نشاط أعلى بـ ${pct(ch)} من أولها — الإعلان يتحسن ولم يظهر عليه إجهاد.`, `CTR in the last ${countedDays(half, 'en')} of activity is ${pct(ch)} higher than the first — improving, no fatigue.`)
+        : L(`معدل النقر في آخر ${countedDays(half, 'ar')} نشاط أقل بـ ${pct(ch)} من أولها — أول علامات الإجهاد؛ جهّز نسخة بديلة.`, `CTR in the last ${countedDays(half, 'en')} of activity is ${pct(ch)} lower than the first — early fatigue; prepare a replacement.`) })
     }
     if (path === 'conversion' && a.spend > 0 && b.spend > 0 && a.revenue > 0) {
       const rA = a.revenue / a.spend
       const rB = b.revenue / b.spend
       const ch = rB / rA - 1
       if (Math.abs(ch) >= 0.2) timeline.push({ id: 'roas-trend', tone: ch > 0 ? 'good' : 'bad', text: L(
-        `العائد على الإنفاق في آخر ${countedDays(half, 'ar')} نشاط ${rB.toFixed(2)}× مقابل ${rA.toFixed(2)}× في أولها (${ch > 0 ? 'تحسّن' : 'تراجع'} ${pct(ch)}).`,
+        `معدل العائد في آخر ${countedDays(half, 'ar')} نشاط ${rB.toFixed(2)}× مقابل ${rA.toFixed(2)}× في أولها (${ch > 0 ? 'تحسّن' : 'تراجع'} ${pct(ch)}).`,
         `ROAS in the last ${countedDays(half, 'en')} of activity ${rB.toFixed(2)}× vs ${rA.toFixed(2)}× in the first (${ch > 0 ? 'up' : 'down'} ${pct(ch)}).`) })
     }
   }
@@ -304,7 +304,7 @@ export function readingCsv(data: CreativeDetail, reading: CreativeReading, ar: b
   block(L('نقاط القوة', 'Strengths'), reading.strengths)
   block(L('تحتاج تحسينًا', 'Needs work'), reading.weaknesses)
   block(L('لماذا', 'Why'), reading.diagnosis)
-  block(L('قراءة الإبداع', 'The creative'), reading.creative)
+  block(L('قراءة المحتوى', 'The creative'), reading.creative)
   block(L('الأيام', 'The days'), reading.timeline)
   block(L('ماذا نفعل', 'What to do'), reading.actions)
 

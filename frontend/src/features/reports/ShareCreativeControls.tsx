@@ -97,7 +97,7 @@ const GROUPS: Array<{
       { key: 'spend', ar: 'الإنفاق', en: 'Spend' },
       { key: 'revenue', ar: 'الإيراد', en: 'Revenue' },
       { key: 'cpa', ar: 'تكلفة الطلب', en: 'Cost per order' },
-      { key: 'roas', ar: 'العائد على الإنفاق', en: 'Return on ad spend' },
+      { key: 'roas', ar: 'معدل العائد', en: 'Return on ad spend' },
     ],
   },
   {

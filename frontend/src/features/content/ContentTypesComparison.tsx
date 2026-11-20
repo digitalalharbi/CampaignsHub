@@ -25,7 +25,7 @@ export type BarMetric = 'cost_per_result' | 'ctr' | 'cpm' | 'cpc' | 'conversion_
 
 const METRIC_WORDS: Record<BarMetric, { ar: string; en: string }> = {
   cost_per_result: { ar: 'تكلفة النتيجة', en: 'Cost/result' },
-  ctr: { ar: 'نسبة النقر', en: 'CTR' },
+  ctr: { ar: 'معدل النقر', en: 'CTR' },
   cpm: { ar: 'CPM', en: 'CPM' },
   cpc: { ar: 'CPC', en: 'CPC' },
   conversion_rate: { ar: 'التحويل', en: 'CVR' },

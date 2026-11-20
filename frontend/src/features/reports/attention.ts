@@ -66,8 +66,8 @@ const HEADLINES: Record<string, Pair> = {
   cpl_drop: { ar: 'انخفضت تكلفة العميل المحتمل', en: 'Cost per lead fell' },
   cpa_rise: { ar: 'ارتفعت تكلفة الطلب', en: 'Cost per order rose' },
   cpa_drop: { ar: 'انخفضت تكلفة الطلب', en: 'Cost per order fell' },
-  roas_drop: { ar: 'تراجع العائد على الإنفاق', en: 'Return on ad spend fell' },
-  roas_rise: { ar: 'تحسّن العائد على الإنفاق', en: 'Return on ad spend improved' },
+  roas_drop: { ar: 'تراجع معدل العائد', en: 'Return on ad spend fell' },
+  roas_rise: { ar: 'تحسّن معدل العائد', en: 'Return on ad spend improved' },
   results_stopped: { ar: 'توقفت النتائج مع استمرار الإنفاق', en: 'Results stopped while spend continued' },
   budget_shift: { ar: 'فرق كبير في التكلفة بين منصتين', en: 'A large cost gap between two platforms' },
 }

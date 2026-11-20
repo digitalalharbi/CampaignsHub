@@ -63,7 +63,7 @@ describe('a result leads the card, and a return comments on it', () => {
   it('keeps the click-through rate on an ad that reports no result at all', () => {
     const brand = ad({ conversions: null, cpa: null, roas: null })
 
-    expect(labels(brand)).toEqual(['الإنفاق', 'نسبة النقر'])
+    expect(labels(brand)).toEqual(['الإنفاق', 'معدل النقر'])
   })
 
   it('falls back to impressions when even the rate is absent', () => {

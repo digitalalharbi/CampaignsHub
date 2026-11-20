@@ -163,7 +163,7 @@ test.describe('the advertiser portal', () => {
       expect(await roas.count(), `the ROAS card is absent and the strip is in «${state}»`).toBeGreaterThan(0)
     }).toPass({ timeout: 20000 })
 
-    await expect(roas).toContainText('العائد على الإنفاق', { timeout: 20000 })
+    await expect(roas).toContainText('معدل العائد', { timeout: 20000 })
 
     /*
      * FILTER-LOCALE-EMPTY-STATE-OBS — watch EVERY state the strip passes through, not the last one.
@@ -198,7 +198,7 @@ test.describe('the advertiser portal', () => {
 
     await toggleLanguage(page)
     await expect(roas).toContainText('Return on ad spend', { timeout: 20000 })
-    await expect(roas).not.toContainText('العائد على الإنفاق')
+    await expect(roas).not.toContainText('معدل العائد')
 
     const states = await page.evaluate(() => (window as unknown as { __stripStates: string[] }).__stripStates)
 

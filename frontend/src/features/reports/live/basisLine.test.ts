@@ -3,7 +3,7 @@ import { basisLine } from './ExecutiveSummary'
 
 /** REPORT-BEST-NOT-SPEND-001 — the headline order names its family, never a money metric, and only when the scope mixed objectives. */
 describe('basisLine', () => {
-  const basis = { family: 'sales', metric: 'roas', label_ar: 'العائد على الإنفاق', label_en: 'ROAS', family_label_ar: 'المبيعات', family_label_en: 'Sales' }
+  const basis = { family: 'sales', metric: 'roas', label_ar: 'معدل العائد', label_en: 'ROAS', family_label_ar: 'المبيعات', family_label_en: 'Sales' }
 
   it('names the family and not the ROAS it was ranked on', () => {
     expect(basisLine(basis, true)).toBe('مرتّبة على أداء المبيعات')
