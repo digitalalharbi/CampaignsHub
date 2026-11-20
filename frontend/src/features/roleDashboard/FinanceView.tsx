@@ -1,3 +1,5 @@
+import { ProviderMark } from '@/components/ProviderMark'
+import { providerLabel } from '@/features/campaigns/labels'
 import { Link } from 'react-router-dom'
 import { RankingBarChart } from '@/features/analytics/charts'
 import { budgetStatus, STATUS_COLOR, STATUS_LABEL } from '@/lib/colors'
@@ -18,7 +20,6 @@ interface FinanceExtras {
   spend_limits?: { id: string; project: string | null; amount: number; currency: string; remaining: number | null; utilisation: number | null; ends_on: string }[]
 }
 
-const PLATFORM: Record<string, string> = { meta: 'Meta', snapchat: 'Snapchat', tiktok: 'TikTok', google: 'Google', x: 'X', linkedin: 'LinkedIn' }
 
 export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'app' }) {
   const f = useFmt()
@@ -40,6 +41,7 @@ export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
   const over = d.units.filter((u) => budgetStatus(u.ratio, near) === 'exceeded').length
   const nearCount = d.units.filter((u) => budgetStatus(u.ratio, near) === 'near').length
   const invData = inv ? [{ label: t.invoiced, v: inv.invoiced }, { label: t.collected, v: inv.collected }, { label: t.owed, v: inv.owed }, { label: t.overdue, v: inv.overdue }] : []
+  const hasInvoices = inv !== null && invData.some((r) => r.v !== 0)
   const invColor: Record<string, string> = { [t.invoiced]: 'var(--brand-600)', [t.collected]: STATUS_COLOR.within, [t.owed]: STATUS_COLOR.near, [t.overdue]: STATUS_COLOR.exceeded }
 
   return (
@@ -61,7 +63,7 @@ export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
           </div>
         </Panel>
 
-        <Panel title={t.runOut} to={`/${portal}/budgets`} testId="dash-panel-runout" className="min-h-[200px] lg:col-span-4">
+        <Panel title={t.runOut} to={`/${portal}/budgets`} testId="dash-panel-runout" className={`min-h-[200px] ${hasInvoices ? 'lg:col-span-4' : 'lg:col-span-7'}`}>
           {dated.length === 0 ? <Nothing label={t.noRate} /> : (
             <ul className="flex h-full flex-col justify-center gap-1" data-testid="dash-runout">
               {dated.map((u) => {
@@ -83,13 +85,14 @@ export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
           )}
         </Panel>
 
+        {/* SHOW-AVAILABLE-001 — no invoice figures, no invoices card. */}
+        {hasInvoices && (
         <Panel title={t.invoices} to={`/${portal}/billing`} testId="dash-panel-invoices" className="min-h-[200px] lg:col-span-3">
           <div ref={invBars.ref} className="h-full min-h-[150px]" role="img" aria-label={`${t.invoices}: ${invData.map((r) => `${r.label} ${f.short(r.v)}`).join(', ')}`}>
-            {!inv || invData.every((r) => r.v === 0) ? <Nothing label={t.nothing} /> : (
-              <RankingBarChart height={invBars.height} currency={inv.currency ?? ''} data={invData} bars={[{ key: 'v', name: t.invoices, kind: 'money' }]} rowColor={(row) => invColor[String(row.label)]} />
-            )}
+            {inv && <RankingBarChart height={invBars.height} currency={inv.currency ?? ''} data={invData} bars={[{ key: 'v', name: t.invoices, kind: 'money' }]} rowColor={(row) => invColor[String(row.label)]} />}
           </div>
         </Panel>
+        )}
       </div>
 
       {/* FINANCE-DASH-001 — the spend across the platforms, and every spend limit with what is left of it. */}
@@ -100,7 +103,7 @@ export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
               {platforms.map((p) => (
                 <li key={p.provider} className="space-y-1">
                   <div className="flex items-center justify-between gap-2 text-sm">
-                    <span className="font-semibold text-text-primary" dir="ltr">{PLATFORM[p.provider] ?? p.provider}</span>
+                    <span className="inline-flex min-w-0 items-center gap-1.5 font-semibold text-text-primary"><ProviderMark provider={p.provider} size={18} />{providerLabel(p.provider, f.ar ? 'ar' : 'en')}</span>
                     <span className="tnum text-text-secondary">{f.money(p.spend, extra.metrics_currency ?? null)}{p.share !== null ? ` · ${f.pct(p.share)}` : ''}</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-surface-secondary">
