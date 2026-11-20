@@ -1,3 +1,4 @@
+import { sharedBase } from '@/features/reports/sharedBase'
 import type { CreativeCard, CreativeFunnelShape, LibraryFilterOptions } from '@/features/content/api'
 import type { CreativeMove, CreativePulse, KindWinner, ObjectiveWinner, PulseList } from '@/features/content/pulse'
 
@@ -175,7 +176,7 @@ export interface SharedCreativeComparison {
 }
 
 async function ask<T>(token: string, path: string, query: string, password?: string): Promise<T> {
-  const res = await fetch(`/api/v1/reports/shared/${token}${path}${query}`, {
+  const res = await fetch(`${sharedBase(token)}${path}${query}`, {
     headers: { Accept: 'application/json', ...(password ? { 'X-Report-Password': password } : {}) },
   })
   const body = await res.json().catch(() => ({}))

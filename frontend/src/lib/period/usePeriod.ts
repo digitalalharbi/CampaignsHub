@@ -52,7 +52,11 @@ const DAY_PRESET: Record<number, PresetKey> = { 7: 'last_7', 14: 'last_14', 28: 
  * `/reports`) seeds its own fields from the period and leaves the address alone: a dialog that rewrites the page URL
  * the moment it opens navigates under the person's first click (CI PR #1071, live-link builder on Firefox).
  */
-export function usePeriod(options: { earliest?: string | null; writeUrl?: boolean } = {}): PeriodState {
+/**
+ * `opening` — DASH-DATE-RANGE-001: the period a page opens on when its address names none and nothing was chosen in this
+ * tab (Home opens on «هذا الشهر»). A choice made in this tab, or a shared address, still wins.
+ */
+export function usePeriod(options: { earliest?: string | null; writeUrl?: boolean; opening?: PresetKey } = {}): PeriodState {
   const writeUrl = options.writeUrl !== false
   const [params, setParams] = useLatestSearchParams()
   const userId = useAuth((s) => s.user?.id ?? null)
@@ -65,7 +69,7 @@ export function usePeriod(options: { earliest?: string | null; writeUrl?: boolea
   const fromUrl = useMemo(() => selectionFromParams(new URLSearchParams(search), ctx), [search, ctx])
   const stored = useMemo(() => (session.has(uid) ? null : loadStored(userId)), [uid, userId])
 
-  const selection = fromUrl ?? session.get(uid) ?? stored?.selection ?? DEFAULT_SELECTION
+  const selection = fromUrl ?? session.get(uid) ?? (options.opening ? { key: options.opening, compare: 'none' as const } : null) ?? stored?.selection ?? DEFAULT_SELECTION
   const recent = sessionRecent.get(uid) ?? stored?.recent ?? []
 
   const resolved = useMemo(

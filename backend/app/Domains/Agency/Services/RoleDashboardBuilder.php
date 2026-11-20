@@ -19,6 +19,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
+use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
@@ -82,6 +83,46 @@ final class RoleDashboardBuilder
 
     public const DEFAULT_DAYS = 30;
 
+    /** DASH-DATE-RANGE-001 — the longest range the page reads at once. */
+    public const MAX_RANGE_DAYS = 366;
+
+    /** @var array{0: string, 1: string}|null an explicit from–to chosen on the page; null = the last `days` days */
+    private ?array $range = null;
+
+    /**
+     * DASH-DATE-RANGE-001 — Owner 2026-11-20: the dashboard reads the period chosen in the shared date picker (this month by
+     * default, last 7 days, since launch, any from–to), not only a fixed number of days. A malformed, reversed, future-ending
+     * or over-long range is ignored and the page falls back to its days.
+     */
+    public function withRange(?string $from, ?string $to): static
+    {
+        $this->range = null;
+        $ok = static fn (?string $d): bool => is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) === 1 && strtotime($d) !== false;
+        if ($ok($from) && $ok($to)) {
+            $today = PeriodResolver::today()->toDateString();
+            $end = min((string) $to, $today);
+            if ($from <= $end && Carbon::parse($from)->diffInDays(Carbon::parse($end)) < self::MAX_RANGE_DAYS) {
+                $this->range = [(string) $from, $end];
+            }
+        }
+
+        return $this;
+    }
+
+    /** @return array{0: Carbon, 1: Carbon, 2: int} from, to and the number of days between them, inclusive */
+    private function window(int $days, Carbon $today): array
+    {
+        if ($this->range !== null) {
+            $from = Carbon::parse($this->range[0], $today->getTimezone())->startOfDay();
+            $to = Carbon::parse($this->range[1], $today->getTimezone())->startOfDay();
+
+            return [$from, $to, (int) $from->diffInDays($to) + 1];
+        }
+        $to = $today->copy();
+
+        return [$to->copy()->subDays($days - 1), $to, $days];
+    }
+
     public function build(User $user, ?string $requested = null, int $days = self::DEFAULT_DAYS, ?string $client = null, ?string $project = null): array
     {
         $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
@@ -96,8 +137,7 @@ final class RoleDashboardBuilder
         // RIYADH-DAY-001 — ONE «today», the Riyadh day: the run-out's rate (ProjectBudgetReader) is already counted on it,
         // so a date added to a UTC «today» landed a day early from 00:00 to 03:00 Riyadh.
         $today = PeriodResolver::today();
-        $to = $today->copy();
-        $from = $to->copy()->subDays($days - 1);
+        [$from, $to, $days] = $this->window($days, $today);
 
         $scope = $this->scope($user);
         // DASH-CLIENT-FILTER-001 — Owner 2026-11-18: every figure on the page follows the chosen client, the budget included.
@@ -329,9 +369,19 @@ final class RoleDashboardBuilder
             $projectsOf[$unit][(string) $pid] = $project['name'];
         }
 
+        // DELIVERY-STATE-001 — running or stopped per unit: a platform with spend AND impressions in the last 3 days.
+        $live = app(DeliveryState::class)->byProject(array_values(array_map('strval', array_keys($approved))));
+
         $units = [];
         foreach ($byUnit as $unit => $readings) {
             $r = $this->reading($readings);
+            $platformsLive = [];
+            foreach (array_keys($projectsOf[$unit]) as $pid) {
+                foreach ($live[$pid] ?? [] as $provider => $on) {
+                    $platformsLive[$provider] = ($platformsLive[$provider] ?? false) || $on;
+                }
+            }
+            ksort($platformsLive);
             $days = $r['cover_days'];
             $units[] = [
                 'id' => str_starts_with((string) $unit, 'p:') ? substr((string) $unit, 2) : (string) $unit,
@@ -341,6 +391,8 @@ final class RoleDashboardBuilder
                 'ratio' => $r['budget'] !== null && $r['spent'] !== null && $r['budget'] > 0 ? round($r['spent'] / $r['budget'], 4) : null,
                 'days_left' => $days,
                 'run_out_on' => $days === null ? null : $today->copy()->addDays($days)->toDateString(),
+                'delivering' => in_array(true, $platformsLive, true),
+                'delivering_platforms' => $platformsLive,
             ] + $r;
         }
 
@@ -368,7 +420,7 @@ final class RoleDashboardBuilder
         if ($mine !== null) {
             $base->where(fn ($q) => $q->where('owner_id', $mine->getKey())->orWhere('created_by', $mine->getKey()));
         }
-        $counts = $projectIds === [] ? [] : $base->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status')->all();
+        $counts = $projectIds === [] ? [] : $base->clone()->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status')->all();
 
         $out = ['active' => 0, 'paused' => 0, 'draft' => 0, 'completed' => 0, 'other' => 0];
         foreach ($counts as $status => $c) {
@@ -376,7 +428,37 @@ final class RoleDashboardBuilder
             $out[$key] += (int) $c;
         }
 
-        return $out + ['total' => array_sum($out)];
+        /*
+         * DELIVERY-STATE-001 — Owner 2026-11-20: «حملات نشطة» must be exact. Active is a campaign that reported spend AND
+         * impressions in the last 3 days, whatever status its platform last sent; one the platform still calls active but that
+         * delivered nothing is stopped («idle», counted with the paused). The buckets still add up to the total.
+         */
+        if ($projectIds !== []) {
+            $running = app(DeliveryState::class)->runningCampaigns($projectIds);
+            $rest = $base->clone()->when($running !== [], fn ($q) => $q->whereNotIn('id', $running))
+                ->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status')->all();
+            $activeNow = 0;
+            if ($running !== []) {
+                $activeNow = $base->clone()->whereIn('id', $running)->count();
+            }
+            $out = ['active' => $activeNow, 'paused' => 0, 'draft' => 0, 'completed' => 0, 'other' => 0, 'idle' => 0];
+            foreach ($rest as $status => $c) {
+                $status = (string) $status;
+                $n = (int) $c;
+                if ($status === 'active') {
+                    $out['idle'] += $n;
+                    $out['paused'] += $n;
+
+                    continue;
+                }
+                $key = in_array($status, ['paused', 'draft', 'completed'], true) ? $status : 'other';
+                $out[$key] += $n;
+            }
+        }
+
+        $out['total'] = array_sum(array_intersect_key($out, array_flip(['active', 'paused', 'draft', 'completed', 'other'])));
+
+        return $out;
     }
 
     /**
@@ -567,10 +649,9 @@ final class RoleDashboardBuilder
     {
         $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
         $today = PeriodResolver::today();
-        $to = $today->copy();
-        $from = $to->copy()->subDays($days - 1);
+        [$from, $to, $days] = $this->window($days, $today);
         $tenant = (string) app(TenantContext::class)->tenantId();
-        $key = 'role-dash-perf|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.($client ?? '*').'|'.($project ?? '*').'|'.$today->toDateString();
+        $key = 'role-dash-perf|'.$tenant.'|'.$user->getKey().'|'.$from->toDateString().'~'.$to->toDateString().'|'.($client ?? '*').'|'.($project ?? '*').'|'.$today->toDateString();
 
         return Cache::remember($key, 120, function () use ($user, $days, $today, $from, $to, $client, $project): array {
             $scope = $this->narrow($this->scope($user), $client, $project);
@@ -603,10 +684,9 @@ final class RoleDashboardBuilder
     {
         $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
         $today = PeriodResolver::today();
-        $to = $today->copy();
-        $from = $to->copy()->subDays($days - 1);
+        [$from, $to, $days] = $this->window($days, $today);
         $tenant = (string) app(TenantContext::class)->tenantId();
-        $key = 'role-dash-watch|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.($unit ?? '*').'|'.($project ?? '*').'|'.$today->toDateString();
+        $key = 'role-dash-watch|'.$tenant.'|'.$user->getKey().'|'.$from->toDateString().'~'.$to->toDateString().'|'.($unit ?? '*').'|'.($project ?? '*').'|'.$today->toDateString();
 
         return Cache::remember($key, 120, function () use ($user, $days, $unit, $project, $today, $from, $to): array {
             $scope = $this->scope($user);

@@ -86,11 +86,11 @@ describe('a result leads the card, and a return comments on it', () => {
    * This rule predates the reordering and must survive it: the count appears, the ratio does not,
    * and the third figure is delivery rather than a fabricated nought.
    */
-  it('never prints a zero return, and the count takes its place', () => {
+  /** SHOW-AVAILABLE-002 — Owner 2026-11-20 supersedes the printed zero: a card shows only what holds a figure above zero. */
+  it('never prints a zero return or a zero count', () => {
     const unsold = ad({ roas: 0, cpa: 0, conversions: 0 })
 
-    expect(labels(unsold)).toContain('النتائج')
-    expect(value(unsold, 'النتائج')).toBe('0')
+    expect(labels(unsold)).not.toContain('النتائج')
     expect(labels(unsold)).not.toContain('العائد')
   })
 
@@ -102,7 +102,7 @@ describe('a result leads the card, and a return comments on it', () => {
    * which is the specific thing #621 exists to prevent — and moving the count UP the card would
    * have made that wrong answer more prominent, not less, if it were not handled here.
    */
-  it('shows a dash rather than a zero when the result was never attributed here', () => {
+  it('leaves out a result that was never attributed here', () => {
     /*
      * The SHAPE `metricState` actually reads, which the first version of this case had wrong.
      *
@@ -119,7 +119,7 @@ describe('a result leads the card, and a return comments on it', () => {
       metrics: { conversions: 0, availability: { conversions: 'not_attributable' } },
     } as Partial<ReportAd>)
 
-    expect(value(unattributed, 'النتائج')).toBe('—')
+    expect(labels(unattributed)).not.toContain('النتائج')
   })
 
   /**
@@ -129,7 +129,7 @@ describe('a result leads the card, and a return comments on it', () => {
    * card. Only «nobody attributed orders here» is a dash. Without this case the one above passes
    * for any fixture the reader cannot parse.
    */
-  it('prints a measured zero, because that is a result and not an absence', () => {
+  it('leaves out a measured zero too (SHOW-AVAILABLE-002, Owner 2026-11-20)', () => {
     const sold_nothing = ad({
       conversions: 0,
       roas: null,
@@ -137,6 +137,6 @@ describe('a result leads the card, and a return comments on it', () => {
       metrics: { conversions: 0, availability: { conversions: 'reported_value' } },
     } as Partial<ReportAd>)
 
-    expect(value(sold_nothing, 'النتائج')).toBe('0')
+    expect(labels(sold_nothing)).not.toContain('النتائج')
   })
 })

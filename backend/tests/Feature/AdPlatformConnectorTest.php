@@ -451,7 +451,7 @@ final class AdPlatformConnectorTest extends TestCase
 
         // The line this platform makes dangerous. Twelve sales, not five hundred.
         $this->assertSame(12.0, $row['purchases'], 'a purchase is a completed payment, never «a conversion»');
-        $this->assertSame(500.0, $row['conversions'], 'TikTok\'s own results figure is still carried — just never as the sale');
+        $this->assertSame(12.0, $row['conversions'], 'TIKTOK-CONVERSIONS-PURCHASES-001 — a conversion is a completed purchase, never TikTok\'s optimisation-event count');
         $this->assertSame(140.0, $row['checkout'], 'a started checkout is its own stage, never a sale');
         // TIKTOK-METRIC-REFUSAL-001 — the website add-to-cart event, documented as `web_event_add_to_cart`.
         $this->assertSame(260.0, $row['add_to_cart'], 'the basket stage is the website add-to-cart event');
@@ -501,7 +501,7 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertSame(1.0, $rows['lead-form']['form_leads']);
         $this->assertArrayNotHasKey('form_leads', $rows['landing'], 'a null native count is absent, never zero — and the website form is not a native lead');
         $this->assertSame(0.0, $rows['landing']['purchases'], 'a reported zero purchase stays a measured zero');
-        $this->assertSame(700.0, $rows['landing']['conversions'], 'optimisation events are carried as conversions only');
+        $this->assertSame(0.0, $rows['landing']['conversions'], 'TIKTOK-CONVERSIONS-PURCHASES-001 — optimisation events are not conversions; a conversion is a purchase');
     }
 
     public function test_snapchat_native_leads_are_carried_at_the_campaign_grain_and_never_from_sign_ups(): void

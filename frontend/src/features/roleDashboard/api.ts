@@ -34,6 +34,10 @@ export interface DashboardUnit extends BudgetReading {
   daily_rate_3d: number | null
   days_left: number | null
   run_out_on: string | null
+  /** DELIVERY-STATE-001 — spend AND impressions in the last 3 days on any platform. */
+  delivering?: boolean
+  /** provider → running in the last 3 days (a provider that did not spend is absent). */
+  delivering_platforms?: Record<string, boolean>
 }
 
 /** The words for a figure travel with it, in both languages (`ObjectiveResult`). */
@@ -155,18 +159,21 @@ export function metricsCurrency(d: Pick<RoleDashboard, 'metrics_currency' | 'mon
 
 export const DASHBOARD_WINDOWS = [7, 14, 30, 90] as const
 export type DashboardWindow = (typeof DASHBOARD_WINDOWS)[number]
+/** DASH-DATE-RANGE-001 — the period the page reads, from the shared date picker. */
+export interface DashboardRange { from: string; to: string }
+const setRange = (params: URLSearchParams, r: DashboardRange | null) => { if (r) { params.set('from', r.from); params.set('to', r.to) } }
 
-export function useDashboardPerformance(days: DashboardWindow, enabled = true, client: string | null = null, project: string | null = null) {
+export function useDashboardPerformance(range: DashboardRange | null, enabled = true, client: string | null = null, project: string | null = null) {
   // HOME-SCOPE-ISOLATION-001 — Owner 2026-11-20: these panels read every client while one was chosen ($23.5K, 1.83K orders,
   // other clients' best campaigns beside «Experts Live Saudi 2026»). They carry the chosen client and project now.
   const params = new URLSearchParams()
-  if (days !== 30) params.set('days', String(days))
+  setRange(params, range)
   if (client) params.set('client', client)
   if (project) params.set('project', project)
   const qs = params.toString()
 
   return useQuery({
-    queryKey: ['me', 'dashboard', 'performance', days, client, project],
+    queryKey: ['me', 'dashboard', 'performance', range?.from, range?.to, client, project],
     queryFn: () => getData<DashboardPerformance>(qs ? `/me/dashboard/performance?${qs}` : '/me/dashboard/performance'),
     enabled,
     staleTime: 60_000,
@@ -177,10 +184,10 @@ export function useDashboardPerformance(days: DashboardWindow, enabled = true, c
   })
 }
 
-export function useRoleDashboard(view: DashboardView | null, days: DashboardWindow = 30, client: string | null = null, project: string | null = null) {
+export function useRoleDashboard(view: DashboardView | null, range: DashboardRange | null = null, client: string | null = null, project: string | null = null) {
   const params = new URLSearchParams()
   if (view) params.set('view', view)
-  if (days !== 30) params.set('days', String(days))
+  setRange(params, range)
   // DASH-CLIENT-FILTER-001 — the client chosen on the page narrows every figure; the server ignores one out of reach.
   if (client) params.set('client', client)
   // HOME-SCOPE-ISOLATION-001 — and the project chosen at the top, inside that client.
@@ -188,7 +195,7 @@ export function useRoleDashboard(view: DashboardView | null, days: DashboardWind
   const qs = params.toString()
 
   return useQuery({
-    queryKey: ['me', 'dashboard', view, days, client, project],
+    queryKey: ['me', 'dashboard', view, range?.from, range?.to, client, project],
     queryFn: () => getData<RoleDashboard>(qs ? `/me/dashboard?${qs}` : '/me/dashboard'),
     // A new window keeps the figures on screen until the new ones land, the same view's page in another period.
     placeholderData: keepPreviousData,
@@ -244,15 +251,15 @@ export interface WatchBoard {
   performance?: PerformanceBlock | null
 }
 
-export function useWatchBoard(days: DashboardWindow, unit: string | null, enabled = true, project: string | null = null) {
+export function useWatchBoard(range: DashboardRange | null, unit: string | null, enabled = true, project: string | null = null) {
   const params = new URLSearchParams()
-  if (days !== 30) params.set('days', String(days))
+  setRange(params, range)
   if (unit) params.set('unit', unit)
   if (project) params.set('project', project)
   const qs = params.toString()
 
   return useQuery({
-    queryKey: ['me', 'dashboard', 'watch', days, unit, project],
+    queryKey: ['me', 'dashboard', 'watch', range?.from, range?.to, unit, project],
     queryFn: () => getData<WatchBoard>(qs ? `/me/dashboard/watch?${qs}` : '/me/dashboard/watch'),
     enabled,
     staleTime: 60_000,

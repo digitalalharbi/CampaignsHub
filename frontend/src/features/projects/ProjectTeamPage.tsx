@@ -28,7 +28,7 @@ import { useUi } from '@/stores/ui'
  */
 export const PROJECT_ROLE_LABELS: Record<string, { ar: string; en: string }> = {
   account_manager: { ar: 'مدير الحساب', en: 'Account manager' },
-  media_buyer: { ar: 'مشتري وسائط', en: 'Media buyer' },
+  media_buyer: { ar: 'مسؤول الحملات', en: 'Campaign manager' },
   analyst: { ar: 'محلّل', en: 'Analyst' },
   content: { ar: 'محتوى', en: 'Content' },
   finance: { ar: 'مالية', en: 'Finance' },

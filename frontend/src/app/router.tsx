@@ -71,6 +71,7 @@ const ClientProfilePage = lazyPage(() => import('@/features/requests/portal/Clie
 const ClientFilesPage = lazyPage(() => import('@/features/requests/portal/ClientFilesPage'), 'ClientFilesPage')
 const ClientCampaignsPage = lazyPage(() => import('@/features/requests/portal/ClientCampaignsPage'), 'ClientCampaignsPage')
 const ClientReportsPage = lazyPage(() => import('@/features/requests/portal/ClientReportsPage'), 'ClientReportsPage')
+const ClientReportViewPage = lazyPage(() => import('@/features/requests/portal/ClientReportViewPage'), 'ClientReportViewPage')
 const ClientSpacePickerPage = lazyPage(() => import('@/features/requests/portal/ClientSpacePickerPage'), 'ClientSpacePickerPage')
 const ClientPortalHomePage = lazyPage(() => import('@/features/requests/portal/ClientPortalHomePage'), 'ClientPortalHomePage')
 const VerifyEmailPage = lazyPage(() => import('@/features/onboarding/VerifyEmailPage'), 'VerifyEmailPage')
@@ -269,6 +270,7 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/portal/files', element: <ClientFilesPage /> },
   { path: '/portal/campaigns', element: <ClientCampaignsPage /> },
   { path: '/portal/reports', element: <ClientReportsPage /> },
+  { path: '/portal/reports/:reportId', element: <ClientReportViewPage /> },
   // Pre-ADR-0002 paths. Kept alive rather than deleted: these are in clients' bookmarks and in
   // emails already sent, and a dead link there costs a support conversation.
   ...legacyClientPortalRedirects,
@@ -300,6 +302,7 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/portal/:clientSlug/campaigns', element: <ClientCampaignsPage /> },
   { path: '/portal/:clientSlug/files', element: <ClientFilesPage /> },
   { path: '/portal/:clientSlug/reports', element: <ClientReportsPage /> },
+  { path: '/portal/:clientSlug/reports/:reportId', element: <ClientReportViewPage /> },
   { path: '/portal/:clientSlug/profile', element: <ClientProfilePage /> },
 
   /*

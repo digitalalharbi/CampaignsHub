@@ -343,3 +343,86 @@ input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/*
+ * SELECT-PRO-001 — Owner 2026-11-20: «الفلاتر عادية جدًا». Every select in the product, filters included, opens a designed
+ * list instead of the operating system's menu: the product's surface, a soft shadow, rounded rows, the chosen row in the
+ * brand colour with its tick. One rule for the ~120 selects, so none is rewritten and each keeps being a real <select>
+ * (keyboard, screen readers, form posts and every test still read it natively).
+ *
+ * `appearance: base-select` is the platform's customisable select. Where a browser does not have it yet, it keeps the
+ * native menu — same control, same behaviour, nothing broken.
+ */
+@supports (appearance: base-select) {
+  select:not([multiple]):not([size]) {
+    appearance: base-select;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+  select:not([multiple]):not([size])::picker-icon {
+    content: '';
+    width: 0.75rem;
+    height: 0.75rem;
+    flex-shrink: 0;
+    background: currentColor;
+    color: var(--text-muted);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    transition: rotate 0.15s;
+  }
+  select:not([multiple]):not([size]):open::picker-icon {
+    rotate: 180deg;
+  }
+  select:not([multiple]):not([size])::picker(select) {
+    appearance: base-select;
+    margin-block: 6px;
+    padding: 6px;
+    min-width: anchor-size(width);
+    max-height: min(22rem, 60dvh);
+    overflow-y: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--text-primary);
+    box-shadow: 0 12px 32px -8px rgb(15 23 42 / 0.22), 0 2px 6px rgb(15 23 42 / 0.08);
+  }
+  select:not([multiple]):not([size]) option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.25rem;
+    padding: 0.45rem 0.75rem;
+    border-radius: 9px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: transparent;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  select:not([multiple]):not([size]) option:focus-visible {
+    background: var(--surface-hover);
+    outline: none;
+  }
+  select:not([multiple]):not([size]) option:checked {
+    background: color-mix(in srgb, var(--brand-500) 12%, transparent);
+    color: var(--brand-600);
+  }
+  select:not([multiple]):not([size]) option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--brand-600);
+    font-weight: 800;
+  }
+  select:not([multiple]):not([size]) option:disabled {
+    color: var(--text-muted);
+    cursor: default;
+  }
+}
+@media (hover: hover) {
+  select:not([multiple]):not([size]) option:hover {
+    background: var(--surface-hover);
+  }
+}

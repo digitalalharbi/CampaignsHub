@@ -15,6 +15,8 @@ use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\MembershipScope;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
+use DateTimeInterface;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -100,11 +102,13 @@ final class ClientPortalUsers
             ->where('tenant_id', $workspace->tenant_id)->where('portal', Portal::ClientPortal->value)->active()
             ->whereHas('scopes', fn ($q) => $q->where('scope_type', MembershipScope::TYPE_CLIENT)->where('scope_id', (string) $workspace->getKey()))
             ->with('scopes')->get();
-        $people = User::query()->whereIn('id', $memberships->pluck('user_id')->all())->get(['id', 'name', 'email'])->keyBy('id');
+        $people = User::query()->whereIn('id', $memberships->pluck('user_id')->all())->get(['id', 'name', 'email', 'last_login_at'])->keyBy('id');
 
         $members = $memberships->map(fn (Membership $m): array => [
             'membership_id' => (string) $m->getKey(), 'user_id' => $m->user_id, 'name' => $people[$m->user_id]->name ?? null, 'email' => $people[$m->user_id]->email ?? null,
             'role' => $m->role, 'projects' => $m->projectScopeIds() ?: null, 'state' => 'active',
+            // CLIENT-PORTAL-LOGIN-001 — when this person last signed in; null = never.
+            'last_login_at' => self::isoOrNull($people[$m->user_id]->last_login_at ?? null),
         ])->all();
 
         $pending = DB::table('workspace_invitations')->where('client_workspace_id', $workspace->getKey())->whereNull('accepted_at')
@@ -112,6 +116,16 @@ final class ClientPortalUsers
             ->map(fn ($i): array => ['invitation_id' => $i->id, 'email' => $i->email, 'role' => $i->role_slug, 'projects' => $i->project_ids ? json_decode($i->project_ids, true) : null, 'state' => 'invited', 'expires_at' => $i->expires_at])->all();
 
         return array_merge($members, $pending);
+    }
+
+    /** CLIENT-PORTAL-LOGIN-001 — a stored instant as ISO-8601, whatever shape the model hands back. */
+    private static function isoOrNull(mixed $at): ?string
+    {
+        if ($at === null || $at === '') {
+            return null;
+        }
+
+        return Carbon::parse($at instanceof DateTimeInterface ? $at->format(DATE_ATOM) : (string) $at)->toIso8601String();
     }
 
     /** Take this client away from a person. Their other access, and the account itself, are untouched. */

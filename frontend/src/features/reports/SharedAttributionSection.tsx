@@ -1,3 +1,4 @@
+import { sharedBase } from '@/features/reports/sharedBase'
 import { useQuery } from '@tanstack/react-query'
 import { AttributionPanel } from '@/features/analytics/AttributionPanel'
 import type { Attribution } from '@/features/analytics/api'
@@ -22,7 +23,7 @@ export function SharedAttributionSection({ token, password }: { token: string; p
   const q = useQuery({
     queryKey: ['shared-attribution', token],
     queryFn: async (): Promise<Attribution> => {
-      const res = await fetch(`/api/v1/reports/shared/${token}/attribution`, {
+      const res = await fetch(`${sharedBase(token)}/attribution`, {
         headers: { Accept: 'application/json', ...(password ? { 'X-Report-Password': password } : {}) },
       })
       const body = await res.json().catch(() => ({}))
