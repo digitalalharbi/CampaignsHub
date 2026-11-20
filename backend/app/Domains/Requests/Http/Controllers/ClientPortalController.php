@@ -1142,7 +1142,7 @@ final class ClientPortalController
             ->whereNull('paused_at')->orderByDesc('created_at')->first();
         abort_if($share === null, 404);
         try {
-            $raw = Crypt::decryptString((string) $share->token_encrypted);
+            $raw = Crypt::decryptString((string) $share->getAttribute('token_encrypted'));
         } catch (Throwable) {
             abort(404);
         }
