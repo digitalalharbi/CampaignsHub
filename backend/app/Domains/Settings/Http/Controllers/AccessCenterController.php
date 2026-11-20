@@ -341,7 +341,9 @@ final class AccessCenterController extends Controller
 
         $membership = Membership::query()->where('tenant_id', $tenantId)->where('user_id', $target->id)->where('status', 'active')
             ->where('portal', '!=', Portal::ClientPortal->value)->first();
-        abort_if($membership === null, 422, 'A client-portal member is changed from the client\'s page.');
+        if ($membership === null) {
+            return $this->updatePortalMember($tenantId, $target, $actor, $data, $audit, $scopes);
+        }
 
         $currentRole = Role::query()->where('tenant_id', $tenantId)
             ->whereIn('id', DB::table('role_user')->where('user_id', $target->id)->pluck('role_id'))
@@ -410,6 +412,32 @@ final class AccessCenterController extends Controller
             'areas' => AccessCatalogue::levelsFor($final['effective']),
             'sections' => AccessSections::statesFor($final['effective'], AccessSections::offIn($final['deny'])),
         ], 'Access saved.');
+    }
+
+    /**
+     * ACCESS-PORTAL-ROLE-001 — Owner 2026-11-20: an active client-portal person is raised or lowered from the access center
+     * too (viewer → approver → client admin), not only from the client's page. Only the role moves; the clients it reaches
+     * stay as granted. The actor must reach every client this person holds, so nobody re-roles access they cannot see.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function updatePortalMember(string $tenantId, User $target, User $actor, array $data, AuditLogger $audit, ClientScopeResolver $scopes): JsonResponse
+    {
+        $portal = Membership::query()->where('tenant_id', $tenantId)->where('user_id', $target->id)->where('status', 'active')
+            ->where('portal', Portal::ClientPortal->value)->first();
+        abort_if($portal === null, 404);
+        $role = (string) ($data['category'] ?? '');
+        abort_unless(in_array($role, ClientPortalUsers::ROLES, true), 422, 'Choose a client-portal role.');
+        foreach ($portal->clientScopeIds() as $clientId) {
+            abort_unless($scopes->canReach($actor, (string) $clientId), 403, 'This person holds a client outside your own access.');
+        }
+        $before = (string) $portal->role;
+        if ($before !== $role) {
+            $portal->update(['role' => $role]);
+            $audit->log('access.member_updated', 'user', (string) $target->uuid, ['category' => $before], ['category' => $role], $data['reason'] ?? null);
+        }
+
+        return ApiResponse::success(['category' => $role], 'Access saved.');
     }
 
     /**
