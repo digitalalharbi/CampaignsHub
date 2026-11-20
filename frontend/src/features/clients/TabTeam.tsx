@@ -8,7 +8,7 @@ import { useUi } from '@/stores/ui'
 
 const ROLES = ['client_owner', 'media_buyer', 'analyst', 'reporter', 'viewer', 'custom']
 
-export function TabTeam({ d }: { d: ClientDetail }) {
+export function TabTeam({ d, onOpenPortal }: { d: ClientDetail; onOpenPortal?: () => void }) {
   const t = useT()
   const lang = useUi((s) => s.locale)
   const qc = useQueryClient()
@@ -31,6 +31,15 @@ export function TabTeam({ d }: { d: ClientDetail }) {
 
   return (
     <div className="grid gap-4">
+      {/* CLIENT-INVITE-PLACE-001 — Owner 2026-11-20: this tab is the agency's own people on the client; the client is invited from «بوابة العميل». */}
+      <div data-testid="team-is-agency" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5 text-sm">
+        <span className="text-text-primary">{lang === 'ar' ? 'هنا فريق الوكالة الذي يعمل على هذا العميل. لدعوة العميل نفسه لمتابعة مشاريعه:' : 'This is the agency team working on this client. To invite the client to follow their projects:'}</span>
+        {onOpenPortal && (
+          <button type="button" onClick={onOpenPortal} data-testid="team-open-portal" className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-700">
+            {lang === 'ar' ? 'دعوة العميل' : 'Invite the client'}
+          </button>
+        )}
+      </div>
       {d.can.manage_team && (
         <form onSubmit={(e) => { e.preventDefault(); if (userId) grant.mutate() }} className="flex flex-wrap items-end gap-2 rounded-xl border border-border bg-surface-secondary p-3">
           <select aria-label={t('tm_member')} className={field} value={userId} onChange={(e) => setUserId(e.target.value ? Number(e.target.value) : '')}>

@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest'
 const TREE: Record<string, string> = import.meta.glob('/src/**/*.{ts,tsx}', { query: '?raw', import: 'default', eager: true })
 
 const FORBIDDEN = [
-  'العتبة', 'المستهلك', 'المحفظة', 'محفظة', 'الأصليون', 'الأصليين', 'الإبداعات', 'المنصرف', 'المصروف',
+  'مشتري إعلانات', 'مشتري وسائط', 'العتبة', 'المستهلك', 'المحفظة', 'محفظة', 'الأصليون', 'الأصليين', 'الإبداعات', 'المنصرف', 'المصروف',
   // The bare stems too: «استهلاك»، «مصروف» without the article are the same retired words.
   'استهلاك', 'مصروف', 'تحتاج انتباه',
   'الاستهلاك', 'الإيقاع', 'الحدود المضبوطة', 'المُبلَّغة', 'الاستبدالات', 'التهدئة', 'إطلاق الحملات',
