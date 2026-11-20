@@ -1,4 +1,5 @@
 import { FreshnessChip } from './FreshnessChip'
+import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { CHART_SERIES } from '@/features/analytics/charts'
 import { Badge } from '@/components/ui/Badge'
@@ -64,6 +65,38 @@ export function PlatformSplit({ items, ar, height = 'h-2.5' }: { items: BudgetRo
         />
       ))}
     </div>
+  )
+}
+
+/**
+ * BUDGET-LIVE-001 — Owner 2026-11-20: is anything still running under this budget? Green = spend and impressions in the
+ * last 3 days, grey = stopped — the colours the ad platforms use. No sentence; the meaning rides in the tooltip.
+ */
+export function LiveDot({ on, ar, testId }: { on: boolean | undefined; ar: boolean; testId?: string }) {
+  if (on === undefined) return null
+  const label = on ? (ar ? 'شغّالة — إنفاق وظهور آخر 3 أيام' : 'Running — spend and impressions in the last 3 days') : (ar ? 'متوقفة — لا إنفاق أو ظهور آخر 3 أيام' : 'Stopped — no spend or impressions in the last 3 days')
+  return (
+    <span className="relative inline-flex h-2.5 w-2.5 shrink-0" title={label} data-testid={testId} data-on={on ? 'true' : 'false'}>
+      {on && <span aria-hidden className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-50" />}
+      <span aria-hidden className={`relative inline-flex h-2.5 w-2.5 rounded-full ${on ? 'bg-success' : 'bg-text-muted/60'}`} />
+      <span className="sr-only">{label}</span>
+    </span>
+  )
+}
+
+/** BUDGET-LIVE-001 — each platform's mark with its own running/stopped dot. */
+export function LivePlatforms({ platforms, ar }: { platforms: Record<string, boolean> | undefined; ar: boolean }) {
+  const entries = Object.entries(platforms ?? {})
+  if (entries.length === 0) return null
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-1.5" data-testid="live-platforms">
+      {entries.sort((a, b) => Number(b[1]) - Number(a[1])).map(([provider, on]) => (
+        <span key={provider} className={`relative inline-flex ${on ? '' : 'opacity-50 grayscale'}`} title={`${providerLabel(provider, ar ? 'ar' : 'en')} · ${on ? (ar ? 'شغّالة' : 'Running') : (ar ? 'متوقفة' : 'Stopped')}`} data-testid={`live-platform-${provider}`} data-on={on ? 'true' : 'false'}>
+          <ProviderMark provider={provider} size={16} />
+          <span aria-hidden className={`absolute -bottom-0.5 -end-0.5 h-1.5 w-1.5 rounded-full ring-1 ring-[var(--surface)] ${on ? 'bg-success' : 'bg-text-muted'}`} />
+        </span>
+      ))}
+    </span>
   )
 }
 
@@ -150,7 +183,10 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
           aria-hidden
         />
         <span className="flex min-w-0 flex-col leading-tight">
-          <span className="truncate text-sm font-bold text-text-primary">{row.client_name}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            <LiveDot on={row.delivering} ar={ar} testId={`budget-live-${row.project_id}`} />
+            <span className="truncate text-sm font-bold text-text-primary">{row.client_name}</span>
+          </span>
           <span className="flex min-w-0 items-center gap-1.5">
             <span className="truncate text-xs text-text-muted">{row.project_name}</span>
             <ModeBadges row={row} ar={ar} />
@@ -192,7 +228,7 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
         </span>
       </span>
 
-      <span className="col-span-2 min-w-0 lg:col-span-1"><PlatformSplit items={row.by_platform} ar={ar} /></span>
+      <span className="col-span-2 min-w-0 lg:col-span-1"><PlatformSplit items={row.by_platform} ar={ar} /><LivePlatforms platforms={row.delivering_platforms} ar={ar} /></span>
 
       <span className="col-span-2 flex flex-wrap items-center justify-self-start gap-1 lg:col-span-1 lg:justify-self-end">
         <span title={ar ? STATUS_WHY[row.status].ar : STATUS_WHY[row.status].en} data-testid="row-status"><Badge tone={st.tone} className="whitespace-nowrap">{ar ? st.ar : st.en}</Badge></span>
