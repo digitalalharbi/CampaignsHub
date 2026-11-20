@@ -112,8 +112,8 @@ final class AlertFigures
     private static function metricLabel(string $metric, bool $ar): string
     {
         $labels = [
-            'roas' => ['العائد على الإنفاق الآن', 'Return on ad spend now'],
-            'ctr' => ['نسبة النقر الآن', 'Click-through rate now'],
+            'roas' => ['معدل العائد الآن', 'Return on ad spend now'],
+            'ctr' => ['معدل النقر الآن', 'Click-through rate now'],
             'cpa' => ['تكلفة النتيجة الآن', 'Cost per result now'],
             'cpl' => ['تكلفة العميل المحتمل الآن', 'Cost per lead now'],
             'cpc' => ['تكلفة النقرة الآن', 'Cost per click now'],

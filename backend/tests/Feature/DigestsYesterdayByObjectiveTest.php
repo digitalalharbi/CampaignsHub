@@ -603,7 +603,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         [$traffic] = $this->decisionCards('traffic', $roas(800.0), $roas(200.0));
         [$sales] = $this->decisionCards('sales', $roas(800.0), $roas(200.0));
 
-        $this->assertStringNotContainsString('العائد على الإنفاق نزل', strip_tags(html_entity_decode($traffic)));
-        $this->assertStringContainsString('العائد على الإنفاق', strip_tags(html_entity_decode($sales)));
+        $this->assertStringNotContainsString('معدل العائد نزل', strip_tags(html_entity_decode($traffic)));
+        $this->assertStringContainsString('معدل العائد', strip_tags(html_entity_decode($sales)));
     }
 }

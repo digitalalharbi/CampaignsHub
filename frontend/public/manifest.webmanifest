@@ -5,7 +5,7 @@
   "description": "كل حملاتك الإعلانية المدفوعة في مكان واحد.",
   "lang": "ar",
   "dir": "rtl",
-  "start_url": "/agency/home",
+  "start_url": "/agency/dashboard",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

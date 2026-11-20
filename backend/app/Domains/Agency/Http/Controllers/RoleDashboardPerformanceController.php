@@ -25,7 +25,13 @@ final class RoleDashboardPerformanceController extends Controller
         abort_if($user === null, 401);
 
         $days = (int) $request->integer('days', RoleDashboardBuilder::DEFAULT_DAYS);
+        // DASH-DATE-RANGE-001 — an explicit from–to from the shared date picker wins over the days.
+        $builder->withRange($request->string('from')->toString() ?: null, $request->string('to')->toString() ?: null);
 
-        return ApiResponse::success($builder->performanceFor($user, $days), 'Dashboard performance.');
+        // HOME-SCOPE-ISOLATION-001 — the client and project chosen at the top; the builder ignores either outside reach.
+        $client = $request->string('client')->toString() ?: null;
+        $project = $request->string('project')->toString() ?: null;
+
+        return ApiResponse::success($builder->performanceFor($user, $days, $client, $project), 'Dashboard performance.');
     }
 }

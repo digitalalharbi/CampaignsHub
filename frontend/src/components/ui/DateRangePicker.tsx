@@ -30,7 +30,9 @@ import { resolveSelection, type Selection } from '@/lib/period/periodState'
  *
  * The period is Riyadh time and the footer says so. Days after today cannot be picked.
  */
-export function DateRangePicker({ projectId, earliest, budgetHint = false, className = '', testId = 'date-range' }: {
+export function DateRangePicker({ projectId, earliest, budgetHint = false, className = '', testId = 'date-range', opening }: {
+  /** DASH-DATE-RANGE-001 — the period the page opens on when nothing names one (see `usePeriod`). */
+  opening?: PresetKey
   /** The page shows budgets or spend limits: say they are counted on their own period, not on this one. */
   budgetHint?: boolean
   /** When given, the «جاري» / «بيانات غير مكتملة» badges are shown beside the button for this project. */
@@ -42,7 +44,7 @@ export function DateRangePicker({ projectId, earliest, budgetHint = false, class
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const compact = useFitCompact()
-  const state = usePeriod({ earliest })
+  const state = usePeriod({ earliest, opening })
   const { period, comparison, selection, ctx, recent } = state
 
   const [open, setOpen] = useState(false)

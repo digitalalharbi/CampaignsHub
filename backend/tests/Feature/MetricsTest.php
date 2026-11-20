@@ -195,6 +195,31 @@ final class MetricsTest extends TestCase
         $this->assertEquals(0.0, $aware['spend']);
     }
 
+    /** ANALYTICS-READ-CACHE-001 — one person's same read is served again for a minute; another filter or person is not. */
+    public function test_a_metrics_read_is_kept_a_minute_per_person_and_per_address(): void
+    {
+        config(['cache.read_cache' => true]);
+        app(UpsertDailyMetrics::class)->handle([$this->metric($this->projectA->id, 'spend', 300, '2026-06-01', ['provider' => 'meta', 'camp' => 'm1'])]);
+        $url = "/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-01&to=2026-06-02";
+
+        $first = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk();
+        $this->assertNull($first->headers->get('X-Read-Cache'));
+        $this->assertEquals(300.0, $first->json('data.current.spend'));
+
+        app(UpsertDailyMetrics::class)->handle([$this->metric($this->projectA->id, 'spend', 500, '2026-06-01', ['provider' => 'meta', 'camp' => 'm1'])]);
+        $again = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk();
+        $this->assertSame('hit', $again->headers->get('X-Read-Cache'));
+        $this->assertEquals(300.0, $again->json('data.current.spend'), 'the same read within the minute is the kept answer');
+
+        $other = $this->actingAs($this->owner, 'sanctum')->getJson($url.'&provider=meta')->assertOk();
+        $this->assertNull($other->headers->get('X-Read-Cache'), 'another filter is another address');
+        $this->assertEquals(500.0, $other->json('data.current.spend'));
+
+        $this->travel(61)->seconds();
+        $later = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk();
+        $this->assertEquals(500.0, $later->json('data.current.spend'), 'after a minute the read is fresh');
+    }
+
     public function test_platform_filter_scopes_metrics_backend_side(): void
     {
         app(UpsertDailyMetrics::class)->handle([

@@ -21,8 +21,10 @@ export async function buildGeneratedClientReport(
   // strip; open it first, as every other spec that drives the switcher does. The walk below is unchanged.
   await openRail(page, { optional: true })
 
-  const clientSelect = page.getByLabel(/^العميل$|^Client$/)
-  await expect(clientSelect).toBeVisible({ timeout: 20_000 })
+  // CLIENT-SWITCHER-X-001 — the client field opens a list and each client is a button, no longer a <select>.
+  const clientField = page.getByTestId('agency-scope-client')
+  const clientRows = page.locator('[data-testid^="agency-scope-client-client-"]')
+  await expect(clientField).toBeVisible({ timeout: 20_000 })
   const projectSelect = page.getByLabel(/^المشاريع$|^المشروع$|^Project$/)
 
   /*
@@ -33,10 +35,11 @@ export async function buildGeneratedClientReport(
    * and left the project select disabled — which is the switcher behaving correctly and the test
    * assuming otherwise.
    */
-  const clientValues = (await clientSelect.locator('option').evaluateAll((os) =>
-    os.map((o) => (o as HTMLOptionElement).value),
-  )).filter(Boolean)
-  expect(clientValues.length, 'the agency owner can reach no clients').toBeGreaterThan(0)
+  await clientField.click()
+  await clientRows.first().waitFor({ timeout: 20_000 })
+  const clientCount = await clientRows.count()
+  await page.keyboard.press('Escape')
+  expect(clientCount, 'the agency owner can reach no clients').toBeGreaterThan(0)
 
   /*
    * After choosing, the choice is VERIFIED — the switcher is allowed to disagree.
@@ -52,9 +55,9 @@ export async function buildGeneratedClientReport(
    * this client is skipped rather than proceeding into a builder that cannot build.
    */
   let projectId = ''
-  for (const clientValue of clientValues) {
-    await clientSelect.selectOption(clientValue)
-    await expect(clientSelect).toHaveValue(clientValue)
+  for (let clientIndex = 0; clientIndex < clientCount; clientIndex++) {
+    await clientField.click()
+    await clientRows.nth(clientIndex).click()
 
     // The options arrive with the per-client refetch, so read until they do.
     /*

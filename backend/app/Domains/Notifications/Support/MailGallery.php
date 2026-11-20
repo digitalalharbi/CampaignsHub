@@ -270,7 +270,7 @@ final class MailGallery
                 items: [[
                     'severity' => 'warning',
                     'context' => $ar ? 'متجر تجريبي · ميتا · المبيعات' : 'Demo store · Meta · Sales',
-                    'title' => $ar ? 'العائد على الإنفاق تراجع على ميتا' : 'Return on ad spend fell on Meta',
+                    'title' => $ar ? 'معدل العائد تراجع على ميتا' : 'Return on ad spend fell on Meta',
                     'detail' => $ar ? 'كل ريال إعلان يعيد قيمة أقل من الفترة السابقة.' : 'Each unit of ad spend returns less than in the previous period.',
                     'numbers' => $ar ? 'قبل 4.56× ← الآن 3.10× (آخر 7 أيام) · حد التنبيه 25%' : 'Before 4.56× → Now 3.10× (last 7 days) · alert at 25%',
                     'action' => $ar ? 'افتح الأقل أداءً ← جدّده أو أوقفه.' : 'Review the weakest ads and decide to pause or refresh them.',

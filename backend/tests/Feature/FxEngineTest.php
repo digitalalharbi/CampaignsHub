@@ -106,7 +106,7 @@ final class FxEngineTest extends TestCase
 
     /**
      * PROJECT-LIFECYCLE-001 §7 (Owner spec 2026-11-15) supersedes «past its end date → withheld»: an expired manual rate is the
-     * last rate recorded, so it is USED, flagged stale + expired («سعر قديم — بتاريخ …»), never left to withhold the spend.
+     * last rate recorded, so it is USED, flagged stale + expired internally (never worded to a client, Owner 2026-11-19), never left to withhold the spend.
      */
     public function test_a_rate_past_its_end_date_is_used_and_flagged_as_an_old_rate(): void
     {
@@ -121,7 +121,9 @@ final class FxEngineTest extends TestCase
         $this->assertTrue($expired->stale);
         $this->assertTrue($expired->expired);
         $this->assertEqualsWithDelta(112.0, $expired->converted, 0.0001);
-        $this->assertSame('سعر قديم — بتاريخ 2026-11-01', $expired->staleLabel());
+        $this->assertSame('2026-11-01', $expired->rateDate);
+        $this->assertArrayNotHasKey('stale_label', $expired->toArray());
+        $this->assertStringNotContainsString('سعر قديم', json_encode($expired->toArray(), JSON_UNESCAPED_UNICODE));
     }
 
     public function test_a_pegged_rate_applies_to_every_date_and_is_never_stale(): void

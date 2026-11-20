@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\ClientWorkspaces\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Branding\Models\BrandingAsset;
+use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\ClientWorkspaces\Enums\WorkspaceMode;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Resources\ClientWorkspaceResource;
@@ -45,8 +47,19 @@ final class ClientWorkspaceController extends Controller
             'id', // the ceiling names client ids, and here the client IS the row
         );
 
+        $rows = $query->get();
+        /*
+         * CLIENT-SWITCHER-LOGO-001 — Owner 2026-11-20: the switcher shows each client's own logo where one was set (never the
+         * agency's in its place; a client with none reads as its initial). One read for every client in the list.
+         */
+        $withLogo = BrandingAsset::query()->where('scope', 'client')->whereIn('kind', SharedLinkBranding::kinds())
+            ->whereIn('scope_id', $rows->modelKeys())->pluck('scope_id')->map(static fn ($id): string => (string) $id)->flip();
+        foreach ($rows as $row) {
+            $row->setAttribute('logo_url', isset($withLogo[(string) $row->getKey()]) ? "/api/v1/app/clients/{$row->getKey()}/logo/file" : null);
+        }
+
         return ApiResponse::success(
-            ClientWorkspaceResource::collection($query->get()),
+            ClientWorkspaceResource::collection($rows),
             'Client workspaces retrieved.',
         );
     }

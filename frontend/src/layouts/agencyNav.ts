@@ -78,7 +78,7 @@ export const agencyNavGroups: readonly NavGroup[] = [
   {
     key: 'home',
     ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard,
-    leaves: [{ to: '/agency/home', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard }],
+    leaves: [{ to: '/agency/dashboard', ar: 'الرئيسية', en: 'Dashboard', icon: LayoutDashboard }],
   },
   {
     key: 'clients',

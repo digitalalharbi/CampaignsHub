@@ -226,7 +226,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
             { k: 'revenue', label: ar ? 'الإيراد' : 'Revenue', value: revenue === null ? null : money(revenue, cur) },
             { k: 'orders', label: ar ? 'الطلبات' : 'Orders', value: orders === null ? null : compact(orders) },
             { k: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order', value: derived.aov === null ? null : money(derived.aov, cur) },
-            { k: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: derived.roas === null ? null : ratio(derived.roas) },
+            { k: 'roas', label: ar ? 'معدل العائد' : 'ROAS', value: derived.roas === null ? null : ratio(derived.roas) },
           ].map((t) => (
             <StatCard key={t.k} testid={`store-hero-${t.k}`} label={t.label} value={t.value ?? '—'} />
           ))

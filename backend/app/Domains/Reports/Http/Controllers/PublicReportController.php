@@ -42,14 +42,39 @@ final class PublicReportController extends Controller
 {
     public function __construct(private readonly ShareService $shares) {}
 
+    /**
+     * PORTAL-FULL-REPORTS-001 — a signed-in client opening their own report inside the portal has already been verified by the
+     * portal session (the report is in their workspace, visible to them, and its link is active). The portal controller marks the
+     * request with the share it resolved; only then is the link's password not asked again. A request attribute is set by the
+     * server only — nothing a browser sends can set it.
+     */
+    /**
+     * PORTAL-FULL-REPORTS-001 — the link a request reads: the one the portal session already resolved (a link made before
+     * links kept a sealed copy of their token has no token the portal could pass), else the token's own.
+     */
+    private function resolveShare(Request $request, string $token): ?ReportShare
+    {
+        $portal = $request->attributes->get('portal_share');
+        if ($portal instanceof ReportShare) {
+            return $portal->isActive() ? $portal : null;
+        }
+
+        return $this->shares->resolveActive($token);
+    }
+
+    private static function portalVerified(Request $request, ReportShare $share): bool
+    {
+        return $request->attributes->get('portal_share_id') === (string) $share->getKey();
+    }
+
     public function show(Request $request, string $token): JsonResponse
     {
         $this->throttle($request);
-        $share = $this->shares->resolveActive($token);
+        $share = $this->resolveShare($request, $token);
         if (! $share) {
             return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
         }
-        if ($share->password_hash !== null) {
+        if ($share->password_hash !== null && ! self::portalVerified($request, $share)) {
             $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
             if (! Hash::check($provided, $share->password_hash)) {
                 $this->shares->log($share, 'denied', $request, 'bad password');
@@ -252,11 +277,11 @@ final class PublicReportController extends Controller
     public function live(Request $request, string $token, LiveReportService $live): JsonResponse
     {
         $this->throttle($request);
-        $share = $this->shares->resolveActive($token);
+        $share = $this->resolveShare($request, $token);
         if (! $share) {
             return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
         }
-        if ($share->password_hash !== null) {
+        if ($share->password_hash !== null && ! self::portalVerified($request, $share)) {
             $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
             if (! Hash::check($provided, $share->password_hash)) {
                 $this->shares->log($share, 'denied', $request, 'bad password');
@@ -522,12 +547,12 @@ final class PublicReportController extends Controller
     {
         $this->throttle($request);
 
-        $share = $this->shares->resolveActive($token);
+        $share = $this->resolveShare($request, $token);
         if (! $share) {
             return [null, ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404)];
         }
 
-        if ($share->password_hash !== null) {
+        if ($share->password_hash !== null && ! self::portalVerified($request, $share)) {
             $provided = (string) ($request->header('X-Report-Password') ?? $request->query('password', ''));
             if (! Hash::check($provided, $share->password_hash)) {
                 $this->shares->log($share, 'denied', $request, 'bad password');
@@ -648,7 +673,7 @@ final class PublicReportController extends Controller
     public function sharedBranding(Request $request, string $token, SharedLinkBranding $branding): JsonResponse
     {
         $this->throttleBranding($request);
-        $share = $this->shares->resolveActive($token);
+        $share = $this->resolveShare($request, $token);
         if (! $share) {
             return ApiResponse::error('الرابط غير صالح أو انتهت صلاحيته أو أُلغي.', status: 404);
         }
@@ -669,7 +694,7 @@ final class PublicReportController extends Controller
     public function sharedBrandingLogo(Request $request, string $token, SharedLinkBranding $branding, ?string $role = null): mixed
     {
         $this->throttleBranding($request);
-        $share = $this->shares->resolveActive($token);
+        $share = $this->resolveShare($request, $token);
         abort_unless((bool) $share, 404);
 
         $file = $branding->logoFor(Report::withoutGlobalScopes()->find($share->report_id), (string) $share->tenant_id, $role);

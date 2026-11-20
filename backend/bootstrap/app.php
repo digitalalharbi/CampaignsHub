@@ -107,6 +107,7 @@ use App\Domains\Tenancy\Middleware\EnsurePlatformAdmin;
 use App\Domains\Tenancy\Middleware\EnsurePortal;
 use App\Domains\Tenancy\Middleware\ResolveMembership;
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\CacheReadResponse;
 use App\Http\Middleware\CompressJsonResponses;
 use App\Http\Middleware\ConditionalThrottle;
 use App\Http\Middleware\NoStoreApiResponses;
@@ -419,6 +420,8 @@ return Application::configure(basePath: dirname(__DIR__))
             // NOTIF-V2-ENGINE-001 — a notifications plan key (spec §1): reads pass unless off, writes need a usable key.
             'plan.feature' => EnsurePlanFeature::class,
             'throttle' => ConditionalThrottle::class,
+            // ANALYTICS-READ-CACHE-001 — a short per-person cache of a heavy GET read.
+            'read.cache' => CacheReadResponse::class,
         ]);
 
         // Ensure tenant (then project) is resolved BEFORE route-model binding, so the global scopes

@@ -100,7 +100,7 @@ export function ReportPlatformSummary({
   add('impressions', ar ? 'الظهور' : 'Impressions', compact(num('impressions')), { delta: movement.impressions })
   add('reach', ar ? 'الوصول' : 'Reach', compact(num('reach')), { delta: movement.reach })
   add('clicks', ar ? 'النقرات' : 'Clicks', compact(num('clicks')), { delta: movement.clicks })
-  add('ctr', ar ? 'نسبة النقر' : 'CTR', percent(num('ctr'), 2), { delta: movement.ctr })
+  add('ctr', ar ? 'معدل النقر' : 'CTR', percent(num('ctr'), 2), { delta: movement.ctr })
 
   /*
    * Revenue and return ride on the REVENUE reading, not on a reported number.
@@ -115,7 +115,7 @@ export function ReportPlatformSummary({
     if (roas.value !== null) {
       cells.push({
         key: 'roas',
-        label: ar ? 'العائد على الإنفاق' : 'ROAS',
+        label: ar ? 'معدل العائد' : 'ROAS',
         /*
          * Through `ratio()`, because a multiplier is «×» and comes from one function.
          *

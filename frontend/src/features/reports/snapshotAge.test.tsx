@@ -84,4 +84,19 @@ describe('a report states the period its figures cover', () => {
 
     expect(screen.getByTestId('report-snapshot-age')).toHaveTextContent('swipe_28d')
   })
+
+  /** Owner 2026-11-19 — a period with a missing or blank date hides the whole line instead of printing «الفترة –». */
+  it.each([
+    ['an empty from', { from: '', to: '2026-11-18' }],
+    ['an empty to', { from: '2026-10-20', to: '' }],
+    ['both blank', { from: '  ', to: '' }],
+    ['a placeholder', { from: '—', to: '—' }],
+    ['a missing to', { from: '2026-10-20' }],
+  ])('hides the line for %s', (_name, period) => {
+    useUi.setState({ locale: 'ar' })
+    const { container } = render(<InteractiveReport data={{ ...(base as object), mode: 'snapshot', period } as never} meta={meta} />)
+
+    expect(screen.queryByTestId('report-snapshot-age')).not.toBeInTheDocument()
+    expect(container).not.toHaveTextContent('الأرقام خلال الفترة')
+  })
 })

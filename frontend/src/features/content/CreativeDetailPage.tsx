@@ -13,7 +13,9 @@ import { formatBytes, imageLoading } from './format'
 import { absenceLabel, posterSource, readPreview } from './adPreview'
 import { getCreativeInReach, type CreativeMetrics, type FunnelStage } from './api'
 import { ConversionFunnelChart, MetricLineChart } from '@/features/analytics/charts'
-import { DateField } from '@/components/ui/DateField'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
+import { usePeriod } from '@/lib/period/usePeriod'
+import { CreativeVerdict } from './CreativeVerdict'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/campaigns/labels'
@@ -268,10 +270,16 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
   const ar = locale === 'ar'
   const t = COPY[ar ? 'ar' : 'en']
   const { creativeId = '' } = useParams()
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
 
-  const from = params.get('from') ?? ''
-  const to = params.get('to') ?? ''
+  /*
+   * DATE-RANGE-001 on this page too — Owner 2026-11-19: the one period control («هذا الشهر: 1 نوفمبر – 19 نوفمبر 2026»)
+   * replaces the two bare «من / إلى» fields. It writes the same `from` / `to` to the address, so a link still opens the
+   * same window; until it has, the resolved period is read straight from it.
+   */
+  const period = usePeriod()
+  const from = params.get('from') ?? period.range.from
+  const to = params.get('to') ?? period.range.to
   const [grain, setGrain] = useState<'daily' | 'weekly'>('daily')
   const [zoom, setZoom] = useState(1)
   const [fullscreen, setFullscreen] = useState(false)
@@ -285,14 +293,6 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
     queryFn: () => getCreativeInReach(creativeId, { from: from || undefined, to: to || undefined }),
     enabled: creativeId !== '',
   })
-
-  const setWindow = (key: 'from' | 'to', value: string) => {
-    const next = new URLSearchParams(params)
-    if (value === '') next.delete(key)
-    else next.set(key, value)
-    // `replace`, so a reader dragging a date range does not have to press Back once per keystroke.
-    setParams(next, { replace: true })
-  }
 
   const data = detail.data
   const creative = data?.creative
@@ -362,18 +362,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           {t.back}
         </Link>
 
-        <div className="flex flex-wrap items-end gap-3">
-          {/* `DateField`, never a native date input: the browser's own control renders in the OS
-              locale, so a Saudi machine shows a Hijri calendar for the ISO value the API expects. */}
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-text-secondary">{t.from}</span>
-            <DateField aria-label={t.from} value={from} onChange={(v) => setWindow('from', v)} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="font-medium text-text-secondary">{t.to}</span>
-            <DateField aria-label={t.to} value={to} onChange={(v) => setWindow('to', v)} />
-          </label>
-        </div>
+        <DateRangePicker testId="creative-date-range" />
       </div>
 
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -477,7 +466,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <dl className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-text-secondary">
             <Fact k={t.dimensions} v={creative.width !== null && creative.height !== null ? `${creative.width}×${creative.height}` : t.notProvided} ltr />
-            <Fact k={t.ratio} v={creative.aspect_ratio ?? t.notProvided} ltr />
+            <Fact k={t.ratio} v={creative.aspect_ratio ?? aspectOf(creative.width ?? creative.dimensions?.width ?? null, creative.height ?? creative.dimensions?.height ?? null) ?? t.notProvided} ltr />
             <Fact k={t.size} v={formatBytes(creative.file_size) ?? t.notProvided} ltr />
             {/* «Not provided» rather than «0s»: a still image has no duration, and a video whose
                 platform omitted it has none either — neither of them lasts zero seconds. */}
@@ -531,6 +520,9 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         </div>
       </section>
       </div>
+
+      {/* ---- CONTENT-WHY-DETAIL-001: why it worked, why it did not ------------------------------ */}
+      <CreativeVerdict data={data} ar={ar} mediaHref={film ?? still ?? null} />
 
       {/* ---- a carousel is more than one picture (§15) ---------------------------------------- */}
       <CreativeCarousel preview={creative.preview} locale={locale} />
@@ -987,6 +979,16 @@ function MetricBlock({
 }
 
 /** The funnel as numbers, beside the bars — a bar chart alone cannot say «not shown on this link». */
+const PER_THOUSAND = new Set(['impressions', 'video_views', 'reach'])
+
+/** «9:16» from the pixels when the platform named no ratio — the same shape the frame is drawn in. */
+export function aspectOf(w: number | null, h: number | null): string | null {
+  if (!w || !h) return null
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
+  const g = gcd(w, h)
+  return `${w / g}:${h / g}`
+}
+
 function FunnelTable({
   stages,
   ar,
@@ -1018,9 +1020,12 @@ function FunnelTable({
               ? t.costHidden
               : stage.cost_per === null
                 ? t.notProvided
-                : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
+                : PER_THOUSAND.has(stage.key)
+                  /* CONTENT-FUNNEL-COST-001 — a cost per impression or per view is a fraction of a cent and printed «0 $»; it reads per thousand, as CPM does. */
+                  ? `${formatMetric({ kind: 'value', value: stage.cost_per * 1000 }, 'cpm', locale, currency)} ${ar ? 'لكل ألف' : 'per 1,000'}`
+                  : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
           </Num>,
-          <span key="src" className="text-xs text-text-secondary">{stage.source}</span>,
+          <span key="src" className="text-xs text-text-secondary">{stage.source === 'platform_reported' ? (ar ? 'المنصة' : 'Platform') : stage.source}</span>,
         ])}
       />
     </div>

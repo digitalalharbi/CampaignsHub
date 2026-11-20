@@ -41,7 +41,7 @@ import { brand, productName } from '@/lib/brand'
  * of them is gone, and none of them is something you reach for several times an hour on a phone.
  */
 const APP_TABS: MobileTab[] = [
-  { to: '/app/home', ar: 'الرئيسية', en: 'Home', icon: LayoutDashboard },
+  { to: '/app/dashboard', ar: 'الرئيسية', en: 'Dashboard', icon: LayoutDashboard },
   { to: '/app/campaigns', ar: 'الحملات', en: 'Campaigns', icon: Megaphone },
   { to: '/app/analytics', ar: 'التحليلات', en: 'Analytics', icon: BarChart3 },
   { to: '/app/projects', ar: 'المشاريع', en: 'Projects', icon: FolderKanban },

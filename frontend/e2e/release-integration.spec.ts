@@ -14,7 +14,7 @@ const SIZES: Array<[number, number]> = [[360, 740], [390, 844], [430, 932], [768
 
 type Surface = { name: string; path: string; ready: string; auth: string }
 const AGENCY: Surface[] = [
-  { name: 'role dashboard', path: '/agency/home', ready: 'main', auth: AUTH.owner },
+  { name: 'role dashboard', path: '/agency/dashboard', ready: 'main', auth: AUTH.owner },
   { name: 'analytics board + period', path: '/agency/analytics', ready: 'main', auth: AUTH.owner },
   { name: 'budgets', path: '/agency/budgets', ready: 'main', auth: AUTH.owner },
   { name: 'spend limits', path: '/agency/spend-limits', ready: 'main', auth: AUTH.owner },
@@ -108,7 +108,7 @@ test.describe('notification centre and modal layer', () => {
     test(`the bell drawer opens above the shell at ${w}px`, async ({ page }) => {
       await page.setViewportSize({ width: w, height: h })
       const errors = await watch(page)
-      await page.goto('/agency/home')
+      await page.goto('/agency/dashboard')
       await expect(page.locator('main').first()).toBeVisible({ timeout: 30_000 })
       const bell = page.getByRole('button', { name: /^(الإشعارات|Notifications)$/ }).first()
       await expect(bell).toBeVisible()

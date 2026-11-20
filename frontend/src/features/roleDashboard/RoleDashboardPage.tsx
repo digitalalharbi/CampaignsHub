@@ -1,12 +1,14 @@
-import { useState } from 'react'
-import { days as countedDays } from '@/lib/counted'
+import { useMemo, useState } from 'react'
 import { Skeleton } from '@/components/ui/States'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { FinancialDisclaimer } from '@/features/funding/FinancialDisclaimer'
 import { useUi } from '@/stores/ui'
 import { useAgencyClient } from '@/stores/agencyClient'
-import { DASHBOARD_WINDOWS, useRoleDashboard, type DashboardView, type DashboardWindow, type RoleDashboard } from './api'
+import { useProject } from '@/stores/project'
+import { useRoleDashboard, type DashboardView, type RoleDashboard } from './api'
+import { DateRangePicker } from '@/components/ui/DateRangePicker'
+import { usePeriod } from '@/lib/period/usePeriod'
 import { FinanceView } from './FinanceView'
 import { ManagerView } from './ManagerView'
 import { MarketerView } from './MarketerView'
@@ -57,12 +59,17 @@ function Body({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'app' }) {
 export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const [chosen, setChosen] = useState<DashboardView | null>(null)
-  const [days, setDays] = useState<DashboardWindow>(30)
+  const period = usePeriod({ opening: 'this_month', writeUrl: false })
+  const range = useMemo(() => ({ from: period.range.from, to: period.range.to }), [period.range.from, period.range.to])
   // ANALYTICS-POPUP-001 — a card that has an analytics counterpart opens that section here, over Home.
   const [popup, setPopup] = useState<AnalyticsSectionId | null>(null)
   // DASH-CLIENT-FILTER-001 — the client chosen in the watch board (one shared choice) narrows every figure above it too.
   const client = useAgencyClient((s) => s.currentClientId)
-  const q = useRoleDashboard(chosen, days, portal === 'agency' ? client : null)
+  // HOME-SCOPE-ISOLATION-001 — the project chosen at the top narrows Home too (the server ignores one outside the client).
+  const project = useProject((s) => s.currentProjectId)
+  // The project narrows only inside a chosen client: under «كل العملاء» the switcher still auto-picks one, and Home must not shrink to it.
+  const scopedProject = portal === 'agency' && client ? project : null
+  const q = useRoleDashboard(chosen, range, portal === 'agency' ? client : null, scopedProject)
   const { ref } = useFitViewport()
   const d = q.data
 
@@ -73,15 +80,11 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
         testid="role-dashboard-intro"
         title={ar ? HOME.ar : HOME.en}
         actions={<div className="flex flex-wrap items-center gap-2">
-          {/* DASH-PERIOD-001 — the window the performance figures are read over, one tap each. */}
-          <div role="radiogroup" aria-label={ar ? 'الفترة' : 'Period'} data-testid="role-dashboard-window" className="inline-flex rounded-xl border border-border bg-surface-secondary p-0.5">
-            {DASHBOARD_WINDOWS.map((n) => (
-              <button key={n} type="button" role="radio" aria-checked={days === n} data-testid={`role-window-${n}`} onClick={() => setDays(n)}
-                className={`min-h-8 rounded-lg px-2.5 text-xs font-semibold tnum ${days === n ? 'bg-surface text-text-primary shadow-[var(--shadow-small)]' : 'text-text-secondary hover:text-text-primary'}`}>
-                {countedDays(n, ar ? 'ar' : 'en')}
-              </button>
-            ))}
-          </div>
+          {/*
+            DASH-DATE-RANGE-001 — Owner 2026-11-20: the shared date picker, as on every other page — presets (this month, last 7
+            days, since launch…) with the from–to shown, or any range. Home opens on «هذا الشهر».
+          */}
+          <DateRangePicker opening="this_month" testId="role-dashboard-range" />
           {d && d.available_views.length > 1 ? (
           <div role="tablist" aria-label={ar ? 'عرض الدور' : 'Role view'} data-testid="role-dashboard-views" className="inline-flex rounded-xl border border-border bg-surface-secondary p-0.5">
             {d.available_views.map((v) => (
@@ -98,9 +101,14 @@ export function RoleDashboardPage({ portal }: { portal: 'agency' | 'app' }) {
       {q.isLoading && <><Skeleton className="h-20" /><Skeleton className="h-64" /></>}
       {q.isError && <QueryFailure error={q.error} ar={ar} onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّر تحميل الرئيسية' : 'Could not load Home'} />}
       {d && <Body d={d} portal={portal} />}
-      {d?.can_watch === true && <WatchBoard portal={portal} days={days} />}
+      {/*
+        * FINANCE-HOME-SCOPE-001 — Owner 2026-11-19: the finance page shows finance only. The follow-up board is the
+        * campaigns' own performance; it belongs to the manager, project-manager and marketer pages, never to «المالية» —
+        * whoever opens it, including the workspace manager switching to that view.
+        */}
+      {d?.can_watch === true && d.view !== 'finance' && <WatchBoard portal={portal} range={range} />}
       {d?.can_money && <FinancialDisclaimer />}
-      <AnalyticsPopup section={popup} days={days} onClose={() => setPopup(null)} />
+      <AnalyticsPopup section={popup} days={period.days} onClose={() => setPopup(null)} />
     </div>
     </OpenAnalytics.Provider>
   )

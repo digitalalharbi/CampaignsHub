@@ -28,6 +28,9 @@ const ALLOW: ReadonlyArray<string> = [
   // A table's «1–25 / 400» row counter: row numbers, not dates.
   'components/ui/DataTable.tsx:{from}–{to} / {totalRows}',
   'components/ui/FixedPageTable.tsx:{from}–{to} / {shown.length}',
+  // A currency pair («USD→SAR») and a time-zone pair, both drawn from a `.from`/`.to` field that is not a date.
+  'features/analytics/AnalyticsPage.tsx:converted.map((c) => `${c.from}→${c.to}`)',
+  'features/analytics/AnalyticsPage.tsx:shifted.map((t) => `${t.from}→${t.to}`)',
 ]
 
 const isAllowed = (path: string, line: string): boolean =>

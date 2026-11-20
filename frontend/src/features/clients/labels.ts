@@ -42,8 +42,8 @@ export const PRIORITY_LABELS: Map = {
 }
 
 export const ACCESS_ROLE_LABELS: Map = {
-  client_owner: { ar: 'مسؤول العميل', en: 'Client Owner' },
-  media_buyer: { ar: 'مشتري إعلانات', en: 'Media Buyer' },
+  client_owner: { ar: 'مدير حساب العميل', en: 'Account manager' },
+  media_buyer: { ar: 'مسؤول الحملات', en: 'Campaign manager' },
   analyst: { ar: 'محلل', en: 'Analyst' },
   reporter: { ar: 'معدّ تقارير', en: 'Reporter' },
   viewer: { ar: 'مُطّلع', en: 'Viewer' },

@@ -196,7 +196,10 @@ final class LifecycleAggregationCurrencyTest extends TestCase
         $this->assertEqualsWithDelta(2430.00, (float) $p['budgets']['spent'], 0.01);
         foreach ([$p['campaigns']['spend_reading'], $p['budgets']['fx'], $p['summary']['reading']] as $fx) {
             $this->assertNotEmpty($fx['stale']);
-            $this->assertSame('سعر قديم — بتاريخ 2026-11-09', $fx['stale_label']);
+            // Owner 2026-11-19: the old-rate wording is gone from every client-facing payload; the internal flags stay.
+            $this->assertArrayNotHasKey('stale_label', $fx);
+            $this->assertArrayNotHasKey('label', $fx['stale'][0]);
+            $this->assertSame('2026-11-09', $fx['stale'][0]['rate_date']);
             $this->assertTrue($fx['stale'][0]['expired']);
         }
 

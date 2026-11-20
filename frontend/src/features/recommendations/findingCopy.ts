@@ -11,7 +11,7 @@ type Pair = { ar: string; en: string }
 const pick = (p: Pair | undefined, ar: boolean, fallback: string) => (p ? (ar ? p.ar : p.en) : fallback)
 
 const HEADLINES: Record<string, Pair> = {
-  roas_drop: { ar: 'تراجع العائد على الإنفاق', en: 'Return on ad spend fell' },
+  roas_drop: { ar: 'تراجع معدل العائد', en: 'Return on ad spend fell' },
   cpa_increase: { ar: 'ارتفعت تكلفة النتيجة', en: 'Cost per result rose' },
   cpl_increase: { ar: 'ارتفعت تكلفة العميل المحتمل', en: 'Cost per lead rose' },
   no_results: { ar: 'صرف بدون نتائج', en: 'Spend with no results' },
@@ -19,7 +19,7 @@ const HEADLINES: Record<string, Pair> = {
   campaign_over_budget: { ar: 'الحملة تجاوزت ميزانيتها', en: 'Campaign is over its budget' },
   campaign_pace_overrun: { ar: 'الحملة تصرف أسرع من خطتها', en: 'Campaign is spending faster than planned' },
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'An unusual day' },
-  sync_failure: { ar: 'فشلت مزامنة البيانات', en: 'Data sync failed' },
+  sync_failure: { ar: 'فشلت تحديث البيانات', en: 'Data sync failed' },
   sync_outage: { ar: 'انقطاع المزامنة', en: 'Sync outage' },
   sla_warning: { ar: 'تحذير مستوى الخدمة', en: 'Service-level warning' },
   token_expiry: { ar: 'صلاحية الربط تنتهي قريبًا', en: 'Connection authorisation expiring' },

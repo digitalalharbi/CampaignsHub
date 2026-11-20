@@ -919,7 +919,7 @@ function SharedCreativeDetail({
             data-testid="shared-creative-download"
             className="justify-self-start rounded-lg border border-border px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-surface-hover"
           >
-            {ar ? 'حمّل الأصل' : 'Download the asset'}
+            {ar ? 'تحميل الإعلان' : 'Download the ad'}
           </a>
         )}
 

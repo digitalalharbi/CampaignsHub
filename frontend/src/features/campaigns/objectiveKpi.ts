@@ -40,13 +40,13 @@ type L = Record<string, { ar: string; en: string }>
 const KPI_LABELS: L = {
   reach: { ar: 'الوصول', en: 'Reach' }, impressions: { ar: 'الظهور', en: 'Impressions' },
   cpm: { ar: 'تكلفة الألف', en: 'CPM' }, frequency: { ar: 'التكرار', en: 'Frequency' },
-  clicks: { ar: 'النقرات', en: 'Clicks' }, ctr: { ar: 'نسبة النقر', en: 'CTR' },
+  clicks: { ar: 'النقرات', en: 'Clicks' }, ctr: { ar: 'معدل النقر', en: 'CTR' },
   cpc: { ar: 'تكلفة النقرة', en: 'CPC' }, sessions: { ar: 'الجلسات', en: 'Sessions' },
   engagements: { ar: 'التفاعلات', en: 'Engagements' }, eng_rate: { ar: 'معدل التفاعل', en: 'Engagement rate' },
   cpe: { ar: 'تكلفة التفاعل', en: 'CPE' }, leads: { ar: 'العملاء المحتملون', en: 'Leads' },
   cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL' }, conv_rate: { ar: 'معدل التحويل', en: 'Conversion rate' },
   installs: { ar: 'التثبيتات', en: 'Installs' }, cpi: { ar: 'تكلفة التثبيت', en: 'CPI' },
-  install_rate: { ar: 'معدل التثبيت', en: 'Install rate' }, roas: { ar: 'العائد على الإنفاق', en: 'ROAS' },
+  install_rate: { ar: 'معدل التثبيت', en: 'Install rate' }, roas: { ar: 'معدل العائد', en: 'ROAS' },
   cpa: { ar: 'تكلفة الاكتساب', en: 'CPA' }, revenue: { ar: 'الإيرادات', en: 'Revenue' },
   conversions: { ar: 'التحويلات', en: 'Conversions' },
 }

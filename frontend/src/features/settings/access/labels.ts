@@ -1,7 +1,8 @@
 /** ACCESS-CENTER-001 — short labels the access center shares. Same words as the client page (TabPortal). */
 export const PORTAL_ROLE_LABEL: Record<string, { ar: string; en: string }> = {
-  client_viewer: { ar: 'مطّلع', en: 'Viewer' },
-  client_approver: { ar: 'معتمِد', en: 'Approver' },
+  // CLIENT-INVITE-NO-ROLE-001 — no viewer/approver split shown: what a client sees and does is the client page's switches.
+  client_viewer: { ar: 'عميل', en: 'Client' },
+  client_approver: { ar: 'عميل', en: 'Client' },
   client_admin: { ar: 'مسؤول العميل', en: 'Client admin' },
 }
 

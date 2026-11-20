@@ -181,13 +181,13 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // Effective disclaimer/methodology copy for live surfaces (dashboard/analytics/live report).
     Route::get('disclaimer', [DisclaimerController::class, 'resolve'])->name('disclaimer.resolve');
 
-    // C3 metrics aggregation (read-only; requires campaigns.view).
-    Route::get('metrics/summary', [MetricsController::class, 'summary'])->name('metrics.summary');
-    Route::get('metrics/timeseries', [MetricsController::class, 'timeseries'])->name('metrics.timeseries');
-    Route::get('metrics/drivers', [MetricsController::class, 'drivers'])->name('metrics.drivers');
-    Route::get('metrics/platforms', [MetricsController::class, 'platforms'])->name('metrics.platforms');
-    Route::get('metrics/accounts', [MetricsController::class, 'accounts'])->name('metrics.accounts');
-    Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->name('metrics.campaigns');
+    // C3 metrics aggregation (read-only; requires campaigns.view). ANALYTICS-READ-CACHE-001 — each read is kept 60 s per person.
+    Route::get('metrics/summary', [MetricsController::class, 'summary'])->middleware('read.cache:60')->name('metrics.summary');
+    Route::get('metrics/timeseries', [MetricsController::class, 'timeseries'])->middleware('read.cache:60')->name('metrics.timeseries');
+    Route::get('metrics/drivers', [MetricsController::class, 'drivers'])->middleware('read.cache:60')->name('metrics.drivers');
+    Route::get('metrics/platforms', [MetricsController::class, 'platforms'])->middleware('read.cache:60')->name('metrics.platforms');
+    Route::get('metrics/accounts', [MetricsController::class, 'accounts'])->middleware('read.cache:60')->name('metrics.accounts');
+    Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->middleware('read.cache:60')->name('metrics.campaigns');
     /*
      * UX-MULTISELECT-SCALE-001 — the filter's options, searched on the server rather than filled from
      * the full metric breakdown. Declared beside it so the two stay visibly related: one carries
@@ -340,6 +340,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * also calls: site (GA4), store, influencers, attribution. Sales-bearing sections need the store capability.
      */
     Route::get('analytics/binding', [AnalyticsReadController::class, 'binding'])->middleware('project.can:analytics.view')->name('analytics.binding');
+    Route::get('analytics/report-view', [AnalyticsReadController::class, 'reportView'])->middleware('project.can:analytics.view')->name('analytics.report-view');
     Route::get('analytics/site', [AnalyticsReadController::class, 'site'])->middleware('project.can:analytics.view')->name('analytics.site');
     Route::get('analytics/store', [AnalyticsReadController::class, 'store'])->middleware('project.can:analytics.store.view')->name('analytics.store');
     Route::get('analytics/influencers', [AnalyticsReadController::class, 'influencers'])->middleware('project.can:analytics.store.view')->name('analytics.influencers');

@@ -22,7 +22,7 @@ test('the first load sends one bootstrap and none of the seven endpoints it repl
     if (pathname.startsWith('/api/v1/')) calls.push(pathname.slice('/api/v1'.length))
   })
 
-  await page.goto('/agency/home')
+  await page.goto('/agency/dashboard')
   // The page's own heading: the agency dashboard has drawn, signed in, from the bootstrap alone.
   await expect(page.getByRole('main').getByRole('heading', { level: 1 })).toBeVisible({ timeout: 30000 })
   await page.waitForLoadState('networkidle')

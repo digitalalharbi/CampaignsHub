@@ -95,7 +95,7 @@ describe('the content type comparison', () => {
 
   it('never lets a percentage trail a cost label in the page text (the Analytics unit guard)', () => {
     // The e2e guard flattens the page to text and refuses «CPM|CPA|ROAS|تكلفة النتيجة … 12%» within 24 characters.
-    const MONEY_AS_PERCENT = /\b(CPC|CPM|CPA|ROAS|تكلفة النقرة|تكلفة الألف ظهور|تكلفة النتيجة|العائد على الإنفاق)\b[^%\n]{0,24}\d[\d,.]*\s*%/
+    const MONEY_AS_PERCENT = /\b(CPC|CPM|CPA|ROAS|تكلفة النقرة|تكلفة الألف ظهور|تكلفة النتيجة|معدل العائد)\b[^%\n]{0,24}\d[\d,.]*\s*%/
     for (const ar of [true, false]) {
       const { container, unmount } = renderWithProviders(<ContentTypesComparison data={payload([sales(formats)])} ar={ar} />, { locale: ar ? 'ar' : 'en' })
       const text = (container.textContent ?? '')
@@ -162,7 +162,7 @@ describe('the report part — one comparison table (REPORT-FORMAT-COMPARE-TABLE-
       roas: { video: 4.2, image: 2.1, carousel: null },
     },
     better: { impressions: 'higher', clicks: 'higher', add_to_cart: 'higher', purchases: 'higher', revenue: 'higher', roas: 'higher' },
-    labels: { spend: { ar: 'الإنفاق', en: 'Spend' }, impressions: { ar: 'مرات الظهور', en: 'Impressions' }, clicks: { ar: 'النقرات', en: 'Clicks' }, add_to_cart: { ar: 'الإضافة للسلة', en: 'Add to cart' }, purchases: { ar: 'الطلبات', en: 'Purchases' }, revenue: { ar: 'الإيراد', en: 'Revenue' }, roas: { ar: 'العائد على الإنفاق', en: 'ROAS' } },
+    labels: { spend: { ar: 'الإنفاق', en: 'Spend' }, impressions: { ar: 'مرات الظهور', en: 'Impressions' }, clicks: { ar: 'النقرات', en: 'Clicks' }, add_to_cart: { ar: 'الإضافة للسلة', en: 'Add to cart' }, purchases: { ar: 'الطلبات', en: 'Purchases' }, revenue: { ar: 'الإيراد', en: 'Revenue' }, roas: { ar: 'معدل العائد', en: 'ROAS' } },
     kinds: { spend: 'money', impressions: 'count', clicks: 'count', add_to_cart: 'count', purchases: 'count', revenue: 'money', roas: 'multiplier' },
     verdict_order: ['roas', 'purchases', 'revenue', 'cpa'],
     ...over,
@@ -198,7 +198,7 @@ describe('the report part — one comparison table (REPORT-FORMAT-COMPARE-TABLE-
 
   it('states one verdict line on the objective’s lead figure — only with data and a sufficient sample', () => {
     const shown = renderWithProviders(<FormatComparisonSlide data={report(salesTable())} />, { locale: 'ar' })
-    expect(screen.getByTestId('format-table-verdict')).toHaveTextContent('فيديو أعلى العائد على الإنفاق: 4.20× مقابل 2.10×')
+    expect(screen.getByTestId('format-table-verdict')).toHaveTextContent('فيديو أعلى معدل العائد: 4.20× مقابل 2.10×')
     shown.unmount()
 
     const small = salesTable({ formats: [{ format: 'video', creatives: 1, small_sample: true }, { format: 'image', creatives: 5, small_sample: false }] })

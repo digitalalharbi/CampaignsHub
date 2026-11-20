@@ -67,7 +67,7 @@ final class RankingMetric
             // Traffic
             'clicks' => [$up, false, 'النقرات', 'Clicks'],
             'landing_page_views' => [$up, false, 'زيارات الصفحة', 'Landing page views'],
-            'ctr' => [$up, false, 'نسبة النقر', 'CTR'],
+            'ctr' => [$up, false, 'معدل النقر', 'CTR'],
             'cpc' => [$down, true, 'تكلفة النقرة', 'CPC'],
 
             // Engagement
@@ -91,7 +91,7 @@ final class RankingMetric
             'purchases' => [$up, false, 'الطلبات', 'Purchases'],
             'conversions' => [$up, false, 'التحويلات', 'Conversions'],
             'revenue' => [$up, true, 'الإيراد', 'Revenue'],
-            'roas' => [$up, false, 'العائد على الإنفاق', 'ROAS'],
+            'roas' => [$up, false, 'معدل العائد', 'ROAS'],
             'cpa' => [$down, true, 'تكلفة النتيجة', 'CPA'],
             'aov' => [$up, true, 'متوسط قيمة الطلب', 'AOV'],
 

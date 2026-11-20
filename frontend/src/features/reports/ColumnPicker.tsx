@@ -12,7 +12,7 @@ export const PLATFORM_COLUMNS: Array<{ key: string; ar: string; en: string }> = 
   { key: 'cost', ar: 'تكلفة النتيجة', en: 'Cost per result' },
   { key: 'impressions', ar: 'الظهور', en: 'Impressions' },
   { key: 'clicks', ar: 'النقرات', en: 'Clicks' },
-  { key: 'ctr', ar: 'نسبة النقر', en: 'CTR' },
+  { key: 'ctr', ar: 'معدل النقر', en: 'CTR' },
 ]
 
 type ColumnDef = { key: string; ar: string; en: string }

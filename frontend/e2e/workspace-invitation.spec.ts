@@ -36,12 +36,12 @@ test('owner invites a member → invitee accepts → joins the workspace', async
   await join.click()
 
   // 3) Joined the existing workspace → the role home with the personal full menu.
-  await expect(page).toHaveURL(/\/(agency|app)\/home/, { timeout: 10_000 })
+  await expect(page).toHaveURL(/\/(agency|app)\/dashboard/, { timeout: 10_000 })
   await switchToEnglish(page)
   await openRail(page, { optional: true })
   await expect(page.getByRole('link', { name: /Campaigns|الحملات/ }).first()).toBeVisible()
 
   // Persistence across reload.
   await page.reload()
-  await expect(page).toHaveURL(/\/(agency|app)\/home/)
+  await expect(page).toHaveURL(/\/(agency|app)\/dashboard/)
 })

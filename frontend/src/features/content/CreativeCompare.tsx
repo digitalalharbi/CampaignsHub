@@ -8,6 +8,8 @@ import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { objectiveLabel, providerLabel } from '@/features/campaigns/labels'
 import { AdPoster } from './AdPoster'
+import { ObjectiveCompare } from './StandingStrip'
+import type { StandingItem } from './standing'
 
 /**
  * §15.7 — creatives side by side, with a winner per metric and never an overall one.
@@ -52,9 +54,12 @@ const COPY = {
 export function CreativeCompare({
   creativeIds,
   creatives,
+  standing = [],
   window,
   onClose,
 }: {
+  /** CONTENT-CARDS-001 — each selected item's standing, for the shared-objective block; absent until the server answers. */
+  standing?: StandingItem[]
   creativeIds: string[]
   /** The already-loaded cards, so the previews render before the comparison call returns. */
   creatives: CreativeCard[]
@@ -106,6 +111,8 @@ export function CreativeCompare({
           </span>
         </p>
       )}
+
+      <ObjectiveCompare items={standing} names={Object.fromEntries(rows.map((c) => [c.id, c.name]))} ar={ar} />
 
       {rows.length > 0 && (
         <TransposedMetricTable

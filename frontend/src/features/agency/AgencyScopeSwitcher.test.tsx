@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { AgencyScopeSwitcher } from './AgencyScopeSwitcher'
 import { renderWithProviders } from '@/test/utils'
+import { useAgencyClient } from '@/stores/agencyClient'
 
 vi.mock('@/features/projects/api', () => ({
   listClientWorkspaces: vi.fn(),
@@ -28,61 +29,52 @@ function mount(count: number) {
   return renderWithProviders(<AgencyScopeSwitcher />, { route: '/agency/dashboard', locale: 'en' })
 }
 
-const clientSelect = () => screen.getByTestId('agency-scope-client') as HTMLSelectElement
+const trigger = () => screen.getByTestId('agency-scope-client')
+const options = () => screen.queryAllByTestId(/^agency-scope-client-client-/)
 
-describe('AgencyScopeSwitcher — long client lists', () => {
-  beforeEach(() => vi.clearAllMocks())
+describe('AgencyScopeSwitcher — the client picker (CLIENT-SWITCHER-X-001)', () => {
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); useAgencyClient.setState({ currentClientId: null }) })
 
-  /** CLIENT-UNIT-001 — the client list is the one entry point, so it is always searchable once there is a choice. */
-  it('shows the search for any list with a choice in it', async () => {
+  it('opens a searchable list with one name per client and its initial', async () => {
     mount(5)
-    await waitFor(() => expect(clientSelect()).toBeInTheDocument())
+    await waitFor(() => expect(trigger()).toBeInTheDocument())
+    fireEvent.click(trigger())
 
-    expect(screen.getByTestId('agency-scope-client-filter')).toBeInTheDocument()
-    // Five clients plus the placeholder.
-    expect(clientSelect().options).toHaveLength(6)
+    expect(screen.getByTestId('agency-scope-client-search')).toBeInTheDocument()
+    expect(options()).toHaveLength(5)
+    expect(options()[0]).toHaveTextContent('AAcme (Managed)')
   })
 
-  it('filters a long list down to what was typed', async () => {
+  it('filters down to what was typed and says when nothing matches', async () => {
     mount(40)
-    await waitFor(() => expect(clientSelect()).toBeInTheDocument())
+    await waitFor(() => expect(trigger()).toBeInTheDocument())
+    fireEvent.click(trigger())
+    fireEvent.change(screen.getByTestId('agency-scope-client-search'), { target: { value: 'acme' } })
+    expect(options().map((o) => o.textContent)).toEqual(['AAcme (Managed)'])
 
-    expect(clientSelect().options).toHaveLength(41)
-
-    fireEvent.change(screen.getByTestId('agency-scope-client-filter'), { target: { value: 'acme' } })
-
-    expect([...clientSelect().options].map((o) => o.textContent)).toEqual(['Select a client', 'Acme (Managed)'])
+    fireEvent.change(screen.getByTestId('agency-scope-client-search'), { target: { value: 'zzzz' } })
+    expect(screen.getByTestId('agency-scope-client-empty')).toBeInTheDocument()
   })
 
-  /**
-   * A filter that hides everything must say so. Left silent, an empty select is indistinguishable
-   * from «you have no clients» — which is a permissions message, and would send somebody to ask for
-   * access they already hold.
-   */
-  it('says when the filter matches nothing', async () => {
-    mount(40)
-    await waitFor(() => expect(clientSelect()).toBeInTheDocument())
+  it('picks a client, shows it on the field and lists it under «Recent» next time', async () => {
+    mount(5)
+    await waitFor(() => expect(trigger()).toBeInTheDocument())
+    fireEvent.click(trigger())
+    fireEvent.click(screen.getByTestId('agency-scope-client-client-c0'))
 
-    fireEvent.change(screen.getByTestId('agency-scope-client-filter'), { target: { value: 'zzzz' } })
-
-    expect(screen.getByTestId('agency-scope-client-filter-empty')).toBeInTheDocument()
-    expect(clientSelect().options).toHaveLength(1)
+    expect(useAgencyClient.getState().currentClientId).toBe('c0')
+    expect(screen.getByTestId('agency-scope-client-current')).toHaveTextContent('Acme (Managed)')
+    fireEvent.click(trigger())
+    expect(screen.getByTestId('agency-scope-client-recent-c0')).toBeInTheDocument()
   })
 
-  /**
-   * The chosen client survives a filter that excludes it. Dropping it would make the select fall
-   * back to the placeholder — reading as "nothing selected" while every page below is still showing
-   * that client's data.
-   */
-  it('keeps the selected client in the list even when the filter excludes it', async () => {
-    mount(40)
-    await waitFor(() => expect(clientSelect()).toBeInTheDocument())
-
-    fireEvent.change(clientSelect(), { target: { value: 'c0' } })
-    fireEvent.change(screen.getByTestId('agency-scope-client-filter'), { target: { value: 'Filler Client 7' } })
-
-    const values = [...clientSelect().options].map((o) => o.value)
-    expect(values).toContain('c0')
-    expect(clientSelect().value).toBe('c0')
+  it('draws the client logo when the client has one', async () => {
+    vi.mocked(listClientWorkspaces).mockResolvedValue([{ id: 'c0', name: 'Acme', logo_url: '/api/v1/app/clients/c0/logo/file' }, { id: 'c1', name: 'Beta', logo_url: null }] as never)
+    vi.mocked(listProjects).mockResolvedValue([] as never)
+    renderWithProviders(<AgencyScopeSwitcher />, { route: '/agency/dashboard', locale: 'en' })
+    await waitFor(() => expect(trigger()).toBeInTheDocument())
+    fireEvent.click(trigger())
+    expect(screen.getByTestId('agency-scope-client-client-c0').querySelector('img')?.getAttribute('src')).toBe('/api/v1/app/clients/c0/logo/file')
+    expect(screen.getByTestId('agency-scope-client-client-c1').querySelector('img')).toBeNull()
   })
 })

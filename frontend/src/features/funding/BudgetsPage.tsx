@@ -10,7 +10,7 @@ import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { AddBudgetDialog } from './AddBudgetDialog'
-import { BoardHeader, BudgetBoardRow, TotalsStrip } from './BudgetBoard'
+import { BoardHeader, BudgetBoardRow, ClassStrip, TotalsStrip } from './BudgetBoard'
 import { FinancialDisclaimer } from './FinancialDisclaimer'
 import { FxRateBar } from './FxRateBar'
 import { RenewAllButton } from './RenewAllDialog'
@@ -44,7 +44,11 @@ export function BudgetsPage() {
   const inAgency = useLocation().pathname.startsWith('/agency')
   const scopedClient = useAgencyClient((s) => s.currentClientId)
   const { data, isLoading, error, refetch } = useBudgets(showDeleted, inAgency ? scopedClient : null)
-  const rows = data?.rows ?? []
+  const allRows = data?.rows ?? []
+  // BUDGET-LOGIC-001 — one class at a time; a class that no longer has a budget falls back to all.
+  const [cls, setCls] = useState<(typeof allRows)[number]['status'] | null>(null)
+  const filtered = cls === null ? allRows : allRows.filter((r) => r.status === cls)
+  const rows = filtered.length > 0 ? filtered : allRows
   const open = params.get('project')
   const canManage = data?.canManage === true
 
@@ -90,7 +94,7 @@ export function BudgetsPage() {
   const [page, setPage] = useState(1)
   const pages = Math.max(1, Math.ceil(rows.length / perPage))
   const current = Math.min(page, pages)
-  useEffect(() => { setPage(1) }, [showDeleted])
+  useEffect(() => { setPage(1) }, [showDeleted, cls])
   const shown = rows.slice((current - 1) * perPage, current * perPage)
 
   return (
@@ -124,6 +128,7 @@ export function BudgetsPage() {
         <EmptyState title={tx(L.empty)} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-1">
+          <ClassStrip rows={allRows} value={cls} onChange={setCls} ar={ar} />
           <BoardHeader ar={ar} />
           <div ref={fit.ref as never} className="min-h-0 flex-1">
             <ul className="flex min-w-0 flex-col gap-0.5" data-testid="budgets-list">

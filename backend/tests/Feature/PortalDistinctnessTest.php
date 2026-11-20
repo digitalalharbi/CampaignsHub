@@ -99,7 +99,7 @@ final class PortalDistinctnessTest extends TestCase
         $user = $this->member($tenant, 'adv@a.test', Portal::App);
 
         $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/memberships')
-            ->assertOk()->assertJsonPath('data.destination', '/app/home');
+            ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
 
         foreach (self::OWNED['agency'] as $endpoint) {
             $this->actingAs($user, 'sanctum')->getJson($endpoint)
@@ -118,7 +118,7 @@ final class PortalDistinctnessTest extends TestCase
         $user = $this->member($tenant, 'agy@a.test', Portal::Agency);
 
         $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/memberships')
-            ->assertOk()->assertJsonPath('data.destination', '/agency/home');
+            ->assertOk()->assertJsonPath('data.destination', '/agency/dashboard');
 
         foreach (self::OWNED['agency'] as $endpoint) {
             $this->actingAs($user, 'sanctum')->getJson($endpoint)->assertOk();
@@ -163,7 +163,7 @@ final class PortalDistinctnessTest extends TestCase
         $user = $this->member($tenant, 'pref@a.test', Portal::App);
 
         $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/memberships?portal=agency')
-            ->assertOk()->assertJsonPath('data.destination', '/app/home');
+            ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
     }
 
     /**
@@ -230,7 +230,7 @@ final class PortalDistinctnessTest extends TestCase
 
         // …and the refusal did not quietly move them anyway.
         $this->actingAs($me, 'sanctum')->getJson('/api/v1/auth/memberships')
-            ->assertOk()->assertJsonPath('data.destination', '/app/home');
+            ->assertOk()->assertJsonPath('data.destination', '/app/dashboard');
     }
 
     /**

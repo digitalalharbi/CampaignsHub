@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Notifications\Mail\ScheduledReportMail;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\TransactionalMailer;
@@ -120,6 +121,14 @@ final class ScheduledReportMailer
 
                 return;
             }
+        }
+
+        // DELIVERY-QUIET-001 — a report over a period in which the project neither spent nor showed one impression is not sent.
+        if ($report->project_id !== null && $report->period_start !== null
+            && app(DeliveryState::class)->watched([(string) $report->project_id], $report->period_start->toDateString(), $report->period_end?->toDateString()) === []) {
+            $this->mark($rows, 'suppressed', 'no_delivery');
+
+            return;
         }
 
         $key = 'report-mail:'.$report->id.':'.substr(hash('sha256', $email), 0, 16);

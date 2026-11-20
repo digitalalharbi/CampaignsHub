@@ -1,9 +1,9 @@
-import { ProviderMark, ProviderName } from '@/components/ProviderMark'
+import { ProviderMark } from '@/components/ProviderMark'
 import { useMemo, useState } from 'react'
 import { CheckCircle2, CircleDashed, Clock, Lightbulb, Sparkles, TrendingUp, Trophy } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { KpiCard, TrendPill, platformColor } from '@/features/analytics/components'
-import { ChartCard, ConversionFunnelChart, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
+import { ChartCard, ConversionFunnelChart, hasFunnel, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
 import { moneyExact, num } from '@/features/analytics/format'
 import { canonicalPlatform, isAdPlatform } from '@/lib/platforms'
 import { Num } from '@/components/ui/Num'
@@ -15,10 +15,19 @@ import { attentionAction, attentionHeadline, type AttentionItem } from '../atten
 import { ContentTile } from './LiveContent'
 import { liveSpark } from './liveSpark'
 import { ComparisonWithheld, kpiKeysFor, visibleKpiKeys } from './LiveKpis'
-import { cardHasFigure, metricLabel, type useLiveMetricReader } from './liveMetrics'
-import { landingLabel, NATIVE_LEADS_LABEL, nativeLeads, resultWords, revenueReported } from './leadResults'
+import { cardHasFigure, metricLabel } from './liveMetrics'
+import { landingLabel, NATIVE_LEADS_LABEL, nativeLeads, revenueReported } from './leadResults'
+import { basisLine, contentLists } from '@/features/reportLogic/content'
+import { funnelStages } from '@/features/reportLogic/funnel'
+import { platformCards, platformRows, resultsSplit, splitTitle } from '@/features/reportLogic/platforms'
+import { count, headlineKeys, metricName, resultBoardKeys, resultSource, shownPlatform, SPEND_DERIVED, type Reader, type ResultSource } from '@/features/reportLogic/results'
+import { rightAxisFor, toggleTrend, trendOptions } from '@/features/reportLogic/trend'
+import { PlatformCardsView } from '@/features/reportLogic/PlatformCardsView'
 
-type Reader = ReturnType<typeof useLiveMetricReader>
+/* REPORT-LOGIC-001 — the result logic lives in `features/reportLogic`; the old names are re-exported below. */
+export { headlineKeys, resultSource, splitTitle, basisLine }
+export type { ResultSource }
+
 
 /**
  * REPORT-EXECUTIVE-SUMMARY-001 / CLIENT-REPORT-FRAMING-001 — the summary a client's live link opens on.
@@ -37,65 +46,6 @@ type Reader = ReturnType<typeof useLiveMetricReader>
  * A movement against the objective is still stated — its true size and direction — in the neutral
  * tone (`calm`), not as an alarm. Picking a platform narrows the content blocks to it.
  */
-
-/** The result an objective is judged on, in the order the reader's keys may name them. */
-const RESULT_KEYS = ['purchases', 'conversions', 'leads', 'installs', 'landing_page_views', 'engagements', 'clicks', 'reach', 'impressions']
-/** Each result's cost, as the totals carry it — kept for the callers that still read it; never drawn here. */
-const COST_FOR: Record<string, string> = {
-  purchases: 'cpa', conversions: 'cpa', leads: 'cpl', installs: 'cpi', landing_page_views: 'cost_per_lpv',
-  engagements: 'cpe', clicks: 'cpc', reach: 'cpm', impressions: 'cpm',
-}
-/** The results board, after the headline result: outcomes first, then the reach that led to them. */
-const BOARD_KEYS = ['revenue', 'purchases', 'leads', 'installs', 'landing_page_views', 'engagements', 'reach', 'impressions', 'clicks', 'ctr', 'conversion_rate']
-/** Spend and every figure derived from it — never on the client's summary. */
-const SPEND_DERIVED = new Set(['spend', 'roas', 'cpa', 'cpm', 'cpc', 'cpl', 'cpi', 'cpe', 'cost_per_lpv', 'budget', 'profit', 'mer', 'blended_roas'])
-
-export function headlineKeys(payload: LivePayload, reader: Reader): { result: string; cost: string } {
-  // NASEL 2026-10-29 — a link without Results never heads its summary with the platform's generic conversion.
-  const keys = reader.keys(payload).filter((k) => k !== 'conversions' || payload.results?.configured === true)
-  const totals = payload.totals ?? {}
-  // The objective's own result first, in RESULT_KEYS' priority — a reach figure never outranks an order.
-  const result = RESULT_KEYS.find((k) => keys.includes(k) && totals[k] !== null && totals[k] !== undefined && Number(totals[k]) > 0)
-    ?? RESULT_KEYS.find((k) => keys.includes(k) && totals[k] !== null && totals[k] !== undefined)
-    ?? 'clicks'
-
-  return { result, cost: COST_FOR[result] ?? 'cpa' }
-}
-
-/** The board's keys: the headline result, then every result figure the period actually carries. */
-function resultBoardKeys(payload: LivePayload, reader: Reader, result: string): string[] {
-  const t = payload.totals ?? {}
-  // «Results» and «Purchases» are one figure on a sales objective; the same count is not shown twice.
-  const sameAsResult = (k: string) => (k === 'purchases' || k === 'conversions') && (result === 'purchases' || result === 'conversions') && Number(t[k]) === Number(t[result])
-  const carried = BOARD_KEYS.filter((k) => k !== result && !sameAsResult(k) && reader.meta[k] && !SPEND_DERIVED.has(k) && t[k] !== null && t[k] !== undefined && Number(t[k]) > 0)
-
-  return [result, ...carried].slice(0, 8)
-}
-
-/**
- * NASEL 2026-10-29 — what the platforms summary, the split and the comparison count, read ONCE. Where verified leads are configured it is the
- * server's native lead-form figure (`results.leads`), per platform and in total, so the cards add up to the total below and a landing-page
- * completion never lands in a platform card. Otherwise the objective's own result, as before.
- */
-export type ResultSource = { key: string; name: string; of: (p: Record<string, unknown>) => number | null; total: number | null }
-
-export function resultSource(payload: LivePayload, reader: Reader, result: string, ar: boolean): ResultSource {
-  const native = nativeLeads(payload)
-  if (native) {
-    return { key: 'form_leads', name: ar ? NATIVE_LEADS_LABEL.ar : NATIVE_LEADS_LABEL.en, of: (p) => native.of(String(p.provider ?? '')), total: native.total }
-  }
-
-  // RESULT-EVENTS-001 — Results defined on an event: the resolver's per-platform results under the link's own name.
-  if (payload.results?.configured === true) {
-    const words = resultWords(payload, ar)
-    return { key: 'results', name: words.result, of: (p) => payload.results?.by_platform?.[canonicalPlatform(String(p.provider ?? ''))]?.results ?? null, total: payload.results.total ?? null }
-  }
-
-  return { key: result, name: metricName(reader, result, ar, payload), of: (p) => count(p[result]), total: count(payload.totals?.[result]) }
-}
-
-const metricName = (reader: Reader, key: string, ar: boolean, payload?: LivePayload) => (reader.meta[key] ? metricLabel(reader.meta[key], key, payload, ar) : key)
-const count = (v: unknown) => (v === null || v === undefined ? null : Number(v))
 
 function Panel({ title, testid, children, className = '', action }: { title: string; testid: string; children: React.ReactNode; className?: string; action?: React.ReactNode }) {
   return (
@@ -184,75 +134,9 @@ export function ExecutiveSummary({
 
 /* ─────────────────────────────── Platforms summary ─────────────────────────────── */
 
-const shownPlatform = (p: Record<string, unknown>, source: ResultSource) => Number(p.impressions ?? 0) > 0 || Number(p.clicks ?? 0) > 0 || Number(source.of(p) ?? 0) > 0
-
 function PlatformCards({ payload, ar, source, selected, onSelect }: { payload: LivePayload; ar: boolean; source: ResultSource; selected: string | null; onSelect: (p: string | null) => void }) {
-  const rows = (payload.platforms ?? []).filter((p) => shownPlatform(p, source))
-  if (rows.length === 0) return null
-  const total = rows.reduce((s, p) => s + Number(source.of(p) ?? 0), 0)
-  const resultName = source.name
-  const ctr = (p: Record<string, unknown>) => (p.ctr === null || p.ctr === undefined ? null : `${(Number(p.ctr) * 100).toFixed(2)}%`)
-  const card = (key: string | null, title: string, value: number | null, impressions: number | null, rate: string | null, share: number | null, color: string) => {
-    const on = selected === key
-
-    return (
-      <button
-        key={key ?? 'all'}
-        type="button"
-        role="tab"
-        aria-selected={on}
-        data-testid={`exec-platform-card-${key ?? 'all'}`}
-        onClick={() => onSelect(key === null || on ? null : key)}
-        // A flex column: a button centres shorter content vertically, which pushed a card's colour bar down from its top edge.
-        className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-surface text-start transition-colors ${on ? 'border-brand-500 ring-2 ring-brand-500/30' : 'border-border hover:border-brand-400'}`}
-      >
-        <span className="block h-1 w-full shrink-0" data-testid="exec-platform-card-bar" style={{ background: color }} aria-hidden />
-        <span className="flex w-full flex-1 flex-col gap-0.5 p-2.5">
-          {/* The platform's logo and name (Owner, 2026-10-19); «all platforms» is a word, not a platform. */}
-          <span className="flex min-w-0 text-xs font-bold text-text-primary">
-            {key === null ? <span className="truncate">{title}</span> : <ProviderName provider={key} locale={ar ? 'ar' : 'en'} size={16} />}
-          </span>
-          <span className="tnum truncate text-lg font-extrabold leading-tight text-text-primary"><Num>{num(value)}</Num></span>
-          <span className="truncate text-[11px] font-semibold text-text-muted">{resultName}</span>
-          <span className="tnum mt-0.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-text-secondary">
-            {impressions !== null && <span>{ar ? 'الظهور' : 'Impr.'} <Num>{num(impressions)}</Num></span>}
-            {rate !== null && <span>{ar ? 'نسبة النقر' : 'CTR'} <Num>{rate}</Num></span>}
-          </span>
-          {share !== null && (
-            <span className="mt-auto block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-label={ar ? `الحصة من ${resultName}` : `Share of ${resultName}`}>
-              <span className="block h-full rounded-full" style={{ width: `${Math.round(share * 100)}%`, background: color }} />
-            </span>
-          )}
-        </span>
-      </button>
-    )
-  }
-
-  /*
-   * REPORT-COMPOSITION-CONTROL-001 — the cards fill the row. A fixed six-column grid left four cards
-   * in a narrow cluster with two empty slots beside them; the row now has exactly as many columns as
-   * cards (up to six), so the summary is as wide as the report under it.
-   */
-  const cards = rows.length + (rows.length > 1 ? 1 : 0)
-
-  return (
-    <section data-testid="exec-platform-cards" aria-label={ar ? 'ملخص المنصات' : 'Platforms summary'} className="flex flex-col gap-2">
-      <h2 className="text-base font-extrabold text-text-primary">{ar ? 'ملخص المنصات' : 'Platforms summary'}</h2>
-      <div
-        role="tablist"
-        data-cards={cards}
-        // REPORT-COMPACT-001 — Owner 2026-11-17: one compact row of platforms from a laptop width up, three on a tablet, two on a phone.
-        className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-[repeat(var(--cards),minmax(0,1fr))]"
-        style={{ '--cards': Math.min(cards, 6) } as React.CSSProperties}
-      >
-        {rows.length > 1 && card(null, ar ? 'كل المنصات' : 'All platforms', source.total, count(payload.totals?.impressions), ctr(payload.totals ?? {}), total > 0 ? 1 : null, 'var(--brand-600)')}
-        {rows.map((p) => {
-          const key = canonicalPlatform(p.provider)
-          return card(key, providerLabel(key, ar ? 'ar' : 'en'), source.of(p), count(p.impressions), ctr(p), total > 0 ? Number(source.of(p) ?? 0) / total : null, platformColor(key))
-        })}
-      </div>
-    </section>
-  )
+  // REPORT-LOGIC-001 — the cards are the shared layer's model and the shared layer's view.
+  return <PlatformCardsView models={platformCards(payload, source, ar)} resultName={source.name} ar={ar} selected={selected} onSelect={onSelect} />
 }
 
 /* ─────────────────────────────── Results board ─────────────────────────────── */
@@ -323,17 +207,10 @@ function ResultsBoard({ payload, reader, ar, result }: { payload: LivePayload; r
 /* ─────────────────────────────── Trend ─────────────────────────────── */
 
 function TrendPanel({ payload, reader, ar, currency, source, wide }: { payload: LivePayload; reader: Reader; ar: boolean; currency: string; source: ResultSource; wide: boolean }) {
-  const result = source.key
-  // The defined Results have no daily figure of their own (only native submissions do): the trend then draws delivery, not an empty line.
-  const options = [
-    ...(result === 'results' ? [] : [{ key: result, name: source.key === 'form_leads' ? source.name : metricName(reader, result, ar, payload), color: 'var(--purple)', kind: 'num' as const }]),
-    ...(result !== 'clicks' ? [{ key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' as const }] : []),
-    ...(result !== 'impressions' ? [{ key: 'impressions', name: ar ? 'الظهور' : 'Impressions', color: 'var(--brand-600)', kind: 'num' as const }] : []),
-  ]
+  const options = trendOptions(payload, reader, source, ar)
   const [on, setOn] = useState<string[]>(options.slice(0, 2).map((o) => o.key))
   const series = options.filter((o) => on.includes(o.key))
-  // The larger-scale series takes the second axis, so a few hundred results are not flattened under thousands of clicks.
-  const rightAxisFor = series.length > 1 ? (on.includes('impressions') ? 'impressions' : on.includes('clicks') ? 'clicks' : undefined) : undefined
+  const rightAxis = rightAxisFor(series.length > 1 ? on : [])
 
   return (
     <div className={wide ? 'lg:col-span-12' : 'lg:col-span-8'}>
@@ -345,7 +222,7 @@ function TrendPanel({ payload, reader, ar, currency, source, wide }: { payload: 
               type="button"
               aria-pressed={on.includes(o.key)}
               data-testid={`exec-trend-${o.key}`}
-              onClick={() => setOn((cur) => (cur.includes(o.key) ? (cur.length > 1 ? cur.filter((k) => k !== o.key) : cur) : [...cur, o.key]))}
+              onClick={() => setOn((cur) => toggleTrend(cur, o.key))}
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${on.includes(o.key) ? 'border-brand-500 bg-brand-500/10 text-text-primary' : 'border-border text-text-muted'}`}
             >
               <span className="h-2 w-2 rounded-full" style={{ background: o.color }} />
@@ -354,7 +231,7 @@ function TrendPanel({ payload, reader, ar, currency, source, wide }: { payload: 
           ))}
         </div>
         <div data-testid="exec-trend">
-          <MetricLineChart data={payload.timeseries ?? []} currency={currency} height={230} rightAxisFor={rightAxisFor} series={series} />
+          <MetricLineChart data={payload.timeseries ?? []} currency={currency} height={230} rightAxisFor={rightAxis} series={series} />
         </div>
       </ChartCard>
     </div>
@@ -363,16 +240,8 @@ function TrendPanel({ payload, reader, ar, currency, source, wide }: { payload: 
 
 /* ─────────────────────────────── Results split ─────────────────────────────── */
 
-/** Plain panel title: «مصادر الزيارات» for clicks, «مصادر <النتيجة>» for any other result. */
-export const splitTitle = (isClicks: boolean, resultName: string, ar: boolean) =>
-  isClicks ? (ar ? 'مصادر الزيارات' : 'Traffic sources') : ar ? `مصادر ${resultName}` : `Sources of ${resultName.toLowerCase()}`
-
 function ResultsSplit({ payload, ar, source, wide, selected, onSelect }: { payload: LivePayload; ar: boolean; source: ResultSource; wide: boolean; selected: string | null; onSelect: (p: string | null) => void }) {
-  const rows = (payload.platforms ?? []).flatMap((p) => {
-    const value = Number(source.of(p) ?? 0)
-    return value > 0 ? [{ key: canonicalPlatform(p.provider), name: providerLabel(canonicalPlatform(p.provider), ar ? 'ar' : 'en'), value }] : []
-  })
-  const total = rows.reduce((s, r) => s + r.value, 0)
+  const { rows, total } = resultsSplit(payload, source, ar)
   const resultName = source.name
 
   return (
@@ -385,7 +254,7 @@ function ResultsSplit({ payload, ar, source, wide, selected, onSelect }: { paylo
         <div className="grid grid-cols-1 items-center gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
           <PlatformDonutChart data={rows.map((r) => ({ name: r.name, value: r.value, key: r.key }))} height={170} legend={false} centerValue={num(total)} centerLabel={resultName} />
           <ul className="flex flex-col gap-1.5">
-            {[...rows].sort((a, b) => b.value - a.value).map((r) => (
+            {rows.map((r) => (
               <li key={r.key}>
                 <button
                   type="button"
@@ -399,7 +268,7 @@ function ResultsSplit({ payload, ar, source, wide, selected, onSelect }: { paylo
                     <ProviderMark provider={r.key} size={16} />
                     <span className="truncate">{r.name}</span>
                   </span>
-                  <span className="tnum font-bold text-text-primary"><Num>{`${Math.round((r.value / total) * 100)}%`}</Num></span>
+                  <span className="tnum font-bold text-text-primary"><Num>{`${Math.round(r.share * 100)}%`}</Num></span>
                 </button>
               </li>
             ))}
@@ -416,10 +285,10 @@ function PlatformComparison({
   payload, reader, ar, source, selected, onSelect, wide,
 }: { payload: LivePayload; reader: Reader; ar: boolean; source: ResultSource; selected: string | null; onSelect: (p: string | null) => void; wide: boolean }) {
   const result = source.key
+  const model = platformRows(payload, source, ar)
   const rows = (payload.platforms ?? []).filter((p) => shownPlatform(p, source))
   const extra = (['impressions', 'clicks'] as const).filter((k) => k !== result)
-  const maxResult = Math.max(0, ...rows.map((p) => Number(source.of(p) ?? 0)))
-  const ctrText = (p: Record<string, unknown>) => (p.ctr === null || p.ctr === undefined ? '—' : `${(Number(p.ctr) * 100).toFixed(2)}%`)
+  const ctrText = (v: number | null) => (v === null ? '—' : `${(v * 100).toFixed(2)}%`)
   // REPORT-FILTERS-FUNCTIONAL-001 — no CTR column where the rows carry no CTR (not chosen): a column of dashes says a figure is withheld.
   const ctrShown = rows.length === 0 || rows.some((p) => 'ctr' in p)
 
@@ -440,11 +309,9 @@ function PlatformComparison({
         <div className="min-w-0 text-xs" data-testid="exec-platform-table">
           <MetricTable
           pageSize={8}
-            head={[ar ? 'المنصة' : 'Platform', source.name, ...extra.map((k) => metricName(reader, k, ar, payload)), ...(ctrShown ? [ar ? 'نسبة النقر' : 'CTR'] : [])]}
-            rows={rows.map((p) => {
-              const key = canonicalPlatform(p.provider)
-              const value = source.of(p)
-              const mov = (p as { movement?: Record<string, number | null> }).movement?.[result]
+            head={[ar ? 'المنصة' : 'Platform', source.name, ...extra.map((k) => metricName(reader, k, ar, payload)), ...(ctrShown ? [ar ? 'معدل النقر' : 'CTR'] : [])]}
+            rows={model.map((m) => {
+              const key = m.key
 
               return [
                 <button
@@ -457,24 +324,24 @@ function PlatformComparison({
                 >
                   {/* REPORT-PLATFORM-ICONS-001 — the one provider mark every table uses, in place of a bare colour dot. */}
                   <ProviderMark provider={key} size={16} />
-                  {providerLabel(key, ar ? 'ar' : 'en')}
+                  {m.name}
                 </button>,
                 <span key="r" className="inline-flex items-center gap-2">
                   <span className="h-1.5 w-14 overflow-hidden rounded-full bg-surface-secondary">
-                    <span className="block h-full rounded-full" style={{ width: `${value === null || maxResult <= 0 ? 0 : Math.round((value / maxResult) * 100)}%`, background: platformColor(key) }} />
+                    <span className="block h-full rounded-full" style={{ width: `${Math.round(m.bar * 100)}%`, background: platformColor(key) }} />
                   </span>
-                  <span className="font-semibold text-text-primary"><Num>{num(value)}</Num></span>
-                  {mov !== undefined && mov !== null && <TrendPill delta={mov} calm />}
+                  <span className="font-semibold text-text-primary"><Num>{num(m.result)}</Num></span>
+                  {m.movement !== null && <TrendPill delta={m.movement} calm />}
                 </span>,
-                ...extra.map((k) => <span key={k} className="text-text-primary"><Num>{num(count(p[k]))}</Num></span>),
-                ...(ctrShown ? [<span key="ctr" className="text-text-secondary"><Num>{ctrText(p)}</Num></span>] : []),
+                ...extra.map((k) => <span key={k} className="text-text-primary"><Num>{num(m[k])}</Num></span>),
+                ...(ctrShown ? [<span key="ctr" className="text-text-secondary"><Num>{ctrText(m.ctr)}</Num></span>] : []),
               ]
             })}
-            values={rows.map((p): SortValues => [
-              providerLabel(canonicalPlatform(p.provider), ar ? 'ar' : 'en'),
-              source.of(p),
-              ...extra.map((k) => count(p[k])),
-              ...(ctrShown ? [count(p.ctr)] : []),
+            values={model.map((m): SortValues => [
+              m.name,
+              m.result,
+              ...extra.map((k) => m[k]),
+              ...(ctrShown ? [m.ctr] : []),
             ])}
             initialSort={{ column: 1, dir: 'desc' }}
           />
@@ -566,7 +433,8 @@ function LeadSummary({ payload, reader, ar, currency }: { payload: LivePayload; 
 
 function FunnelPanel({ payload, ar, narrow = false, wide = false }: { payload: LivePayload; ar: boolean; narrow?: boolean; wide?: boolean }) {
   // The stages without their cost: the client's funnel shows how far people went, not what each step cost.
-  const stages = (payload.funnel ?? []).filter((s) => s.reported).map((s) => ({ ...s, cost_per: null }))
+  const stages = funnelStages(payload)
+  if (!hasFunnel(stages)) return null
 
   return (
     /*
@@ -583,38 +451,11 @@ function FunnelPanel({ payload, ar, narrow = false, wide = false }: { payload: L
 
 /* ─────────────────────────────── Content ─────────────────────────────── */
 
-/**
- * «مرتّبة على أداء المبيعات» — which objective the headline order rests on, when the scope mixed several.
- *
- * CLIENT-REPORT-FRAMING-001: the client's summary names no money metric, so the line names the FAMILY
- * (sales, traffic, awareness…) and not the ROAS or cost the server ranked on. A single-objective scope
- * needs no line: the order is the report's own objective.
- */
-export function basisLine(basis: LivePayload['ads_basis'], ar: boolean): string | null {
-  // The objective's result was not reported: say that, plainly, instead of naming a family the order does not rest on.
-  if (basis?.fallback && basis.metric) {
-    const note = ar ? basis.note_ar : basis.note_en
-    if (note) return note
-  }
-  if (!basis || !basis.metric || !basis.family) return null
-  const family = (ar ? basis.family_label_ar : basis.family_label_en) ?? basis.family
-  return ar ? `مرتّبة على أداء ${family}` : `Ranked by ${family.toLowerCase()} performance`
-}
-
 function ContentBlock({ kind, half = false, payload, locale, currency, platform, onClear, onOpen }: {
   kind: 'best' | 'improve'; half?: boolean; payload: LivePayload; locale: Locale; currency: string; platform: string | null; onClear: () => void; onOpen: (c: ReportAd) => void
 }) {
   const ar = locale === 'ar'
-  const all = useMemo(() => (kind === 'best' ? payload.ads : payload.ads_weakest) ?? [], [kind, payload])
-  // A creative already among the best is not also listed as one to improve.
-  const best = useMemo(() => new Set((payload.ads ?? []).slice(0, 4).map((a) => a.content_key).filter(Boolean)), [payload])
-  const items = useMemo(
-    () => all
-      .filter((a) => kind === 'best' || !best.has(a.content_key))
-      .filter((a) => platform === null || (a.provider && canonicalPlatform(a.provider) === platform))
-      .slice(0, 4),
-    [all, best, kind, platform],
-  )
+  const items = useMemo(() => contentLists(payload, kind, platform), [payload, kind, platform])
   const title = kind === 'best' ? (ar ? 'أفضل المحتوى أداءً' : 'Best performing content') : (ar ? 'محتوى بفرصة للتحسين' : 'Content with room to improve')
   const Icon = kind === 'best' ? Trophy : Sparkles
 

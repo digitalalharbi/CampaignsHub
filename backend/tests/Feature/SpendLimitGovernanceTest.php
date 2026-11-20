@@ -371,7 +371,8 @@ final class SpendLimitGovernanceTest extends TestCase
      */
     public function test_a_crossed_threshold_is_announced_once_and_recorded_with_its_figures(): void
     {
-        $this->spend(8_500, '2026-08-05');
+        // DELIVERY-QUIET-001 — the crossing is judged while the project is still spending (within 3 days of the sweep).
+        $this->spend(8_500, '2026-08-14');
         $limit = $this->limit(10_000, thresholds: [80]);
 
         $rule = AlertRule::create([

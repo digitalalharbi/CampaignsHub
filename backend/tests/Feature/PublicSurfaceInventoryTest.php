@@ -54,6 +54,8 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/client/quotes',
         'GET api/v1/client/quotes/{quote}',
         'GET api/v1/client/reports',
+        // PORTAL-FULL-REPORTS-001 — the client's own report, whole; the portal session is checked in the controller like every /client route.
+        'GET api/v1/client/reports/{report}/view/{path?}',
         'GET api/v1/client/requests',
         'GET api/v1/client/requests/{reference}',
         'GET api/v1/client/requests/{reference}/files/{file}',

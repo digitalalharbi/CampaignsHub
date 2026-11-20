@@ -51,7 +51,7 @@ export function DeliveryOverviewPage() {
   return (
     <AgencyFit className="space-y-5" testid="delivery-fit">
       <PageIntro
-        title={ar ? 'الجدولة الدورية والفوترة' : 'Periodic delivery & billing'}
+        title={ar ? 'الجدولة' : 'Delivery'}
         purpose={ar ? 'حالة تقرير كل عميل وفاتورته، والخطوة التالية المطلوبة منك.' : 'Where each client’s report and invoice stand, and the next step for you.'}
       />
 

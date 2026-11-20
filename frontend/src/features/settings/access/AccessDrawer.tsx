@@ -93,16 +93,28 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
       </div>
 
       {!team ? (
-        <section className="rounded-xl border border-border p-3 text-sm" data-testid="drawer-portal">
-          <div className="font-semibold text-text-primary">{ar ? 'بوابة العميل' : 'Client portal'} · {ar ? (PORTAL_ROLE_LABEL[row.category ?? '']?.ar ?? row.category) : (PORTAL_ROLE_LABEL[row.category ?? '']?.en ?? row.category)}</div>
-          <div className="mt-1 text-xs text-text-muted">{row.scope.clients.map((c) => c.name).join('، ')}</div>
-          <p className="mt-2 text-xs text-text-muted">{ar ? 'صلاحيات البوابة لا تتغيّر من هنا؛ تُدار من صفحة العميل.' : 'Portal access is not changed here; manage it on the client page.'}</p>
+        <section className="space-y-3 rounded-xl border border-border p-3 text-sm" data-testid="drawer-portal">
+          <div className="font-semibold text-text-primary">{ar ? 'بوابة العميل' : 'Client portal'} · <span className="text-text-muted">{row.scope.clients.map((c) => c.name).join('، ')}</span></div>
+          {member ? (
+            <>
+              {/* ACCESS-PORTAL-ROLE-001 — raise or lower an active portal person here; their clients stay as granted. */}
+              <ChipPicker testId="drawer-portal-role" label={ar ? 'الدور' : 'Role'} value={category} onChange={setCategory}
+                options={['client_approver', 'client_admin'].map((value) => ({ value, label: ar ? PORTAL_ROLE_LABEL[value]!.ar : PORTAL_ROLE_LABEL[value]!.en }))} />
+              <div className="flex justify-end">
+                <Button disabled={!changedCategory} onClick={() => run(a.updateMember.mutateAsync({ id: row.id, category }), ar ? 'حُفظ' : 'Saved')} data-testid="drawer-portal-save">
+                  <Save size={14} aria-hidden /> {ar ? 'حفظ الدور' : 'Save role'}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-text-muted">{ar ? (PORTAL_ROLE_LABEL[row.category ?? '']?.ar ?? row.category) : (PORTAL_ROLE_LABEL[row.category ?? '']?.en ?? row.category)}</div>
+          )}
         </section>
       ) : ownerMovable ? (
         <section className="space-y-3 rounded-xl border border-border p-3" data-testid="drawer-owner-move">
           <AreaChips areas={data.areas} levels={levelsOf(row.areas)} ar={ar} />
           <div>
-            <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'غيّر الفئة' : 'Change category'}</h3>
+            <h3 className="mb-1.5 text-sm font-bold text-text-primary">{ar ? 'ترقية أو تخفيض — اختر الفئة الجديدة' : 'Promote or demote — choose the new category'}</h3>
             <ChipPicker testId="drawer-owner-category" label={ar ? 'الفئة' : 'Category'} value={category} onChange={(s) => { setCategory(s); setConfirmDowngrade(false) }}
               options={data.categories.map((c) => ({ value: c.slug, label: ar ? c.name_ar : c.name_en }))} />
           </div>

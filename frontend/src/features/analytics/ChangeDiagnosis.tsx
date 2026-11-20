@@ -430,6 +430,8 @@ export function ChangeDiagnosis({
         WIDE — the decomposition. Two thirds of the row, because a comparison needs the width and the
         reader is meant to read DOWN it rather than across a row of cards.
       */}
+      {/* SHOW-AVAILABLE-001 — no comparable previous period, nothing to decompose: the card is not drawn; the days below still stand. */}
+      {comparable ? (
       <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-2">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-base font-bold text-text-primary">
@@ -449,15 +451,9 @@ export function ChangeDiagnosis({
           the money contract exists to prevent, arriving from a fallback rather than from a sum. A
           refusal stands alone.
         */}
-        {subtitle !== undefined && <p className="mb-2 text-xs text-text-muted">{subtitle}</p>}
+        {/* NO-OPERATOR-NOTES-001 — the windows' caveat is the heading's tooltip, not a paragraph under it. */}
+        {subtitle !== undefined && <span data-testid="change-subtitle" className="sr-only">{subtitle}</span>}
 
-        {!comparable && (
-          <p data-testid="change-withheld" className="rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-text-secondary">
-            {ar
-              ? 'تحليل التغيّر محجوب: لا يُقارَن ما قيس جزئيًا بما قيس كاملًا. الأيام الخارجة عن سلوك الفترة أدناه تبقى صالحة لأنها تُقاس داخل الفترة نفسها.'
-              : 'The change analysis is withheld: a partly measured window is not compared with a whole one. The days below that departed from the period\'s own behaviour still stand, because each is measured inside the same window.'}
-          </p>
-        )}
 
         {comparable && rows.length > 0 && (
           <p className="mb-3 text-sm text-text-secondary">
@@ -491,6 +487,7 @@ export function ChangeDiagnosis({
 
         {comparable && <Decomposed d={lead} currency={currency} />}
       </div>
+      ) : <span data-testid="change-withheld" className="sr-only">{ar ? 'لا مقارنة بالفترة السابقة — تحليل التغيّر محجوب' : 'No comparison with the previous period — the change analysis is withheld'}</span>}
 
       {/* SQUARE — the focused signals. One number each, and each one a different question. */}
       <div className="grid grid-cols-2 gap-3">

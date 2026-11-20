@@ -31,6 +31,7 @@
                 <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px;">{{ $t['workspace'] }}</div>
                 <div style="font-size:16px; font-weight:800; color:#0b1a16; line-height:1.3; padding-top:4px;">{{ $workspace }}</div>
 
+                @if ($roleName !== '')
                 <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px; padding-top:14px;">{{ $t['role'] }}</div>
                 <div style="font-size:16px; font-weight:800; color:#0b1a16; line-height:1.3; padding-top:4px;">{{ $roleName }}</div>
                 {{--
@@ -42,6 +43,7 @@
                 --}}
                 @if ($roleNote !== '')
                     <div style="font-size:13px; color:#5b6b68; line-height:1.8; padding-top:6px;">{{ $roleNote }}</div>
+                @endif
                 @endif
             </td>
         </tr>

@@ -1,3 +1,4 @@
+import { BodyPortal } from '@/components/ui/BodyPortal'
 import { campaignStatusLabel } from '@/features/campaigns/labels'
 import { creativeKindLabel } from './creativeKind'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -11,6 +12,11 @@ import { providerLabel } from '@/features/campaigns/labels'
 import type { CreativeCard } from './api'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { useQuery } from '@tanstack/react-query'
+import { getCreativeInReach } from './api'
+import { ReportAdDeepFigures } from '@/features/reports/ReportAdDeepFigures'
+import type { ReportAd } from '@/features/reports/ReportAdsSection'
+import { MetricLineChart } from '@/features/analytics/charts'
 
 /**
  * AD-PREVIEW-001 — one ad, opened where the reader is standing.
@@ -49,6 +55,8 @@ export function AdPreviewDialog({
   figures,
   trend,
   detailsTo,
+  period,
+  currency,
   onClose,
 }: {
   creative: CreativeCard
@@ -66,10 +74,30 @@ export function AdPreviewDialog({
   trend?: ReactNode
   /** Where the full page is, when the reader does want to leave. */
   detailsTo?: string
+  /**
+   * CONTENT-FULL-ANALYSIS-001 — the window the opening surface already reads (never decided here). Given it, the popup
+   * reads the creative's own full figures for that window and its daily trend, so every content popup in the product
+   * carries the report's full analysis.
+   */
+  period?: { from?: string; to?: string }
+  currency?: string | null
   onClose: () => void
 }) {
   const ar = locale === 'ar'
   const reading = readPreview(creative.preview, ar)
+  const detail = useQuery({
+    queryKey: ['creative-detail', creative.id, period?.from ?? '', period?.to ?? ''],
+    queryFn: () => getCreativeInReach(creative.id, { from: period?.from, to: period?.to }),
+    enabled: period !== undefined && creative.id !== '',
+    staleTime: 60_000,
+  })
+  const deepMetrics = detail.data?.metrics ?? creative.metrics ?? null
+  const deepCurrency = detail.data?.currency ?? currency ?? null
+  const deepAd = { ...(deepMetrics ?? {}), id: creative.id, name: creative.name, provider: creative.provider, objective: creative.objective, preview: creative.preview } as unknown as ReportAd
+  const ownTrend = trend ?? (detail.data && detail.data.trend.length > 1
+    ? <MetricLineChart data={detail.data.trend} currency={deepCurrency ?? ''} height={180} rightAxisFor="clicks"
+        series={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', color: 'var(--brand-600)', kind: 'money' }, { key: 'clicks', name: ar ? 'النقرات' : 'Clicks', color: 'var(--info)', kind: 'num' }]} />
+    : null)
   /*
    * The shape the STAGE is sized for — the platform's word first, the asset's own dimensions where
    * it said nothing. One expression, because the stage's height and the fit inside it must not be
@@ -121,12 +149,13 @@ export function AdPreviewDialog({
   }, [onClose])
 
   return (
+    <BodyPortal>
     <div
       role="dialog"
       aria-modal="true"
       aria-label={creative.name}
       data-testid="ad-preview-dialog"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center sm:p-6"
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 pt-[env(safe-area-inset-top)] sm:items-center sm:p-6"
       onClick={onClose}
     >
       {/*
@@ -166,7 +195,7 @@ export function AdPreviewDialog({
          * the creative more instead of more margin, capped so it never becomes a full-screen takeover —
          * this is a quick review surface and a modal that fills the screen stops reading as one.
          */
-        className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92vh] sm:rounded-2xl sm:border lg:grid lg:max-w-[88vw] lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] lg:items-start lg:gap-x-6"
+        className="flex h-full w-full max-w-2xl flex-col gap-3 overflow-y-auto border-border bg-surface p-4 sm:h-auto sm:max-h-[92dvh] sm:rounded-2xl sm:border lg:grid lg:max-w-[88vw] lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)] lg:items-start lg:gap-x-6"
         onClick={(e) => e.stopPropagation()}
       >
         {/*
@@ -372,10 +401,22 @@ export function AdPreviewDialog({
           It was last, under eight metadata rows, which on a phone put it off the screen entirely in
           the panel somebody opened to judge a creative.
         */}
-        {trend && (
+        {/* CONTENT-FULL-ANALYSIS-001 — the report's full reading of the content: score, figures, funnel, retention. */}
+        {ownTrend && (
           <div data-testid="ad-preview-dialog-trend" className="mt-4">
-            <h4 className="mb-1 text-xs font-bold text-text-secondary">{ar ? 'الاتجاه الزمني' : 'Trend over time'}</h4>
-            {trend}
+            <h4 className="mb-1 text-xs font-bold text-text-secondary">{ar ? 'الأداء يوميًا' : 'Daily performance'}</h4>
+            {ownTrend}
+          </div>
+        )}
+
+        {/*
+          CONTENT-POPUP-SCALE-001 — the deeper figures come AFTER the trend. They were placed between the
+          figures and the chart and pushed the chart ~320px past the first 900px viewport, which the
+          content-popup-scale spec (the owner's «creative, KPIs and chart without scrolling») catches.
+        */}
+        {deepMetrics && (
+          <div className="mt-3" data-testid="ad-preview-dialog-deep">
+            <ReportAdDeepFigures ad={deepAd} currency={deepCurrency} ar={ar} />
           </div>
         )}
 
@@ -469,6 +510,7 @@ export function AdPreviewDialog({
         </div>
       </div>
     </div>
+    </BodyPortal>
   )
 }
 

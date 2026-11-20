@@ -27,7 +27,7 @@ import { fmtDateTime } from '@/lib/datetime'
 import { ArrowRight, ChevronLeft, ChevronRight, CircleCheck, Image as ImageIcon, Info, LayoutGrid, OctagonAlert, Rows, TriangleAlert, Trophy } from 'lucide-react'
 import {
   ChartCard,
-  ConversionFunnelChart,
+  ConversionFunnelChart, hasFunnel,
   KpiSparkline,
   MetricLineChart,
   PlatformDonutChart,
@@ -1645,7 +1645,7 @@ function GeneralPerformanceSlide({ data }: { data: ReportData }) {
               {p.result_metrics_apply
                 ? (
                   <div>
-                    تكلفة الطلب {moneyExact(p.cpa, c ?? null)} · العائد على الإنفاق {ratio(p.roas)}
+                    تكلفة الطلب {moneyExact(p.cpa, c ?? null)} · معدل العائد {ratio(p.roas)}
                   </div>
                 )
                 : <div>لا تنطبق تكلفة الطلب على هذا الهدف</div>}
@@ -1718,7 +1718,7 @@ function FunnelSlide({ data }: { data: ReportData }) {
   return (
     <div>
       <Title sub="من الظهور إلى الشراء — معدل الانتقال وتكلفة كل مرحلة">قمع التحويل</Title>
-      {stages.length > 0 ? (
+      {hasFunnel(stages) ? (
         <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
           <ChartCard title="مراحل القمع" subtitle="العدد ومعدل الانتقال وتكلفة كل مرحلة"><ConversionFunnelChart stages={stages} currency={data.currency} ar /></ChartCard>
           <div className="space-y-3">
@@ -2248,8 +2248,11 @@ function DataQualitySlide({ data }: { data: ReportData }) {
 function SnapshotAge({ data }: { data: ReportData }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const live = data.mode === 'live'
-  const from = data.period?.from ?? null
-  const to = data.period?.to ?? null
+  // A date counts only when it is a real, non-blank string. A half-filled period (one date, an empty string, a placeholder)
+  // would print «الأرقام خلال الفترة –», which says nothing and looks broken, so the whole line is hidden instead.
+  const real = (v: unknown): string | null => (typeof v === 'string' && /\d{4}-\d{2}-\d{2}/.test(v.trim()) ? v.trim() : null)
+  const from = real(data.period?.from)
+  const to = real(data.period?.to)
 
   // No period recorded, nothing claimed.
   if (!live && (from === null || to === null)) return null

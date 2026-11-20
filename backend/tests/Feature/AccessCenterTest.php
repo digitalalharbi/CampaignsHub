@@ -158,6 +158,22 @@ final class AccessCenterTest extends TestCase
         $this->assertSame('client_viewer', DB::table('memberships')->where('user_id', $portal->id)->value('role'));
     }
 
+    /** ACCESS-PORTAL-ROLE-001 — an active client-portal person is raised and lowered from the access center; only the role moves. */
+    public function test_a_client_portal_person_is_raised_and_lowered_from_the_access_center(): void
+    {
+        $client = $this->client('Acme');
+        $portal = User::create(['name' => 'Portal', 'email' => 'portal2@a.test', 'password' => 'secret123', 'email_verified_at' => now()]);
+        $this->grantMembership($portal, $this->tenant, Portal::ClientPortal, 'client_viewer', [(string) $client->id]);
+        Sanctum::actingAs($this->owner);
+
+        $this->putJson("/api/v1/settings/access/members/{$portal->uuid}", ['category' => 'client_approver'])->assertOk()->assertJsonPath('data.category', 'client_approver');
+        $this->assertSame('client_approver', DB::table('memberships')->where('user_id', $portal->id)->value('role'));
+        $this->putJson("/api/v1/settings/access/members/{$portal->uuid}", ['category' => 'client_viewer'])->assertOk();
+        $this->assertSame('client_viewer', DB::table('memberships')->where('user_id', $portal->id)->value('role'));
+        $this->putJson("/api/v1/settings/access/members/{$portal->uuid}", ['category' => 'tenant-owner'])->assertStatus(422);
+        $this->assertSame([], $this->keysIn($portal), 'a portal role never becomes a staff key');
+    }
+
     public function test_the_existing_team_invite_still_works_for_the_owner_and_carries_no_override(): void
     {
         Sanctum::actingAs($this->owner);

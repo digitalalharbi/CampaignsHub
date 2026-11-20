@@ -269,7 +269,7 @@ export function HeroSection({
           className="order-2 rounded-2xl border border-border bg-surface p-3.5 shadow-[var(--shadow-small)] lg:order-2 lg:rounded-t-none lg:border-t-0 lg:pt-0 lg:shadow-none"
         >
           {authed ? (
-            <Link to="/app/home" className="block"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
+            <Link to="/app/dashboard" className="block"><Button className="w-full">{c.nav.dashboard} <Arrow size={15} /></Button></Link>
           ) : (
             <div className="space-y-2">
               <Link to={primaryTo} data-testid="hero-primary-cta" className="block">

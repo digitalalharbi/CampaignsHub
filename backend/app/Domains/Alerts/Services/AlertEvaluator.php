@@ -32,6 +32,7 @@ use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\DataFreshnessService;
+use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\PeriodResolver;
@@ -226,6 +227,7 @@ final class AlertEvaluator
 
         $this->inSweep = true;
         $this->liveIds = [];
+        $this->movingMemo = [];
         try {
             foreach ($tenantIds as $tenantId) {
                 $this->tenants->setTenantId((string) $tenantId);
@@ -320,7 +322,7 @@ final class AlertEvaluator
         };
 
         // PROJECT-LIFECYCLE-001 rule 5 (N4) — every rule type, tenant-wide or project-scoped, speaks only about LIVE projects.
-        $breaches = $this->onlyLiveProjects($rule, $breaches);
+        $breaches = $this->onlyLiveProjects($rule, $breaches, $now);
 
         // LINK-HEALTH-YESTERDAY-001 — a link alert only when yesterday's data did not arrive; every link type, one rule.
         $openLinks = null;
@@ -353,15 +355,66 @@ final class AlertEvaluator
      * @param  list<array<string,mixed>>  $breaches
      * @return list<array<string,mixed>>
      */
-    private function onlyLiveProjects(AlertRule $rule, array $breaches): array
+    private function onlyLiveProjects(AlertRule $rule, array $breaches, ?Carbon $now = null): array
     {
         $live = $this->liveProjectIds((string) $rule->tenant_id);
         if ($rule->project_id !== null && ! isset($live[(string) $rule->project_id])) {
             return [];
         }
 
-        return array_values(array_filter($breaches, static fn (array $b): bool => ($b['project_id'] ?? null) === null || $b['project_id'] === ''
+        $breaches = array_values(array_filter($breaches, static fn (array $b): bool => ($b['project_id'] ?? null) === null || $b['project_id'] === ''
             || isset($live[(string) $b['project_id']])));
+
+        /*
+         * DELIVERY-QUIET-001 — Owner 2026-11-20: a project that is not moving is not watched. A finding about a project with no
+         * spend and no impression in the last 3 days is dropped until it moves again (PERFORMANCE_TYPES); a linking or
+         * measurement fault (a token, a failed sync) is still raised, because it is why the figures stopped. «توقفت أمس» falls inside the window by design.
+         */
+        if (! in_array((string) $rule->type, self::PERFORMANCE_TYPES, true)) {
+            return $breaches;
+        }
+        $about = array_values(array_unique(array_filter(array_map(static fn (array $b): string => (string) ($b['project_id'] ?? ''), $breaches))));
+        if ($about === []) {
+            return $breaches;
+        }
+        $moving = array_flip($this->movingIds((string) $rule->tenant_id, $about, $now ?? Carbon::now()));
+
+        // «توقفت أمس» and «ما تصرف» are the news of the stop itself, said once per episode; they are not watching a quiet project.
+        return array_values(array_filter($breaches, static fn (array $b): bool => ($b['project_id'] ?? null) === null || $b['project_id'] === ''
+            || in_array($b['type'] ?? null, self::NOTICES, true) || isset($moving[(string) $b['project_id']])));
+    }
+
+    /**
+     * DELIVERY-QUIET-001 — the rule types that read ad delivery, and so fall silent with it. A link or measurement fault, a lead
+     * waiting for follow-up, a store's own GA4 reading and a launch step are raised whether the ads move or not.
+     */
+    private const PERFORMANCE_TYPES = ['budget_risk', 'no_results', 'roas_drop', 'cpa_increase', 'cpl_increase', 'metric_anomaly'];
+
+    /** @var array<string, array<string, bool>> tenant and window → project id → watched, memoised for one sweep */
+    private array $movingMemo = [];
+
+    /**
+     * @param  list<string>  $ids
+     * @return list<string>
+     */
+    private function movingIds(string $tenantId, array $ids, Carbon $now): array
+    {
+        // The window ends on the instant the sweep judges, never the wall clock: a replayed or scheduled sweep reads its own days.
+        $from = $now->copy()->subDays(DeliveryState::DAYS - 1)->toDateString();
+        $memo = $tenantId.'|'.$from;
+        $known = $this->inSweep ? ($this->movingMemo[$memo] ?? []) : [];
+        $unknown = array_values(array_filter($ids, static fn (string $id): bool => ! array_key_exists($id, $known)));
+        if ($unknown !== []) {
+            $moved = array_flip(app(DeliveryState::class)->watched($unknown, $from, $now->toDateString()));
+            foreach ($unknown as $id) {
+                $known[$id] = isset($moved[$id]);
+            }
+            if ($this->inSweep) {
+                $this->movingMemo[$memo] = $known;
+            }
+        }
+
+        return array_values(array_filter($ids, static fn (string $id): bool => ($known[$id] ?? false) === true));
     }
 
     /** @return array<string, true> the tenant's live project ids — memoised for one sweep (a single rule reads afresh) */
@@ -1025,7 +1078,7 @@ final class AlertEvaluator
                     .($state['last_sync_at'] ? ' Last figures dated '.$state['last_sync_at'].'.' : ' No figures have ever arrived.'),
                 'context' => [
                     // The reader's language, beside the English the rest of the engine carries.
-                    'title_ar' => $failed ? 'انقطاع مزامنة البيانات' : 'البيانات متأخرة',
+                    'title_ar' => $failed ? 'انقطاع تحديث البيانات' : 'البيانات متأخرة',
                     'message_ar' => ($failed
                         ? 'فشلت آخر مزامنة لـ: '.$names.'.'
                         : 'لا أرقام حديثة من: '.$names.'.')

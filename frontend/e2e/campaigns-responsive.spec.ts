@@ -90,7 +90,9 @@ test('no console errors while using the campaigns surface', async ({ page }) => 
   await page.getByTestId('view-cards').click()
   await page.locator('[data-testid="campaign-card"]').first().click()
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
-  await page.getByRole('tab', { name: /Performance|الأداء/ }).click()
+  // CAMPAIGN-PAGE-LEAN-001 — «الأداء» lives inside «نظرة عامة» now; open the tabs that remain.
+  await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()
+  await page.getByRole('tab', { name: /Overview|نظرة عامة/ }).click()
 
   const unexpected = errors.filter((e) => !/401|Unauthorized|favicon/i.test(e))
   expect(unexpected, `console errors:\n${unexpected.join('\n')}`).toHaveLength(0)

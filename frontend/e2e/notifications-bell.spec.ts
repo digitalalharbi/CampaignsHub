@@ -62,7 +62,7 @@ test.describe('the bell', () => {
     raise(['--count=1', '--kind=budget_90', '--type=budget_risk', '--severity=warning'])
     raise(['--count=1', '--kind=sync_failed', '--type=sync_failed', '--severity=critical'])
 
-    await page.goto('/agency/home')
+    await page.goto('/agency/dashboard')
     // The number is the real count — 113 — and reads 99+ above 99.
     await expect(page.getByTestId('bell-badge')).toHaveText('99+', { timeout: 20_000 })
 
@@ -87,6 +87,13 @@ test.describe('the bell', () => {
     await page.getByTestId('bell-filter-budget').click()
     await page.locator('[data-testid^="notification-open-"]').first().click()
     await expect(page).toHaveURL(/\/agency\/budgets\?project=/)
+    // The budget opens as a centred dialog over the whole screen, header included; close it as a person would before
+    // reaching for the bell again (whether it had drawn yet was a race — webkit lost it).
+    // The drawer draws after the budget's own read returns; webkit under the CI shard's load took longer than the default
+    // 5s on four PRs in a row (the same assertion, the same expectation — it only waits for the real thing to arrive).
+    await expect(page.getByTestId('budget-drawer')).toBeVisible({ timeout: 20_000 })
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('budget-drawer')).toHaveCount(0)
 
     // One call clears all 113, not just the 100 rows the panel loaded.
     await bell(page).click()
@@ -100,7 +107,7 @@ test.describe('the bell', () => {
   test('two different objects with the same finding are two notifications, each named by it (the control — the same-object repeat is BellNotificationsTest)', async ({ page }) => {
     expect(raise(['--count=2', '--kind=roas_drop'])).toBe(2)
 
-    await page.goto('/agency/home')
+    await page.goto('/agency/dashboard')
     await bell(page).click()
     await expect(page.locator('[data-kind="roas_drop"]')).toHaveCount(2)
     await expect(page.locator('[data-kind="roas_drop"] [data-testid="notification-title"]').first()).toHaveText('انخفاض العائد')
@@ -116,7 +123,7 @@ test.describe('the ping', () => {
     page.on('pageerror', (e) => problems.push(e.message))
     await watchAudio(page)
 
-    await page.goto('/agency/home')
+    await page.goto('/agency/dashboard')
     await expect(bell(page)).toBeVisible()
 
     // Before any gesture the browser would refuse audio: nothing plays, and nothing is logged.

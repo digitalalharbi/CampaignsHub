@@ -2,7 +2,9 @@ import { Link } from 'react-router-dom'
 import { PlatformDonutChart } from '@/features/analytics/charts'
 import { budgetStatus, STATUS_COLOR, STATUS_LABEL, type BudgetStatus } from '@/lib/colors'
 import type { RoleDashboard } from './api'
+import { DeliveryPanel } from './delivery'
 import { unitPath } from './ManagerView'
+import { PerformanceBlock } from './performance'
 import { BudgetGauge, Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
 
 const T = {
@@ -57,6 +59,9 @@ export function PmView({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'ap
         {approvals && <Kpi testId="dash-kpi-approvals" to={approvalsTo} label={t.approvals} value={f.count(approvals.pending)} hint={`${f.count(approvals.changes_requested)} ${t.changes}`} status={approvals.pending > 0 ? 'near' : 'within'} />}
       </div>
 
+      {/* HOME-360-001 — the project manager reads the same performance at a glance as the manager. */}
+      <PerformanceBlock d={d} portal={portal} />
+
       <div className="grid min-h-0 grid-cols-1 gap-2 lg:grid-cols-12 lg:grid-rows-1">
         <Panel title={t.ratio} to={`/${portal}/budgets`} testId="dash-panel-gauges" className="min-h-[200px] lg:col-span-6">
           {shown.length === 0 ? <Nothing label={t.nothing} /> : (
@@ -84,6 +89,9 @@ export function PmView({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'ap
           )}
         </Panel>
       </div>
+
+      {/* DELIVERY-STATE-001 — who is running and who stopped, the same reading as finance. */}
+      <DeliveryPanel units={units} portal={portal} money={m !== null && m !== undefined} />
 
       <StatusStrip>
         {(['exceeded', 'near', 'within'] as const).map((s) => (

@@ -19,7 +19,7 @@ export function Field({
   return (
     <div className="block">
       {label && (
-        <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-semibold text-text-secondary">
+        <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-bold text-text-primary">
           {label}
           {required && <span className="text-danger"> *</span>}
         </label>

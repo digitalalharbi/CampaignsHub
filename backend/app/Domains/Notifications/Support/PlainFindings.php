@@ -29,7 +29,7 @@ final class PlainFindings
         'cpa' => ['تكلفة النتيجة', 'cost per result'],
         'cpl' => ['تكلفة العميل المحتمل', 'cost per lead'],
         'cpi' => ['تكلفة التثبيت', 'cost per install'],
-        'roas' => ['العائد على الإنفاق', 'return on ad spend'],
+        'roas' => ['معدل العائد', 'return on ad spend'],
         'revenue' => ['قيمة الطلبات', 'order value'],
         'purchases' => ['الطلبات', 'orders'],
         'leads' => ['العملاء المحتملون', 'leads'],

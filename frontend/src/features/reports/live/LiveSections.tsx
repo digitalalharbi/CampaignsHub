@@ -3,7 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { ProviderName } from '@/components/ProviderMark'
 import { canonicalPlatform, isAdPlatform } from '@/lib/platforms'
-import { ChartCard, ConversionFunnelChart, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
+import { ChartCard, ConversionFunnelChart, hasFunnel, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
 import { moneyState, rankableMoney, type MoneyTotals } from '@/lib/money/contract'
 import { Num } from '@/components/ui/Num'
 import { ratio } from '@/features/analytics/format'
@@ -242,7 +242,7 @@ export function TrendAndDistribution({ payload, ar, currency }: { payload: LiveP
 export function FunnelSection({ payload, ar, currency }: { payload: LivePayload; ar: boolean; currency: string }) {
   return (
     <>
-        {(payload.funnel ?? []).length > 0 && (
+        {hasFunnel(payload.funnel ?? []) && (
         <div className="mt-3 grid gap-3" data-testid="live-funnel">
           <ChartCard title={ar ? 'قمع المنصات الإعلانية' : 'Ad platforms funnel'}>
             <ConversionFunnelChart stages={payload.funnel ?? []} currency={currency} ar={ar} />

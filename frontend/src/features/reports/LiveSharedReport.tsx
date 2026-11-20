@@ -11,7 +11,6 @@ import { useUi } from '@/stores/ui'
 import type { ReportAd } from './ReportAdsSection'
 import { ReportAdDetail } from './ReportAdDetail'
 import { LiveContentDetail } from './live/LiveContent'
-import { LivePlatformDrawer } from './live/LivePlatformDrawer'
 import { FreshnessStrip } from './live/LiveSections'
 import { ContentView, DashboardView, PlatformsView, platformsOf, StandardView, SummaryView, WebsiteView } from './live/LiveViews'
 import { websiteHasContent } from './Ga4ReportBlocks'
@@ -28,6 +27,13 @@ import { LiveDeliveryNote } from './live/LiveDeliveryNote'
  * route: it pulled the /r/ closure 11.8 KB over PUBLIC_REPORT_BUDGET_BYTES. The fallback is the same-size button, so nothing shifts.
  */
 const DateRangeField = lazy(() => import('@/components/ui/DateRangeField').then((m) => ({ default: m.DateRangeField })))
+
+/*
+ * ANALYTICS-REPORT-LOGIC-001 — the platform drawer is read after a click, so it is loaded then, not with the route.
+ * Moving the report's logic into the shared layer put the /r/ closure over its byte budget; the drawer is the largest piece of the
+ * page that nobody sees on arrival.
+ */
+const LivePlatformDrawer = lazy(() => import('./live/LivePlatformDrawer').then((m) => ({ default: m.LivePlatformDrawer })))
 
 /**
  * LIVEREP-001 — the client's own view of a live shared link.
@@ -391,6 +397,7 @@ export function LiveSharedReport({
       />
 
       {drawer && mode === 'dashboard' && (
+        <Suspense fallback={null}>
         <LivePlatformDrawer
           token={token}
           secret={password}
@@ -402,6 +409,7 @@ export function LiveSharedReport({
           onOpenContent={onOpenContent}
           onClose={() => setDrawer(null)}
         />
+        </Suspense>
       )}
 
       {/*
