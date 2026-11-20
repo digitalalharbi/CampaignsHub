@@ -1156,6 +1156,15 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsAudi
             'video_views' => $this->total($row['video_play_actions'] ?? null),
             'video_completions' => $this->total($row['video_p100_watched_actions'] ?? null),
             /*
+             * METRIC-COVERAGE-001 — the watch quartiles at the ad set and ad grains, where `entity_daily_metrics` has the
+             * columns. Only the entity request asks for the p25–p75 fields, so the campaign and creative rows never carry
+             * them (absent, not zero) and the campaign store ignores keys it does not read.
+             */
+            'video_p25' => $this->total($row['video_p25_watched_actions'] ?? null),
+            'video_p50' => $this->total($row['video_p50_watched_actions'] ?? null),
+            'video_p75' => $this->total($row['video_p75_watched_actions'] ?? null),
+            'video_p100' => $this->total($row['video_p100_watched_actions'] ?? null),
+            /*
              * Meta publishes no generic «conversions» figure — it publishes actions, and which of
              * them is the result depends on the objective. This connector's definition of a
              * conversion has always been a purchase, so the two are the same number HERE and are
@@ -1230,7 +1239,8 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsAudi
                 'level' => $grain === ReportsEntityGrains::AD_SET ? 'adset' : 'ad',
                 'time_increment' => 1,
                 'fields' => "{$idField},campaign_id,date_start,spend,impressions,clicks,reach,actions,"
-                    .'action_values,video_play_actions,video_p100_watched_actions',
+                    .'action_values,video_play_actions,video_p25_watched_actions,video_p50_watched_actions,'
+                    .'video_p75_watched_actions,video_p100_watched_actions',
                 'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
                 'action_attribution_windows' => json_encode(self::ATTRIBUTION_WINDOWS, JSON_THROW_ON_ERROR),
                 'limit' => 500,
