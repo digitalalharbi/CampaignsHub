@@ -16,7 +16,7 @@ export function CloseButton({ onClose, label, testid, autoFocus = false }: { onC
       aria-label={label ?? word}
       data-testid={testid}
       data-autofocus={autoFocus || undefined}
-      className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-semibold text-text-secondary transition-colors hover:border-border-strong hover:bg-surface-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"
+      className="inline-flex h-10 items-center gap-1 rounded-xl border border-border px-3 text-sm font-semibold text-text-secondary hover:bg-surface-hover hover:text-text-primary"
     >
       <X size={16} aria-hidden />
       <span>{word}</span>
