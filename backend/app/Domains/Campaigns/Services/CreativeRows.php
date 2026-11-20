@@ -451,7 +451,7 @@ final class CreativeRows
                 'key' => $kind,
                 'count' => (clone $scope)->where(fn ($q) => CreativeKind::scope($q, [$kind]))->count(),
             ],
-            CreativeKind::ALL,
+            CreativeKind::FILTERABLE,
         );
     }
 
