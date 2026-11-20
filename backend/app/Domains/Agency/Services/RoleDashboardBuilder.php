@@ -398,20 +398,28 @@ final class RoleDashboardBuilder
             $running = app(DeliveryState::class)->runningCampaigns($projectIds);
             $rest = $base->clone()->when($running !== [], fn ($q) => $q->whereNotIn('id', $running))
                 ->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status')->all();
-            $out = ['active' => $running === [] ? 0 : $base->clone()->whereIn('id', $running)->count(), 'paused' => 0, 'draft' => 0, 'completed' => 0, 'other' => 0, 'idle' => 0];
+            $activeNow = 0;
+            if ($running !== []) {
+                $activeNow = $base->clone()->whereIn('id', $running)->count();
+            }
+            $out = ['active' => $activeNow, 'paused' => 0, 'draft' => 0, 'completed' => 0, 'other' => 0, 'idle' => 0];
             foreach ($rest as $status => $c) {
                 $status = (string) $status;
+                $n = (int) $c;
                 if ($status === 'active') {
-                    $out['idle'] += (int) $c;
-                    $out['paused'] += (int) $c;
+                    $out['idle'] += $n;
+                    $out['paused'] += $n;
+
                     continue;
                 }
                 $key = in_array($status, ['paused', 'draft', 'completed'], true) ? $status : 'other';
-                $out[$key] += (int) $c;
+                $out[$key] += $n;
             }
         }
 
-        return $out + ['total' => $out['active'] + $out['paused'] + $out['draft'] + $out['completed'] + $out['other']];
+        $out['total'] = array_sum(array_intersect_key($out, array_flip(['active', 'paused', 'draft', 'completed', 'other'])));
+
+        return $out;
     }
 
     /**
@@ -491,10 +499,10 @@ final class RoleDashboardBuilder
         }
 
         return [
-            'open' => $base->clone()->count(),
-            'overdue' => $base->clone()->whereDate('due_date', '<', $today->toDateString())->count(),
-            'blocked' => $base->clone()->where('status', 'blocked')->count(),
-            'mine' => $base->clone()->where('assignee_id', $user->getKey())->count(),
+            'open' => (clone $base)->count(),
+            'overdue' => (clone $base)->whereDate('due_date', '<', $today->toDateString())->count(),
+            'blocked' => (clone $base)->where('status', 'blocked')->count(),
+            'mine' => (clone $base)->where('assignee_id', $user->getKey())->count(),
         ];
     }
 
