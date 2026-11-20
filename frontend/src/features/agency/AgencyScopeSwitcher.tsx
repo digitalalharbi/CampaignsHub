@@ -5,6 +5,7 @@ import { listClientWorkspaces, listProjects } from '@/features/projects/api'
 import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { useClientProjectAutoSelect } from './clientProject'
+import { ClientPicker } from './ClientScopeChip'
 import { useUi } from '@/stores/ui'
 import { RailPopover } from '@/layouts/SidebarNav'
 
@@ -100,7 +101,7 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
    */
   if (collapsed) {
     return (
-      <RailPopover icon={Building2} label={ar ? 'العميل والمشروع' : 'Client and project'} testid="agency-scope-collapsed">
+      <RailPopover icon={Building2} label={ar ? 'العميل' : 'Client'} testid="agency-scope-collapsed">
         <AgencyScopeSwitcher />
       </RailPopover>
     )
@@ -142,23 +143,8 @@ export function AgencyScopeSwitcher({ collapsed }: { collapsed?: boolean }) {
 
   return (
     <div data-testid="agency-scope" className="space-y-2">
-      {!scopedToProjectsOnly && (
-      <Field
-        testId="agency-scope-client"
-        icon={<Building2 size={14} />}
-        label={ar ? 'العميل' : 'Client'}
-        value={currentClientId ?? ''}
-        placeholder={ar ? 'اختر عميلًا' : 'Select a client'}
-        onChange={(id) => {
-          setCurrentClientId(id === '' ? null : id)
-          // Always clear the project: it belonged to the previous client, and carrying it over is
-          // exactly how the wrong client's campaigns end up on screen.
-          setCurrentProjectId(null)
-        }}
-        options={authorisedClients.map((c) => ({ id: c.id, name: c.name }))}
-        alwaysFilter
-      />
-      )}
+      {/* CLIENT-SWITCHER-X-001 — the same picker as the top bar: one name per client, its logo or initial, a search. */}
+      {!scopedToProjectsOnly && <ClientPicker variant="field" />}
 
       {/* CLIENT-UNIT-001 — the «المشاريع» switch exists only for a client that has a second project. */}
       {(scopedToProjectsOnly || projectsForClient.length > 1) && <Field

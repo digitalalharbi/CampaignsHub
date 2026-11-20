@@ -39,10 +39,16 @@ async function selectFirstClientAndProject(page: import('@playwright/test').Page
      * what any test in this file is about — every one of them needs to be IN a project, so the
      * helper's job is to get there rather than to assume the first attempt does.
      */
-    const options = await client.locator('option').count()
+    // CLIENT-SWITCHER-X-001 — the client field opens a list; each row is a button.
+    await client.click()
+    const rows = page.locator('[data-testid^="agency-scope-client-client-"]')
+    await rows.first().waitFor({ timeout: 10000 })
+    const options = await rows.count()
+    await page.keyboard.press('Escape')
 
-    for (let i = 1; i < options; i++) {
-      await client.selectOption({ index: i })
+    for (let i = 0; i < options; i++) {
+      await client.click()
+      await rows.nth(i).click()
       /*
        * CLIENT-UNIT-001 — a client with ONE project has no project step: the project is the scope the moment the client is
        * picked, so «a project is in context» is read from the stored scope, not from a select that is no longer drawn.
