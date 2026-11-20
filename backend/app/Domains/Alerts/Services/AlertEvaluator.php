@@ -389,7 +389,7 @@ final class AlertEvaluator
      */
     private const PERFORMANCE_TYPES = ['budget_risk', 'no_results', 'roas_drop', 'cpa_increase', 'cpl_increase', 'metric_anomaly'];
 
-    /** @var array<string, array<string, true>> tenant → project ids that moved, memoised for one sweep */
+    /** @var array<string, array<string, bool>> tenant and window → project id → watched, memoised for one sweep */
     private array $movingMemo = [];
 
     /**
