@@ -98,7 +98,7 @@ export function ClientCommandCenterPage() {
   const d = query.data
 
   // Only tabs whose backend is live AND the user is permitted to see are shown — never a placeholder tab.
-  const TABS: { key: Tab; label: string }[] = [
+  const TABS: { key: Tab; label: string; count?: number }[] = [
     { key: 'overview', label: t('tab_overview') },
     // CLIENT-UNIT-001 — the project is hidden until the client has a second one; one project IS the client.
     // PROJECT-LIFECYCLE-001 §8 — shown whenever there is more than one project OR an archived one to find.
@@ -106,13 +106,13 @@ export function ClientCommandCenterPage() {
     { key: 'campaigns', label: t('tab_campaigns') },
     ...(d.can.view_analytics ? [{ key: 'analytics' as Tab, label: t('tab_analytics') }] : []),
     ...(d.can.view_reports ? [{ key: 'reports' as Tab, label: t('tab_reports') }] : []),
-    { key: 'requests', label: t('tab_requests') },
+    { key: 'requests', label: t('tab_requests'), count: d.overview?.open_requests ?? 0 },
     ...(d.can.view_reports ? [{ key: 'delivery' as Tab, label: lang === 'ar' ? 'الجدولة الدورية' : 'Periodic delivery' }] : []),
     { key: 'billing' as Tab, label: lang === 'ar' ? 'الاشتراكات' : 'Billing' },
     { key: 'messages' as Tab, label: lang === 'ar' ? 'المحادثات' : 'Conversations' },
     ...(canContent ? [{ key: 'approvals' as Tab, label: lang === 'ar' ? 'للاعتماد' : 'Approvals' }] : []),
     ...(d.can.manage_settings || d.can.manage_team ? [{ key: 'portal' as Tab, label: lang === 'ar' ? 'بوابة العميل' : 'Client portal' }] : []),
-    ...(d.can.manage_team ? [{ key: 'team' as Tab, label: t('tab_team') }] : []),
+    ...(d.can.manage_team ? [{ key: 'team' as Tab, label: lang === 'ar' ? 'فريق الوكالة' : 'Agency team' }] : []),
     ...(d.can.manage_files ? [{ key: 'files' as Tab, label: t('tab_files') }] : []),
     { key: 'activity', label: t('tab_activity') },
     { key: 'settings', label: t('tab_settings') },
@@ -141,7 +141,11 @@ export function ClientCommandCenterPage() {
       {/* CLIENT-TABS-001 — a steady segmented bar (the levels strip's look): the active tab is a filled pill, nothing slides. */}
       <nav aria-label={ar ? 'أقسام العميل' : 'Client sections'} className="-mx-0.5 flex min-w-0 max-w-full flex-nowrap gap-1 overflow-x-auto rounded-2xl border border-border bg-surface-secondary p-1 [scrollbar-width:none]" data-testid="client-tabs">
       {TABS.map((tb) => (
-      <button key={tb.key} type="button" aria-pressed={tab === tb.key} data-testid={`client-tab-${tb.key}`} onClick={() => setTab(tb.key)} className={`inline-flex min-h-9 shrink-0 items-center whitespace-nowrap rounded-xl px-3 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 ${tab === tb.key ? 'bg-brand-600 text-white shadow-[var(--shadow-small)]' : 'text-text-secondary hover:bg-surface hover:text-text-primary'}`}>{tb.label}</button>
+      <button key={tb.key} type="button" aria-pressed={tab === tb.key} data-testid={`client-tab-${tb.key}`} onClick={() => setTab(tb.key)} className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-sm font-bold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-600 ${tab === tb.key ? 'bg-brand-600 text-white shadow-[var(--shadow-small)]' : 'text-text-secondary hover:bg-surface hover:text-text-primary'}`}>
+        {tb.label}
+        {/* CLIENT-ATTENTION-001 — an open item carries its number on the tab, so it is not missed. */}
+        {(tb.count ?? 0) > 0 && <span aria-hidden data-testid={`client-tab-${tb.key}-count`} className="tnum inline-grid h-5 min-w-5 place-items-center rounded-full bg-danger px-1.5 text-[11px] font-extrabold text-white">{tb.count}</span>}
+      </button>
       ))}
       </nav>
     </div>
@@ -243,7 +247,7 @@ export function ClientCommandCenterPage() {
           {tab === 'approvals' && canContent && <TabContentApprovals d={d} />}
           {tab === 'portal' && <TabPortal d={d} />}
           {tab === 'messages' && <TabMessages clientId={d.id} />}
-          {tab === 'team' && d.can.manage_team && <TabTeam d={d} />}
+          {tab === 'team' && d.can.manage_team && <TabTeam d={d} onOpenPortal={d.can.manage_settings || d.can.manage_team ? () => setTab('portal') : undefined} />}
 
           {tab === 'files' && d.can.manage_files && <TabFiles clientId={d.id} />}
 

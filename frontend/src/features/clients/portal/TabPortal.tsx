@@ -7,6 +7,7 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Switch } from '@/components/ui/Switch'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { fmtDate } from '@/lib/datetime'
 
 /**
  * CP-VISIBILITY-001, CP-WRITE-DENY-001, CP-USERS-001 — one client's portal, decided by the agency.
@@ -25,7 +26,7 @@ const COPY = {
   ar: {
     see: 'ما الذي يراه العميل', seeHint: 'الرؤية منفصلة عن الصلاحية: عرض الحملات لا يمنح تعديلها.',
     do: 'ما الذي يستطيع فعله', doHint: 'التعديل على الحملات والميزانيات والربط يبقى للوكالة دائماً.',
-    people: 'من يدخل البوابة', invite: 'دعوة', email: 'البريد الإلكتروني', role: 'الدور', projects: 'المشاريع', allProjects: 'كل المشاريع',
+    people: 'دعوة العميل لمتابعة مشاريعه', peopleHint: 'ادعُ العميل أو فريقه هنا بدور مطّلع أو معتمِد، وحدّد مشاريعه. ما يراه ويفعله تحدده الخيارات أدناه. هذه الدعوة لا تمنحه أي دخول لمساحة الوكالة.', lastLogin: 'آخر دخول', neverLogged: 'لم يدخل بعد', invite: 'دعوة', email: 'البريد الإلكتروني', role: 'الدور', projects: 'المشاريع', allProjects: 'كل المشاريع',
     save: 'حفظ', saved: 'تم الحفظ', none: 'لا أحد بعد.', granted: 'مُنح الوصول لحساب موجود.', invited: 'أُرسلت الدعوة.',
     roles: { client_viewer: 'مطّلع', client_approver: 'معتمِد', client_admin: 'مسؤول العميل' } as Record<string, string>,
     states: { active: 'نشط', invited: 'مدعو' } as Record<string, string>,
@@ -36,7 +37,7 @@ const COPY = {
   en: {
     see: 'What the client sees', seeHint: 'Seeing is separate from doing: showing campaigns grants no power over them.',
     do: 'What the client may do', doHint: 'Changing campaigns, budgets and connections always stays with the agency.',
-    people: 'Who can open the portal', invite: 'Invite', email: 'Email', role: 'Role', projects: 'Projects', allProjects: 'All projects',
+    people: 'Invite the client to follow their projects', peopleHint: 'Invite the client or their team here as a viewer or approver and choose their projects. What they see and do is set below. This never gives them access to the agency workspace.', lastLogin: 'Last sign-in', neverLogged: 'Never signed in', invite: 'Invite', email: 'Email', role: 'Role', projects: 'Projects', allProjects: 'All projects',
     save: 'Save', saved: 'Saved', none: 'Nobody yet.', granted: 'Access granted to an existing account.', invited: 'Invitation sent.',
     roles: { client_viewer: 'Viewer', client_approver: 'Approver', client_admin: 'Client admin' } as Record<string, string>,
     states: { active: 'Active', invited: 'Invited' } as Record<string, string>,
@@ -64,6 +65,37 @@ export function TabPortal({ d }: { d: ClientDetail }) {
 
   return (
     <div data-testid="portal-tab" className="grid gap-6 text-sm">
+      {d.can.manage_team && (
+        <section>
+          <h3 className="font-bold text-text-primary">{t.people}</h3>
+          <p className="mb-3 text-xs text-text-muted">{t.peopleHint}</p>
+          <Invite clientId={d.id} projects={d.projects} t={t} onDone={() => void users.refetch()} canAdmin={caps.team_admin === true} />
+          {users.isError ? (
+            <QueryFailure error={users.error} ar={ar} testId="portal-users-failure" onRetry={() => void users.refetch()} fallbackTitle={ar ? 'تعذّر تحميل المستخدمين.' : 'Could not load the people.'} />
+          ) : (
+            <ul data-testid="portal-users" className="mt-3 space-y-2">
+              {(users.data ?? []).length === 0 && !users.isLoading && <li className="text-text-muted">{t.none}</li>}
+              {(users.data ?? []).map((u) => (
+                <li key={u.membership_id ?? u.invitation_id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3">
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold text-text-primary" dir="ltr">{u.email}</span>
+                    <span className="text-xs text-text-muted">{u.name ? `${u.name} · ` : ''}{t.roles[u.role] ?? u.role} · {u.projects === null ? t.allProjects : u.projects.map((id) => d.projects.find((p) => p.id === id)?.name ?? id).join('، ')}</span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {u.state === 'active' && (
+                      <span data-testid="portal-user-login" className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${u.last_login_at ? 'bg-[var(--positive-background)] text-success' : 'bg-[var(--warning-background)] text-warning'}`}>
+                        {u.last_login_at ? `${t.lastLogin} ${fmtDate(u.last_login_at)}` : t.neverLogged}
+                      </span>
+                    )}
+                    <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">{t.states[u.state]}</span>
+                    {u.membership_id && <Revoke clientId={d.id} membershipId={u.membership_id} label={t.revoke} onDone={() => void users.refetch()} />}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       <section>
         <h3 className="font-bold text-text-primary">{t.see}</h3>
         <p className="mb-3 text-xs text-text-muted">{t.seeHint}</p>
@@ -97,31 +129,6 @@ export function TabPortal({ d }: { d: ClientDetail }) {
         )}
       </section>
 
-      {d.can.manage_team && (
-        <section>
-          <h3 className="mb-2 font-bold text-text-primary">{t.people}</h3>
-          <Invite clientId={d.id} projects={d.projects} t={t} onDone={() => void users.refetch()} canAdmin={caps.team_admin === true} />
-          {users.isError ? (
-            <QueryFailure error={users.error} ar={ar} testId="portal-users-failure" onRetry={() => void users.refetch()} fallbackTitle={ar ? 'تعذّر تحميل المستخدمين.' : 'Could not load the people.'} />
-          ) : (
-            <ul data-testid="portal-users" className="mt-3 space-y-2">
-              {(users.data ?? []).length === 0 && !users.isLoading && <li className="text-text-muted">{t.none}</li>}
-              {(users.data ?? []).map((u) => (
-                <li key={u.membership_id ?? u.invitation_id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3">
-                  <span className="min-w-0">
-                    <span className="block truncate font-semibold text-text-primary" dir="ltr">{u.email}</span>
-                    <span className="text-xs text-text-muted">{u.name ? `${u.name} · ` : ''}{t.roles[u.role] ?? u.role} · {u.projects === null ? t.allProjects : u.projects.map((id) => d.projects.find((p) => p.id === id)?.name ?? id).join('، ')}</span>
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">{t.states[u.state]}</span>
-                    {u.membership_id && <Revoke clientId={d.id} membershipId={u.membership_id} label={t.revoke} onDone={() => void users.refetch()} />}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
     </div>
   )
 }

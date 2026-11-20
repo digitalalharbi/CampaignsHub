@@ -11,6 +11,8 @@ export interface PortalUser {
   projects: string[] | null
   state: 'active' | 'invited'
   expires_at?: string
+  /** CLIENT-PORTAL-LOGIN-001 — last sign-in; null = never signed in. */
+  last_login_at?: string | null
 }
 
 export const PORTAL_ROLES = ['client_viewer', 'client_approver', 'client_admin'] as const
