@@ -89,7 +89,9 @@ test.describe('the bell', () => {
     await expect(page).toHaveURL(/\/agency\/budgets\?project=/)
     // The budget opens as a centred dialog over the whole screen, header included; close it as a person would before
     // reaching for the bell again (whether it had drawn yet was a race — webkit lost it).
-    await expect(page.getByTestId('budget-drawer')).toBeVisible()
+    // The drawer draws after the budget's own read returns; webkit under the CI shard's load took longer than the default
+    // 5s on four PRs in a row (the same assertion, the same expectation — it only waits for the real thing to arrive).
+    await expect(page.getByTestId('budget-drawer')).toBeVisible({ timeout: 20_000 })
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('budget-drawer')).toHaveCount(0)
 
