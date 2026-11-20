@@ -21,3 +21,7 @@ export const listPortalUsers = (clientId: string) => getData<{ users: PortalUser
 export const invitePortalUser = (clientId: string, body: { email: string; role: string; project_ids?: string[] }) =>
   postData<{ state: 'granted' | 'invited'; dev_link: string | null }>(`/app/clients/${clientId}/portal-users`, body)
 export const revokePortalUser = (clientId: string, membershipId: string) => deleteData(`/app/clients/${clientId}/portal-users/${membershipId}`)
+
+/** CLIENT-INVITE-CONTROL-001 — a pending invitation is resent or withdrawn from the client page too. */
+export const resendPortalInvitation = (invitationId: string) => postData(`/settings/access/invitations/${invitationId}/resend`)
+export const withdrawPortalInvitation = (invitationId: string) => deleteData(`/settings/team/invitations/${invitationId}`)

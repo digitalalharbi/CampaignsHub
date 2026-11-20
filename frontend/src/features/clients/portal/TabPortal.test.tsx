@@ -59,7 +59,7 @@ describe('TabPortal', () => {
     expect(body.settings.portal.capabilities).toEqual({ create_requests: true, approve_content: true, team_admin: true })
   })
 
-  it('invites a person with a role and a project ceiling', async () => {
+  it('invites a person with a project ceiling and no viewer/approver choice (CLIENT-INVITE-NO-ROLE-001)', async () => {
     vi.mocked(invitePortalUser).mockResolvedValue({ state: 'invited', dev_link: null })
     mount()
     const form = await screen.findByTestId('portal-invite')
@@ -68,17 +68,17 @@ describe('TabPortal', () => {
     fireEvent.click(within(form).getByLabelText('Alpha'))
     fireEvent.click(within(form).getByRole('button', { name: 'Invite' }))
 
-    await waitFor(() => expect(invitePortalUser).toHaveBeenCalledWith('c1', { email: 'sara@client.test', role: 'client_viewer', project_ids: ['p1'] }))
+    await waitFor(() => expect(invitePortalUser).toHaveBeenCalledWith('c1', { email: 'sara@client.test', role: 'client_approver', project_ids: ['p1'] }))
     expect(await within(form).findByRole('status')).toHaveTextContent('Invitation sent.')
   })
 
   it('offers the client administrator role only after that power is switched on', async () => {
     mount()
     const form = await screen.findByTestId('portal-invite')
-    expect(within(form).queryByRole('option', { name: 'Client admin' })).toBeNull()
+    expect(within(form).queryByLabelText('Manage who can open the portal')).toBeNull()
 
     fireEvent.click(screen.getByTestId('cap-team_admin'))
-    expect(within(form).getByRole('option', { name: 'Client admin' })).toBeInTheDocument()
+    expect(within(form).getByLabelText('Manage who can open the portal')).toBeInTheDocument()
   })
 
   it('lists members and pending invitations with their ceilings, and removes one', async () => {
@@ -91,8 +91,11 @@ describe('TabPortal', () => {
 
     const list = await screen.findByTestId('portal-users')
     await waitFor(() => expect(within(list).getByText('sara@client.test')).toBeInTheDocument())
-    expect(within(list).getByText(/Approver · Alpha/)).toBeInTheDocument()
-    expect(within(list).getByText(/Viewer · All projects/)).toBeInTheDocument()
+    expect(within(list).getByText(/Sara · Alpha/)).toBeInTheDocument()
+    expect(within(list).getByText(/All projects/)).toBeInTheDocument()
+    // CLIENT-INVITE-CONTROL-001 — an active person is edited in place; a pending invitation is resent or withdrawn.
+    expect(within(list).getByTestId('portal-person-edit')).toBeInTheDocument()
+    expect(within(list).getByTestId('portal-person-withdraw')).toBeInTheDocument()
 
     fireEvent.click(within(list).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(revokePortalUser).toHaveBeenCalledWith('c1', 'm1'))
