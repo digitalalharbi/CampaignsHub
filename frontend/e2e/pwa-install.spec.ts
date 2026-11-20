@@ -66,11 +66,11 @@ test.describe('signed in', () => {
   test('the start URL opens the role home, the bare portal address lands there, and the analytics board is still reachable', async ({ page }) => {
     // AF1: the role dashboard is the landing (the Owner's order), and the installed app's start URL is that landing.
     await page.goto('/agency/dashboard')
-    await expect(page).toHaveURL(/\/agency\/home/)
+    await expect(page).toHaveURL(/\/agency\/dashboard/)
     await expect(page.getByTestId('role-dashboard')).toBeVisible({ timeout: 30_000 })
 
     await page.goto('/agency')
-    await expect(page).toHaveURL(/\/agency\/home/)
+    await expect(page).toHaveURL(/\/agency\/dashboard/)
     // Let the landing finish drawing before the next address: Firefox aborts a `goto` issued while the previous navigation is
     // still settling (NS_BINDING_ABORTED), which says nothing about the app.
     await expect(page.getByTestId('role-dashboard')).toBeVisible({ timeout: 30_000 })
