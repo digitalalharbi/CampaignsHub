@@ -79,7 +79,7 @@ final class InternalScan
     private function budgets(string $tenantId, Carbon $now): int
     {
         // DELIVERY-QUIET-001 — a project that neither spent nor showed one impression in 3 days raises no budget notice.
-        $ids = app(DeliveryState::class)->moving(ActiveProjects::liveIds($tenantId));
+        $ids = app(DeliveryState::class)->watched(ActiveProjects::liveIds($tenantId), $now->copy()->subDays(DeliveryState::DAYS - 1)->toDateString(), $now->toDateString());
         $n = 0;
         foreach ($this->budgets->forProjects($ids, $now) as $projectId => $r) {
             if (($r['has_budget'] ?? false) !== true) {
@@ -143,7 +143,7 @@ final class InternalScan
     private function recommendations(string $tenantId, Carbon $now): int
     {
         $n = 0;
-        $live = app(DeliveryState::class)->moving(ActiveProjects::liveIds($tenantId));
+        $live = app(DeliveryState::class)->watched(ActiveProjects::liveIds($tenantId), $now->copy()->subDays(DeliveryState::DAYS - 1)->toDateString(), $now->toDateString());
         if ($live === []) {
             return 0;
         }

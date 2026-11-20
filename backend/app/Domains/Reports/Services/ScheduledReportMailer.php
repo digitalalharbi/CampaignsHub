@@ -124,7 +124,7 @@ final class ScheduledReportMailer
 
         // DELIVERY-QUIET-001 — a report over a period in which the project neither spent nor showed one impression is not sent.
         if ($report->project_id !== null && $report->period_start !== null
-            && app(DeliveryState::class)->moving([(string) $report->project_id], $report->period_start->toDateString(), $report->period_end?->toDateString()) === []) {
+            && app(DeliveryState::class)->watched([(string) $report->project_id], $report->period_start->toDateString(), $report->period_end?->toDateString()) === []) {
             $this->mark($rows, 'suppressed', 'no_delivery');
 
             return;

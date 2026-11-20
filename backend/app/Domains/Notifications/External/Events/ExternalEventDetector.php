@@ -59,7 +59,7 @@ final class ExternalEventDetector
 
         foreach ($wanted as $tenant => $projects) {
             // DELIVERY-QUIET-001 — nothing is sent to an outside recipient about a project that did not move in 3 days.
-            $projects = array_intersect_key($projects, array_flip(app(DeliveryState::class)->moving(array_map('strval', array_keys($projects)))));
+            $projects = array_intersect_key($projects, array_flip(app(DeliveryState::class)->watched(array_map('strval', array_keys($projects)), $now->copy()->subDays(DeliveryState::DAYS - 1)->toDateString(), $now->toDateString())));
             if ($projects === []) {
                 continue;
             }

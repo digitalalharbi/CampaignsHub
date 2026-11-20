@@ -321,7 +321,7 @@ final class AlertEvaluator
         };
 
         // PROJECT-LIFECYCLE-001 rule 5 (N4) — every rule type, tenant-wide or project-scoped, speaks only about LIVE projects.
-        $breaches = $this->onlyLiveProjects($rule, $breaches);
+        $breaches = $this->onlyLiveProjects($rule, $breaches, $now);
 
         // LINK-HEALTH-YESTERDAY-001 — a link alert only when yesterday's data did not arrive; every link type, one rule.
         $openLinks = null;
@@ -354,7 +354,7 @@ final class AlertEvaluator
      * @param  list<array<string,mixed>>  $breaches
      * @return list<array<string,mixed>>
      */
-    private function onlyLiveProjects(AlertRule $rule, array $breaches): array
+    private function onlyLiveProjects(AlertRule $rule, array $breaches, ?Carbon $now = null): array
     {
         $live = $this->liveProjectIds((string) $rule->tenant_id);
         if ($rule->project_id !== null && ! isset($live[(string) $rule->project_id])) {
@@ -376,10 +376,11 @@ final class AlertEvaluator
         if ($about === []) {
             return $breaches;
         }
-        $moving = array_flip($this->movingIds((string) $rule->tenant_id, $about));
+        $moving = array_flip($this->movingIds((string) $rule->tenant_id, $about, $now ?? Carbon::now()));
 
+        // «توقفت أمس» and «ما تصرف» are the news of the stop itself, said once per episode; they are not watching a quiet project.
         return array_values(array_filter($breaches, static fn (array $b): bool => ($b['project_id'] ?? null) === null || $b['project_id'] === ''
-            || isset($moving[(string) $b['project_id']])));
+            || in_array($b['type'] ?? null, self::NOTICES, true) || isset($moving[(string) $b['project_id']])));
     }
 
     /**
@@ -395,17 +396,20 @@ final class AlertEvaluator
      * @param  list<string>  $ids
      * @return list<string>
      */
-    private function movingIds(string $tenantId, array $ids): array
+    private function movingIds(string $tenantId, array $ids, Carbon $now): array
     {
-        $known = $this->inSweep ? ($this->movingMemo[$tenantId] ?? []) : [];
+        // The window ends on the instant the sweep judges, never the wall clock: a replayed or scheduled sweep reads its own days.
+        $from = $now->copy()->subDays(DeliveryState::DAYS - 1)->toDateString();
+        $memo = $tenantId.'|'.$from;
+        $known = $this->inSweep ? ($this->movingMemo[$memo] ?? []) : [];
         $unknown = array_values(array_filter($ids, static fn (string $id): bool => ! array_key_exists($id, $known)));
         if ($unknown !== []) {
-            $moved = array_flip(app(DeliveryState::class)->moving($unknown));
+            $moved = array_flip(app(DeliveryState::class)->watched($unknown, $from, $now->toDateString()));
             foreach ($unknown as $id) {
                 $known[$id] = isset($moved[$id]);
             }
             if ($this->inSweep) {
-                $this->movingMemo[$tenantId] = $known;
+                $this->movingMemo[$memo] = $known;
             }
         }
 

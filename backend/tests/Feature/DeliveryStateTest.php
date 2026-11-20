@@ -53,6 +53,7 @@ final class DeliveryStateTest extends TestCase
         $running = $this->project('Running');
         $shownOnly = $this->project('Shown');
         $quiet = $this->project('Ettifaq');
+        $fresh = $this->project('Fresh');                          // nothing on record yet: still being set up, still watched
 
         $this->metric($running, 'snapchat', 'spend', 1, 120);
         $this->metric($running, 'snapchat', 'impressions', 1, 9_000);
@@ -63,20 +64,18 @@ final class DeliveryStateTest extends TestCase
         $this->metric($quiet, 'meta', 'spend', 1, 0);             // a zero row is not movement
 
         $state = app(DeliveryState::class);
-        $ids = [(string) $running->id, (string) $shownOnly->id, (string) $quiet->id];
+        $ids = [(string) $running->id, (string) $shownOnly->id, (string) $quiet->id, (string) $fresh->id];
 
-        $moving = $state->moving($ids);
-        sort($moving);
-        $expected = [(string) $running->id, (string) $shownOnly->id];
-        sort($expected);
-        $this->assertSame($expected, $moving, 'one impression is enough to be watched; a project silent for 3 days is not');
+        $this->assertSame([(string) $running->id, (string) $shownOnly->id, (string) $fresh->id], $state->watched($ids),
+            'one impression is enough to be watched; a project that delivered and went silent for 3 days is not');
 
         $by = $state->byProject($ids);
+        $this->assertArrayNotHasKey((string) $fresh->id, $by);
         $this->assertSame(['snapchat' => true, 'tiktok' => false], $by[(string) $running->id]);
         $this->assertSame(['meta' => false], $by[(string) $shownOnly->id]);
         $this->assertArrayNotHasKey((string) $quiet->id, $by);
 
-        $this->assertContains((string) $quiet->id, $state->moving([(string) $quiet->id], Carbon::now()->subDays(20)->toDateString()),
+        $this->assertContains((string) $quiet->id, $state->watched([(string) $quiet->id], Carbon::now()->subDays(20)->toDateString()),
             'a report over its own period still covers a project that spent inside it');
     }
 

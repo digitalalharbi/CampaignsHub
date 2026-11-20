@@ -306,7 +306,7 @@ final class DigestDispatcher
                 $projectIds = array_values(array_filter($projectIds, static fn ($id): bool => self::projectKey((string) $id) === $onlyProject));
             }
             // DELIVERY-QUIET-001 — a project with no spend and no impression in this period is not reported; none moved, nothing is sent.
-            $projectIds = app(DeliveryState::class)->moving($projectIds, Carbon::parse($from)->toDateString(), Carbon::parse($to)->toDateString());
+            $projectIds = app(DeliveryState::class)->watched($projectIds, Carbon::parse($from)->toDateString(), Carbon::parse($to)->toDateString());
             if ($projectIds === []) {
                 return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', 'no_delivery');
             }

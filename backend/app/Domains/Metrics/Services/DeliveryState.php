@@ -55,31 +55,36 @@ final class DeliveryState
     }
 
     /**
-     * DELIVERY-QUIET-001 — Owner 2026-11-20: a project with no data is not watched. Nothing is reported, digested or alerted
-     * about it until it moves again: at least one riyal of spend OR one impression. By default the window is the last 3 days;
-     * a report over its own period passes that period, so a monthly summary still covers a project that spent earlier on.
+     * DELIVERY-QUIET-001 — Owner 2026-11-20: a project that stopped is not watched. It delivered before (spend or impressions
+     * on record) and has neither spent nor shown one impression in the window: nothing is reported, digested or alerted about it
+     * until it moves again — one riyal or one impression. A project with no delivery on record yet is still being set up, and its
+     * setup notices (no budget, no account) keep arriving. By default the window is the last 3 days; a report over its own period
+     * passes that period, so a monthly summary still covers a project that spent earlier in it.
      *
      * @param  list<string>  $projectIds
-     * @return list<string> the ones that moved
+     * @return list<string> the ones still watched (not quiet), in the order given
      */
-    public function moving(array $projectIds, ?string $from = null, ?string $to = null): array
+    public function watched(array $projectIds, ?string $from = null, ?string $to = null): array
     {
         $projectIds = array_values(array_unique(array_filter(array_map('strval', $projectIds))));
         if ($projectIds === []) {
             return [];
         }
+        $from ??= now()->subDays(self::DAYS - 1)->toDateString();
 
-        return BoundAccountVisibility::apply(DailyMetric::withoutGlobalScopes(), 'daily_metrics')
+        $delivered = fn () => BoundAccountVisibility::apply(DailyMetric::withoutGlobalScopes(), 'daily_metrics')
             ->whereIn('daily_metrics.project_id', $projectIds)
-            ->where('daily_metrics.metric_date', '>=', $from ?? now()->subDays(self::DAYS - 1)->toDateString())
-            ->when($to !== null, fn ($q) => $q->where('daily_metrics.metric_date', '<=', $to))
             ->whereIn('daily_metrics.metric_key', ['spend', 'impressions'])
-            ->where('daily_metrics.value', '>', 0)
-            ->distinct()
-            ->pluck('daily_metrics.project_id')
-            ->map(static fn ($id): string => (string) $id)
-            ->values()
-            ->all();
+            ->where('daily_metrics.value', '>', 0);
+
+        $moved = array_flip($delivered()->where('daily_metrics.metric_date', '>=', $from)
+            ->when($to !== null, fn ($q) => $q->where('daily_metrics.metric_date', '<=', $to))
+            ->distinct()->pluck('daily_metrics.project_id')->map(static fn ($id): string => (string) $id)->all());
+        $rest = array_values(array_filter($projectIds, static fn (string $id): bool => ! isset($moved[$id])));
+        $before = $rest === [] ? [] : array_flip($delivered()->whereIn('daily_metrics.project_id', $rest)->where('daily_metrics.metric_date', '<', $from)
+            ->distinct()->pluck('daily_metrics.project_id')->map(static fn ($id): string => (string) $id)->all());
+
+        return array_values(array_filter($projectIds, static fn (string $id): bool => isset($moved[$id]) || ! isset($before[$id])));
     }
 
     /**

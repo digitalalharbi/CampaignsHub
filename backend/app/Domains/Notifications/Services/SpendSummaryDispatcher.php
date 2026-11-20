@@ -97,7 +97,7 @@ final class SpendSummaryDispatcher
                 return $this->finishInternal($user, $key, 'skipped', 'no_projects_in_scope');
             }
             // DELIVERY-QUIET-001 — a project that did not move in this period (no spend, no impression) is left out; none moved, none sent.
-            $projectIds = app(DeliveryState::class)->moving($projectIds, $from->toDateString(), $to->toDateString());
+            $projectIds = app(DeliveryState::class)->watched($projectIds, $from->toDateString(), $to->toDateString());
             if ($projectIds === []) {
                 return $this->finishInternal($user, $key, 'skipped', 'no_delivery');
             }
@@ -149,7 +149,7 @@ final class SpendSummaryDispatcher
                 ->where('tenant_id', $tenantId)->whereIn('id', $recipient->projectIds())
                 ->live() // PROJECT-LIFECYCLE-001 — active + paused only
                 ->pluck('id')->map(static fn ($id): string => (string) $id)->all();
-            $projectIds = app(DeliveryState::class)->moving($projectIds, $from->toDateString(), $to->toDateString());
+            $projectIds = app(DeliveryState::class)->watched($projectIds, $from->toDateString(), $to->toDateString());
             if ($projectIds === []) {
                 return $this->finishExternal($recipient, $key, 'skipped', 'no_delivery');
             }
