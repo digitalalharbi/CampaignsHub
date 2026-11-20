@@ -161,8 +161,8 @@ describe('changing the client in the side menu', () => {
       { locale: 'ar', route: '/agency/integrations' },
     )
 
-    const select = await screen.findByTestId('agency-scope-client')
-    fireEvent.change(select, { target: { value: 'k2' } })
+    fireEvent.click(await screen.findByTestId('agency-scope-client'))
+    fireEvent.click(await screen.findByTestId('agency-scope-client-client-k2'))
 
     await waitFor(() => expect(useAgencyClient.getState().currentClientId).toBe('k2'))
     expect(screen.getByTestId('where')).toHaveTextContent('/agency/integrations')

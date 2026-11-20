@@ -253,6 +253,10 @@ final class ClientPortalContentTest extends TestCase
         $token = $this->portalLogin('owner@x.test');
         $this->getJson("/api/v1/client/reports/{$report->id}/view", $this->auth($token))
             ->assertOk()->assertJsonPath('data.name', 'My Client Report');
+        // A link made before links kept a sealed token opens all the same (the portal hands the share itself over).
+        $older = $this->addReport($mine, 'My Older Report', audience: 'client', shared: true);
+        $this->getJson("/api/v1/client/reports/{$older->id}/view", $this->auth($token))
+            ->assertOk()->assertJsonPath('data.name', 'My Older Report');
         $this->getJson("/api/v1/client/reports/{$other->id}/view", $this->auth($token))->assertNotFound();
         $this->getJson("/api/v1/client/reports/{$unshared->id}/view", $this->auth($token))->assertNotFound();
         $this->getJson("/api/v1/client/reports/{$report->id}/view/nothing-here", $this->auth($token))->assertNotFound();
