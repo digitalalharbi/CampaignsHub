@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { PlatformDonutChart } from '@/features/analytics/charts'
 import { budgetStatus, STATUS_COLOR, STATUS_LABEL, type BudgetStatus } from '@/lib/colors'
 import type { RoleDashboard } from './api'
+import { DeliveryPanel } from './delivery'
 import { unitPath } from './ManagerView'
 import { PerformanceBlock } from './performance'
 import { BudgetGauge, Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
@@ -88,6 +89,9 @@ export function PmView({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'ap
           )}
         </Panel>
       </div>
+
+      {/* DELIVERY-STATE-001 — who is running and who stopped, the same reading as finance. */}
+      <DeliveryPanel units={units} portal={portal} money={m !== null && m !== undefined} />
 
       <StatusStrip>
         {(['exceeded', 'near', 'within'] as const).map((s) => (

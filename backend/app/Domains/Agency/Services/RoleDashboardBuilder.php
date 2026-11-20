@@ -19,6 +19,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
+use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
@@ -329,9 +330,19 @@ final class RoleDashboardBuilder
             $projectsOf[$unit][(string) $pid] = $project['name'];
         }
 
+        // DELIVERY-STATE-001 — running or stopped per unit: a platform with spend AND impressions in the last 3 days.
+        $live = app(DeliveryState::class)->byProject(array_values(array_map('strval', array_keys($approved))));
+
         $units = [];
         foreach ($byUnit as $unit => $readings) {
             $r = $this->reading($readings);
+            $platformsLive = [];
+            foreach (array_keys($projectsOf[$unit]) as $pid) {
+                foreach ($live[$pid] ?? [] as $provider => $on) {
+                    $platformsLive[$provider] = ($platformsLive[$provider] ?? false) || $on;
+                }
+            }
+            ksort($platformsLive);
             $days = $r['cover_days'];
             $units[] = [
                 'id' => str_starts_with((string) $unit, 'p:') ? substr((string) $unit, 2) : (string) $unit,
@@ -341,6 +352,8 @@ final class RoleDashboardBuilder
                 'ratio' => $r['budget'] !== null && $r['spent'] !== null && $r['budget'] > 0 ? round($r['spent'] / $r['budget'], 4) : null,
                 'days_left' => $days,
                 'run_out_on' => $days === null ? null : $today->copy()->addDays($days)->toDateString(),
+                'delivering' => in_array(true, $platformsLive, true),
+                'delivering_platforms' => $platformsLive,
             ] + $r;
         }
 
@@ -376,7 +389,29 @@ final class RoleDashboardBuilder
             $out[$key] += (int) $c;
         }
 
-        return $out + ['total' => array_sum($out)];
+        /*
+         * DELIVERY-STATE-001 — Owner 2026-11-20: «حملات نشطة» must be exact. Active is a campaign that reported spend AND
+         * impressions in the last 3 days, whatever status its platform last sent; one the platform still calls active but that
+         * delivered nothing is stopped («idle», counted with the paused). The buckets still add up to the total.
+         */
+        if ($projectIds !== []) {
+            $running = app(DeliveryState::class)->runningCampaigns($projectIds);
+            $rest = (clone $base)->when($running !== [], fn ($q) => $q->whereNotIn('id', $running))
+                ->selectRaw('status, count(*) as c')->groupBy('status')->pluck('c', 'status')->all();
+            $out = ['active' => $running === [] ? 0 : (clone $base)->whereIn('id', $running)->count(), 'paused' => 0, 'draft' => 0, 'completed' => 0, 'other' => 0, 'idle' => 0];
+            foreach ($rest as $status => $c) {
+                $status = (string) $status;
+                if ($status === 'active') {
+                    $out['idle'] += (int) $c;
+                    $out['paused'] += (int) $c;
+                    continue;
+                }
+                $key = in_array($status, ['paused', 'draft', 'completed'], true) ? $status : 'other';
+                $out[$key] += (int) $c;
+            }
+        }
+
+        return $out + ['total' => $out['active'] + $out['paused'] + $out['draft'] + $out['completed'] + $out['other']];
     }
 
     /**

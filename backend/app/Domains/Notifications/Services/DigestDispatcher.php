@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Branding\Services\SharedLinkBranding;
+use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Mail\SpendSummaryMail;
@@ -303,6 +304,11 @@ final class DigestDispatcher
             // DIGESTS-VISUAL-V2-001 — a per-project digest narrows to ONE project of the reader's own scope; it can never widen it.
             if ($onlyProject !== null) {
                 $projectIds = array_values(array_filter($projectIds, static fn ($id): bool => self::projectKey((string) $id) === $onlyProject));
+            }
+            // DELIVERY-QUIET-001 — a project with no spend and no impression in this period is not reported; none moved, nothing is sent.
+            $projectIds = app(DeliveryState::class)->moving($projectIds, Carbon::parse($from)->toDateString(), Carbon::parse($to)->toDateString());
+            if ($projectIds === []) {
+                return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', 'no_delivery');
             }
             /*
              * FINANCE-DIGEST-001 — Owner 2026-11-17: «المحاسب يحتاج تفاصيل الميزانيات لا الأداء».

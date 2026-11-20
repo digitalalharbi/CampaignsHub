@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { RankingBarChart } from '@/features/analytics/charts'
 import { budgetStatus, STATUS_COLOR, STATUS_LABEL } from '@/lib/colors'
 import type { RoleDashboard } from './api'
+import { DeliveryPanel } from './delivery'
 import { unitPath } from './ManagerView'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
 import { fmtDate } from '@/lib/datetime'
@@ -94,6 +95,9 @@ export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
         </Panel>
         )}
       </div>
+
+      {/* DELIVERY-STATE-001 — who is running and who stopped with money left. */}
+      <DeliveryPanel units={d.units} portal={portal} />
 
       {/* FINANCE-DASH-001 — the spend across the platforms, and every spend limit with what is left of it. */}
       <div className="grid gap-3 lg:grid-cols-2" data-testid="dash-finance-split">

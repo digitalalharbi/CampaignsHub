@@ -32,6 +32,7 @@ use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Models\SpendLimitEvent;
 use App\Domains\Metrics\Services\ChangeTimeline;
 use App\Domains\Metrics\Services\DataFreshnessService;
+use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\PeriodResolver;
@@ -225,6 +226,7 @@ final class AlertEvaluator
 
         $this->inSweep = true;
         $this->liveIds = [];
+        $this->movingMemo = [];
         try {
             foreach ($tenantIds as $tenantId) {
                 $this->tenants->setTenantId((string) $tenantId);
@@ -359,8 +361,55 @@ final class AlertEvaluator
             return [];
         }
 
-        return array_values(array_filter($breaches, static fn (array $b): bool => ($b['project_id'] ?? null) === null || $b['project_id'] === ''
+        $breaches = array_values(array_filter($breaches, static fn (array $b): bool => ($b['project_id'] ?? null) === null || $b['project_id'] === ''
             || isset($live[(string) $b['project_id']])));
+
+        /*
+         * DELIVERY-QUIET-001 — Owner 2026-11-20: a project that is not moving is not watched. A finding about a project with no
+         * spend and no impression in the last 3 days is dropped until it moves again (PERFORMANCE_TYPES); a linking or
+         * measurement fault (a token, a failed sync) is still raised, because it is why the figures stopped. «توقفت أمس» falls inside the window by design.
+         */
+        if (! in_array((string) $rule->type, self::PERFORMANCE_TYPES, true)) {
+            return $breaches;
+        }
+        $about = array_values(array_unique(array_filter(array_map(static fn (array $b): string => (string) ($b['project_id'] ?? ''), $breaches))));
+        if ($about === []) {
+            return $breaches;
+        }
+        $moving = array_flip($this->movingIds((string) $rule->tenant_id, $about));
+
+        return array_values(array_filter($breaches, static fn (array $b): bool => ($b['project_id'] ?? null) === null || $b['project_id'] === ''
+            || isset($moving[(string) $b['project_id']])));
+    }
+
+    /**
+     * DELIVERY-QUIET-001 — the rule types that read ad delivery, and so fall silent with it. A link or measurement fault, a lead
+     * waiting for follow-up, a store's own GA4 reading and a launch step are raised whether the ads move or not.
+     */
+    private const PERFORMANCE_TYPES = ['budget_risk', 'no_results', 'roas_drop', 'cpa_increase', 'cpl_increase', 'metric_anomaly'];
+
+    /** @var array<string, array<string, true>> tenant → project ids that moved, memoised for one sweep */
+    private array $movingMemo = [];
+
+    /**
+     * @param  list<string>  $ids
+     * @return list<string>
+     */
+    private function movingIds(string $tenantId, array $ids): array
+    {
+        $known = $this->inSweep ? ($this->movingMemo[$tenantId] ?? []) : [];
+        $unknown = array_values(array_filter($ids, static fn (string $id): bool => ! array_key_exists($id, $known)));
+        if ($unknown !== []) {
+            $moved = array_flip(app(DeliveryState::class)->moving($unknown));
+            foreach ($unknown as $id) {
+                $known[$id] = isset($moved[$id]);
+            }
+            if ($this->inSweep) {
+                $this->movingMemo[$tenantId] = $known;
+            }
+        }
+
+        return array_values(array_filter($ids, static fn (string $id): bool => ($known[$id] ?? false) === true));
     }
 
     /** @return array<string, true> the tenant's live project ids — memoised for one sweep (a single rule reads afresh) */
