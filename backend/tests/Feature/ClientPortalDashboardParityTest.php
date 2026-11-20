@@ -79,6 +79,7 @@ final class ClientPortalDashboardParityTest extends TestCase
         $current = (array) $r->json('data.current');
         $this->assertArrayHasKey('impressions', $current);
         $this->assertArrayNotHasKey('spend', $current);
+        $this->assertArrayNotHasKey('spend_coverage', $current);
         $this->assertArrayNotHasKey('revenue', $current);
         $this->assertArrayNotHasKey('roas', $current);
         $this->assertArrayNotHasKey('cpa', $current);
@@ -90,7 +91,9 @@ final class ClientPortalDashboardParityTest extends TestCase
         $this->actingAs($this->client());
 
         $current = (array) $this->getJson($this->url($this->a, 'summary'), $this->spa)->assertOk()->json('data.current');
-        $this->assertArrayHasKey('spend', $current);
+        // Every summary carries the money's coverage beside it; with spend on, spend's stays and revenue's does not.
+        $this->assertArrayHasKey('spend_coverage', $current);
+        $this->assertArrayNotHasKey('revenue_coverage', $current);
         $this->assertArrayNotHasKey('revenue', $current);
         $this->assertArrayNotHasKey('roas', $current);
     }
