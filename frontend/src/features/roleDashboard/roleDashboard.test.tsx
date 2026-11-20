@@ -223,11 +223,11 @@ describe('the manager performance panels', () => {
     expect(within(screen.getByTestId('watch-best')).getByRole('link', { name: /Leads Snap/ })).toHaveAttribute('href', '/agency/campaigns/p1/k1')
     expect(screen.getByTestId('watch-best-k1')).toHaveTextContent('Snapchat')
     expect(screen.getByTestId('watch-worst-k3')).toHaveTextContent('Leads TikTok')
-    // HOME-CONTENT-REPORT-001 — the best content is the report's own section; the weakest keep their tiles.
+    // HOME-CONTENT-PARITY-001 — best and weakest are the same report section, drawn alike.
     const best = screen.getByTestId('watch-panel-content-best')
     const cards = within(best).getAllByTestId('report-ad-card')
     expect(cards.length).toBe(2)
-    expect(screen.getAllByTestId('watch-content-worst')).toHaveLength(1)
+    expect(within(screen.getByTestId('watch-panel-content-worst')).getAllByTestId('report-ad-card')).toHaveLength(1)
     // …and a card opens the content's full analysis in a popup over Home.
     fireEvent.click(cards[0])
     expect(screen.getByTestId('ad-preview-dialog')).toBeInTheDocument()

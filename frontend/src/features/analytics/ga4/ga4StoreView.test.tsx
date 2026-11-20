@@ -77,7 +77,7 @@ describe('the GA4 store view', () => {
       { key: 'Direct', name: 'مباشر', value: 400 },
     ])
 
-    renderWithProviders(<Ga4Acquisition ar={false} channels={slices} devices={null} funnel={[{ stage: 'sessions', count: 1000, step_rate: null, exceeds_previous: false }]} />, { locale: 'en' })
+    renderWithProviders(<Ga4Acquisition ar={false} channels={slices} devices={null} funnel={[{ stage: 'sessions', count: 1000, step_rate: null, exceeds_previous: false }, { stage: 'add_to_cart', count: 40, step_rate: 0.04, exceeds_previous: false }]} />, { locale: 'en' })
     expect(screen.getByTestId('ga4-channels')).toHaveAttribute('data-slices', '2')
     expect(screen.getByTestId('ga4-devices-absent')).toHaveTextContent('Unavailable')
     expect(screen.getByTestId('ga4-funnel')).toBeInTheDocument()

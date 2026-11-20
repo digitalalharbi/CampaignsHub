@@ -198,6 +198,7 @@ export function ReportAdsSection({
   restWhere,
   windowEnd,
   browsable = true,
+  family,
 }: {
   ads: ReportAd[] | undefined
   /**
@@ -259,6 +260,8 @@ export function ReportAdsSection({
    * press, so offering one would draw a control that does nothing in the document a client keeps.
    */
   browsable?: boolean
+  /** HOME-CONTENT-PARITY-001 — the objective a flat list was ranked in, so its cards state that objective's figures. */
+  family?: string | null
 }) {
   const ar = locale === 'ar'
   const rows = (ads ?? []).slice(0, limit)
@@ -412,6 +415,7 @@ export function ReportAdsSection({
                 currency={currency ?? null}
                 testidPrefix={`report-ad-poster-${i}`}
                 onOpen={onOpen}
+                family={family ?? undefined}
               />
             ))}
           </div>
@@ -680,7 +684,13 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   const conversionState = ad.metrics ? metricState(ad.metrics as CreativeMetrics, 'conversions') : null
   // RESULT-EVENTS-001 — a link with no defined Results states no result for its content: not the generic count, not its cost or return.
   const undefinedResult = ad.result_defined === false
-  const countIsStated = !undefinedResult && ad.conversions !== null && ad.conversions !== undefined
+  /*
+   * SHOW-AVAILABLE-002 — Owner 2026-11-20: «النتائج 0» under a visits ad is not a result. The platform's generic count is printed
+   * only where the objective counts results (sales, leads, app…) and only above zero; a traffic, awareness, video or engagement
+   * card states its own figure instead (clicks, impressions, views…).
+   */
+  const resultFamily = !opts.family || !NON_RESULT_FAMILIES.has(opts.family)
+  const countIsStated = !undefinedResult && resultFamily && typeof ad.conversions === 'number' && ad.conversions > 0
 
   if (countIsStated) {
     /*
@@ -738,6 +748,8 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   return out.slice(0, 3)
 }
 
+const NON_RESULT_FAMILIES = new Set(['traffic', 'awareness', 'video', 'engagement', 'awareness_engagement', 'reach'])
+
 /** REPORT-CARD-OBJECTIVE-001 — the count each objective is judged on, read from the ad's own reported figure. */
 const OBJECTIVE_COUNT: Record<string, { key: string; ar: string; en: string }> = {
   sales: { key: 'purchases', ar: 'الطلبات', en: 'Purchases' },
@@ -753,7 +765,7 @@ function objectiveCount(ad: ReportAd, family: string, ar: boolean): { label: str
   const spec = OBJECTIVE_COUNT[family]
   if (!spec) return null
   const raw = (ad as Record<string, unknown>)[spec.key]
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return null
   const reported = (ad as Record<string, unknown>).reported as Record<string, boolean> | undefined
   if (reported && reported[spec.key] === false) return null
 
