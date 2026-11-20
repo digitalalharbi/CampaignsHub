@@ -98,7 +98,7 @@ describe('ClientLiveDashboard', () => {
     renderWithProviders(<ClientLiveDashboard />, { locale: 'en', route: '/portal/nasel' })
 
     expect(await screen.findByTestId('client-results')).toBeInTheDocument()
-    expect(screen.getByTestId('client-platform-snapchat')).toHaveTextContent('6')
+    expect(screen.getByTestId('client-platform-snapchat').closest('tr')).toHaveTextContent('6')
     expect(screen.queryByTestId('client-platform-meta')).toBeNull()
     expect(screen.getByTestId('client-campaign-c-1')).toHaveTextContent('Riwaq Snap')
     expect(screen.getByTestId('client-overview').textContent).not.toMatch(/\$\s?0/)

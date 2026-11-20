@@ -6,6 +6,7 @@ import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCa
 import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { Num } from '@/components/ui/Num'
+import { MetricTable } from '@/components/ui/MetricTable'
 import type { CampaignRow, PlatformRow } from './api'
 
 /**
@@ -74,8 +75,6 @@ function ClientResults({ platforms, campaigns, ar }: { platforms: PlatformRow[];
   const cRows = campaigns.filter((c) => (c.conversions ?? 0) > 0)
     .sort((a, b) => (b.conversions ?? 0) - (a.conversions ?? 0)).slice(0, 8)
   if (pRows.length === 0 && cRows.length === 0) return null
-  const head = 'px-2 py-2 text-xs font-semibold text-text-muted'
-  const cell = 'px-2 py-2 text-sm text-text-primary'
   const n = (v: number | null | undefined) => (v === null || v === undefined ? '—' : <Num>{new Intl.NumberFormat('en').format(Math.round(v))}</Num>)
 
   return (
@@ -83,24 +82,15 @@ function ClientResults({ platforms, campaigns, ar }: { platforms: PlatformRow[];
       {pRows.length > 0 && (
         <section className="rounded-2xl border border-border bg-surface p-4">
           <h3 className="mb-2 text-sm font-bold text-text-primary">{ar ? 'المنصات' : 'Platforms'}</h3>
-          <table className="w-full text-start">
-            <thead><tr className="border-b border-border text-start">
-              <th className={`${head} text-start`}>{ar ? 'المنصة' : 'Platform'}</th>
-              <th className={`${head} text-end`}>{ar ? 'الظهور' : 'Impressions'}</th>
-              <th className={`${head} text-end`}>{ar ? 'النقرات' : 'Clicks'}</th>
-              <th className={`${head} text-end`}>{ar ? 'تحويلات المنصة' : 'Conversions'}</th>
-            </tr></thead>
-            <tbody>
-              {pRows.map((p) => (
-                <tr key={p.provider} className="border-b border-border/60 last:border-0" data-testid={`client-platform-${p.provider}`}>
-                  <td className={cell}><span className="flex items-center gap-2"><ProviderMark provider={p.provider} size={18} />{providerLabel(p.provider, ar ? 'ar' : 'en')}</span></td>
-                  <td className={`${cell} text-end`}>{n(p.impressions)}</td>
-                  <td className={`${cell} text-end`}>{n(p.clicks)}</td>
-                  <td className={`${cell} text-end font-bold`}>{n(p.conversions)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <MetricTable
+            testId="client-platforms"
+            head={[ar ? 'المنصة' : 'Platform', ar ? 'الظهور' : 'Impressions', ar ? 'النقرات' : 'Clicks', ar ? 'تحويلات المنصة' : 'Conversions']}
+            rows={pRows.map((p) => [
+              <span key="p" data-testid={`client-platform-${p.provider}`} className="flex items-center gap-2"><ProviderMark provider={p.provider} size={18} />{providerLabel(p.provider, ar ? 'ar' : 'en')}</span>,
+              n(p.impressions), n(p.clicks), <b key="c">{n(p.conversions)}</b>,
+            ])}
+            values={pRows.map((p) => [providerLabel(p.provider, ar ? 'ar' : 'en'), p.impressions ?? null, p.clicks ?? null, p.conversions ?? null])}
+          />
         </section>
       )}
       {cRows.length > 0 && (
