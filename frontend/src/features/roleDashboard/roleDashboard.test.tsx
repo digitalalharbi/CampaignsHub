@@ -44,9 +44,9 @@ describe('the role dashboards', () => {
   it('manager: figures open their pages, spend carries its status, the strip names alerts and integrations', () => {
     page(base({}))
     // ANALYTICS-POPUP-001 — a figure the board answers opens that section in a popup; the rest stay links.
-    expect(screen.getByTestId('dash-kpi-budget')).toHaveAttribute('data-opens', 'analytics:board')
+    // HOME-DOORS-001 — money opens «الميزانيات» itself; the campaigns figure still opens the board.
+    expect(screen.getByTestId('dash-kpi-budget')).toHaveAttribute('href', '/agency/budgets')
     expect(screen.getByTestId('dash-kpi-active')).toHaveAttribute('data-opens', 'analytics:board')
-    expect(screen.getByTestId('dash-kpi-budget')).not.toHaveAttribute('href')
     expect(screen.getByTestId('dash-kpi-alerts')).toHaveAttribute('href', '/agency/alerts')
     // 1500 of 3000 is 50%: green.
     expect(screen.getByTestId('dash-kpi-spend')).toHaveAttribute('data-status', 'within')
@@ -170,7 +170,10 @@ describe('the manager performance panels', () => {
     const rows = within(top).getAllByRole('row').slice(1)
     // The most results first.
     expect(rows[0]).toHaveTextContent('Weekend')
-    expect(within(top).getByRole('link', { name: 'Weekend' })).toHaveAttribute('href', '/agency/campaigns/p1/k2')
+    // HOME-DOORS-001 — a campaign opens a popup with its figures; the campaign page is one link inside it.
+    fireEvent.click(within(top).getByTestId('dash-top-open-k2'))
+    const popup = screen.getByTestId('dash-top-popup')
+    expect(within(popup).getByRole('link', { name: 'Details' })).toHaveAttribute('href', '/agency/campaigns/p1/k2')
     expect(screen.getByTestId('dash-compare-snapchat')).toHaveTextContent('3.6')
     expect(screen.getByTestId('dash-spend-share-legend')).toHaveTextContent(/6[23]%/)
   })
