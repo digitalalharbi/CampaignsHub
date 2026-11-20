@@ -340,6 +340,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * also calls: site (GA4), store, influencers, attribution. Sales-bearing sections need the store capability.
      */
     Route::get('analytics/binding', [AnalyticsReadController::class, 'binding'])->middleware('project.can:analytics.view')->name('analytics.binding');
+    Route::get('analytics/report-view', [AnalyticsReadController::class, 'reportView'])->middleware('project.can:analytics.view')->name('analytics.report-view');
     Route::get('analytics/site', [AnalyticsReadController::class, 'site'])->middleware('project.can:analytics.view')->name('analytics.site');
     Route::get('analytics/store', [AnalyticsReadController::class, 'store'])->middleware('project.can:analytics.store.view')->name('analytics.store');
     Route::get('analytics/influencers', [AnalyticsReadController::class, 'influencers'])->middleware('project.can:analytics.store.view')->name('analytics.influencers');
