@@ -83,6 +83,46 @@ final class RoleDashboardBuilder
 
     public const DEFAULT_DAYS = 30;
 
+    /** DASH-DATE-RANGE-001 — the longest range the page reads at once. */
+    public const MAX_RANGE_DAYS = 366;
+
+    /** @var array{0: string, 1: string}|null an explicit from–to chosen on the page; null = the last `days` days */
+    private ?array $range = null;
+
+    /**
+     * DASH-DATE-RANGE-001 — Owner 2026-11-20: the dashboard reads the period chosen in the shared date picker (this month by
+     * default, last 7 days, since launch, any from–to), not only a fixed number of days. A malformed, reversed, future-ending
+     * or over-long range is ignored and the page falls back to its days.
+     */
+    public function withRange(?string $from, ?string $to): static
+    {
+        $this->range = null;
+        $ok = static fn (?string $d): bool => is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) === 1 && strtotime($d) !== false;
+        if ($ok($from) && $ok($to)) {
+            $today = PeriodResolver::today()->toDateString();
+            $end = min((string) $to, $today);
+            if ($from <= $end && Carbon::parse($from)->diffInDays(Carbon::parse($end)) < self::MAX_RANGE_DAYS) {
+                $this->range = [(string) $from, $end];
+            }
+        }
+
+        return $this;
+    }
+
+    /** @return array{0: Carbon, 1: Carbon, 2: int} from, to and the number of days between them, inclusive */
+    private function window(int $days, Carbon $today): array
+    {
+        if ($this->range !== null) {
+            $from = Carbon::parse($this->range[0], $today->getTimezone())->startOfDay();
+            $to = Carbon::parse($this->range[1], $today->getTimezone())->startOfDay();
+
+            return [$from, $to, (int) $from->diffInDays($to) + 1];
+        }
+        $to = $today->copy();
+
+        return [$to->copy()->subDays($days - 1), $to, $days];
+    }
+
     public function build(User $user, ?string $requested = null, int $days = self::DEFAULT_DAYS, ?string $client = null, ?string $project = null): array
     {
         $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
@@ -97,8 +137,7 @@ final class RoleDashboardBuilder
         // RIYADH-DAY-001 — ONE «today», the Riyadh day: the run-out's rate (ProjectBudgetReader) is already counted on it,
         // so a date added to a UTC «today» landed a day early from 00:00 to 03:00 Riyadh.
         $today = PeriodResolver::today();
-        $to = $today->copy();
-        $from = $to->copy()->subDays($days - 1);
+        [$from, $to, $days] = $this->window($days, $today);
 
         $scope = $this->scope($user);
         // DASH-CLIENT-FILTER-001 — Owner 2026-11-18: every figure on the page follows the chosen client, the budget included.
@@ -610,10 +649,9 @@ final class RoleDashboardBuilder
     {
         $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
         $today = PeriodResolver::today();
-        $to = $today->copy();
-        $from = $to->copy()->subDays($days - 1);
+        [$from, $to, $days] = $this->window($days, $today);
         $tenant = (string) app(TenantContext::class)->tenantId();
-        $key = 'role-dash-perf|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.($client ?? '*').'|'.($project ?? '*').'|'.$today->toDateString();
+        $key = 'role-dash-perf|'.$tenant.'|'.$user->getKey().'|'.$from->toDateString().'~'.$to->toDateString().'|'.($client ?? '*').'|'.($project ?? '*').'|'.$today->toDateString();
 
         return Cache::remember($key, 120, function () use ($user, $days, $today, $from, $to, $client, $project): array {
             $scope = $this->narrow($this->scope($user), $client, $project);
@@ -646,10 +684,9 @@ final class RoleDashboardBuilder
     {
         $days = in_array($days, self::WINDOWS, true) ? $days : self::DEFAULT_DAYS;
         $today = PeriodResolver::today();
-        $to = $today->copy();
-        $from = $to->copy()->subDays($days - 1);
+        [$from, $to, $days] = $this->window($days, $today);
         $tenant = (string) app(TenantContext::class)->tenantId();
-        $key = 'role-dash-watch|'.$tenant.'|'.$user->getKey().'|'.$days.'|'.($unit ?? '*').'|'.($project ?? '*').'|'.$today->toDateString();
+        $key = 'role-dash-watch|'.$tenant.'|'.$user->getKey().'|'.$from->toDateString().'~'.$to->toDateString().'|'.($unit ?? '*').'|'.($project ?? '*').'|'.$today->toDateString();
 
         return Cache::remember($key, 120, function () use ($user, $days, $unit, $project, $today, $from, $to): array {
             $scope = $this->scope($user);

@@ -7,7 +7,7 @@ import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
 import { Delta } from '@/components/ui/Delta'
 import { days } from '@/lib/counted'
-import { metricsCurrency, useDashboardPerformance, type CampaignRow, type DashboardWindow, type PlatformRow, type RoleDashboard } from './api'
+import { metricsCurrency, useDashboardPerformance, type CampaignRow, type PlatformRow, type RoleDashboard } from './api'
 import { Skeleton } from '@/components/ui/States'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { useProject } from '@/stores/project'
@@ -240,7 +240,7 @@ export function PerformanceBlock({ d, portal }: { d: RoleDashboard; portal: 'age
   const scopeClient = useAgencyClient((s) => s.currentClientId)
   const scopeProject = useProject((s) => s.currentProjectId)
   const needs = d.performance_deferred === true || d.campaign_rows === undefined
-  const perf = useDashboardPerformance(d.window.days as DashboardWindow, needs, portal === 'agency' ? scopeClient : null, portal === 'agency' && scopeClient ? scopeProject : null)
+  const perf = useDashboardPerformance({ from: d.window.from, to: d.window.to }, needs, portal === 'agency' ? scopeClient : null, portal === 'agency' && scopeClient ? scopeProject : null)
   const pd: RoleDashboard = needs ? { ...d, ...(perf.data ?? {}) } : d
   const loading = needs && perf.isLoading
   const mc = metricsCurrency(pd)
