@@ -176,6 +176,8 @@ final class AttributionTransparency
             'disagreement' => $this->disagreement->build($hasStore, $projectId, $window['from_date'], $window['to_date'], $loaded['orders'], $providers),
             'model_comparison' => $this->modelComparison->build($hasStore, $tenantId, $projectId, $loaded['orders'], $to, $platforms, $creditConfig),
             'reconciliation' => $this->reconciliation($hasStore, $platforms, $loaded, $projectId, $tenantId, $window['from_date'], $window['to_date'], $providers),
+            // ATTRIB-CAMPAIGN-001 — per campaign, what the platform claimed beside what the store recorded (Thunder's two halves).
+            'campaigns' => $this->campaignComparison($hasStore, $projectId, $window['from_date'], $window['to_date'], $loaded['orders'], $providers),
             'measurement' => [
                 'label_ar' => 'ما قاسه الموقع',
                 'label_en' => 'Site-Measured',
@@ -836,6 +838,101 @@ final class AttributionTransparency
         }
 
         return $out;
+    }
+
+    /**
+     * ATTRIB-CAMPAIGN-001 — Owner 2026-11-20 (the Thunder model): each campaign's platform-reported orders, revenue and ROAS
+     * beside the orders the store matched to that same campaign (UTM, click id or creator code), their net revenue and
+     * refunds. The verdict is read from the gap: the platform over-claims, under-claims, or the two agree. With no store
+     * connected the store half is null — never zero — and no verdict is given.
+     *
+     * @param  Collection<int,CommerceOrder>  $orders
+     * @return list<array<string,mixed>>
+     */
+    private function campaignComparison(bool $hasStore, string $projectId, string $fromDate, string $toDate, Collection $orders, array $providers): array
+    {
+        $rows = DailyMetric::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereNotNull('external_campaign_id')
+            ->whereIn('metric_key', ['spend', self::ORDERS_KEY, self::REVENUE_KEY])
+            ->when($providers !== [], fn ($q) => $q->whereIn('provider', $providers))
+            ->groupBy('external_campaign_id', 'metric_key')
+            ->select('external_campaign_id', 'metric_key')
+            ->selectRaw('SUM(value) AS total')
+            ->toBase()
+            ->get();
+
+        $platform = [];
+        foreach ($rows as $r) {
+            $platform[(string) $r->external_campaign_id][(string) $r->metric_key] = (float) $r->total;
+        }
+
+        $store = [];
+        if ($hasStore) {
+            foreach ($orders as $order) {
+                if ($order->cancelled_at !== null || $order->external_campaign_id === null) {
+                    continue;
+                }
+                $id = (string) $order->external_campaign_id;
+                $store[$id] ??= ['orders' => 0, 'revenue' => 0.0, 'refunds' => 0.0];
+                $store[$id]['orders']++;
+                $store[$id]['revenue'] += $order->netRevenue() ?? 0.0;
+                $store[$id]['refunds'] += (float) ($order->refunded_total ?? 0);
+            }
+        }
+
+        $ids = array_values(array_unique([...array_keys($platform), ...array_keys($store)]));
+        if ($ids === []) {
+            return [];
+        }
+
+        $campaigns = ExternalCampaign::withoutGlobalScopes()->whereIn('id', $ids)->get(['id', 'name', 'provider'])->keyBy('id');
+
+        $out = [];
+        foreach ($ids as $id) {
+            $p = $platform[$id] ?? [];
+            $claimed = (float) ($p[self::ORDERS_KEY] ?? 0);
+            $s = $store[$id] ?? null;
+            if ($claimed <= 0 && $s === null) {
+                continue; // nothing claimed and nothing sold: not an attribution question
+            }
+            $spend = (float) ($p['spend'] ?? 0);
+            $storeOrders = $hasStore ? ($s['orders'] ?? 0) : null;
+            $storeRevenue = $hasStore ? round($s['revenue'] ?? 0.0, 2) : null;
+
+            $verdict = null;
+            if ($hasStore) {
+                $verdict = match (true) {
+                    $claimed > max($storeOrders * 1.2, $storeOrders + 1) => 'over',
+                    $storeOrders > max($claimed * 1.2, $claimed + 1) => 'under',
+                    default => 'match',
+                };
+            }
+
+            $c = $campaigns->get($id);
+            $out[] = [
+                'id' => $id,
+                'name' => $c?->name,
+                'provider' => $c?->provider !== null ? AdPlatforms::canonical((string) $c->provider) : null,
+                'spend' => round($spend, 2),
+                'platform_orders' => round($claimed, 2),
+                'platform_revenue' => round((float) ($p[self::REVENUE_KEY] ?? 0), 2),
+                'platform_roas' => $spend > 0 && ($p[self::REVENUE_KEY] ?? 0) > 0 ? round((float) $p[self::REVENUE_KEY] / $spend, 2) : null,
+                'store_orders' => $storeOrders,
+                'store_revenue' => $storeRevenue,
+                'store_refunds' => $hasStore ? round($s['refunds'] ?? 0.0, 2) : null,
+                'store_roas' => $hasStore && $spend > 0 && $storeRevenue > 0 ? round($storeRevenue / $spend, 2) : null,
+                'store_cpa' => $hasStore && $storeOrders > 0 ? round($spend / $storeOrders, 2) : null,
+                'profit' => $hasStore ? round($storeRevenue - $spend, 2) : null,
+                'verdict' => $verdict,
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => $b['spend'] <=> $a['spend']);
+
+        return array_slice($out, 0, 50);
     }
 
     /**

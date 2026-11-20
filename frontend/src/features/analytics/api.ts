@@ -592,7 +592,26 @@ export interface AttributionDisagreement {
   platforms: { provider: string; claimed: number; confirmed: number; widest_gap: DisagreementPoint | null; points: DisagreementPoint[] }[]
 }
 
+/** ATTRIB-CAMPAIGN-001 — one campaign: what the platform claimed beside what the store matched to it. */
+export interface CampaignAttribution {
+  id: string
+  name: string | null
+  provider: string | null
+  spend: number
+  platform_orders: number
+  platform_revenue: number
+  platform_roas: number | null
+  store_orders: number | null
+  store_revenue: number | null
+  store_refunds: number | null
+  store_roas: number | null
+  store_cpa: number | null
+  profit: number | null
+  verdict: 'over' | 'under' | 'match' | null
+}
+
 export interface Attribution {
+  campaigns?: CampaignAttribution[]
   /** CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the claim-versus-store pair, split across the window. */
   disagreement?: AttributionDisagreement
   /** ATTRIBUTION-MODELS-001 — first touch, last touch, assists and paths on the store's evidence. */
