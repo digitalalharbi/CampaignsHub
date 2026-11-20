@@ -75,6 +75,7 @@ interface Shared {
 export function PublicReport({ token: tokenProp, embedded = false }: { token?: string; embedded?: boolean } = {}) {
   const params = useParams()
   const token = tokenProp ?? params.token ?? ''
+  const Body = embedded ? 'div' : 'main'
   // REPORT-CURRENCY-CODE-001 — the shared report names its currency by code (USD, SAR), set before any figure renders.
   setCodeMarks(true)
   useEffect(() => () => setCodeMarks(false), [])
@@ -248,7 +249,8 @@ export function PublicReport({ token: tokenProp, embedded = false }: { token?: s
         </div>
       </header>
 
-      <main className={embedded ? '' : 'mx-auto max-w-[1240px] px-4 py-6 sm:px-8 sm:py-8'}>
+      {/* A page has one <main>: embedded in the portal, the portal's own shell owns it. */}
+      <Body className={embedded ? '' : 'mx-auto max-w-[1240px] px-4 py-6 sm:px-8 sm:py-8'}>
         {/* A shape rather than a sentence: the page is about to be a dashboard, so it looks like one while it loads. */}
         {state === 'loading' && (
           <div data-testid="shared-report-loading" aria-busy="true" aria-label={locale === 'ar' ? 'جارٍ التحميل' : 'Loading'} className="grid gap-4">
@@ -361,7 +363,7 @@ export function PublicReport({ token: tokenProp, embedded = false }: { token?: s
             cta
           />
         </div>
-      </main>
+      </Body>
     </div>
   )
 }
