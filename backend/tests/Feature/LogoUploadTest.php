@@ -227,4 +227,17 @@ final class LogoUploadTest extends TestCase
         $this->actingAs($this->owner, 'sanctum')->patchJson("/api/v1/app/clients/{$this->client->id}/settings", ['branding' => ['logo_url' => 'https://evil.example/x.png'], 'name' => 'Razzah'])->assertOk();
         $this->assertNull($this->client->fresh()->branding['logo_url'] ?? null);
     }
+
+    /** CLIENT-SWITCHER-LOGO-001 — the client list names each client's own logo; one without reads null, never the agency's. */
+    public function test_the_client_list_carries_each_clients_own_logo_and_never_the_agencys(): void
+    {
+        $this->up("/api/v1/app/clients/{$this->client->id}/logo", $this->png())->assertCreated();
+        app(BrandingService::class)->setLogo('tenant', null, $this->png('agency.png'));
+
+        $rows = collect($this->actingAs($this->owner, 'sanctum')->getJson('/api/v1/client-workspaces')->assertOk()->json('data'))->keyBy('id');
+
+        $this->assertSame("/api/v1/app/clients/{$this->client->id}/logo/file", $rows[$this->client->id]['logo_url']);
+        $this->assertNull($rows[$this->other->id]['logo_url']);
+        $this->actingAs($this->owner, 'sanctum')->get($rows[$this->client->id]['logo_url'])->assertOk();
+    }
 }

@@ -60,6 +60,8 @@ export interface ClientWorkspace {
   mode: string
   status: string
   projects_count?: number
+  /** CLIENT-SWITCHER-LOGO-001 — the client's own logo (never the agency's in its place); null draws its initial. */
+  logo_url?: string | null
 }
 
 export interface ExternalAccount {
