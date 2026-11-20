@@ -402,16 +402,21 @@ export function AdPreviewDialog({
           the panel somebody opened to judge a creative.
         */}
         {/* CONTENT-FULL-ANALYSIS-001 — the report's full reading of the content: score, figures, funnel, retention. */}
-        {deepMetrics && (
-          <div className="mt-3" data-testid="ad-preview-dialog-deep">
-            <ReportAdDeepFigures ad={deepAd} currency={deepCurrency} ar={ar} />
-          </div>
-        )}
-
         {ownTrend && (
           <div data-testid="ad-preview-dialog-trend" className="mt-4">
             <h4 className="mb-1 text-xs font-bold text-text-secondary">{ar ? 'الأداء يوميًا' : 'Daily performance'}</h4>
             {ownTrend}
+          </div>
+        )}
+
+        {/*
+          CONTENT-POPUP-SCALE-001 — the deeper figures come AFTER the trend. They were placed between the
+          figures and the chart and pushed the chart ~320px past the first 900px viewport, which the
+          content-popup-scale spec (the owner's «creative, KPIs and chart without scrolling») catches.
+        */}
+        {deepMetrics && (
+          <div className="mt-3" data-testid="ad-preview-dialog-deep">
+            <ReportAdDeepFigures ad={deepAd} currency={deepCurrency} ar={ar} />
           </div>
         )}
 
