@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
-import { CloseButton } from './CloseButton'
+import { X } from 'lucide-react'
 
 type Size = 'sm' | 'md' | 'lg' | 'xl'
 
@@ -117,7 +117,11 @@ export function Modal({
         {title && (
           <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3">
             <h3 className="font-[var(--font-heading)] text-base font-bold text-text-primary">{title}</h3>
-            <CloseButton onClose={onClose} label="Close" />
+            {/* POPUP-CLOSE-001 — the same «✕ إغلاق» pill as `CloseButton`, inline: this file ships in the public report's budgeted bundle. */}
+            <button type="button" onClick={onClose} aria-label="Close" className="inline-flex h-10 items-center gap-1 rounded-xl border border-border px-3 text-sm font-semibold text-text-secondary hover:bg-surface-hover">
+              <X size={16} aria-hidden />
+              {document.documentElement.lang === 'en' ? 'Close' : 'إغلاق'}
+            </button>
           </div>
         )}
         <div className="min-h-0 flex-1 overflow-y-auto p-5 text-sm text-text-secondary">{children}</div>
