@@ -40,11 +40,22 @@ final class InvitationMail extends Mailable
         /** Who sent it. Empty when the product cannot say — never «فريق العمل» as a stand-in. */
         public readonly string $invitedBy = '',
         public readonly int $expiresInHours = 72,
+        /**
+         * CLIENT-INVITE-WORDING-001 — Owner 2026-11-20: a client invited to follow their own projects is not «joining a team»
+         * and is not handed a role: what they see is what the agency switched on. Their mail says so and names no role.
+         */
+        public readonly bool $forClient = false,
     ) {}
 
     public function envelope(): Envelope
     {
         $ar = $this->lang === 'ar';
+
+        if ($this->forClient) {
+            return new Envelope(subject: MailSubject::of($ar
+                ? "دعوة لمتابعة مشاريع {$this->workspace}"
+                : "Follow {$this->workspace}'s projects on CampaignsHub", $ar));
+        }
 
         return new Envelope(subject: MailSubject::of($ar
             ? "دعوة للانضمام إلى {$this->workspace}"
@@ -56,17 +67,21 @@ final class InvitationMail extends Mailable
         $ar = $this->lang === 'ar';
         $role = $this->role($ar);
 
-        $intro = $this->invitedBy !== ''
+        $intro = $this->forClient
+            ? ($ar
+                ? ($this->invitedBy !== '' ? "دعاك {$this->invitedBy} لمتابعة حملات ومشاريع {$this->workspace} وتقاريرها على كامبينز هب." : "لديك دعوة لمتابعة حملات ومشاريع {$this->workspace} وتقاريرها على كامبينز هب.")
+                : ($this->invitedBy !== '' ? "{$this->invitedBy} invited you to follow {$this->workspace}'s campaigns, projects and reports on CampaignsHub." : "You are invited to follow {$this->workspace}'s campaigns, projects and reports on CampaignsHub."))
+            : ($this->invitedBy !== ''
             ? ($ar
                 ? "دعاك {$this->invitedBy} للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب."
                 : "{$this->invitedBy} invited you to join the {$this->workspace} workspace on CampaignsHub.")
             : ($ar
                 ? "لديك دعوة للانضمام إلى مساحة عمل {$this->workspace} على كامبينز هب."
-                : "You are invited to join the {$this->workspace} workspace on CampaignsHub.");
+                : "You are invited to join the {$this->workspace} workspace on CampaignsHub."));
 
         $shell = MailShell::build(
             lang: $this->lang,
-            subject: $ar ? 'دعوة للانضمام إلى الفريق' : 'An invitation to join the team',
+            subject: $this->forClient ? ($ar ? 'دعوة لمتابعة مشاريعك' : 'An invitation to follow your projects') : ($ar ? 'دعوة للانضمام إلى الفريق' : 'An invitation to join the team'),
             preheader: $intro,
             // The recipient has no account and therefore no preferences to manage.
             preferences: false,
@@ -76,11 +91,12 @@ final class InvitationMail extends Mailable
         );
 
         $body = $shell + [
-            'title' => $ar ? 'دعوة للانضمام إلى الفريق' : 'An invitation to join the team',
+            'title' => $this->forClient ? ($ar ? 'دعوة لمتابعة مشاريعك' : 'An invitation to follow your projects') : ($ar ? 'دعوة للانضمام إلى الفريق' : 'An invitation to join the team'),
             'intro' => $intro,
             'workspace' => $this->workspace,
-            'roleName' => $role['name'],
-            'roleNote' => $role['note'],
+            // A client is handed no role: what they see is what the agency switched on.
+            'roleName' => $this->forClient ? '' : $role['name'],
+            'roleNote' => $this->forClient ? '' : $role['note'],
             'actionUrl' => $this->acceptUrl,
             'actionLabel' => $ar ? 'قبول الدعوة' : 'Accept the invitation',
             'validity' => $ar

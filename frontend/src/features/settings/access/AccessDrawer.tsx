@@ -99,7 +99,7 @@ function DrawerBody({ subject, onClose, data, ar }: { subject: DrawerSubject; on
             <>
               {/* ACCESS-PORTAL-ROLE-001 — raise or lower an active portal person here; their clients stay as granted. */}
               <ChipPicker testId="drawer-portal-role" label={ar ? 'الدور' : 'Role'} value={category} onChange={setCategory}
-                options={Object.entries(PORTAL_ROLE_LABEL).map(([value, l]) => ({ value, label: ar ? l.ar : l.en }))} />
+                options={['client_approver', 'client_admin'].map((value) => ({ value, label: ar ? PORTAL_ROLE_LABEL[value]!.ar : PORTAL_ROLE_LABEL[value]!.en }))} />
               <div className="flex justify-end">
                 <Button disabled={!changedCategory} onClick={() => run(a.updateMember.mutateAsync({ id: row.id, category }), ar ? 'حُفظ' : 'Saved')} data-testid="drawer-portal-save">
                   <Save size={14} aria-hidden /> {ar ? 'حفظ الدور' : 'Save role'}
