@@ -275,8 +275,10 @@ body {
 :is(input, select, textarea):is(.border-border, .border-border-strong, .border) {
   border-color: var(--field-border);
 }
-:is(input, select, textarea):is(.border-border, .border-border-strong, .border):hover:not(:disabled):not(:focus) {
-  border-color: var(--field-border-hover);
+@media (hover: hover) {
+  :is(input, select, textarea):is(.border-border, .border-border-strong, .border):hover:not(:disabled):not(:focus) {
+    border-color: var(--field-border-hover);
+  }
 }
 :is(input, select, textarea):is(.border-border, .border-border-strong, .border):focus,
 :is(input, select, textarea):is(.border-border, .border-border-strong, .border):focus-visible {
@@ -309,8 +311,10 @@ input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0
 input[type='radio']:not(.sr-only):not([class*='opacity-0']) {
   border-radius: 9999px;
 }
-input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']):hover:not(:disabled) {
-  border-color: var(--field-border-hover);
+@media (hover: hover) {
+  input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']):hover:not(:disabled) {
+    border-color: var(--field-border-hover);
+  }
 }
 input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']):checked {
   border-color: var(--brand-600);
