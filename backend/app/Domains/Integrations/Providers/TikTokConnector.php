@@ -41,8 +41,8 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsAu
      *  - `purchases` ← **`complete_payment`**, never `conversion`. TikTok's `conversion` counts every
      *    event the campaign was optimised for — a lead, an install, a registration, a form submit. On
      *    a lead-gen campaign it is a count of leads, and reporting it as purchases would tell a client
-     *    they sold something. `conversion` is still carried, as `conversions`, because it IS the
-     *    platform's own «results» figure; what it must never be is the sale.
+     *    they sold something. Since 2026-11-20 (Owner) `conversions` is the completed purchase too; TikTok's
+     *    `conversion` is not requested at all.
      *  - `checkout` ← `initiate_checkout`, its own stage. A started checkout is not a completed one.
      *  - `add_to_cart` ← **`web_event_add_to_cart`** («Adds to cart (website)»). The first real sync
      *    (2026-10-12) asked for `add_to_cart`, which is not a report metric, and TikTok refused the
@@ -89,7 +89,10 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsAu
         'checkout' => 'initiate_checkout',
         'purchases' => 'complete_payment',
         'revenue' => 'total_complete_payment_rate',
-        'conversions' => 'conversion',
+        // TIKTOK-CONVERSIONS-PURCHASES-001 — Owner 2026-11-20: «التحويلات هي السيلز فقط». TikTok's `conversion` counts every event
+        // the campaign optimises for (add to cart, a form, a registration…), so it is no longer read as conversions: a conversion here
+        // is a completed website purchase, the same figure as `purchases`. Leads keep their own metric (`form_leads`).
+        'conversions' => 'complete_payment',
         // NASEL — «Form submissions (TikTok)»: leads submitted on TikTok's own Instant Form (v1.3 basic report metrics, read 2026-10-28).
         // Never `form`, which is «Form submissions (website)» — a pixel event on the landing page — and never `conversion`.
         'form_leads' => 'onsite_form',
