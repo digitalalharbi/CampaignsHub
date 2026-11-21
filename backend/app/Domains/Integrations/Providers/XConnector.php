@@ -421,7 +421,12 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
 
         foreach (array_chunk($cardUris, 200) as $chunk) {
             try {
-                $body = $this->read($this->api($tokens)->get($this->url("accounts/{$adAccountId}/cards/all"), ['card_uris' => implode(',', $chunk)]), 'cards');
+                // X-LEGACY-CARDS-001 — `include_legacy_cards` defaults to false, and a website card made in the X Ads composer is
+                // a legacy card: Production 2026-11-21 (Ettifaq, 9 tweets, 9 card_uris) answered `data: []` without it.
+                $body = $this->read($this->api($tokens)->get($this->url("accounts/{$adAccountId}/cards/all"), [
+                    'card_uris' => implode(',', $chunk),
+                    'include_legacy_cards' => 'true',
+                ]), 'cards');
             } catch (\Throwable) {
                 continue;
             }
@@ -479,7 +484,7 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
                 $out[$c['card_uri']] = [
                     'still' => $still,
                     'film' => $film,
-                    'title' => is_string($c['title'] ?? null) && trim($c['title']) !== '' ? trim($c['title']) : $title,
+                    'title' => $this->cardTitle($c['title'] ?? null) ?? $this->cardTitle($c['website_title'] ?? null) ?? $title,
                     'destination' => $https($c['website_dest_url'] ?? null) ?? $https($c['website_url'] ?? null) ?? $destination,
                     'type' => is_string($c['card_type'] ?? null) ? $c['card_type'] : null,
                 ];
@@ -506,6 +511,11 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
         }
 
         return null;
+    }
+
+    private function cardTitle(mixed $value): ?string
+    {
+        return is_string($value) && trim($value) !== '' ? trim($value) : null;
     }
 
     /** An image link only: a video's `media_url` (.vmap, .mp4, .m3u8) is never a still. */
