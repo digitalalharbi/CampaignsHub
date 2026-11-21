@@ -4,7 +4,7 @@ import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
 import { FORMS_COPY, optionLabel, type BaseFieldProps, type Option } from './types'
 import { useClickOutside, useListNavigation, useTypeahead } from './useTypeahead'
-import { Chip, OptionSwatch, PanelSearch, PanelState, Spinner, panelClass, triggerClass } from './internals'
+import { Chip, OptionSwatch, PanelSearch, PanelState, Spinner, panelClassFor, usePanelUp, triggerClass } from './internals'
 
 export interface MultiSelectFieldProps extends BaseFieldProps {
   value: string[]
@@ -100,6 +100,7 @@ export function MultiSelectField({
     setQuery('')
   }
   const containerRef = useClickOutside<HTMLDivElement>(open, close)
+  const up = usePanelUp(containerRef, open)
 
   const toggle = (opt: Option) => {
     if (opt.disabled) return
@@ -221,7 +222,7 @@ export function MultiSelectField({
         {name && value.map((v) => <input key={v} type="hidden" name={`${name}[]`} value={v} />)}
 
         {open && (
-          <div className={panelClass}>
+          <div className={panelClassFor(up)}>
             {isSearchable && (
               <PanelSearch
                 ref={searchInputRef}

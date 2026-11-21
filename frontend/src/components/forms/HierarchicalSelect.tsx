@@ -4,7 +4,7 @@ import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
 import { FORMS_COPY, matchesQuery, optionLabel, type BaseFieldProps, type Option } from './types'
 import { useClickOutside, useListNavigation } from './useTypeahead'
-import { ClearButton, OptionSwatch, PanelSearch, PanelState, panelClass, triggerClass } from './internals'
+import { ClearButton, OptionSwatch, PanelSearch, PanelState, panelClassFor, usePanelUp, triggerClass } from './internals'
 
 export interface HierarchicalSelectProps extends BaseFieldProps {
   value: string | null
@@ -116,6 +116,7 @@ export function HierarchicalSelect({
     setQuery('')
   }
   const containerRef = useClickOutside<HTMLDivElement>(open, close)
+  const up = usePanelUp(containerRef, open)
 
   const isSelectable = (opt: Option, hasChildren: boolean) => !opt.disabled && !(leafOnly && hasChildren)
 
@@ -193,7 +194,7 @@ export function HierarchicalSelect({
         {name && <input type="hidden" name={name} value={value ?? ''} />}
 
         {open && (
-          <div className={panelClass}>
+          <div className={panelClassFor(up)}>
             {isSearchable && (
               <PanelSearch
                 ref={searchInputRef}
