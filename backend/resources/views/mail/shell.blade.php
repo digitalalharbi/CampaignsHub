@@ -77,7 +77,7 @@
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f7f5f0" dir="{{ $dir }}" style="width:100%; background-color:#f7f5f0;">
         <tr>
-            <td align="center" bgcolor="#f7f5f0" style="padding:24px 8px; background-color:#f7f5f0;">
+            <td align="center" bgcolor="#f7f5f0" style="padding:10px 4px; background-color:#f7f5f0;">
                 <!--[if mso]><table role="presentation" align="center" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
                 <table role="presentation" class="ch-wrap" align="center" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" dir="{{ $dir }}" style="margin:0 auto; width:100%; max-width:600px; background-color:#ffffff; border-radius:14px; overflow:hidden; border:1px solid #e4e0d6;">
 
@@ -115,7 +115,7 @@
                     @endif
 
                     <tr>
-                        <td class="ch-pad" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#ffffff" style="padding:28px 24px; background-color:#ffffff; text-align:{{ $align }}; direction:{{ $dir }}; font-family:{!! $font !!}; font-size:14px; line-height:1.8; color:#0b1a16; font-variant-numeric:tabular-nums;">
+                        <td class="ch-pad" dir="{{ $dir }}" align="{{ $align }}" bgcolor="#ffffff" style="padding:18px 14px; background-color:#ffffff; text-align:{{ $align }}; direction:{{ $dir }}; font-family:{!! $font !!}; font-size:14px; line-height:1.8; color:#0b1a16; font-variant-numeric:tabular-nums;">
                             {!! $slot !!}
                         </td>
                     </tr>

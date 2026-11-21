@@ -354,6 +354,8 @@ final class OperationalDigestModel
             // «ملخص الربط»: every project whose sources failed or are late, apart from performance.
             'linking' => array_values(array_filter(array_map(static fn (array $pr): ?array => $pr['linking'] === [] ? null : ['id' => $pr['id'], 'name' => $pr['name'], 'items' => $pr['linking']], $projects))),
             'mix' => $mix,
+            // DIGEST-FIGURES-ONLY-001 — «ملخص كل مشروع»: every project once, by spend, figures only (no verdict, no note).
+            'cards' => self::cards($projects),
             'projects' => $projects,
             'issues' => $issues,
             'issues_shown' => array_slice($issues, 0, self::TOP_ISSUES),
@@ -361,6 +363,49 @@ final class OperationalDigestModel
             'links' => ['alerts' => MailDeepLinks::alerts(), 'dashboard' => MailDeepLinks::dashboard()],
             'raw' => ['totals' => $t],
         ];
+    }
+
+    /**
+     * DIGEST-FIGURES-ONLY-001 — Owner 2026-11-21: the projects summary is a complete summary of every project, figures only.
+     *
+     * One card per project, largest spend first and then by name, so the order is the same on every run. A card carries
+     * the project's spend and its change, its share of the summary's spend, the objective's own figures (each objective
+     * of a mixed project on its own line, never summed across objectives) and where the money went by platform. It
+     * carries no state, verdict, cause or note: those were the parts the Owner found inaccurate.
+     *
+     * @param  list<array<string,mixed>>  $projects  `self::project()` of each project
+     * @return list<array<string,mixed>>
+     */
+    private static function cards(array $projects): array
+    {
+        $spendOf = static fn (array $pr): float => (float) ($pr['raw']['totals']['spend'] ?? 0);
+        usort($projects, static fn (array $a, array $b): int => ($spendOf($b) <=> $spendOf($a)) ?: strcmp((string) $a['name'], (string) $b['name']));
+        $total = array_sum(array_map($spendOf, $projects));
+
+        return array_map(static function (array $pr) use ($spendOf, $total): array {
+            $kpis = (array) ($pr['kpis'] ?? []);
+            $lines = [];
+            if (($pr['mixed'] ?? false) && ($pr['groups'] ?? []) !== []) {
+                foreach ((array) $pr['groups'] as $g) {
+                    $lines[] = ['label' => (string) ($g['label'] ?? ''), 'figures' => array_values(array_slice((array) ($g['kpis'] ?? []), 1))];
+                }
+            } else {
+                $lines[] = ['label' => (string) ($pr['objective_label'] ?? ''), 'figures' => array_values(array_slice($kpis, 1))];
+            }
+            $platforms = array_values(array_filter((array) ($pr['platforms'] ?? []), static fn (array $pf): bool => (int) ($pf['share'] ?? 0) > 0));
+
+            return [
+                'id' => (string) $pr['id'],
+                'name' => (string) $pr['name'],
+                'state' => (string) $pr['state'],
+                'no_data' => $pr['state'] === 'none',
+                'reason' => $pr['state'] === 'none' ? (string) ($pr['status']['reason'] ?? '') : '',
+                'spend' => $kpis[0] ?? null,
+                'share' => $total > 0 ? (int) round($spendOf($pr) / $total * 100) : 0,
+                'lines' => array_values(array_filter($lines, static fn (array $l): bool => $l['figures'] !== [])),
+                'platforms' => array_map(static fn (array $pf): array => ['name' => (string) $pf['name'], 'share' => (int) $pf['share']], array_slice($platforms, 0, 4)),
+            ];
+        }, $projects);
     }
 
     /**

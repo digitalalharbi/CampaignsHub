@@ -552,6 +552,34 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $this->assertStringNotContainsString('يحتاج قرارك', $html);
     }
 
+    /**
+     * DIGEST-FIGURES-ONLY-001 — Owner 2026-11-21: «ملخص المشاريع» carries a card for EVERY project, largest spend first, with
+     * figures only — no best/weakest, no state counts, no heatmap, no coverage count, no verdict chip.
+     */
+    public function test_the_projects_summary_has_one_figures_only_card_per_project_by_spend(): void
+    {
+        $d = DigestDemo::payload(12, 6);
+        $m = OperationalDigestModel::portfolio($d, 'ar', 'daily');
+        $this->assertCount(12, $m['cards']);
+        $this->assertCount(12, array_unique(array_column($m['cards'], 'id')));
+        $spends = array_map(static fn (array $c): float => (float) collect($m['projects'])->firstWhere('id', $c['id'])['raw']['totals']['spend'], $m['cards']);
+        $sorted = $spends;
+        rsort($sorted);
+        $this->assertSame($sorted, $spends, 'largest spend first');
+
+        $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio', 'أمس: 11 نوفمبر 2026'))->render();
+        $this->assertStringContainsString('ملخص كل مشروع', $html);
+        $this->assertSame(12, substr_count($html, 'data-block="portfolio-row"'));
+        foreach (['data-block="movers"', 'data-block="counts"', 'data-block="heatmap"', 'data-block="coverage"', 'أرقامها محدّثة', 'الأفضل والأقل', 'يحتاج قرارك'] as $gone) {
+            $this->assertStringNotContainsString($gone, $html, $gone);
+        }
+
+        $project = (new OperationalDigestMail(OperationalDigestModel::project($d['projects'][0], 'ar', 1), 'ar', 'م', 'daily', 'project'))->render();
+        foreach (['data-block="platform-strip"', 'data-block="content-top"', 'data-block="content-weak"', 'data-block="best-worst"'] as $gone) {
+            $this->assertStringNotContainsString($gone, $project, $gone);
+        }
+    }
+
     // ── §7 — a cause only with evidence ─────────────────────────────────────
 
     public function test_a_cause_is_written_only_when_the_budget_data_proves_it(): void
