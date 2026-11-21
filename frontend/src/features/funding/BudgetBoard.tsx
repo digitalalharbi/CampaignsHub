@@ -182,7 +182,8 @@ export function PlatformMarks({ platforms, ar, testId = 'live-platforms', size =
 /** The budget's own state beside the client: one chip, green «شغّالة» or grey «واقفة». */
 export function LiveChip({ on, ar, testId }: { on: boolean | undefined; ar: boolean; testId?: string }) {
   if (on === undefined) return null
-  const why = on ? (ar ? 'إنفاق وظهور آخر 3 أيام' : 'Spend and impressions in the last 3 days') : (ar ? 'لا إنفاق أو ظهور آخر 3 أيام' : 'No spend or impressions in the last 3 days')
+  // DELIVERY-RULE-7D-001 — the one rule, said where it is shown.
+  const why = on ? (ar ? 'إنفاق خلال آخر 7 أيام' : 'Spend in the last 7 days') : (ar ? 'لا إنفاق خلال آخر 7 أيام' : 'No spend in the last 7 days')
 
   return (
     <span

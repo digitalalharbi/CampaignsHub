@@ -28,10 +28,9 @@ final class DigestsObjectiveKpisTest extends TestCase
     {
         $m = OperationalDigestModel::portfolio(DigestDemo::payload(12, 6), 'ar', 'daily');
         $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio'))->render();
-        // The four state tiles: one <tr>, four cells, each with its label before its number.
-        $row = substr($html, (int) strpos($html, 'data-block="counts"'), 3000);
-        $this->assertSame(4, substr_count($row, 'data-count='));
-        $this->assertLessThan(strpos($row, 'dir="ltr">'), strpos($row, 'مشكلة'), 'label above, number under');
+        // DIGEST-FIGURES-ONLY-001 — the four state tiles (مشكلة / مراقبة / سليم / لا بيانات) are gone: figures only.
+        $this->assertStringNotContainsString('data-block="counts"', $html);
+        $this->assertStringNotContainsString('data-count=', $html);
         // No class or style that collapses a tile on a phone.
         $this->assertDoesNotMatchRegularExpression('/class="ch-kpi[ "]/', $html);
         $this->assertStringContainsString('width="33%"', $html, 'three tiles to a row, each a third of the row');
