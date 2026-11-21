@@ -16,10 +16,15 @@ use Illuminate\Support\Carbon;
  * @property string|null $author_label
  * @property string $body
  * @property Carbon|null $created_at
+ * @property Carbon|null $read_by_team_at
+ * @property Carbon|null $read_by_client_at
  */
 class RequestComment extends Model
 {
     protected $guarded = ['id'];
+
+    /** CLIENT-CHAT-001 — when each side has read the other's message (null: not yet). */
+    protected $casts = ['read_by_team_at' => 'datetime', 'read_by_client_at' => 'datetime'];
 
     public function request(): BelongsTo
     {

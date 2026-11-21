@@ -34,15 +34,18 @@ const overview = (projects: Array<{ id: string; name: string | null }>) => ({
  */
 describe('ClientLiveDashboard', () => {
   const urls: string[] = []
+  let results: unknown = { configured: false }
 
   beforeEach(() => {
     vi.clearAllMocks()
     urls.length = 0
+    results = { configured: false }
     const answer = (url: string) => {
       urls.push(url)
       if (url.includes('/metrics/summary')) {
         return { current: { impressions: 1000, clicks: 50, ctr: 5, conversions: 7 }, previous: {}, deltas: {}, currency: null, rows_in_scope: true }
       }
+      if (url.includes('/metrics/results')) return results
       if (url.includes('/metrics/platforms')) return [{ provider: 'snapchat', impressions: 900, clicks: 40, conversions: 6, ctr: 4.4, spend_share: null }, { provider: 'meta', impressions: 0, clicks: 0, conversions: 0, ctr: null, spend_share: null }]
       if (url.includes('/metrics/campaigns')) return [{ campaign_id: 'c-1', campaign_name: 'Riwaq Snap', provider: 'snapchat', impressions: 900, clicks: 40, conversions: 6, ctr: 4.4 }]
 
@@ -102,5 +105,22 @@ describe('ClientLiveDashboard', () => {
     expect(screen.queryByTestId('client-platform-meta')).toBeNull()
     expect(screen.getByTestId('client-campaign-c-1')).toHaveTextContent('Riwaq Snap')
     expect(screen.getByTestId('client-overview').textContent).not.toMatch(/\$\s?0/)
+  })
+
+  it('leads with the project\'s own Results and counts platforms and campaigns by them', async () => {
+    results = {
+      configured: true, total: 899, previous_total: 700, delta: 0.284,
+      by_platform: { snapchat: { results: 563, metric: 'form_leads' }, meta: { results: 336, metric: 'form_leads' } },
+      by_campaign: [{ campaign_id: 'c-9', campaign_name: 'Riwaq Snap LeadForm', provider: 'snapchat', results: 400, metric: 'form_leads' }],
+    }
+    vi.mocked(fetchPortalOverview).mockResolvedValue(overview([{ id: 'p-1', name: 'Riwaq' }]) as never)
+    renderWithProviders(<ClientLiveDashboard />, { locale: 'en', route: '/portal/nasel' })
+
+    expect(await screen.findByTestId('client-delivery-trend')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('client-kpis')).toHaveTextContent('899'))
+    expect(screen.getByTestId('client-kpis').textContent).not.toMatch(/Platform conversions/)
+    expect(screen.getByTestId('client-campaign-c-9')).toHaveTextContent('400')
+    expect(screen.getByTestId('client-results')).toHaveTextContent('Results')
+    expect(screen.getByTestId('client-platform-snapchat').closest('tr')).toHaveTextContent('563')
   })
 })
