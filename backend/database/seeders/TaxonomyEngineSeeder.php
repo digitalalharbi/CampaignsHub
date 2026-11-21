@@ -326,17 +326,41 @@ final class TaxonomyEngineSeeder extends Seeder
                 ],
             ],
             [
+                /*
+                 * CONSULTING-COPY-001 — Owner 2026-11-21: «استشارة شراء إعلامي — جلسة استشارية في الشراء الإعلامي» said nothing a
+                 * client could act on. Each service now says what the session covers and what the client leaves with.
+                 */
                 'key' => 'consulting_training', 'label_ar' => 'الاستشارات والتدريب', 'label_en' => 'Consulting & Training',
                 'icon' => 'graduation-cap', 'color' => '#f97316',
                 'required_field_rules' => ['topic', 'challenges', 'schedule', 'files'],
                 'services' => [
-                    ['key' => 'media_buying_consult', 'label_ar' => 'استشارة شراء إعلامي', 'label_en' => 'Media buying consult', 'description' => 'جلسة استشارية في الشراء الإعلامي.', 'description_en' => 'A consulting session on media buying.', 'icon' => 'message-circle'],
-                    ['key' => 'performance_review_session', 'label_ar' => 'جلسة مراجعة الأداء', 'label_en' => 'Performance review session', 'description' => 'جلسة لمراجعة الأداء ووضع التوصيات.', 'description_en' => 'A session to review performance and recommend actions.', 'icon' => 'clipboard-check'],
-                    ['key' => 'platform_selection_consult', 'label_ar' => 'استشارة اختيار المنصات', 'label_en' => 'Platform selection consult', 'description' => 'استشارة لاختيار المنصات المناسبة.', 'description_en' => 'Consulting on choosing the right platforms.', 'icon' => 'list-checks'],
-                    ['key' => 'tracking_consult', 'label_ar' => 'استشارة التتبع', 'label_en' => 'Tracking consult', 'description' => 'استشارة في إعداد التتبع والقياس.', 'description_en' => 'Consulting on tracking and measurement setup.', 'icon' => 'crosshair'],
-                    ['key' => 'team_training', 'label_ar' => 'تدريب الفريق', 'label_en' => 'Team training', 'description' => 'تدريب الفريق على إدارة الحملات المدفوعة.', 'description_en' => 'Train your team on paid campaign management.', 'icon' => 'graduation-cap'],
-                    ['key' => 'pre_launch_review', 'label_ar' => 'مراجعة ما قبل الإطلاق', 'label_en' => 'Pre-launch review', 'description' => 'مراجعة الجاهزية قبل إطلاق الحملة.', 'description_en' => 'Review readiness before launching a campaign.', 'icon' => 'shield-check'],
-                    ['key' => 'custom_request', 'label_ar' => 'طلب مخصص', 'label_en' => 'Custom request', 'description' => 'طلب خدمة مخصصة غير مدرجة.', 'description_en' => 'Request a custom service not listed here.', 'icon' => 'plus'],
+                    ['key' => 'media_buying_consult', 'label_ar' => 'استشارة إعلانية', 'label_en' => 'Advertising consultation', 'description' => 'جلسة مع مختص نراجع فيها حملاتك وميزانيتك ونحدد أين تصرف وكيف ترفع نتائجك، وتطلع بخطة واضحة.', 'description_en' => 'A session with a specialist on your campaigns and budget: where to spend and how to improve results, ending with a clear plan.', 'icon' => 'message-circle'],
+                    ['key' => 'performance_review_session', 'label_ar' => 'جلسة مراجعة الأداء', 'label_en' => 'Performance review session', 'description' => 'نراجع معك أرقام حملاتك الحالية، ونوضح وش ينجح ووش يحتاج تعديل، مع توصيات تنفذها مباشرة.', 'description_en' => 'We go through your current numbers with you: what works, what needs changing, and recommendations you can apply right away.', 'icon' => 'clipboard-check'],
+                    ['key' => 'platform_selection_consult', 'label_ar' => 'اختيار المنصات المناسبة', 'label_en' => 'Choosing the right platforms', 'description' => 'نحدد لك المنصات الأنسب لنشاطك وجمهورك (سناب، تيك توك، ميتا، جوجل وغيرها) وكيف توزع الميزانية بينها.', 'description_en' => 'Which platforms fit your business and audience (Snapchat, TikTok, Meta, Google and more) and how to split the budget.', 'icon' => 'list-checks'],
+                    ['key' => 'tracking_consult', 'label_ar' => 'استشارة التتبع والقياس', 'label_en' => 'Tracking and measurement consultation', 'description' => 'نراجع البكسل والأحداث وربط المتجر، ونتأكد أن كل طلب أو عميل محتمل يُقاس بدقة.', 'description_en' => 'We review your pixels, events and store connection so every order or lead is measured correctly.', 'icon' => 'crosshair'],
+                    ['key' => 'team_training', 'label_ar' => 'تدريب فريقك', 'label_en' => 'Training your team', 'description' => 'ورشة عملية لفريقك على إطلاق الحملات وقراءة الأرقام وتحسين الأداء على المنصات الإعلانية.', 'description_en' => 'A hands-on workshop for your team on launching campaigns, reading the numbers and improving results.', 'icon' => 'graduation-cap'],
+                    ['key' => 'pre_launch_review', 'label_ar' => 'مراجعة قبل الإطلاق', 'label_en' => 'Pre-launch review', 'description' => 'نراجع الحملة قبل تشغيلها: الاستهداف، المحتوى، الرابط والتتبع والميزانية، حتى لا تخسر من أول يوم.', 'description_en' => 'We check the campaign before it runs — targeting, content, link, tracking and budget — so you do not lose money on day one.', 'icon' => 'shield-check'],
+                    ['key' => 'custom_request', 'label_ar' => 'طلب مخصص', 'label_en' => 'Custom request', 'description' => 'احتياجك غير موجود في القائمة؟ اكتب لنا وش تحتاج ونرجع لك بالحل المناسب.', 'description_en' => 'Need something not listed? Tell us what you need and we will come back with the right solution.', 'icon' => 'plus'],
+                ],
+            ],
+            [
+                /*
+                 * SOFTWARE-SERVICES-001 — Owner 2026-11-21: «اضيف خدمات البرمجية». What an advertiser most often needs built around
+                 * the ads: a site or landing page that converts, a store, an app, the systems the leads land in, and the
+                 * automation and integrations between them. Keys are new (`dev_*`), so nothing already requested changes.
+                 */
+                'key' => 'software_services', 'label_ar' => 'الخدمات البرمجية', 'label_en' => 'Software services',
+                'icon' => 'code', 'color' => '#6366f1',
+                'required_field_rules' => ['topic', 'challenges', 'files'],
+                'services' => [
+                    ['key' => 'dev_website', 'label_ar' => 'تصميم وتطوير المواقع', 'label_en' => 'Website design and development', 'description' => 'موقع لنشاطك سريع ومتوافق مع الجوال، جاهز للإعلانات والتتبع من أول يوم.', 'description_en' => 'A fast, mobile-ready website for your business, ready for ads and tracking from day one.', 'icon' => 'globe'],
+                    ['key' => 'dev_landing_pages', 'label_ar' => 'صفحات الهبوط', 'label_en' => 'Landing pages', 'description' => 'صفحة هبوط لكل حملة مصممة لرفع التحويل، مع نموذج تسجيل وتتبع جاهز.', 'description_en' => 'A landing page per campaign built to convert, with a sign-up form and tracking ready.', 'icon' => 'layout-template'],
+                    ['key' => 'dev_ecommerce', 'label_ar' => 'إنشاء المتاجر الإلكترونية', 'label_en' => 'Online store build', 'description' => 'إنشاء وتطوير متجرك على سلة أو زد أو Shopify، وربطه بالمنصات الإعلانية.', 'description_en' => 'Build and develop your store on Salla, Zid or Shopify, connected to the ad platforms.', 'icon' => 'shopping-cart'],
+                    ['key' => 'dev_mobile_app', 'label_ar' => 'تطبيقات الجوال', 'label_en' => 'Mobile apps', 'description' => 'تطوير تطبيق iOS وAndroid مع قياس التثبيتات والأحداث داخل التطبيق.', 'description_en' => 'iOS and Android app development, with installs and in-app events measured.', 'icon' => 'smartphone'],
+                    ['key' => 'dev_custom_system', 'label_ar' => 'أنظمة وبرامج مخصصة', 'label_en' => 'Custom systems', 'description' => 'لوحات تحكم وأنظمة إدارة مبنية على طريقة عمل فريقك.', 'description_en' => 'Dashboards and management systems built around how your team works.', 'icon' => 'layout-dashboard'],
+                    ['key' => 'dev_leads_system', 'label_ar' => 'نظام إدارة العملاء المحتملين', 'label_en' => 'Leads management system', 'description' => 'يستقبل العملاء المحتملين من الإعلانات ويوزعهم على فريق المبيعات ويتابع حالتهم.', 'description_en' => 'Receives leads from your ads, assigns them to your sales team and tracks their status.', 'icon' => 'users'],
+                    ['key' => 'dev_automation', 'label_ar' => 'أتمتة العمليات', 'label_en' => 'Process automation', 'description' => 'أتمتة المهام المتكررة: إرسال العملاء المحتملين لواتساب أو جوجل شيت، والتقارير والتنبيهات.', 'description_en' => 'Automate repetitive work: leads to WhatsApp or Google Sheets, reports and alerts.', 'icon' => 'workflow'],
+                    ['key' => 'dev_api_integration', 'label_ar' => 'الربط البرمجي (API)', 'label_en' => 'API integration', 'description' => 'ربط أنظمتك ببعضها وبالمنصات الإعلانية والمتاجر عبر الواجهات البرمجية.', 'description_en' => 'Connect your systems to each other, to the ad platforms and to stores through APIs.', 'icon' => 'plug'],
                 ],
             ],
         ];
