@@ -1,0 +1,45 @@
+{
+  "key": "split",
+  "version": 1,
+  "label": {
+    "ar": "تقسيم",
+    "en": "Split"
+  },
+  "kind": "both",
+  "anchor": "end-side",
+  "blocks": [
+    {
+      "role": "surface",
+      "cols": 5,
+      "rows": 12,
+      "place": "calm",
+      "align": "end"
+    },
+    {
+      "role": "hook",
+      "cols": 4,
+      "rows": 3,
+      "place": "calm",
+      "align": "end"
+    },
+    {
+      "role": "message",
+      "cols": 4,
+      "rows": 3,
+      "place": "calm",
+      "align": "end"
+    },
+    {
+      "role": "cta",
+      "cols": 4,
+      "rows": 1,
+      "place": "live-bottom",
+      "align": "end"
+    }
+  ],
+  "motion": [
+    "rise",
+    "bar-grow-start"
+  ],
+  "detailCuts": 0
+}
