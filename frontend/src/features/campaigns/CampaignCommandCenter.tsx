@@ -493,7 +493,11 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
         </ChartCard>
         {sells && (
           <ChartCard title={ar ? 'معدل العائد (ROAS)' : 'Return on ad spend (ROAS)'} subtitle={ar ? 'الاتجاه اليومي' : 'Day by day'}>
-            <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'roas', name: 'ROAS' }]} height={190} />
+            {/*
+              CAMPAIGN-DETAIL-PRO-001 — the daily rows carry spend and revenue but not always their ratio, and the chart drew
+              a flat zero beside a 0.93× total. The day's return is read from the day's own figures; a day with no spend has none.
+            */}
+            <MetricLineChart data={series.map((p) => ({ ...p, roas: p.roas ?? (Number(p.spend) > 0 && p.revenue != null ? Number(p.revenue) / Number(p.spend) : null) })) as unknown as Array<Record<string, unknown>>} series={[{ key: 'roas', name: 'ROAS' }]} height={190} />
           </ChartCard>
         )}
         <ChartCard title={sells ? 'CPA / CPC' : 'CPC / CPM'} subtitle={ar ? 'التكلفة' : 'Cost'}>
