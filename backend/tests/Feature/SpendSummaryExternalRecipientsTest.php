@@ -142,7 +142,7 @@ final class SpendSummaryExternalRecipientsTest extends TestCase
         $this->assertNull($s['total']['spend'], 'a withheld spend leaves no false total');
 
         $html = (new SpendSummaryMail($s, 'ar', 'weekly'))->render();
-        $this->assertStringContainsString('ملخص الإنفاق • الأسبوع الماضي', $html);
+        $this->assertStringContainsString('ملخص الإنفاق : الأسبوع الماضي', $html);
         $this->assertStringContainsString('غير محوّل', $html);
         $this->assertStringContainsString('ما فيه حد إنفاق مضبوط', $html);
         $this->assertStringContainsString('يكفي تقريبًا', $html);

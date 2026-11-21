@@ -99,7 +99,7 @@ final class FxApplyEveryMoneyPathTest extends TestCase
             "projects/{$p}/campaigns/{$c}/creatives?{$w}", "projects/{$p}/campaigns/{$c}/events?{$w}", "projects/{$p}/campaigns/{$c}/funnel?{$w}",
             "projects/{$p}/campaigns/{$c}/external", "projects/{$p}/campaigns/{$c}/related", "projects/{$p}/campaigns/{$c}/activity", "projects/{$p}/campaigns/{$c}/alerts",
             "projects/{$p}/external-campaigns", "projects/{$p}/campaign-activity",
-            "projects/{$p}/metrics/summary?{$w}", "projects/{$p}/metrics/campaigns?{$w}", "projects/{$p}/metrics/platforms?{$w}", "projects/{$p}/metrics/accounts?{$w}",
+            "projects/{$p}/metrics/summary?{$w}", "projects/{$p}/metrics/campaigns?{$w}", "projects/{$p}/metrics/platforms?{$w}", "projects/{$p}/metrics/accounts?{$w}", "projects/{$p}/metrics/accounts/pulse?{$w}",
             "projects/{$p}/metrics/timeseries?{$w}", "projects/{$p}/metrics/budget?{$w}", "projects/{$p}/metrics/budget-accounts?{$w}", "projects/{$p}/metrics/budget-platforms?{$w}",
             "projects/{$p}/metrics/budget-explanation?{$w}", "projects/{$p}/metrics/funnel?{$w}", "projects/{$p}/metrics/drivers?{$w}", "projects/{$p}/metrics/attribution?{$w}",
             "projects/{$p}/metrics/entities/ad_set?{$w}", "projects/{$p}/metrics/objective-performance?{$w}", "projects/{$p}/metrics/objective-paths?{$w}",

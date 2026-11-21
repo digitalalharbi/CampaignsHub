@@ -12,7 +12,7 @@ vi.mock('./api', async (importOriginal) => ({
   // WATCH-BOARD-001 — the follow-up board's own request.
   useWatchBoard: () => ({ data: state.watch, isLoading: false, isError: false, isFetching: false, isPlaceholderData: false }),
 }))
-vi.mock('@/features/funding/fundingApi', () => ({ useFinancialDisclaimer: () => ({ data: { ar: 'نص', en: 'Disclaimer' } }) }))
+vi.mock('@/features/funding/fundingApi', () => ({ useFinancialDisclaimer: () => ({ data: { ar: 'نص', en: 'Disclaimer' } }), useBudgets: () => ({ data: undefined }) }))
 
 import { RoleDashboardPage } from './RoleDashboardPage'
 
@@ -290,9 +290,36 @@ describe('running or stopped, merged with the budget, for every role', () => {
     page(base({ view: 'manager', delivery }))
     const panel = screen.getByTestId('dash-panel-delivery')
     const header = within(panel).getByTestId('dash-delivery-header')
-    expect(header.children).toHaveLength(5)
-    expect(header).toHaveTextContent(/Client · project.*Status.*Platforms.*Spend.*Remaining/)
+    expect(header.children).toHaveLength(6)
+    expect(header).toHaveTextContent(/Client · project.*Status.*Platforms.*Today.*Spend.*Remaining/)
     expect(within(panel).getByTestId('dash-delivery-c1')).toHaveTextContent('Client')
+  })
+
+  it('keeps every cell under its heading, a row with no platform included, and shows today so far (DELIVERY-TABLE-002, DELIVERY-TODAY-001)', () => {
+    const rows: DeliveryRow[] = [
+      { ...delivery[0], today_spend: 42.5, today_as_of: '2026-11-21T08:20:00Z' },
+      { id: 'c9', kind: 'client' as const, name: 'Jeddah', delivering: false, delivering_platforms: {}, reason: 'no_spend', budget: 9000, spent: 5400, remaining: 3600, ratio: 0.6, currency: 'SAR', today_spend: null },
+    ]
+    page(base({ view: 'manager', delivery: rows }))
+    const panel = screen.getByTestId('dash-panel-delivery')
+    const row = within(panel).getByTestId('dash-delivery-c9')
+    expect(row.children).toHaveLength(6)
+    expect(within(row).getByTestId('dash-delivery-platforms-cell-c9')).toHaveTextContent('—')
+    expect(within(row).getByTestId('dash-delivery-today-c9')).toHaveTextContent('—')
+    expect(within(panel).getByTestId('dash-delivery-today-c1')).toHaveTextContent('43')
+  })
+
+  it('says why a stopped row is stopped, by the server\'s one rule (DELIVERY-RULE-7D-001)', () => {
+    const rows: DeliveryRow[] = [
+      { ...delivery[0], reason: 'running' },
+      { ...delivery[1], reason: 'no_sync' },
+      { id: 'c3', kind: 'client' as const, name: 'Gamma', delivering: false, delivering_platforms: { meta: true }, reason: 'budget_spent', budget: 100, spent: 100, remaining: 0, ratio: 1, currency: 'SAR' },
+    ]
+    page(base({ view: 'manager', delivery: rows }))
+    const panel = screen.getByTestId('dash-panel-delivery')
+    expect(within(panel).queryByTestId('dash-delivery-reason-c1')).toBeNull()
+    expect(within(panel).getByTestId('dash-delivery-reason-c2')).toHaveTextContent('Data not arriving')
+    expect(within(panel).getByTestId('dash-delivery-reason-c3')).toHaveTextContent('Budget ran out')
   })
 
   it('shows the state with no money for a member without the money key', () => {

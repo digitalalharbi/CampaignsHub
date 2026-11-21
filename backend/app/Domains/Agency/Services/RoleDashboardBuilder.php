@@ -15,6 +15,7 @@ use App\Domains\ClientWorkspaces\Models\ContentApproval;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Funding\Services\FundingReach;
 use App\Domains\Funding\Services\ProjectBudgetReader;
+use App\Domains\Funding\Support\BudgetFx;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Models\SpendLimit;
@@ -23,6 +24,7 @@ use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
+use App\Domains\Metrics\Spend\SpendLedger;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Services\ReportAds;
@@ -33,6 +35,7 @@ use App\Models\User;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * ROLE-DASHBOARD-001 — one landing page per role, from facts the product already computes.
@@ -372,7 +375,7 @@ final class RoleDashboardBuilder
             $projectsOf[$unit][(string) $pid] = $project['name'];
         }
 
-        // DELIVERY-STATE-001 — running or stopped per unit: a platform with spend AND impressions in the last 3 days.
+        // DELIVERY-STATE-001 / DELIVERY-RULE-7D-001 — running or stopped per unit, by the one rule (spend in 7 days on fresh data).
         $live = app(DeliveryState::class)->byProject(array_values(array_map('strval', array_keys($approved))));
 
         $units = [];
@@ -407,7 +410,8 @@ final class RoleDashboardBuilder
 
     /**
      * DELIVERY-ALL-ROLES-001 — one row per client (or per client-less project) of the member's reach: running or stopped
-     * (spend AND impressions in the last 3 days) and each platform's own state. The budget, spent and remaining come from
+     * by the one rule ({@see DeliveryState}: spend in the last 7 days, on data refreshed in that window, budget not run out),
+     * each platform's own state, and the one reason the row reads as it does. The budget, spent and remaining come from
      * the money units ONLY (so a member without money, or a project whose money is withheld, carries none). A unit with no
      * platform reading and no budget is left out: nothing to say about it.
      *
@@ -421,7 +425,7 @@ final class RoleDashboardBuilder
         if ($pids === []) {
             return [];
         }
-        $live = app(DeliveryState::class)->byProject($pids);
+        $detail = app(DeliveryState::class)->detail($pids);
         $money = [];
         foreach ($units as $u) {
             $money[(string) $u['id']] = $u;
@@ -437,11 +441,29 @@ final class RoleDashboardBuilder
                 'kind' => $client !== null ? 'client' : 'project',
                 'name' => $client !== null ? (string) ($scope['clients'][$client] ?? $project['name']) : (string) $project['name'],
                 'platforms' => [],
+                'states' => [],
+                'last_spend' => null,
             ];
-            foreach ($live[$pid] ?? [] as $provider => $on) {
+            foreach ($detail[$pid] ?? [] as $provider => $d) {
+                $on = $d['state'] === DeliveryState::RUNNING;
                 $rows[$id]['platforms'][$provider] = ($rows[$id]['platforms'][$provider] ?? false) || $on;
+                // A platform is as good as its best project under this client: running beats no-spend beats no-data.
+                $rank = [DeliveryState::RUNNING => 0, DeliveryState::NO_SPEND => 1, DeliveryState::NO_SYNC => 2];
+                $was = $rows[$id]['states'][$provider] ?? null;
+                if ($was === null || $rank[$d['state']] < $rank[$was]) {
+                    $rows[$id]['states'][$provider] = $d['state'];
+                }
+                if ($d['last_spend'] !== null && ($rows[$id]['last_spend'] === null || $d['last_spend'] > $rows[$id]['last_spend'])) {
+                    $rows[$id]['last_spend'] = $d['last_spend'];
+                }
             }
         }
+
+        // DELIVERY-TODAY-001 — today's spend so far, from the same SAR ledger the budget is drawn from, for money units only.
+        $today = $this->todaySpend(array_values(array_unique(array_merge(...array_map(
+            static fn (array $u): array => array_map(static fn (array $p): string => (string) $p['id'], $u['projects'] ?? []),
+            array_values($money) ?: [[]],
+        )))));
 
         $out = [];
         foreach ($rows as $id => $r) {
@@ -450,21 +472,112 @@ final class RoleDashboardBuilder
                 continue;
             }
             ksort($r['platforms']);
+            $reason = DeliveryState::reason(array_values($r['states']), isset($m['remaining']) && $m['budget'] !== null ? (float) $m['remaining'] : null);
             $out[] = [
                 'id' => $r['id'],
                 'kind' => $r['kind'],
                 'name' => $r['name'],
-                'delivering' => in_array(true, $r['platforms'], true),
+                // A budget that ran out stops the row whatever the platforms last did; the reason says which leg failed.
+                'delivering' => $reason === DeliveryState::RUNNING,
+                'reason' => $reason,
+                'last_spend' => $r['last_spend'],
                 'delivering_platforms' => $r['platforms'],
                 'budget' => $m['budget'] ?? null,
                 'spent' => $m['spent'] ?? null,
                 'remaining' => $m['remaining'] ?? null,
                 'ratio' => $m['ratio'] ?? null,
                 'currency' => $m['currency'] ?? null,
-            ];
+            ] + $this->todayOf($m, $today);
         }
 
         return $out;
+    }
+
+    /**
+     * DELIVERY-TODAY-001 — Owner 2026-11-21: «إنفاق اليوم حتى الآن» beside the budget, for credibility.
+     *
+     * TODAY-SPEND-LIVE-001 — Owner 2026-11-21: «انفاق اليوم غير صحيح! ليش صفر». It was read from `funding_spend_days`, the
+     * budget ledger, which is rebuilt by a scheduled job; when that job stalled the column said 0 while TikTok and Meta were
+     * spending. It now reads the synced platform rows themselves through the ONE spend definition the ledger is built from
+     * ({@see SpendLedger::accountDays()}) and converts each account-day with the same rate the ledger uses ({@see BudgetFx}),
+     * so it is as fresh as the last platform sync and can never disagree with the budget once the ledger catches up.
+     *
+     * Missing is never zero: 0 only when an account of the project was synced today and reported nothing; a currency with no
+     * rate withholds the sum (null). `as_of` is the latest successful platform sync of the project's selected accounts.
+     *
+     * @param  list<string>  $projectIds
+     * @return array<string, array{amount: float|null, as_of: string|null}> project id → today so far
+     */
+    private function todaySpend(array $projectIds): array
+    {
+        $projectIds = array_values(array_filter($projectIds, static fn (string $id): bool => $id !== ''));
+        if ($projectIds === []) {
+            return [];
+        }
+        $day = now('Asia/Riyadh')->startOfDay();
+        $dayStart = $day->copy()->utc();
+        $date = Carbon::parse($day->toDateString());
+
+        $synced = DB::table('project_integration_bindings as b')
+            ->join('external_accounts as a', 'a.id', '=', 'b.external_account_id')
+            ->whereIn('b.project_id', $projectIds)->where('b.is_active', true)->where('b.purpose', 'advertising')
+            ->groupBy('b.project_id')->selectRaw('b.project_id, MAX(a.last_synced_at) AS at')->pluck('at', 'project_id')->all();
+
+        $fx = app(BudgetFx::class);
+        $sum = [];
+        $withheld = [];
+        foreach (SpendLedger::accountDays($projectIds, $date, $date) as $d) {
+            $rate = $d->currency === null ? null : $fx->rate($d->currency, 'SAR', $date);
+            if ($rate === null) {
+                $withheld[$d->projectId] = true;
+
+                continue;
+            }
+            $sum[$d->projectId] = ($sum[$d->projectId] ?? 0.0) + $d->amount * $rate['rate'];
+        }
+
+        $out = [];
+        foreach ($projectIds as $id) {
+            $at = isset($synced[$id]) ? Carbon::parse($synced[$id]) : null;
+            $amount = match (true) {
+                isset($withheld[$id]) => null,
+                isset($sum[$id]) => round($sum[$id], 2),
+                $at !== null && $at->greaterThanOrEqualTo($dayStart) => 0.0,
+                default => null,
+            };
+            $out[$id] = ['amount' => $amount, 'as_of' => $at?->toIso8601String()];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $unit  the money unit, or null for a member without the money key
+     * @param  array<string, array{amount: float|null, as_of: string|null}>  $today
+     * @return array{today_spend: float|null, today_as_of: string|null}
+     */
+    private function todayOf(?array $unit, array $today): array
+    {
+        if ($unit === null) {
+            return ['today_spend' => null, 'today_as_of' => null];
+        }
+        $sum = 0.0;
+        $known = false;
+        $asOf = null;
+        foreach ($unit['projects'] ?? [] as $p) {
+            $t = $today[(string) $p['id']] ?? ['amount' => null, 'as_of' => null];
+            if ($t['amount'] === null) {
+                // One project with no figure withholds the client's sum: a part shown as the whole would read as the whole.
+                return ['today_spend' => null, 'today_as_of' => null];
+            }
+            $sum += $t['amount'];
+            $known = true;
+            if ($t['as_of'] !== null && ($asOf === null || $t['as_of'] < $asOf)) {
+                $asOf = $t['as_of'];   // the oldest refresh is how fresh the sum is
+            }
+        }
+
+        return ['today_spend' => $known ? round($sum, 2) : null, 'today_as_of' => $known ? $asOf : null];
     }
 
     /** @return list<array{date: string, spend: float}> the last 14 complete days of the scope's spend */
@@ -494,8 +607,8 @@ final class RoleDashboardBuilder
         }
 
         /*
-         * DELIVERY-STATE-001 — Owner 2026-11-20: «حملات نشطة» must be exact. Active is a campaign that reported spend AND
-         * impressions in the last 3 days, whatever status its platform last sent; one the platform still calls active but that
+         * DELIVERY-STATE-001 — Owner 2026-11-20: «حملات نشطة» must be exact. Active is a campaign that spent in the last
+         * 7 days (DELIVERY-RULE-7D-001), whatever status its platform last sent; one the platform still calls active but that
          * delivered nothing is stopped («idle», counted with the paused). The buckets still add up to the total.
          */
         if ($projectIds !== []) {

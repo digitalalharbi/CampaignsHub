@@ -11,6 +11,13 @@ vi.mock('./api', async (orig) => ({
   listProjects: vi.fn(),
 }))
 
+vi.mock('@/features/funding/fundingApi', async (orig) => ({
+  ...(await orig<typeof import('@/features/funding/fundingApi')>()),
+  useBudgets: (_d: boolean, _c: string | null, enabled: boolean) => ({
+    data: enabled ? { rows: [{ project_id: 'p-new', status: 'low', payment_mode: 'direct', approved: 1000, spent: 900, remaining: 100, used_ratio: 0.9, run_out_date: '2026-11-24', by_platform: [] }], totals: null, canManage: false, deletedCount: 0 } : undefined,
+  }),
+}))
+
 import { listClientWorkspaces, listProjects } from './api'
 
 const client = (id: string, name: string) => ({ id, name, mode: 'managed', status: 'active' })
@@ -94,5 +101,18 @@ describe('ProjectChooser', () => {
 
     expect(await screen.findByTestId('project-chooser-empty')).toBeTruthy()
     expect(useProject.getState().currentProjectId).toBeNull()
+  })
+
+  it('draws each choice with the client logo, the platforms\' logos and, with the money key, its budget (PROJECT-CHOOSER-VISUAL-001)', async () => {
+    signInWith(['campaigns.view', 'funding.view'])
+    vi.mocked(listClientWorkspaces).mockResolvedValue([{ ...client('c2', 'Nova'), logo_url: '/logo/nova.png' }, client('c1', 'Acme')] as never)
+    vi.mocked(listProjects).mockResolvedValue([project('p-new', 'c2', 'Launch', '2026-10-09T00:00:00Z', 7), project('p-old', 'c1', 'Ramadan', '2026-09-01T00:00:00Z')] as never)
+    renderWithProviders(<ProjectChooser purpose="spend-limits" />, { locale: 'en', route: '/agency/spend-limits' })
+    const card = await screen.findByTestId('project-choice-p-new')
+    expect(card.querySelector('img')?.getAttribute('src')).toBe('/logo/nova.png')
+    expect(screen.getByTestId('chooser-platforms-p-new').querySelectorAll('[data-testid="provider-mark"]')).toHaveLength(2)
+    expect(screen.getByTestId('chooser-budget-p-new')).toHaveTextContent('Running low')
+    expect(card.textContent).toContain('90%')
+    expect(screen.queryByTestId('chooser-budget-p-old')).toBeNull()
   })
 })

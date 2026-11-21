@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Platform\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\MetaCandidate\MetaAppRegistry;
 use App\Domains\Integrations\MetaCandidate\MetaAppRouting;
 use App\Domains\Integrations\MetaCandidate\MetaAppSwitchGuard;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateConnection;
@@ -89,6 +90,11 @@ final class MetaSaasAppController extends Controller
             return $refusal;
         }
 
+        // META-MULTI-APP-001 — the App Secret refreshes and proves every token the app issued: clearing it strands them just as the App ID does.
+        if ($key === 'client_secret' && ($refusal = $this->refuseIfConnectionsBelong()) !== null) {
+            return $refusal;
+        }
+
         if (! $this->credentials->forget($key)) {
             return ApiResponse::error(message: 'That credential is not stored.', errors: ['key' => [$key]], status: 422);
         }
@@ -97,6 +103,25 @@ final class MetaSaasAppController extends Controller
         $this->audit->log(action: 'platform.integration.meta_saas.credential_cleared', entityType: ProviderConfiguration::class, entityId: 'meta.saas', after: ['field' => $key]);
 
         return ApiResponse::success($this->payload(), 'Credential cleared.');
+    }
+
+    /**
+     * DELETE /settings/integrations/meta-saas — forget the whole SaaS app. Refused (409) while ANY connection still belongs to it, so a
+     * token is never left with no credentials to refresh or prove it. With none, every stored credential is cleared and the app is switched
+     * off for new connections; nothing else is touched.
+     */
+    public function destroy(): JsonResponse
+    {
+        if (($refusal = $this->refuseIfConnectionsBelong()) !== null) {
+            return $refusal;
+        }
+        foreach (MetaSaasCredentials::KEYS as $key) {
+            $this->credentials->forget($key);
+        }
+        ProviderConfiguration::query()->where('provider', MetaCredentialProfile::Saas->storageKey())->update(['enabled' => false]);
+        $this->audit->log(action: 'platform.integration.meta_saas.forgotten', entityType: ProviderConfiguration::class, entityId: 'meta.saas');
+
+        return ApiResponse::success($this->payload(), 'SaaS app forgotten.');
     }
 
     public function start(Request $request): JsonResponse
@@ -245,6 +270,23 @@ final class MetaSaasAppController extends Controller
         );
     }
 
+    /** META-MULTI-APP-001 — an app that still has connections cannot be forgotten: they depend on its credentials to refresh and sync. */
+    private function refuseIfConnectionsBelong(): ?JsonResponse
+    {
+        $blocked = app(MetaAppRegistry::class)->removalBlockedBy(MetaCredentialProfile::Saas);
+        if ($blocked === null) {
+            return null;
+        }
+        $this->audit->log(action: 'platform.integration.meta_saas.removal_refused', entityType: ProviderConfiguration::class, entityId: 'meta.saas', after: $blocked);
+
+        return ApiResponse::error(
+            message: 'Connections still belong to the SaaS app; forgetting its credentials would stop them syncing.',
+            errors: ['app' => [$blocked['reason']]],
+            status: 409,
+            meta: ['guard' => $blocked],
+        );
+    }
+
     private function saasRow(): ?ProviderConfiguration
     {
         return ProviderConfiguration::query()->where('provider', MetaCredentialProfile::Saas->storageKey())->first();
@@ -270,6 +312,8 @@ final class MetaSaasAppController extends Controller
                 ...$this->eligibility(),
             ],
             // How many existing connections each app holds — read-only, and nothing here moves them.
+            // Every registered Meta app, its role, public App ID, configured flag and verified / unverified connection counts.
+            'registry' => app(MetaAppRegistry::class)->overview(),
             'connections_by_app' => ['live' => (int) ($connections['live'] ?? 0), 'saas' => (int) ($connections['saas'] ?? 0)],
             'readiness' => $this->readiness->items(),
             // The end-to-end journey in the isolated test workspace, each step read from real rows.
