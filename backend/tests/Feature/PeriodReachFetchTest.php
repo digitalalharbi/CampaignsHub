@@ -32,7 +32,7 @@ use Tests\TestCase;
  *                                  and not for dates older than six months (LinkedIn rounds those to months)
  *   Google    campaign only        GAQL `metrics.unique_users` unsegmented, ≤ 92 days; campaign types without
  *                                  the metric answer nothing and stay not reported
- *   TikTok    not asked            its docs do not state that range reach is deduplicated rather than summed
+ *   TikTok    account + campaign   BASIC report with no time dimension (reach deduplicated over the range), ≤ 365 days
  */
 final class PeriodReachFetchTest extends TestCase
 {
@@ -198,12 +198,35 @@ final class PeriodReachFetchTest extends TestCase
         $this->assertNull($this->stored('account', '1234567890'), 'unique users cannot be aggregated to the customer');
     }
 
-    public function test_tiktok_is_not_asked_because_its_range_reach_is_not_documented_as_deduplicated(): void
+    public function test_tiktok_is_asked_without_a_time_dimension_at_account_and_campaign_grain(): void
+    {
+        $account = $this->account('tiktok', 'adv-1', ['tt-1']);
+        Http::fake(function (Request $request) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $q);
+            $this->assertSame('BASIC', $q['report_type']);
+            $this->assertStringNotContainsString('stat_time', (string) $q['dimensions']);
+            $this->assertSame('2026-09-01', $q['start_date']);
+            $this->assertSame('2026-09-14', $q['end_date']);
+
+            $list = $q['data_level'] === 'AUCTION_ADVERTISER'
+                ? [['dimensions' => ['advertiser_id' => 'adv-1'], 'metrics' => ['reach' => '40000', 'frequency' => '2.5', 'impressions' => '100000']]]
+                : [['dimensions' => ['campaign_id' => 'tt-1'], 'metrics' => ['reach' => '30000', 'frequency' => '2.0', 'impressions' => '60000']]];
+
+            return Http::response(['code' => 0, 'message' => 'OK', 'data' => ['list' => $list, 'page_info' => ['total_page' => 1]]]);
+        });
+
+        $this->assertSame(2, $this->fetch($account));
+        $this->assertEqualsWithDelta(40000, (float) $this->stored('account', 'adv-1')->reach, 0.01);
+        $this->assertEqualsWithDelta(30000, (float) $this->stored('campaign', 'tt-1')->reach, 0.01);
+        $this->assertSame(PeriodReach::REPORTED, $this->stored('campaign', 'tt-1')->state);
+    }
+
+    public function test_tiktok_is_not_asked_beyond_365_days(): void
     {
         $account = $this->account('tiktok', 'adv-1', ['tt-1']);
         Http::fake();
 
-        $this->assertSame(0, $this->fetch($account));
+        $this->assertSame(0, $this->fetch($account, '2025-09-01', '2026-09-14'));
         Http::assertNothingSent();
     }
 

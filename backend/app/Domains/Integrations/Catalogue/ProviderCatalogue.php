@@ -248,6 +248,7 @@ final class ProviderCatalogue
                 resourceType: ResourceType::AdAccount,
                 accountType: 'ad_account',
                 creativeInsights: true,
+                periodReach: true,
             ),
         );
     }

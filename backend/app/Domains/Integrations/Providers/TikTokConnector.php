@@ -10,6 +10,7 @@ use App\Domains\Integrations\Support\AssetExpiry;
 use App\Domains\Integrations\Support\PlatformCreatedAt;
 use App\Domains\Integrations\Support\TikTokCampaignStatus;
 use App\Domains\Integrations\ValueObjects\SyncResult;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
@@ -23,7 +24,7 @@ use RuntimeException;
  *
  * Awaiting credentials on this install.
  */
-final class TikTokConnector extends ApiAdvertisingConnector implements ReportsAudienceBreakdowns, ReportsCreativeInsights
+final class TikTokConnector extends ApiAdvertisingConnector implements ReportsAudienceBreakdowns, ReportsCreativeInsights, ReportsPeriodReach
 {
     /**
      * A ceiling on paging, so a wrong `total_page` cannot become an unbounded loop.
@@ -1314,5 +1315,74 @@ final class TikTokConnector extends ApiAdvertisingConnector implements ReportsAu
         }
 
         return array_values($rows);
+    }
+
+    /*
+     * REACH-PERIOD-001 / TIKTOK-PERIOD-REACH-001 — TikTok's BASIC report returns `reach` (and `frequency`)
+     * deduplicated over the whole requested range when the dimensions carry NO time dimension
+     * (no `stat_time_day` / `stat_time_hour`); TikTok caps that range at 365 days. Before this, TikTok was
+     * never asked, so every TikTok-only report read «التكرار: غير متاح» (Owner, 2026-11-21, Buzz report).
+     *
+     * Account grain is `AUCTION_ADVERTISER` by `advertiser_id`; campaign grain is `AUCTION_CAMPAIGN` by
+     * `campaign_id`. Nothing is summed here: each row is TikTok's own deduplicated answer for the window.
+     */
+    private const PERIOD_REACH_MAX_DAYS = 365;
+
+    public function periodReachGrains(): array
+    {
+        return [ReportsPeriodReach::ACCOUNT, ReportsPeriodReach::CAMPAIGN];
+    }
+
+    public function periodReachWindowSupported(string $from, string $to): bool
+    {
+        $start = Carbon::parse($from);
+        $end = Carbon::parse($to);
+
+        return $end->greaterThanOrEqualTo($start) && $start->diffInDays($end) + 1 <= self::PERIOD_REACH_MAX_DAYS;
+    }
+
+    public function periodReach(string $adAccountId, string $grain, string $from, string $to): array
+    {
+        [$level, $dimension] = match ($grain) {
+            ReportsPeriodReach::ACCOUNT => ['AUCTION_ADVERTISER', 'advertiser_id'],
+            ReportsPeriodReach::CAMPAIGN => ['AUCTION_CAMPAIGN', 'campaign_id'],
+            default => [null, null],
+        };
+
+        if ($level === null) {
+            return [];
+        }
+
+        $reported = $this->readAll($this->tokens(), 'report/integrated/get/', 'period reach', [
+            'advertiser_id' => $adAccountId,
+            'report_type' => 'BASIC',
+            'data_level' => $level,
+            // No time dimension: that is what makes TikTok deduplicate reach over the range.
+            'dimensions' => json_encode([$dimension], JSON_THROW_ON_ERROR),
+            'metrics' => json_encode(['reach', 'frequency', 'impressions'], JSON_THROW_ON_ERROR),
+            'start_date' => $from,
+            'end_date' => $to,
+        ]);
+
+        $rows = [];
+
+        foreach ($reported as $row) {
+            $dims = (array) ($row['dimensions'] ?? []);
+            $metrics = (array) ($row['metrics'] ?? []);
+            $id = $grain === ReportsPeriodReach::ACCOUNT ? $adAccountId : (string) ($dims['campaign_id'] ?? '');
+
+            if ($id === '') {
+                continue;
+            }
+
+            $rows[] = [
+                'external_id' => $id,
+                'reach' => is_numeric($metrics['reach'] ?? null) ? (float) $metrics['reach'] : null,
+                'impressions' => is_numeric($metrics['impressions'] ?? null) ? (float) $metrics['impressions'] : null,
+                'frequency' => is_numeric($metrics['frequency'] ?? null) ? (float) $metrics['frequency'] : null,
+            ];
+        }
+
+        return $rows;
     }
 }
