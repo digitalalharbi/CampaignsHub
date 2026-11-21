@@ -641,25 +641,18 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
     }
 
     /**
-     * The Owner approved this card (2026-11-12): the metric and its % change as the title, before/after bars that name their
-     * days («أمس: 11 نوفمبر 2026» against «10 نوفمبر 2026», never a bare «قبل / الآن»), and numbered action chips.
+     * The approved decision card (2026-11-12) is no longer drawn in the digest: DIGEST-NO-DECISION-SECTION-001 and
+     * DIGEST-FIGURES-ONLY-001 (Owner 2026-11-21). The model still finds the movement; the mail carries figures only.
      */
-    public function test_the_decision_card_keeps_the_approved_layout_with_dated_bars(): void
+    public function test_the_alert_decision_card_is_no_longer_drawn_in_the_digest(): void
     {
-        [$html] = $this->decisionCards('traffic',
+        [$html, $m] = $this->decisionCards('traffic',
             ['spend' => 100.0, 'impressions' => 10000.0, 'clicks' => 300.0, 'link_clicks' => 300.0],
             ['spend' => 100.0, 'impressions' => 10000.0, 'clicks' => 150.0, 'link_clicks' => 150.0]);
-        $text = preg_replace('/\s+/u', ' ', strip_tags(html_entity_decode($html)));
 
-        $this->assertStringContainsString('data-viz="before_now"', $html);
-        $this->assertMatchesRegularExpression('/تكلفة النقرة زادت\s*\S*100%/u', $text, 'the metric and its % change');
-        $this->assertStringContainsString('10 نوفمبر 2026 · ', $text, 'the «before» bar names its day');
-        $this->assertStringContainsString('أمس: 11 نوفمبر 2026 · ', $text, 'the «after» bar names its day');
-        preg_match_all('/data-viz="before_now".*?<\/table>\s*<\/td>\s*<\/tr>\s*<\/table>/us', $html, $bars);
-        $this->assertNotEmpty($bars[0]);
-        foreach ($bars[0] as $bar) {
-            $this->assertDoesNotMatchRegularExpression('/>\s*(قبل|الآن) /u', $bar, 'never a bare «قبل / الآن» on a bar');
-        }
+        $this->assertNotSame([], $m['issues'], 'the movement is still found');
+        $this->assertStringNotContainsString('data-viz="before_now"', $html);
+        $this->assertStringNotContainsString('data-block="issue"', $html);
     }
 
     /** ROAS cards come only from sales: a traffic campaign whose «return» fell is never judged on it. */

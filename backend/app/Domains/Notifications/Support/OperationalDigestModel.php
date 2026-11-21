@@ -451,7 +451,8 @@ final class OperationalDigestModel
                 'spend' => $kpis[0] ?? null,
                 'share' => $total > 0 ? (int) round($spendOf($pr) / $total * 100) : 0,
                 'lines' => array_values(array_filter($lines, static fn (array $l): bool => $l['figures'] !== [])),
-                'platforms' => array_map(static fn (array $pf): array => ['name' => (string) $pf['name'], 'share' => (int) $pf['share']], array_slice($platforms, 0, 4)),
+                // Every platform that spent, never a fixed number of them (CanonicalPlatformOrderTest).
+                'platforms' => array_map(static fn (array $pf): array => ['name' => (string) $pf['name'], 'share' => (int) $pf['share']], $platforms),
             ];
         }, $projects);
     }
