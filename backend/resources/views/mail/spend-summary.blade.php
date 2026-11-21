@@ -36,8 +36,19 @@
         </tr>
     </table>
 
-    {{-- One card per project: name, state chip, the bar of the limit used, remaining amount and share, days left. --}}
-    @foreach ($s['projects'] as $p)
+    {{--
+      FINANCE-SPEND-ONLY-001 — Owner 2026-11-21: finance reads the money per CLIENT. Each client: its spend in the period and what
+      is left (one currency only, otherwise «لا بيانات»), then one card per project: name, state chip, the bar of the limit used,
+      remaining amount and share, days left. No performance figure anywhere.
+    --}}
+    @foreach ($s['clients'] as $client)
+    @if ($client['name'] !== '')
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="spend-client" style="margin:10px 0 6px;"><tr>
+            <td style="font-size:14px; font-weight:800; color:#0b1a16;">{{ \Illuminate\Support\Str::limit($client['name'], 34, '…') }}</td>
+            <td style="text-align:{{ $endSide }}; font-size:11px; color:#5b6b68; white-space:nowrap;">{{ $ar ? 'الإنفاق' : 'Spend' }} <b dir="ltr" style="color:#0b1a16;">{{ $client['spend_text'] }}</b> — {{ $ar ? 'المتبقي' : 'Left' }} <b dir="ltr" style="color:#0b1a16;">{{ $client['remaining_text'] }}</b></td>
+        </tr></table>
+    @endif
+    @foreach ($client['projects'] as $p)
         @php($tone = ['over' => ($external ? 'watch' : 'bad'), 'near' => 'watch', 'ok' => 'ok', 'unconverted' => 'none', 'none' => 'none'][$p['state']])
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="spend-project" data-state="{{ $p['state'] }}" style="border:1px solid #e4e0d6; border-{{ $startSide }}:4px solid {{ $S::INK[$tone] }}; border-radius:12px; margin-bottom:8px; background-color:{{ $S::SOFT[$tone] }};">
             <tr><td style="padding:10px 12px;">
@@ -66,6 +77,7 @@
             </td></tr>
         </table>
     @endforeach
+    @endforeach
 
     @if ($s['projects'] === [])
         <div style="font-size:13px; color:#5b6b68; margin-bottom:10px;">{{ $ar ? 'ما فيه مشاريع في هذا الملخص.' : 'No projects in this summary.' }}</div>
@@ -77,5 +89,6 @@
         <div style="font-size:12px; color:#5b6b68; line-height:1.7; margin-top:14px;">{{ $ar ? 'وصلتك هذه الرسالة لمتابعة ميزانية المشاريع المذكورة وتجديدها مع العميل.' : 'You receive this to follow the budgets of the projects above and renew them with the client.' }}</div>
     @endif
     {{-- BUDGET-DISCLAIMER-001 — the one financial disclaimer, wherever money figures appear (external recipients included). --}}
+    @include('mail.digest._notes', ['ar' => $ar, 'sources' => $s['source_names'] ?? []])
     <div data-block="financial-disclaimer" style="font-size:11px; color:#5b6b68; line-height:1.7; margin-top:12px; border-top:1px solid #e4e0d6; padding-top:8px;">{{ \App\Domains\Funding\Support\FundingDisclaimer::text($ar ? 'ar' : 'en') }}</div>
 </div>

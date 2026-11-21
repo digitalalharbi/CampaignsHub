@@ -74,14 +74,16 @@ test.describe('an advertiser who opens the agency portal', () => {
 test.describe('an agency operator who opens the advertiser portal', () => {
   test.use({ storageState: AUTH.owner })
 
-  test('is refused with a way out', async ({ page }) => {
+  /*
+   * MAIL-LINK-PORTAL-001 (#1257, Owner-approved): every mail link is written under /app, and an agency member holds no
+   * advertiser membership, so RequirePortal carries them to the SAME page under /agency instead of a wall. The refusal
+   * with exits is still exercised for a reader who holds the other portal only (the advertiser describe above).
+   */
+  test('is carried to the same page in the agency portal, not refused', async ({ page }) => {
     await page.goto('/app/dashboard')
 
-    await expect(page.getByTestId('app-portal-denied')).toBeVisible({ timeout: 20000 })
-    const actions = await actionsOn(page)
-    for (const action of alwaysAvailable) {
-      expect(actions).toContain(action)
-    }
+    await expect(page).toHaveURL(/\/agency\/dashboard/, { timeout: 20000 })
+    await expect(page.getByTestId('app-portal-denied')).toHaveCount(0)
   })
 
   /**
@@ -90,18 +92,17 @@ test.describe('an agency operator who opens the advertiser portal', () => {
    * This is the shape the trap actually took in the wild: a bookmark or a pasted URL, and a refresh
    * that changed nothing. The page must refuse the same way both times — never blank, never a loop.
    */
-  test('an old deep link refuses with exits, and still does after a reload', async ({ page }) => {
-    await page.goto('/app/dashboard')
-    expect(await actionsOn(page)).toEqual(expect.arrayContaining(alwaysAvailable))
+  test('an old deep link is carried across, and still is after a reload', async ({ page }) => {
+    await page.goto('/app/analytics?project=p1&tab=creative')
+    await expect(page).toHaveURL(/\/agency\/analytics\?project=p1&tab=creative/, { timeout: 20000 })
 
     await page.reload()
-    expect(await actionsOn(page)).toEqual(expect.arrayContaining(alwaysAvailable))
+    await expect(page).toHaveURL(/\/agency\/analytics/, { timeout: 20000 })
 
     // Not a blank page, and not a redirect loop back to a login it already passed.
     await expect(page.locator('body')).not.toHaveText('')
     await expect(page).not.toHaveURL(/\/login/)
   })
-
 })
 
 /**
@@ -165,8 +166,8 @@ test.describe('signing out from a refusal', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
 
   test('ends the session and clears what this app stored', async ({ page }) => {
-    await signInAs(page, 'agency@campaignshub.io')
-    await page.goto('/app/dashboard')
+    await signInAs(page, 'advertiser@campaignshub.io')
+    await page.goto('/agency/dashboard')
     await expect(page.getByTestId('access-recovery')).toBeVisible({ timeout: 20000 })
 
     await page.evaluate(() => {

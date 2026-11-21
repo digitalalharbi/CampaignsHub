@@ -51,7 +51,8 @@ final class ExternalPreviewsTest extends TestCase
     {
         [, $s] = $this->subscribe('finance@client.test', 'finance', [$this->project->id]);
         $res = $this->actingAs($this->owner)->postJson('/api/v1/settings/workspace/notifications/external/preview', ['subscription_id' => $s, 'theme' => 'dark', 'locale' => 'en'])->assertOk();
-        $this->assertStringStartsWith('Al-Waha Store — Nour Agency | ', (string) $res->json('data.subject'));
+        $this->assertStringStartsWith('Nour Agency — ', (string) $res->json('data.subject'));
+        $this->assertStringEndsWith(' — Al-Waha Store', (string) $res->json('data.subject'));
         $this->assertSame('Nour Agency via CampaignsHub', $res->json('data.sender_name'));
         $this->assertStringNotContainsString('src="cid:', (string) $res->json('data.html'));
         $this->assertLessThan(100 * 1024, $res->json('data.html_bytes'));
@@ -82,7 +83,8 @@ final class ExternalPreviewsTest extends TestCase
         $draft = ['email' => 'new@client.test', 'role_key' => 'finance', 'language' => 'ar', 'subscription' => ['period_key' => 'this_month_to_yesterday']];
 
         $res = $this->actingAs($this->owner)->postJson("{$base}/preview", ['draft' => $draft, 'project_id' => $this->project->id, 'theme' => 'light', 'locale' => 'ar'])->assertOk();
-        $this->assertStringStartsWith('Al-Waha Store — Nour Agency | ', (string) $res->json('data.subject'));
+        $this->assertStringStartsWith('Nour Agency — ', (string) $res->json('data.subject'));
+        $this->assertStringEndsWith(' — Al-Waha Store', (string) $res->json('data.subject'));
         $this->assertStringContainsString('Al-Waha Store', (string) $res->json('data.html'));
 
         $this->actingAs($this->owner)->postJson("{$base}/test-send", ['draft' => $draft, 'project_id' => $this->project->id])->assertOk()->assertJsonPath('data.sent_to', $this->owner->email);
