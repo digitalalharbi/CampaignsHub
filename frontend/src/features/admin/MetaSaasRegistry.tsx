@@ -32,7 +32,7 @@ export function MetaSaasRegistry({ registry, ar }: { registry: MetaAppRegistrySt
 
   return (
     <section data-testid="meta-registry" className="rounded-2xl border border-border bg-surface p-5">
-      <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.title}</h2>
+      <h2 className="font-heading text-base font-bold text-text-primary">{c.title}</h2>
       <p className="mt-1 max-w-3xl text-xs text-text-secondary">{c.note}</p>
       {/* Cards at phone width, a plain list everywhere: no horizontal page scroll. */}
       <ul className="mt-3 grid gap-3 md:grid-cols-3">
@@ -40,7 +40,7 @@ export function MetaSaasRegistry({ registry, ar }: { registry: MetaAppRegistrySt
           <li key={app.profile} data-testid={`meta-registry-${app.profile}`} data-role={app.role} className="min-w-0 rounded-xl border border-border p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-bold text-text-primary">{c.profiles[app.profile] ?? app.profile}</span>
-              <span data-testid={`meta-registry-${app.profile}-role`} className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-[11px] font-semibold text-text-secondary">{c.roles[app.role]}</span>
+              <span data-testid={`meta-registry-${app.profile}-role`} className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-text-secondary">{c.roles[app.role]}</span>
             </div>
             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
               <dt className="text-text-muted">{c.appId}</dt>
