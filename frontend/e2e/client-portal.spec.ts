@@ -75,7 +75,8 @@ test('guest submits a verified request then tracks it in the client portal', asy
   // 4) Open it → reply → the message persists after a reload.
   await page.getByText(reference).click()
   await expect(page).toHaveURL(/\/portal(\/clients\/[^/]+)?\/requests\/REQ-/)
-  await expect(page.getByText(/Timeline|المسار/)).toBeVisible()
+  // CLIENT-CHAT-001 — the history is «سجل الطلب» and the conversation a chat beside it.
+  await expect(page.getByText(/Request history|سجل الطلب/)).toBeVisible()
   const msg = `Any update on ${tag}?`
 
   /*

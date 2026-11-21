@@ -106,7 +106,7 @@ export function ChatComposer({ onSend, sending, placeholder, attach, note, minLe
           rows={1}
           maxLength={maxLength}
           placeholder={placeholder}
-          aria-label={placeholder}
+          aria-label={ar ? 'رسالة' : 'Message'}
           data-testid="chat-input"
           className="max-h-40 min-h-10 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-sm text-text-primary outline-none placeholder:text-text-muted"
         />
