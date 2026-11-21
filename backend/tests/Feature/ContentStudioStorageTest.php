@@ -49,14 +49,14 @@ final class ContentStudioStorageTest extends TestCase
         return $user;
     }
 
-    private function session(User $user): string
+    private function openStudioSession(User $user): string
     {
         return (string) $this->actingAs($user, 'sanctum')->postJson('/api/v1/content-studio/sessions', ['project_id' => $this->projectA->id])
             ->assertCreated()->json('data.id');
     }
 
     /** @return array<string, mixed> */
-    private function output(array $over = []): array
+    private function outputPayload(array $over = []): array
     {
         return $over + [
             'file' => UploadedFile::fake()->image('out.png', 1080, 1920),
@@ -88,9 +88,9 @@ final class ContentStudioStorageTest extends TestCase
     public function test_a_saved_output_becomes_a_draft_library_asset_with_its_score_and_tokens(): void
     {
         $user = $this->member(['content.view', 'content.create']);
-        $session = $this->session($user);
+        $session = $this->openStudioSession($user);
 
-        $res = $this->actingAs($user, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->output(), ['Accept' => 'application/json'])
+        $res = $this->actingAs($user, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->outputPayload(), ['Accept' => 'application/json'])
             ->assertCreated();
 
         $item = ContentIntakeItem::query()->findOrFail($res->json('data.intake_item_id'));
@@ -109,8 +109,8 @@ final class ContentStudioStorageTest extends TestCase
     public function test_the_server_refuses_what_breaks_a_hard_rule(): void
     {
         $user = $this->member(['content.view', 'content.create']);
-        $session = $this->session($user);
-        $post = fn (array $over) => $this->actingAs($user, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->output($over), ['Accept' => 'application/json']);
+        $session = $this->openStudioSession($user);
+        $post = fn (array $over) => $this->actingAs($user, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->outputPayload($over), ['Accept' => 'application/json']);
 
         $post(['kind' => 'video', 'duration_ms' => 15_001, 'file' => UploadedFile::fake()->create('v.mp4', 100, 'video/mp4')])
             ->assertStatus(422)->assertJsonPath('errors.refusals.0', 'video_too_long');
@@ -131,8 +131,8 @@ final class ContentStudioStorageTest extends TestCase
     public function test_a_fifteen_second_video_is_accepted(): void
     {
         $user = $this->member(['content.view', 'content.create']);
-        $session = $this->session($user);
-        $this->actingAs($user, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->output([
+        $session = $this->openStudioSession($user);
+        $this->actingAs($user, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->outputPayload([
             'kind' => 'video', 'duration_ms' => 15_000, 'has_audio' => true, 'family_key' => 'detail-cuts',
             'file' => UploadedFile::fake()->create('v.mp4', 100, 'video/mp4'),
         ]), ['Accept' => 'application/json'])->assertCreated()->assertJsonPath('data.has_audio', true);
@@ -157,12 +157,12 @@ final class ContentStudioStorageTest extends TestCase
     public function test_project_and_tenant_isolation(): void
     {
         $owner = $this->member(['content.view', 'content.create', 'content.update']);
-        $session = $this->session($owner);
+        $session = $this->openStudioSession($owner);
 
         // A member of client B reaches neither project A's session nor its brand kit.
         $other = $this->member(['content.view', 'content.create', 'content.update'], clientA: false);
         $this->actingAs($other, 'sanctum')->getJson("/api/v1/content-studio/sessions/{$session}")->assertForbidden();
-        $this->actingAs($other, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->output(), ['Accept' => 'application/json'])->assertForbidden();
+        $this->actingAs($other, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->outputPayload(), ['Accept' => 'application/json'])->assertForbidden();
         $this->actingAs($other, 'sanctum')->getJson('/api/v1/content-studio/brand-kit?project='.$this->projectA->id)->assertForbidden();
         $this->actingAs($other, 'sanctum')->postJson('/api/v1/content-studio/sessions', ['project_id' => $this->projectA->id])->assertForbidden();
 
@@ -183,8 +183,8 @@ final class ContentStudioStorageTest extends TestCase
     public function test_rating_is_like_dislike_or_cleared(): void
     {
         $user = $this->member(['content.view', 'content.create']);
-        $session = $this->session($user);
-        $id = $this->actingAs($user, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->output(), ['Accept' => 'application/json'])->json('data.id');
+        $session = $this->openStudioSession($user);
+        $id = $this->actingAs($user, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->outputPayload(), ['Accept' => 'application/json'])->json('data.id');
 
         $this->actingAs($user, 'sanctum')->postJson("/api/v1/content-studio/outputs/{$id}/rating", ['rating' => 1])->assertOk()->assertJsonPath('data.rating', 1);
         $this->actingAs($user, 'sanctum')->postJson("/api/v1/content-studio/outputs/{$id}/rating", ['rating' => -1])->assertOk()->assertJsonPath('data.rating', -1);
