@@ -45,38 +45,15 @@
       owner, a project manager, finance or a client.
     --}}
     <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:10px 0 6px;">{{ $ar ? 'ملخص كل مشروع' : 'Every project' }}</div>
+    {{-- EMAIL-CLIENT-COMPAT-001 — compact on purpose: thirty cards must stay inside the mail size budget. --}}
     @foreach ($m['cards'] as $c)
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="portfolio-row" data-project="{{ $c['id'] }}" data-state="{{ $c['state'] }}" style="border:1px solid #e4e0d6; border-radius:10px; margin-bottom:6px;">
-            <tr><td style="padding:8px 10px;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-                    <td style="font-size:13px; font-weight:800; color:#0b1a16;">{{ \Illuminate\Support\Str::limit($c['name'], 30, '…') }}</td>
-                    @if ($c['spend'])
-                        <td style="text-align:{{ $endSide }}; font-size:13px; font-weight:800; white-space:nowrap; color:{{ $c['spend']['missing'] ? '#8b9a97' : '#0b1a16' }};" dir="ltr">{{ $c['spend']['value'] }} <span style="font-size:11px; font-weight:700; color:{{ $c['spend']['colour'] }};">{{ $c['spend']['change'] }}</span></td>
-                    @endif
-                </tr></table>
-                @if ($c['share'] > 0)
-                    {{-- The project's share of the summary's spend: one thin bar. --}}
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="share" style="margin:4px 0 2px; background-color:#eee9dd; border-radius:3px;"><tr>
-                        <td width="{{ max(1, $c['share']) }}%" height="5" bgcolor="#0d8a6f" style="background-color:#0d8a6f; height:5px; line-height:5px; font-size:1px; border-radius:3px;">&nbsp;</td>
-                        @if ($c['share'] < 100)<td height="5" style="font-size:1px; line-height:5px;">&nbsp;</td>@endif
-                    </tr></table>
-                @endif
-                @if ($c['no_data'])
-                    <div style="font-size:12px; color:#8b9a97; padding-top:2px;">{{ $ar ? 'لا بيانات' : 'No data' }}@if ($c['reason'] !== '') — {{ $c['reason'] }}@endif</div>
-                @endif
-                @foreach ($c['lines'] as $line)
-                    <div data-line style="font-size:12px; color:#3d4742; line-height:1.7; padding-top:2px;">
-                        @if ($line['label'] !== '')<span style="display:inline-block; padding:0 7px; border-radius:999px; font-size:10px; font-weight:800; background-color:#e8f5f1; color:#0a6b57;">{{ $line['label'] }}</span>@endif
-                        @foreach ($line['figures'] as $f)
-                            <span style="white-space:nowrap; padding-{{ $endSide }}:8px;">{{ $f['label'] }} <b dir="ltr" style="color:{{ $f['missing'] ? '#8b9a97' : '#0b1a16' }};">{{ $f['value'] }}</b>@if ($f['change']) <span dir="ltr" style="font-size:11px; font-weight:700; color:{{ $f['colour'] }};">{{ $f['change'] }}</span>@endif</span>
-                        @endforeach
-                    </div>
-                @endforeach
-                @if ($c['platforms'])
-                    <div style="font-size:11px; color:#8b9a97; padding-top:2px;">@foreach ($c['platforms'] as $pf){{ $pf['name'] }} <span dir="ltr">{{ $pf['share'] }}%</span>@if (! $loop->last) — @endif @endforeach</div>
-                @endif
-            </td></tr>
-        </table>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="portfolio-row" data-project="{{ $c['id'] }}" data-state="{{ $c['state'] }}" style="border:1px solid #e4e0d6;border-radius:10px;margin-bottom:6px"><tr><td style="padding:7px 10px;font-size:12px;line-height:1.7;color:#3d4742">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="font-size:13px;font-weight:800;color:#0b1a16">{{ \Illuminate\Support\Str::limit($c['name'], 30, '…') }}</td>@if ($c['spend'])<td dir="ltr" style="text-align:{{ $endSide }};font-size:13px;font-weight:800;color:#0b1a16;white-space:nowrap">{{ $c['spend']['value'] }} <span style="font-size:11px;color:{{ $c['spend']['colour'] }}">{{ $c['spend']['change'] }}</span></td>@endif</tr></table>
+@if ($c['share'] > 0)<div data-block="share" style="background-color:#e6e2d6;height:4px;border-radius:2px;margin:3px 0"><div style="background-color:#0d8a6f;width:{{ max(1, $c['share']) }}%;height:4px;border-radius:2px;font-size:1px;line-height:4px">&nbsp;</div></div>@endif
+@if ($c['no_data'])<div style="color:#8b9a97">{{ $ar ? 'لا بيانات' : 'No data' }}@if ($c['reason'] !== '') — {{ $c['reason'] }}@endif</div>@endif
+@foreach ($c['lines'] as $line)<div data-line>@if ($line['label'] !== '')<b style="color:#0a6b57">{{ $line['label'] }}:</b> @endif @foreach ($line['figures'] as $f){{ $f['label'] }} <b dir="ltr" style="color:#0b1a16">{{ $f['value'] }}</b>@if ($f['change']) <span dir="ltr" style="font-size:11px;color:{{ $f['colour'] }}">{{ $f['change'] }}</span>@endif @if (! $loop->last)— @endif @endforeach</div>@endforeach
+@if ($c['platforms'])<div style="font-size:11px;color:#8b9a97">@foreach ($c['platforms'] as $pf){{ $pf['name'] }} <span dir="ltr">{{ $pf['share'] }}%</span>@if (! $loop->last) — @endif @endforeach</div>@endif
+</td></tr></table>
     @endforeach
 
     {{-- DIGEST-PM-ACTIONS-001 — «يحتاج قرارك الآن» for project management: budget actions the figures prove. --}}

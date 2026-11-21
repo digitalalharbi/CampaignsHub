@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Access\Models\Role;
+use App\Domains\Access\Support\WorkspaceRolePresets;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
@@ -147,8 +148,8 @@ final class DigestsCadenceBudgetsTest extends TestCase
             'providers.channels.email' => LaravelMailProvider::class,
         ]);
         app(TenantContext::class)->setTenantId($this->tenant->id);
-        $role = Role::query()->where('tenant_id', $this->tenant->id)->where('slug', \App\Domains\Access\Support\WorkspaceRolePresets::FINANCE)->first()
-            ?? Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Finance', 'slug' => \App\Domains\Access\Support\WorkspaceRolePresets::FINANCE]);
+        $role = Role::query()->where('tenant_id', $this->tenant->id)->where('slug', WorkspaceRolePresets::FINANCE)->first()
+            ?? Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Finance', 'slug' => WorkspaceRolePresets::FINANCE]);
         $role->givePermissionTo('projects.view', 'projects.view.all', 'clients.view', 'clients.view_all', 'budget.view', 'budget.manage', 'analytics.view', 'campaigns.view');
         $finance = User::create(['name' => 'Fin', 'email' => 'fin-role-'.uniqid().'@cad.test', 'password' => 'secret123']);
         Membership::create(['tenant_id' => $this->tenant->id, 'user_id' => $finance->id, 'portal' => 'agency', 'status' => 'active']);
