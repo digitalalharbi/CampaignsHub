@@ -55,6 +55,13 @@ test.describe('content format comparison', () => {
     expect(await block.locator('[data-testid^="format-row-"]').count()).toBeGreaterThan(1)
     await expect(block).not.toContainText(/الإنفاق|Spend|تكلفة النتيجة|Cost\/result|—/)
     await expect(block.getByTestId('format-cards')).toHaveCount(0)
+    // FORMAT-COMPARE-INTERACTIVE-001 — one figure at a time as bars; another figure is a click away, the table a toggle away.
+    await expect(block.getByTestId('format-bars')).toBeVisible()
+    const chips = block.locator('[data-testid^="format-metric-"]')
+    expect(await chips.count()).toBeGreaterThan(1)
+    await chips.nth(1).click()
+    await expect(chips.nth(1)).toHaveAttribute('aria-selected', 'true')
+    await expect(block.getByTestId('format-bars')).toBeVisible()
   })
 
   test('a regenerated saved report carries the comparison page', async ({ page, request }) => {

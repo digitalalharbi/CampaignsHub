@@ -216,6 +216,31 @@ describe('the report part — one comparison table (REPORT-FORMAT-COMPARE-TABLE-
     expect(screen.getByTestId('format-table-verdict').textContent).not.toMatch(/×|(?:SAR|ر\.س)/)
   })
 
+  // FORMAT-COMPARE-INTERACTIVE-001 — the live report reads one figure at a time, as bars, with the table one click away.
+  it('the live block draws bars for the chosen figure, its share and the best type, and switches figure on click', () => {
+    renderWithProviders(<FormatComparisonReportBlock payload={report(salesTable())} ar />, { locale: 'ar' })
+    // opens on the objective's lead figure (ROAS for sales), the best type marked
+    expect(screen.getByTestId('format-metric-roas')).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('format-bar-video')).toHaveAttribute('data-winner', 'true')
+    expect(screen.queryByTestId('format-bar-carousel')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('format-metric-clicks'))
+    const video = screen.getByTestId('format-bar-video')
+    expect(video).toHaveTextContent('900')
+    expect(video).toHaveTextContent('69%') // 900 of 1,300 — a share only for an additive figure
+    expect(screen.getByTestId('format-bar-image')).toHaveTextContent('31%')
+    // the server's table is still there, one click away
+    expect(screen.getByTestId('format-table-toggle')).toBeInTheDocument()
+  })
+
+  it('a rate states no share, and a client never gets a money figure to choose', () => {
+    const t = salesTable({ rows: ['clicks', 'ctr', 'revenue'], cells: { clicks: { video: 900, image: 400 }, ctr: { video: 0.018, image: 0.01 }, revenue: { video: 4200, image: 1050 } }, kinds: { clicks: 'count', ctr: 'rate', revenue: 'money' }, better: { clicks: 'higher', ctr: 'higher', revenue: 'higher' }, labels: { clicks: { ar: 'النقرات', en: 'Clicks' }, ctr: { ar: 'معدل النقر', en: 'CTR' }, revenue: { ar: 'الإيراد', en: 'Revenue' } }, verdict_order: [] })
+    renderWithProviders(<FormatComparisonReportBlock payload={report(t, 'client', { spend_hidden: true })} ar />, { locale: 'ar' })
+    expect(screen.queryByTestId('format-metric-revenue')).toBeNull()
+    fireEvent.click(screen.getByTestId('format-metric-ctr'))
+    expect(screen.getByTestId('format-bar-video').textContent).not.toMatch(/\(\d+%\)/)
+  })
+
   it('draws nothing where the server did not name the part', () => {
     renderWithProviders(<FormatComparisonReportBlock payload={{ ...report(salesTable()), report_sections: ['kpis'] }} ar />, { locale: 'ar' })
     expect(screen.queryByTestId('report-format-comparison')).toBeNull()

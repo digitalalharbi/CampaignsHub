@@ -2,6 +2,7 @@ import { isClientAudience } from './reportAudience'
 import { type WithReportSections } from './reportSections'
 import type { FormatComparisonPayload } from '@/features/content/api'
 import { FormatComparisonStrip, tableHasFigures } from './FormatComparisonStrip'
+import { FormatComparisonInteractive } from './FormatComparisonInteractive'
 
 /**
  * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى» in a report: the live link, the saved report and its PDF.
@@ -35,7 +36,7 @@ export function FormatComparisonReportBlock({ payload, ar, client }: { payload: 
 
   return (
     <div data-testid="report-format-comparison" className="min-w-0">
-      <FormatComparisonStrip data={payload.content_format_comparison} ar={ar} client={forClient} />
+      <FormatComparisonInteractive data={payload.content_format_comparison} ar={ar} client={forClient} />
     </div>
   )
 }
