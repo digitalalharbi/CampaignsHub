@@ -108,6 +108,12 @@ Even then, the documentation is not skipped — it moves after the fix instead o
    and the RESUME_STATE update. A hotfix without a follow-up test is the same incident scheduled
    again.
 
+### Override log
+
+| Date (UTC) | PR | Commit on `main` | What was overridden | Why | Follow-up |
+|---|---|---|---|---|---|
+| 2026-11-21 11:05 | #1262 TIKTOK-PERIOD-REACH-001 | `f2e2ab245` | Required CI checks (backend tests 1–8, frontend, gate) still queued on head `21512cf`; merged by the Owner with «bypass rules». Earlier heads had green static and backend shards 1, 2, 5; 4 and 7 had been fixed in the PR | Owner: the Buzz client report showed «التكرار: غير متاح» and he wanted it fixed without waiting on a stalled Actions queue | Deploy Production run 44897410229 succeeded at 11:12. The full backend suite runs again on the next PR off `main`; the Buzz report's frequency is to be read on Production |
+
 ## 6. Secrets — the strategy, in full
 
 **Nothing secret is ever committed.** The repository is public.
