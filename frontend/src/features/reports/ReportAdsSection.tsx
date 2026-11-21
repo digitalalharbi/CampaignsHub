@@ -44,6 +44,8 @@ export type ReportAd = {
   id?: string
   /** The share-bound handle the content drilldown opens this ad by — never an internal id. */
   content_key?: string
+  /** CONTENT-CARD-BY-OBJECTIVE-001 — the coarse objective family of the ad's campaign (sales, traffic, leads …), never the objective itself. */
+  card_family?: string | null
   /** NASEL 2026-10-29 — the content's result under the project's verified events; present (possibly null) only when they are configured. */
   verified_result?: { metric: string; path: string | null; value: number | null; label?: string | null } | null
   /** RESULT-EVENTS-001 — false on a link that defines no Results: the row's generic conversion is never printed as one. */
@@ -767,10 +769,12 @@ const OBJECTIVE_COUNT: Record<string, { key: string; ar: string; en: string }> =
 function objectiveCount(ad: ReportAd, family: string, ar: boolean): { label: string; value: string } | null {
   const spec = OBJECTIVE_COUNT[family]
   if (!spec) return null
-  const raw = (ad as Record<string, unknown>)[spec.key]
+  // CONTENT-CARD-BY-OBJECTIVE-001 — a sales ad whose platform reports orders but no purchase count (X) still states its orders.
+  const key = family === 'sales' && typeof (ad as Record<string, unknown>)[spec.key] !== 'number' ? 'orders' : spec.key
+  const raw = (ad as Record<string, unknown>)[key]
   if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return null
   const reported = (ad as Record<string, unknown>).reported as Record<string, boolean> | undefined
-  if (reported && reported[spec.key] === false) return null
+  if (reported && reported[key] === false) return null
 
   return { label: ar ? spec.ar : spec.en, value: numberFormatter('en-US', { maximumFractionDigits: 0 }).format(raw) }
 }
