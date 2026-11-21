@@ -74,7 +74,7 @@ export function FormatComparisonInteractive({ data, ar, client }: { data: Format
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-extrabold tracking-tight text-text-primary">{ar ? 'مقارنة أنواع المحتوى' : 'Content types'}</h3>
         {scopes.length > 0 && (
-          <div role="tablist" aria-label={ar ? 'الهدف' : 'Objective'} className="inline-flex rounded-lg border border-border p-0.5 text-[11px]">
+          <div role="tablist" aria-label={ar ? 'الهدف' : 'Objective'} className="inline-flex rounded-lg border border-border p-0.5 text-xs">
             {[{ key: 'all', label: { ar: 'كل الأهداف', en: 'All objectives' } }, ...scopes].map((s) => (
               <button
                 key={s.key}
@@ -129,8 +129,8 @@ export function FormatComparisonInteractive({ data, ar, client }: { data: Format
                   <span className="flex min-w-0 items-center gap-1.5 font-bold text-text-primary">
                     {kindName(b.format, ar)}
                     <span className="font-normal text-text-muted"><Num>{ar ? `${b.creatives} محتوى` : `${b.creatives} creatives`}</Num></span>
-                    {b.smallSample && <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">{ar ? 'عينة صغيرة' : 'Small sample'}</span>}
-                    {wins && <span data-testid="format-bar-best" className="rounded bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success">{ar ? 'الأفضل' : 'Best'}</span>}
+                    {b.smallSample && <span className="rounded bg-warning/15 px-1.5 py-0.5 text-xs font-semibold text-warning">{ar ? 'عينة صغيرة' : 'Small sample'}</span>}
+                    {wins && <span data-testid="format-bar-best" className="rounded bg-success/15 px-1.5 py-0.5 text-xs font-bold text-success">{ar ? 'الأفضل' : 'Best'}</span>}
                   </span>
                   <span className="tnum whitespace-nowrap font-bold text-text-primary">
                     <Num>{figure(kind, b.value, currency)}</Num>
@@ -146,7 +146,7 @@ export function FormatComparisonInteractive({ data, ar, client }: { data: Format
         </ul>
       )}
 
-      <p data-testid="format-coverage" className="text-[11px] leading-relaxed text-text-muted">
+      <p data-testid="format-coverage" className="text-xs leading-relaxed text-text-muted">
         {coverageLine(ar, creatives, withMetrics)}
         {better && bars.length >= 2 && (ar ? ` الأفضل هنا الأ${better === 'lower' ? 'قل' : 'على'}.` : ` ${better === 'lower' ? 'Lower' : 'Higher'} is better here.`)}
         {RESULT_ROWS.has(active) && (ar ? ' النتائج المحسوبة هي المنسوبة لكل محتوى، وقد تكون أقل من إجمالي التقرير على مستوى الحملات.' : ' Results are those attributed to each creative and can be below the report’s campaign-level total.')}
