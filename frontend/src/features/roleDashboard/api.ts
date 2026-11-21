@@ -40,6 +40,19 @@ export interface DashboardUnit extends BudgetReading {
   delivering_platforms?: Record<string, boolean>
 }
 
+export interface DeliveryRow {
+  id: string
+  kind: 'client' | 'project'
+  name: string
+  delivering: boolean
+  delivering_platforms: Record<string, boolean>
+  budget: number | null
+  spent: number | null
+  remaining: number | null
+  ratio: number | null
+  currency: string | null
+}
+
 /** The words for a figure travel with it, in both languages (`ObjectiveResult`). */
 export interface Words { ar: string; en: string }
 
@@ -115,6 +128,8 @@ export interface RoleDashboard {
   /** PROJECT-LIFECYCLE-001 §7 — the budgets page's budget (SAR); `budget_fx`/`spent_fx` = the same converted by the engine; `fx` = exclusions + old rates. */
   money: (BudgetReading & { rows: number; budget_fx?: FxConversion | null; spent_fx?: FxConversion | null; fx?: FxSpendNote; platform_campaign_budgets?: BudgetReading | null }) | null
   units: DashboardUnit[]
+  /** DELIVERY-ALL-ROLES-001 — running or stopped for every role; the money fields are null without the money key. */
+  delivery?: DeliveryRow[]
   daily_spend: { date: string; spend: number }[]
   alerts?: { open: number; critical: number; warning: number } | null
   integrations?: { ok: number; attention: number; pending: number; platforms: { platform: string; ok: number; attention: number }[] } | null
