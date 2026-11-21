@@ -7,7 +7,7 @@ import { Panel, useFmt } from './parts'
 /**
  * DELIVERY-STATE-001 + DELIVERY-ALL-ROLES-001 — Owner 2026-11-21: who is running and who stopped, merged with the budget.
  * DELIVERY-TABLE-001 (Owner, same day: «مثل جدول الميزانيات») — a table: one header row (العميل · المشروع · الحالة ·
- * المنصات · المصروف · المتبقي) and one bordered row per client under it, in the budgets table's look. Each platform's
+ * المنصات · الإنفاق · المتبقي) and one bordered row per client under it, in the budgets table's look. Each platform's
  * mark: green ring = running, grey = stopped. Every role sees the state; the money only with the money key
  * (the server sends it null otherwise). A stopped unit with budget left comes first. No row → no card.
  */
@@ -46,7 +46,7 @@ export function DeliveryPanel({ rows: given, units, portal, className = '' }: { 
             [ar ? 'العميل · المشروع' : 'Client · project', ''],
             [ar ? 'الحالة' : 'Status', ''],
             [ar ? 'المنصات' : 'Platforms', ''],
-            ...(money ? [[ar ? 'المصروف' : 'Spent', ''], [ar ? 'المتبقي' : 'Remaining', 'text-end']] : []),
+            ...(money ? [[ar ? 'الإنفاق' : 'Spend', ''], [ar ? 'المتبقي' : 'Remaining', 'text-end']] : []),
           ].map(([h, c]) => <span key={h} className={`truncate text-xs font-bold text-text-muted ${c}`}>{h}</span>)}
         </div>
         <ul className="space-y-1">

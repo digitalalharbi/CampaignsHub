@@ -291,7 +291,7 @@ describe('running or stopped, merged with the budget, for every role', () => {
     const panel = screen.getByTestId('dash-panel-delivery')
     const header = within(panel).getByTestId('dash-delivery-header')
     expect(header.children).toHaveLength(5)
-    expect(header).toHaveTextContent(/Client · project.*Status.*Platforms.*Spent.*Remaining/)
+    expect(header).toHaveTextContent(/Client · project.*Status.*Platforms.*Spend.*Remaining/)
     expect(within(panel).getByTestId('dash-delivery-c1')).toHaveTextContent('Client')
   })
 
