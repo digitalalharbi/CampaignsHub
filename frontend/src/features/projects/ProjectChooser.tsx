@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { usePortalBase } from '@/app/portalPath'
-import { FolderKanban } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FolderKanban, Megaphone, RefreshCw, Search, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { listClientWorkspaces, listProjects, type Project } from './api'
 import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { useUi } from '@/stores/ui'
 import { Skeleton } from '@/components/ui/States'
+import { BodyPortal } from '@/components/ui/BodyPortal'
 import { fmtDateTime } from '@/lib/datetime'
-import { Pager } from '@/components/fit/Pager'
-import { useFitRows } from '@/components/fit/useFitRows'
-import { useColumns } from '@/components/fit/useColumns'
+import { useAuth } from '@/stores/auth'
+import { useBudgets, type BudgetRow } from '@/features/funding/fundingApi'
+import { ClientAvatar } from '@/features/agency/ClientScopeChip'
+import { ProviderMark } from '@/components/ProviderMark'
+import { Num } from '@/components/ui/Num'
+import { money } from '@/features/analytics/format'
 
 /**
  * PROJECT-FIRST-VISIT-001 — a project-scoped page with no project chosen shows the CHOICE, on the page.
@@ -26,19 +31,23 @@ import { useColumns } from '@/components/fit/useColumns'
  * One exception, and it is safe: a reader who can reach exactly ONE project has no choice to make,
  * and the page selects it for them — there is no wrong client to land on.
  */
-type Row = Project & { client_name: string; synced_at: string | null; campaigns: number | null; platforms: number }
+type Row = Project & { client_name: string; client_logo: string | null; synced_at: string | null; campaigns: number | null; platforms: number; providers: string[]; budget: BudgetRow | null }
 
 export type ProjectChooserPurpose = 'campaigns' | 'analytics' | 'reports' | 'recommendations' | 'spend-limits'
 
-/** A card is about this tall (name, client, one line of facts) and the grid's gap is 8px. */
-const CARD_HEIGHT = 104
-const CARD_GAP = 8
-
+/**
+ * PROJECT-CHOOSER-VISUAL-001 — Owner 2026-11-21: with «كل العملاء» chosen, every project-scoped page (campaigns, analytics,
+ * reports, spend limits…) opens on this choice. It is a step, not a summary: one clear panel — «اختر المشروع», the task it
+ * is for, a search, and one row per project with the client's logo, the platforms' logos, the campaigns, how fresh its
+ * data is and, for a reader who holds the money key, a thin budget bar. A click picks it and the page carries on with it,
+ * the same shape as linking an integration (choose, then continue).
+ */
 /**
  * `fit` (AGENCY-FIT-001): inside a fitted page the choices are a page of whole rows that fit the screen, with a pager for
  * the rest. Without it the list is as it always was.
  */
 export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: ProjectChooserPurpose; fit?: boolean }) {
+  void fitted
   const ar = useUi((s) => s.locale) === 'ar'
   const { setCurrentProjectId } = useProject()
   const { setCurrentClientId } = useAgencyClient()
@@ -48,26 +57,35 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
    * request — a 403 in the console on every first visit (the chromium and webkit gates caught it in
    * campaigns-responsive.spec.ts). Client names are asked for only where there are clients to name.
    */
-  const agency = usePortalBase() === '/agency'
+  const base = usePortalBase()
+  const agency = base === '/agency'
+  const navigate = useNavigate()
   const clients = useQuery({ queryKey: ['agency-scope', 'clients'], queryFn: listClientWorkspaces, enabled: agency })
   const projects = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false) })
-  const cols = useColumns([[1024, 3], [640, 2]])
-  const fit = useFitRows({ rowHeight: CARD_HEIGHT + CARD_GAP, reserve: 0, min: 1, max: 12, fallback: 1000 })
-  const [page, setPage] = useState(1)
+  const canMoney = useAuth((st) => st.hasPermission('funding.view'))
+  const budgets = useBudgets(false, null, agency && canMoney)
+  const [query, setQuery] = useState('')
 
   const rows: Row[] = useMemo(() => {
-    const byClient = new Map((clients.data ?? []).map((c) => [c.id, c.name]))
+    const byClient = new Map((clients.data ?? []).map((c) => [c.id, c]))
+    const byProject = new Map((budgets.data?.rows ?? []).map((b) => [b.project_id, b]))
     return (projects.data ?? [])
-      .map((p) => ({
-        ...p,
-        client_name: byClient.get(p.client_workspace_id) ?? '',
-        synced_at: p.summary?.data_last_synced_at ?? null,
-        campaigns: typeof p.summary?.campaigns === 'number' ? p.summary.campaigns : null,
-        platforms: p.summary?.providers?.length ?? 0,
-      }))
+      .map((p) => {
+        const b = byProject.get(p.id) ?? null
+        return {
+          ...p,
+          client_name: byClient.get(p.client_workspace_id)?.name ?? p.client_name ?? '',
+          client_logo: byClient.get(p.client_workspace_id)?.logo_url ?? null,
+          synced_at: p.summary?.data_last_synced_at ?? null,
+          campaigns: typeof p.summary?.campaigns === 'number' ? p.summary.campaigns : null,
+          platforms: p.summary?.providers?.length ?? 0,
+          providers: p.summary?.providers ?? [],
+          budget: b !== null && !['void', 'no_budget', 'unset'].includes(b.status) ? b : null,
+        }
+      })
       // The project that reported most recently first — the one most likely to be «what is happening now».
       .sort((a, b) => (b.synced_at ?? '').localeCompare(a.synced_at ?? '') || a.name.localeCompare(b.name))
-  }, [clients.data, projects.data])
+  }, [clients.data, projects.data, budgets.data])
 
   const choose = (p: Row) => {
     /*
@@ -95,13 +113,11 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
     'spend-limits': { ar: 'لعرض حدود إنفاقه وضبطها', en: 'to see and set its spend limits' },
   }[purpose]
 
-  const perPage = fitted && fit.locked ? Math.max(1, fit.rows * cols) : Number.MAX_SAFE_INTEGER
-  const pages = Math.max(1, Math.ceil(rows.length / perPage))
-  const current = Math.min(page, pages)
-  const pageRows = fitted && fit.locked ? rows.slice((current - 1) * perPage, current * perPage) : rows
+  const needle = query.trim().toLowerCase()
+  const shown = needle === '' ? rows : rows.filter((p) => `${p.name} ${p.client_name}`.toLowerCase().includes(needle))
 
   if (clients.isLoading || projects.isLoading) {
-    return <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+    return <div className="mx-auto w-full max-w-2xl space-y-2 py-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
   }
 
   if (rows.length === 0) {
@@ -114,44 +130,151 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
     )
   }
 
+  const Chevron = ar ? ChevronLeft : ChevronRight
+
   return (
-    <section data-testid="project-chooser" aria-label={ar ? 'اختر مشروعًا' : 'Choose a project'} className={fitted ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-3'}>
-      <div>
-        <h2 className="text-base font-bold text-text-primary">{ar ? 'اختر مشروعًا' : 'Choose a project'}</h2>
-        <p className="mt-0.5 text-sm text-text-secondary">
-          {ar ? `كل مشروع مستقل — اختر واحدًا ${purposeWords.ar}.` : `Each project stands alone — pick one ${purposeWords.en}.`}
-        </p>
+    <BodyPortal>
+    {/*
+      Owner 2026-11-21: a popup over the same page — the page stays where it is behind it, and the choice carries on in it.
+      «×» or Escape leaves for the portal's home rather than leaving a page with nothing to show. It is rendered on
+      <body>, so the page's own box (a fitted page measures what hangs below it) never holds the popup's list.
+    */}
+    <section
+      data-testid="project-chooser"
+      role="dialog"
+      aria-modal="true"
+      aria-label={ar ? 'اختر المشروع' : 'Choose a project'}
+      onKeyDown={(e) => { if (e.key === 'Escape') navigate(base || '/') }}
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm sm:items-center sm:p-8"
+    >
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl">
+        <div className="flex items-start gap-3 border-b border-border px-5 py-4">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600" aria-hidden><FolderKanban size={20} /></span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-extrabold text-text-primary">{ar ? 'اختر المشروع' : 'Choose a project'}</h2>
+            <p className="mt-0.5 text-sm text-text-secondary">
+              {ar ? `كل مشروع مستقل — اختر واحدًا ${purposeWords.ar}.` : `Each project stands alone — pick one ${purposeWords.en}.`}
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-bold text-text-secondary"><Num>{String(rows.length)}</Num> {ar ? 'مشروع' : 'projects'}</span>
+          <button type="button" data-testid="project-chooser-close" onClick={() => navigate(base || '/')} aria-label={ar ? 'إغلاق' : 'Close'} className="grid size-8 shrink-0 place-items-center rounded-lg text-text-muted hover:bg-surface-secondary hover:text-text-primary"><X size={16} aria-hidden /></button>
+        </div>
+        {rows.length > 6 && (
+          <div className="border-b border-border px-5 py-3">
+            <label className="flex items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2 focus-within:border-brand-500">
+              <Search size={15} className="shrink-0 text-text-muted" aria-hidden />
+              <input
+                data-testid="project-chooser-search"
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={ar ? 'ابحث باسم المشروع أو العميل' : 'Search by project or client'}
+                aria-label={ar ? 'ابحث باسم المشروع أو العميل' : 'Search by project or client'}
+                className="min-w-0 flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
+              />
+            </label>
+          </div>
+        )}
+        <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+          {shown.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                data-testid={`project-choice-${p.id}`}
+                onClick={() => choose(p)}
+                className="group flex w-full items-center gap-3 px-5 py-3 text-start transition hover:bg-brand-500/5 focus:outline-none focus-visible:bg-brand-500/5"
+              >
+                <ChoiceRow p={p} ar={ar} />
+                <Chevron size={18} className="shrink-0 text-text-muted transition group-hover:text-brand-600" aria-hidden />
+              </button>
+            </li>
+          ))}
+          {shown.length === 0 && <li className="px-5 py-6 text-center text-sm text-text-muted">{ar ? 'لا مشروع بهذا الاسم.' : 'No project by that name.'}</li>}
+        </ul>
       </div>
-      <div ref={fitted ? (fit.ref as never) : undefined} className={fitted ? 'min-h-0 flex-1' : undefined}>
-      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {pageRows.map((p) => (
-          <li key={p.id} className="min-w-0">
-            <button
-              type="button"
-              data-testid={`project-choice-${p.id}`}
-              onClick={() => choose(p)}
-              style={fitted ? { height: CARD_HEIGHT } : undefined}
-              className="w-full rounded-2xl border border-border bg-surface p-4 text-start transition hover:border-brand-500 hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-            >
-              <div className="truncate text-sm font-bold text-text-primary">{p.name}</div>
-              <div className="mt-0.5 truncate text-xs text-text-secondary">{p.client_name || (ar ? 'بلا عميل' : 'No client')}</div>
-              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-text-muted">
-                {p.campaigns !== null && (
-                  <span><span dir="ltr" className="tabular-nums">{p.campaigns}</span> {ar ? 'حملة' : 'campaigns'}</span>
-                )}
-                {p.platforms > 0 && <span><span dir="ltr" className="tabular-nums">{p.platforms}</span> {ar ? 'منصات' : 'platforms'}</span>}
-                <span>
-                  {p.synced_at
-                    ? <>{ar ? 'آخر مزامنة' : 'Last sync'} <span dir="ltr" className="tabular-nums">{fmtDateTime(p.synced_at)}</span></>
-                    : (ar ? 'لم تصل بيانات بعد' : 'No data has arrived yet')}
-                </span>
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
-      </div>
-      {fitted && fit.locked && <Pager testid="project-chooser-pager" page={current} pages={pages} onPage={setPage} total={rows.length} ar={ar} hideWhenSingle />}
     </section>
+    </BodyPortal>
+  )
+}
+
+const TONE = {
+  danger: { text: 'text-danger', chip: 'bg-danger/10 text-danger', bar: 'bg-danger' },
+  warning: { text: 'text-warning', chip: 'bg-warning/10 text-warning', bar: 'bg-warning' },
+  success: { text: 'text-success', chip: 'bg-success/10 text-success', bar: 'bg-success' },
+  neutral: { text: 'text-text-secondary', chip: 'bg-surface-secondary text-text-secondary', bar: 'bg-border-strong' },
+} as const
+
+function budgetTone(b: BudgetRow): keyof typeof TONE {
+  if (b.status === 'over' || b.status === 'credit_over') return 'danger'
+  if (b.status === 'low' || b.status === 'credit_near' || b.status === 'incomplete') return 'warning'
+  if (b.status === 'ok' || b.status === 'credit') return 'success'
+  return 'neutral'
+}
+
+function budgetLabel(b: BudgetRow, ar: boolean): string {
+  const t = budgetTone(b)
+  if (t === 'danger') return ar ? 'تجاوزت الميزانية' : 'Over budget'
+  if (t === 'warning') return b.status === 'incomplete' ? (ar ? 'ناقصة بيانات' : 'Incomplete') : (ar ? 'قرّبت تخلص' : 'Running low')
+  if (b.payment_mode === 'credit') return ar ? 'بالأجل' : 'On credit'
+  return ar ? 'ضمن الميزانية' : 'Within budget'
+}
+
+/** How long ago, in a few words — «قبل 12 د» reads at a glance where a full timestamp does not. */
+function ago(iso: string | null, ar: boolean): string | null {
+  if (!iso) return null
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  if (mins < 60) return ar ? `قبل ${mins} د` : `${mins}m ago`
+  const h = Math.round(mins / 60)
+  if (h < 48) return ar ? `قبل ${h} س` : `${h}h ago`
+  return fmtDateTime(iso)
+}
+
+/** PROJECT-CHOOSER-VISUAL-001 — one project, as a card worth choosing from. */
+function ChoiceRow({ p, ar }: { p: Row; ar: boolean }) {
+  const b = p.budget
+  const t = b ? budgetTone(b) : 'neutral'
+  const credit = b?.payment_mode === 'credit'
+  const synced = ago(p.synced_at, ar)
+  const attention = p.summary?.attention ?? null
+  const pct = b && !credit && b.used_ratio !== null ? Math.round(b.used_ratio * 100) : null
+
+  return (
+    <>
+      <ClientAvatar name={p.client_name || p.name} logo={p.client_logo} size={36} />
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-extrabold text-text-primary group-hover:text-brand-600">{p.name}</span>
+          {b && <span data-testid={`chooser-budget-${p.id}`} className={`shrink-0 rounded-full px-2 py-px text-xs font-bold ${TONE[t].chip}`}>{budgetLabel(b, ar)}</span>}
+          {!b && attention && (
+            <span className="shrink-0 rounded-full bg-warning/10 px-2 py-px text-xs font-bold text-warning">
+              {attention === 'no_accounts' ? (ar ? 'بلا حسابات' : 'No accounts') : attention === 'never_synced' ? (ar ? 'لا بيانات' : 'No data') : (ar ? 'بيانات قديمة' : 'Stale')}
+            </span>
+          )}
+        </span>
+        <span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-text-muted">
+          <span className="truncate text-text-secondary">{p.client_name && p.client_name !== p.name ? p.client_name : (p.client_name ? (ar ? 'عميل' : 'Client') : (ar ? 'بلا عميل' : 'No client'))}</span>
+          {p.campaigns !== null && <span className="inline-flex shrink-0 items-center gap-1"><Megaphone size={10} aria-hidden /><Num>{String(p.campaigns)}</Num> {ar ? 'حملة' : 'campaigns'}</span>}
+          <span className="inline-flex shrink-0 items-center gap-1" title={p.synced_at ? fmtDateTime(p.synced_at) : undefined}>
+            <RefreshCw size={10} aria-hidden />{synced ?? (ar ? 'لم تصل بيانات بعد' : 'No data has arrived yet')}
+          </span>
+        </span>
+      </span>
+      <span className="hidden shrink-0 items-center gap-1 sm:flex" data-testid={`chooser-platforms-${p.id}`}>
+        {p.providers.slice(0, 5).map((pr) => <ProviderMark key={pr} provider={pr} size={16} />)}
+      </span>
+      {b && (
+        <span className="hidden w-28 shrink-0 text-xs md:block">
+          <span className="flex items-baseline justify-between gap-1">
+            <span className="truncate font-bold text-text-primary"><Num>{money(credit ? (b.to_date ?? b.spent) : b.spent, b.currency)}</Num></span>
+            {pct !== null && <span data-testid="chooser-gauge" className={`font-bold ${TONE[t].text}`}><Num>{`${pct}%`}</Num></span>}
+          </span>
+          {!credit && (
+            <span className="mt-1 block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+              <span className={`block h-full rounded-full ${TONE[t].bar}`} style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
+            </span>
+          )}
+        </span>
+      )}
+    </>
   )
 }

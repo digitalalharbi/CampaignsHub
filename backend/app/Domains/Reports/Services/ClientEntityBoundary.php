@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Services;
 
 use App\Domains\Campaigns\Enums\CampaignStatus;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Reports\Support\ClientContentName;
 
 /**
@@ -131,6 +132,14 @@ final class ClientEntityBoundary
     {
         return array_map(static function (array $ad): array {
             unset($ad['id'], $ad['campaign_id'], $ad['external_account_id'], $ad['client_display_name']);
+            /*
+             * CONTENT-CARD-BY-OBJECTIVE-001 — Owner 2026-11-21: a content card states the figures of its objective (sales: spend,
+             * orders, return; traffic: spend, clicks, click rate). Only the coarse family crosses, never the campaign's own objective.
+             */
+            $family = ObjectiveFamily::tryFrom((string) ($ad['objective'] ?? ''));
+            if ($family !== null && $family !== ObjectiveFamily::Unknown && isset($ad['provider'])) {
+                $ad['card_family'] = $family->value;
+            }
             /* CLIENT-LIVE-LINK-SAFETY-001 — the campaign's objective is campaign management: the content's name is the only identity. */
             unset($ad['objective'], $ad['campaign_name'], $ad['ad_set_id'], $ad['ad_set_name']);
 

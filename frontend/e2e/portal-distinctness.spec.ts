@@ -275,13 +275,14 @@ test.describe('signing in', () => {
     await expect(page.getByRole('button', { name: /Google|Apple|WhatsApp/i })).toHaveCount(0)
   })
 
-  /** And the advertiser portal now refuses an agency operator the same way every other one does. */
-  test('the advertiser portal refuses an agency operator', async ({ page }) => {
+  /** MAIL-LINK-PORTAL-001 (#1257): an agency operator who opens an /app link is carried to the same page under /agency. */
+  test('the advertiser portal carries an agency operator to the agency portal', async ({ page }) => {
     await page.goto('/login')
     await signIn(page, 'agency@campaignshub.io', 'password')
     await expect(page).toHaveURL(/\/agency/, { timeout: 20000 })
 
     await page.goto('/app/dashboard')
-    await expect(page.getByTestId('app-portal-denied')).toBeVisible({ timeout: 20000 })
+    await expect(page).toHaveURL(/\/agency\/dashboard/, { timeout: 20000 })
+    await expect(page.getByTestId('app-portal-denied')).toHaveCount(0)
   })
 })

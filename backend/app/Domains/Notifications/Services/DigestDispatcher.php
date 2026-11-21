@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Access\Support\WorkspaceRolePresets;
 use App\Domains\Branding\Services\SharedLinkBranding;
 use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Notifications\Mail\DailyDigestMail;
@@ -305,20 +306,23 @@ final class DigestDispatcher
             if ($onlyProject !== null) {
                 $projectIds = array_values(array_filter($projectIds, static fn ($id): bool => self::projectKey((string) $id) === $onlyProject));
             }
-            // DELIVERY-QUIET-001 — a project with no spend and no impression in this period is not reported; none moved, nothing is sent.
-            $projectIds = app(DeliveryState::class)->watched($projectIds, Carbon::parse($from)->toDateString(), Carbon::parse($to)->toDateString());
-            if ($projectIds === []) {
-                return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', 'no_delivery');
-            }
             /*
              * FINANCE-DIGEST-001 — Owner 2026-11-17: «المحاسب يحتاج تفاصيل الميزانيات لا الأداء».
              *
              * A reader who may open the budgets of every project in scope and neither its analytics nor its campaigns is the finance
              * role. The performance digest is not for them: it carried operational blocks, links back into the product and spend in the
              * reporting currency. They receive the spend summary instead — the approved budgets, in their own currency, no links.
+             * FINANCE-SPEND-ONLY-001 — Owner 2026-11-21: «استثني المالية من الاطلاع على الأداء». The finance ROLE is excluded from
+             * performance whatever else it may open, and it is decided BEFORE the quiet-delivery filter: a client whose campaigns did
+             * not spend in the period still has a budget and a remainder finance must see.
              */
             if ($onlyProject === null && $this->readsBudgetsOnly($user, $projectIds)) {
                 return $this->sendBudgetsOnly($user, $tenantId, $kind, $from, $to, $locale, $ledgerKind, $ledgerKey, $scope, $projectIds);
+            }
+            // DELIVERY-QUIET-001 — a project with no spend and no impression in this period is not reported; none moved, nothing is sent.
+            $projectIds = app(DeliveryState::class)->watched($projectIds, Carbon::parse($from)->toDateString(), Carbon::parse($to)->toDateString());
+            if ($projectIds === []) {
+                return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', 'no_delivery');
             }
             // MEMBER-VISIBILITY-001 — a reader whose membership withholds the money on any project in scope receives
             // the digest without spend, cost or spend charts. Decided per recipient, from the one authorisation engine.
@@ -433,6 +437,10 @@ final class DigestDispatcher
         if ($projectIds === []) {
             return false;
         }
+        // FINANCE-SPEND-ONLY-001 — the workspace's finance role reads money only, even where its keys would open analytics.
+        if ($this->holdsFinanceRole($user)) {
+            return true;
+        }
         foreach ($projectIds as $projectId) {
             $id = (string) $projectId;
             if (! $this->abilities->allows($user, $id, ProjectCapability::BUDGET_VIEW)
@@ -443,6 +451,16 @@ final class DigestDispatcher
         }
 
         return true;
+    }
+
+    /** FINANCE-SPEND-ONLY-001 — whether the reader's role in the tenant being built is the finance preset. */
+    private function holdsFinanceRole(User $user): bool
+    {
+        try {
+            return $user->rolesInCurrentTenant()->contains(static fn ($role): bool => (string) ($role->slug ?? '') === WorkspaceRolePresets::FINANCE);
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**
