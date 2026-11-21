@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { usePortalBase } from '@/app/portalPath'
-import { CheckCircle2, Copy, History, Pause, Pencil, Play, Plus, Rocket, XCircle } from 'lucide-react'
+import { CheckCircle2, Copy, History, MoreHorizontal, Pencil, Plus, Rocket, Trash2, XCircle } from 'lucide-react'
+import { ProviderMark } from '@/components/ProviderMark'
 import type { UnifiedCampaign } from './types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -254,6 +255,19 @@ export function CampaignControlPanel({ campaign, projectId, onOpenHistory, focus
   )
 }
 
+/**
+ * CAMPAIGN-MANAGER-PRO-001 — Owner 2026-11-21: a row reads like the platforms' own managers. A switch for on/off at the
+ * start, the name and its state, one line of what it is set to, the two or three edits that level is changed by most,
+ * and everything else under «المزيد» — rename, schedule, bidding, duplicate, archive and delete last, in red, inside
+ * the menu rather than beside every row. The withheld reasons stay, said once per reason.
+ */
+const PRIMARY: Record<WriteEntity['level'], WriteActionKey[]> = {
+  campaign: ['budget', 'create_ad_set'],
+  ad_set: ['budget', 'targeting', 'create_ad'],
+  ad: ['creative', 'destination'],
+}
+const DESTRUCTIVE: WriteActionKey[] = ['archive', 'delete']
+
 function EntityRow({ entity, ar, busy, onQuick, onOpen, prominent = false, compact = false }: {
   entity: WriteEntity
   ar: boolean
@@ -264,6 +278,7 @@ function EntityRow({ entity, ar, busy, onQuick, onOpen, prominent = false, compa
   compact?: boolean
 }) {
   const locale = ar ? 'ar' : 'en'
+  const [more, setMore] = useState(false)
   const status = entity.status ?? ''
   const inactive = INACTIVE.has(status)
   const quick: 'pause' | 'resume' | null = inactive ? null : status === 'paused' ? 'resume' : 'pause'
@@ -272,62 +287,107 @@ function EntityRow({ entity, ar, busy, onQuick, onOpen, prominent = false, compa
   const withheld = (quick ? [quick, ...secondary] : secondary)
     .filter((a) => entity.actions[a] !== 'available' && entity.actions[a] !== 'provider_unsupported')
   const forbidden = secondary.filter((a) => entity.actions[a] === 'provider_unsupported')
+  const withheldOther = withheld.filter((a): a is Exclude<WriteActionKey, 'pause' | 'resume'> => a !== 'pause' && a !== 'resume' && !(inactive && a !== 'duplicate'))
+  const primary = PRIMARY[entity.level]
+  const shown = offered.filter((a) => primary.includes(a))
+  const menu = offered.filter((a) => !primary.includes(a))
+  const menuSafe = menu.filter((a) => !DESTRUCTIVE.includes(a))
+  const menuDanger = menu.filter((a) => DESTRUCTIVE.includes(a))
   const budget = entity.daily_budget !== null
     ? `${money(entity.daily_budget, entity.currency ?? '')} ${ar ? 'يوميًا' : 'daily'}`
     : entity.lifetime_budget !== null ? `${money(entity.lifetime_budget, entity.currency ?? '')} ${ar ? 'إجمالًا' : 'lifetime'}` : null
   /* A demo row exists on no platform: one badge says so, and no control is drawn for it. */
   const demo = (Object.values(entity.actions) as ActionState[]).some((v) => v === 'demo')
   const levelName = entity.level === 'campaign' ? (ar ? 'حملة' : 'Campaign') : entity.level === 'ad_set' ? (ar ? 'مجموعة' : 'Ad set') : (ar ? 'إعلان' : 'Ad')
+  const on = status !== 'paused' && !inactive
+  const quickState = quick ? entity.actions[quick] : null
+  const switchable = quick !== null && quickState === 'available' && !demo
+  const switchTitle = quick === null ? campaignStatusLabel(status, locale)
+    : quickState === 'available' ? ACTION_LABELS[quick][locale]
+    : quickState && quickState !== 'provider_unsupported' ? STATE_LABELS[quickState as Exclude<ActionState, 'available'>][locale] : ''
+  const meta = [
+    entity.account?.name,
+    budget,
+    entity.bid_strategy ? strategyName(entity.bid_strategy.toUpperCase(), ar) : null,
+    entity.targeting?.countries && entity.targeting.countries.length > 0 ? entity.targeting.countries.join(', ') : null,
+    entity.targeting?.age ?? null,
+  ].filter((x): x is string => Boolean(x))
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            {prominent && <Badge tone="neutral">{providerLabel(entity.provider, locale)}</Badge>}
-            <span className="text-[11px] text-text-muted">{levelName}</span>
-            <span className={`truncate font-semibold text-text-primary ${compact ? 'text-xs' : 'text-sm'}`}>{entity.name ?? entity.external_id}</span>
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-3">
+        {!demo && (
+          <span title={switchTitle} className="shrink-0">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={on}
+              aria-label={switchTitle}
+              data-testid={quick ? `control-${quick}-${entity.id}` : `control-state-${entity.id}`}
+              disabled={!switchable || busy}
+              onClick={() => quick && onQuick(quick)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${on ? 'bg-brand-600' : 'bg-border-strong'}`}
+            >
+              <span className={`inline-block size-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-[18px] rtl:-translate-x-[18px]' : 'translate-x-0.5 rtl:-translate-x-0.5'}`} />
+            </button>
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {prominent && <ProviderMark provider={entity.provider} size={16} />}
+            <span className="rounded bg-surface-secondary px-1.5 text-xs text-text-muted">{levelName}</span>
+            <span title={entity.external_id} className={`min-w-0 truncate font-bold text-text-primary ${compact ? 'text-xs' : 'text-sm'}`}>{entity.name ?? entity.external_id}</span>
             <Badge tone={campaignStatusTone(status)}>{campaignStatusLabel(status, locale)}</Badge>
             {demo && <Badge tone="neutral" data-testid={`control-demo-${entity.id}`}>{ar ? 'تجريبي' : 'Demo'}</Badge>}
           </div>
-          {!compact && (
-            <p className="mt-0.5 text-xs text-text-secondary">
-              {entity.account?.name && <span>{entity.account.name} · </span>}
-              <span dir="ltr">{entity.external_id}</span>
-              {budget && <span> · <span dir="ltr">{budget}</span></span>}
-              {entity.bid_strategy && <span> · {strategyName(entity.bid_strategy.toUpperCase(), ar)}</span>}
-              {entity.targeting?.countries && entity.targeting.countries.length > 0 && <span> · <span dir="ltr">{entity.targeting.countries.join(', ')}</span></span>}
-              {entity.targeting?.age && <span> · <span dir="ltr">{entity.targeting.age}</span></span>}
-            </p>
+          {!compact && meta.length > 0 && (
+            <p className="mt-0.5 truncate text-xs text-text-secondary"><span dir="auto">{meta.join(' · ')}</span></p>
           )}
         </div>
-        {!demo && <div className="flex flex-wrap items-center gap-1.5">
-          {quick && entity.actions[quick] !== 'available' && entity.actions[quick] !== 'provider_unsupported' && (
-            <Button data-testid={`control-${quick}-${entity.id}`} size="sm" variant="secondary" disabled title={STATE_LABELS[entity.actions[quick] as Exclude<ActionState, 'available'>][locale]}>
-              {quick === 'pause' ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />} {ACTION_LABELS[quick][locale]}
-            </Button>
-          )}
-          {quick && entity.actions[quick] === 'available' && (
-            <Button data-testid={`control-${quick}-${entity.id}`} size="sm" variant={quick === 'pause' ? 'secondary' : 'primary'} disabled={busy} onClick={() => onQuick(quick)}>
-              {quick === 'pause' ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />} {ACTION_LABELS[quick][locale]}
-            </Button>
-          )}
-          {!compact && withheld.filter((a) => a !== 'pause' && a !== 'resume' && !(inactive && a !== 'duplicate')).map((a) => (
-            <Button key={a} data-testid={`control-${a}-${entity.id}`} size="sm" variant="ghost" disabled title={STATE_LABELS[entity.actions[a] as Exclude<ActionState, 'available'>][locale]}>
-              {ACTION_LABELS[a][locale]}
-            </Button>
-          ))}
-          {offered.map((a) => (
-            <Button key={a} data-testid={`control-${a}-${entity.id}`} size="sm" variant={a === 'delete' ? 'danger' : 'ghost'} disabled={busy} onClick={() => onOpen(a)}>
-              {a === 'rename' && <Pencil size={13} aria-hidden />}
-              {a === 'duplicate' && <Copy size={13} aria-hidden />}
-              {ACTION_LABELS[a][locale]}
-            </Button>
-          ))}
-        </div>}
+        {!demo && (
+          <div className="relative flex shrink-0 items-center gap-1">
+            {shown.map((a) => (
+              <Button key={a} data-testid={`control-${a}-${entity.id}`} size="sm" variant="secondary" disabled={busy} onClick={() => onOpen(a)}>
+                {a.startsWith('create_') ? <Plus size={13} aria-hidden /> : <Pencil size={13} aria-hidden />}
+                {ACTION_LABELS[a][locale]}
+              </Button>
+            ))}
+            {(menu.length > 0 || withheldOther.length > 0) && (
+              <>
+                <Button data-testid={`control-more-${entity.id}`} size="sm" variant="ghost" aria-expanded={more} aria-haspopup="menu" onClick={() => setMore((m) => !m)} title={ar ? 'المزيد' : 'More'}>
+                  <MoreHorizontal size={15} aria-hidden /><span className="sr-only">{ar ? 'المزيد' : 'More'}</span>
+                </Button>
+                <div
+                  role="menu"
+                  hidden={!more}
+                  onClick={() => setMore(false)}
+                  className="absolute end-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl"
+                >
+                  {menuSafe.map((a) => (
+                    <button key={a} type="button" role="menuitem" data-testid={`control-${a}-${entity.id}`} disabled={busy} onClick={() => onOpen(a)} className="flex w-full items-center gap-2 px-3 py-1.5 text-start text-sm text-text-primary hover:bg-surface-secondary disabled:opacity-50">
+                      {a === 'rename' ? <Pencil size={13} aria-hidden /> : a === 'duplicate' ? <Copy size={13} aria-hidden /> : <span className="w-[13px]" aria-hidden />}
+                      {ACTION_LABELS[a][locale]}
+                    </button>
+                  ))}
+                  {withheldOther.map((a) => (
+                    <button key={a} type="button" role="menuitem" data-testid={`control-${a}-${entity.id}`} disabled title={STATE_LABELS[entity.actions[a] as Exclude<ActionState, 'available'>][locale]} className="flex w-full items-center gap-2 px-3 py-1.5 text-start text-sm text-text-muted">
+                      <span className="w-[13px]" aria-hidden />{ACTION_LABELS[a][locale]}
+                    </button>
+                  ))}
+                  {menuDanger.length > 0 && <div className="my-1 border-t border-border" />}
+                  {menuDanger.map((a) => (
+                    <button key={a} type="button" role="menuitem" data-testid={`control-${a}-${entity.id}`} disabled={busy} onClick={() => onOpen(a)} className="flex w-full items-center gap-2 px-3 py-1.5 text-start text-sm font-bold text-danger hover:bg-danger/10 disabled:opacity-50">
+                      <Trash2 size={13} aria-hidden />{ACTION_LABELS[a][locale]}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
       {!compact && !demo && (withheld.length > 0 || forbidden.length > 0) && (
-        <p data-testid={`control-withheld-${entity.id}`} className="text-[11px] text-text-muted">
+        <p data-testid={`control-withheld-${entity.id}`} className="ps-12 text-xs text-text-muted">
           {/* One line per REASON, not per action: the reason is what the reader needs, said once. */}
           {Object.entries(groupByReason(withheld, entity)).map(([reason, actions], i) => (
             <span key={reason}>
