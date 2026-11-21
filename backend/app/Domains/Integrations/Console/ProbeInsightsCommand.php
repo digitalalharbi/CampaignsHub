@@ -704,6 +704,12 @@ final class ProbeInsightsCommand extends Command
             return;
         }
 
+        if ($account->provider === 'x') {
+            $this->reportXShapes($connector->peekRawResponses());
+
+            return;
+        }
+
         /** @var array<string, array<string, true>> $byType */
         $byType = [];
         /** @var array<string, int> $counts */
@@ -915,6 +921,88 @@ final class ProbeInsightsCommand extends Command
      * @param  array<mixed>  $body
      * @return list<string>
      */
+    /**
+     * X-MEDIA-FIELDS-002 — where an X promoted tweet keeps its picture, by KEY NAME.
+     *
+     * Production 2026-11-21: after the media-field fix and a structure sweep on the new code, the Ettifaq tweets were
+     * still stored as text with no still. The Ads API answered them, so the picture sits under a name the connector does
+     * not read, or nowhere. The tweet, card and media-library bodies the sweep received are described here — key paths
+     * only, never values (they hold a client's ad copy and links) — so the next mapping is written against what X sends.
+     *
+     * @param  list<array<string, mixed>>  $bodies
+     */
+    private function reportXShapes(array $bodies): void
+    {
+        $kinds = ['tweet' => [], 'card' => [], 'media_library' => [], 'other' => []];
+        $counts = ['tweet' => 0, 'card' => 0, 'media_library' => 0, 'other' => 0];
+        $facts = ['tweets with entities.media' => 0, 'tweets with extended_entities.media' => 0, 'tweets with card_uri' => 0, 'retweets' => 0];
+
+        foreach ($bodies as $body) {
+            $items = $body['data'] ?? null;
+            $items = is_array($items) && array_is_list($items) ? $items : (is_array($items) ? [$items] : []);
+
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                $kind = match (true) {
+                    isset($item['full_text']) || isset($item['id_str']) => 'tweet',
+                    isset($item['card_uri']) || isset($item['card_type']) || isset($item['components']) => 'card',
+                    isset($item['media_key']) => 'media_library',
+                    default => 'other',
+                };
+                $counts[$kind]++;
+                foreach ($this->flattenDeep($item) as $path) {
+                    $kinds[$kind][$path] = true;
+                }
+                if ($kind === 'tweet') {
+                    $source = is_array($item['retweeted_status'] ?? null) ? $item['retweeted_status'] : $item;
+                    $facts['retweets'] += $source !== $item ? 1 : 0;
+                    $facts['tweets with entities.media'] += ! empty($source['entities']['media']) ? 1 : 0;
+                    $facts['tweets with extended_entities.media'] += ! empty($source['extended_entities']['media']) ? 1 : 0;
+                    $facts['tweets with card_uri'] += ! empty($source['card_uri']) || ! empty($item['card_uri']) ? 1 : 0;
+                }
+            }
+        }
+
+        $this->line('');
+        $this->line('  X BODY SHAPES — key paths only, never values');
+        foreach ($facts as $label => $n) {
+            $this->line(sprintf('    %-40s %d', $label, $n));
+        }
+        foreach ($kinds as $kind => $paths) {
+            if ($counts[$kind] === 0) {
+                continue;
+            }
+            $names = array_keys($paths);
+            sort($names);
+            $this->line(sprintf('    %s  (%d)', $kind, $counts[$kind]));
+            $this->line('      '.implode(', ', $names));
+        }
+    }
+
+    /**
+     * Key paths to five levels; list members are described by their shape, not their count.
+     *
+     * @param  array<mixed>  $body
+     * @return list<string>
+     */
+    private function flattenDeep(array $body, string $prefix = '', int $depth = 0): array
+    {
+        $out = [];
+        foreach ($body as $key => $value) {
+            $path = is_int($key) ? $prefix : ($prefix === '' ? (string) $key : $prefix.'.'.$key);
+            if (! is_int($key)) {
+                $out[] = $path;
+            }
+            if (is_array($value) && $depth < 5) {
+                $out = [...$out, ...$this->flattenDeep($value, $path, $depth + 1)];
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
     private function flatten(array $body, string $prefix = '', int $depth = 0): array
     {
         $out = [];
