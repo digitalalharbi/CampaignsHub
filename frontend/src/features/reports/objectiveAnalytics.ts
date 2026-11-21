@@ -19,6 +19,8 @@ export interface ObjectiveKpi {
   reason: string | null
   /** Platforms in this family that did not send the figure (or one of a ratio's parts). */
   not_reported_by?: string[]
+  /** OBJECTIVE-CARDS-PARITY-001 — the movement against the equal window before; null/absent where it cannot be stated. */
+  delta?: number | null
 }
 
 export interface RankingEnd {

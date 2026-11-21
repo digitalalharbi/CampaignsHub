@@ -56,6 +56,17 @@ final class PreviousComparison
             }
         }
 
+        // OBJECTIVE-CARDS-PARITY-001 — each objective KPI's movement against the window before is the same comparison.
+        if (is_array($payload['objective_analytics']['families'] ?? null)) {
+            foreach ($payload['objective_analytics']['families'] as $i => $block) {
+                foreach ((array) ($block['kpis'] ?? []) as $j => $kpi) {
+                    if (is_array($kpi)) {
+                        unset($payload['objective_analytics']['families'][$i]['kpis'][$j]['delta']);
+                    }
+                }
+            }
+        }
+
         /*
          * Built from their own window read, so no key above reaches them. A finding that IS a sum against the last window's rate leaves
          * whole; every other finding keeps what this period measured and loses the figure it was compared with and the ratio that returns it.

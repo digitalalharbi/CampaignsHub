@@ -32,6 +32,60 @@ final class ObjectiveAnalyticsSection
             $input->to,
         );
 
-        return $section['families'] === [] ? null : $section;
+        if ($section['families'] === []) {
+            return null;
+        }
+
+        return self::withMovement($section, $this->previous($reader, $input));
+    }
+
+    /**
+     * OBJECTIVE-CARDS-PARITY-001 (Owner 2026-11-22) — the objective cards read like the summary's KPI cards: each figure beside its
+     * movement against the equal window just before. The previous window is built by the same reader and the same analytics (its
+     * KPIs only: no content, no days), so the two figures are one definition apart by nothing.
+     *
+     * @return array<string, array<string, float>> family → kpi key → previous value (reported figures only)
+     */
+    private function previous(ObjectiveAnalyticsReader $reader, ObjectiveAnalyticsInput $input): array
+    {
+        $days = max(1, (int) $input->from->copy()->startOfDay()->diffInDays($input->to->copy()->startOfDay()) + 1);
+        $prevTo = $input->from->copy()->subDay();
+        $prevFrom = $prevTo->copy()->subDays($days - 1);
+
+        $before = (new ObjectiveReportAnalytics)->build($reader->byObjectiveProvider($prevFrom, $prevTo), [], [], $prevFrom, $prevTo);
+
+        $out = [];
+        foreach ($before['families'] ?? [] as $block) {
+            foreach ((array) ($block['kpis'] ?? []) as $kpi) {
+                if (($kpi['state'] ?? null) === 'reported' && is_numeric($kpi['value'] ?? null)) {
+                    $out[(string) $block['family']][(string) $kpi['key']] = (float) $kpi['value'];
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * A movement is stated only where both windows reported the figure and the earlier one is not zero — never a 100 % rise out of
+     * nothing, never a fall to a figure nobody sent.
+     *
+     * @param  array<string, mixed>  $section
+     * @param  array<string, array<string, float>>  $previous
+     * @return array<string, mixed>
+     */
+    public static function withMovement(array $section, array $previous): array
+    {
+        foreach ($section['families'] as $i => $block) {
+            foreach ((array) ($block['kpis'] ?? []) as $j => $kpi) {
+                $before = $previous[(string) ($block['family'] ?? '')][(string) ($kpi['key'] ?? '')] ?? null;
+                $now = $kpi['value'] ?? null;
+                $section['families'][$i]['kpis'][$j]['delta'] = ($kpi['state'] ?? null) === 'reported' && is_numeric($now) && $before !== null && $before != 0.0
+                    ? round(((float) $now - $before) / abs($before), 4)
+                    : null;
+            }
+        }
+
+        return $section;
     }
 }
