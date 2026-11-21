@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { LiveChip, LiveDot, PlatformMarks, rowPlatforms } from '@/features/funding/BudgetBoard'
 import { Num } from '@/components/ui/Num'
-import type { DashboardUnit, DeliveryRow } from './api'
+import type { DashboardUnit, DeliveryReason, DeliveryRow } from './api'
 import { Panel, useFmt } from './parts'
 
 /**
@@ -11,11 +11,19 @@ import { Panel, useFmt } from './parts'
  * mark: green ring = running, grey = stopped. Every role sees the state; the money only with the money key
  * (the server sends it null otherwise). A stopped unit with budget left comes first. No row → no card.
  */
+/** DELIVERY-RULE-7D-001 — the one reason under a stopped row, in a few words. Running says nothing more. */
+const REASON: Record<Exclude<DeliveryReason, 'running'>, { ar: string; en: string }> = {
+  no_spend: { ar: 'لا إنفاق آخر 7 أيام', en: 'No spend in 7 days' },
+  no_sync: { ar: 'البيانات لا تصل', en: 'Data not arriving' },
+  budget_spent: { ar: 'انتهت الميزانية', en: 'Budget ran out' },
+}
+
 export function DeliveryPanel({ rows: given, units, portal, className = '' }: { rows?: DeliveryRow[]; units?: DashboardUnit[]; portal: 'agency' | 'app'; money?: boolean; className?: string }) {
   const f = useFmt()
   const ar = f.ar
   const read: DeliveryRow[] = given ?? (units ?? []).filter((u) => u.delivering !== undefined).map((u) => ({
     id: u.id, kind: u.kind, name: u.name, delivering: !!u.delivering, delivering_platforms: u.delivering_platforms ?? {},
+    reason: u.delivering ? 'running' : undefined,
     budget: u.budget, spent: u.spent, remaining: u.remaining, ratio: u.ratio, currency: u.currency,
   }))
   if (read.length === 0) return null
@@ -26,7 +34,7 @@ export function DeliveryPanel({ rows: given, units, portal, className = '' }: { 
   const off = read.length - on
   const money = read.some((u) => u.budget !== null || u.remaining !== null)
   // The same columns for the header and every row, so they line up as one table.
-  const cols = money ? 'sm:grid-cols-[minmax(0,1.6fr)_5.5rem_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(5.5rem,auto)]' : 'sm:grid-cols-[minmax(0,1.6fr)_5.5rem_minmax(0,1.2fr)]'
+  const cols = money ? 'sm:grid-cols-[minmax(0,1.6fr)_8rem_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(5.5rem,auto)]' : 'sm:grid-cols-[minmax(0,1.6fr)_8rem_minmax(0,1.2fr)]'
   const path = (u: DeliveryRow) => (portal === 'agency' && u.kind === 'client' ? `/agency/clients/${u.id}` : `/${portal}/budgets`)
 
   return (
@@ -65,7 +73,14 @@ export function DeliveryPanel({ rows: given, units, portal, className = '' }: { 
                     <span className={`truncate text-sm font-bold ${u.delivering ? 'text-text-primary' : 'text-text-secondary'}`} title={u.name}>{u.name}</span>
                     <span className="text-xs text-text-muted">{u.kind === 'client' ? (ar ? 'عميل' : 'Client') : (ar ? 'مشروع' : 'Project')}</span>
                   </span>
-                  <span className="justify-self-end sm:justify-self-start"><LiveChip on={u.delivering} ar={ar} /></span>
+                  <span className="flex flex-col items-end gap-0.5 justify-self-end sm:items-start sm:justify-self-start">
+                    <LiveChip on={u.delivering} ar={ar} />
+                    {u.reason && u.reason !== 'running' && (
+                      <span className={`text-xs font-bold ${u.reason === 'no_spend' ? 'text-text-muted' : 'text-warning'}`} data-testid={`dash-delivery-reason-${u.id}`} data-reason={u.reason}>
+                        {ar ? REASON[u.reason].ar : REASON[u.reason].en}
+                      </span>
+                    )}
+                  </span>
                   <PlatformMarks platforms={rowPlatforms({ by_platform: [], delivering_platforms: u.delivering_platforms })} ar={ar} testId={`dash-delivery-platforms-${u.id}`} size={16} />
                   {money && (
                     <span className="flex min-w-0 items-center gap-1.5" title={ratio === null ? undefined : `${ar ? 'صُرف' : 'Spent'} ${Math.round((u.ratio ?? 0) * 100)}%`}>

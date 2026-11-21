@@ -295,6 +295,19 @@ describe('running or stopped, merged with the budget, for every role', () => {
     expect(within(panel).getByTestId('dash-delivery-c1')).toHaveTextContent('Client')
   })
 
+  it('says why a stopped row is stopped, by the server\'s one rule (DELIVERY-RULE-7D-001)', () => {
+    const rows: DeliveryRow[] = [
+      { ...delivery[0], reason: 'running' },
+      { ...delivery[1], reason: 'no_sync' },
+      { id: 'c3', kind: 'client' as const, name: 'Gamma', delivering: false, delivering_platforms: { meta: true }, reason: 'budget_spent', budget: 100, spent: 100, remaining: 0, ratio: 1, currency: 'SAR' },
+    ]
+    page(base({ view: 'manager', delivery: rows }))
+    const panel = screen.getByTestId('dash-panel-delivery')
+    expect(within(panel).queryByTestId('dash-delivery-reason-c1')).toBeNull()
+    expect(within(panel).getByTestId('dash-delivery-reason-c2')).toHaveTextContent('Data not arriving')
+    expect(within(panel).getByTestId('dash-delivery-reason-c3')).toHaveTextContent('Budget ran out')
+  })
+
   it('shows the state with no money for a member without the money key', () => {
     page(base({ view: 'marketer', can_money: false, money: null, units: [], delivery: delivery.map((r) => ({ ...r, budget: null, spent: null, remaining: null, ratio: null })) }))
     const panel = screen.getByTestId('dash-panel-delivery')

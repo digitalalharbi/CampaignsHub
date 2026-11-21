@@ -34,11 +34,13 @@ export interface DashboardUnit extends BudgetReading {
   daily_rate_3d: number | null
   days_left: number | null
   run_out_on: string | null
-  /** DELIVERY-STATE-001 — spend AND impressions in the last 3 days on any platform. */
+  /** DELIVERY-STATE-001 / DELIVERY-RULE-7D-001 — spend in the last 7 days on any platform, on data that keeps coming in. */
   delivering?: boolean
-  /** provider → running in the last 3 days (a provider that did not spend is absent). */
+  /** provider → running in the last 7 days (every platform the project selects; false = stopped). */
   delivering_platforms?: Record<string, boolean>
 }
+
+export type DeliveryReason = 'running' | 'no_spend' | 'no_sync' | 'budget_spent'
 
 export interface DeliveryRow {
   id: string
@@ -46,6 +48,10 @@ export interface DeliveryRow {
   name: string
   delivering: boolean
   delivering_platforms: Record<string, boolean>
+  /** DELIVERY-RULE-7D-001 — why the row reads as it does, decided by the server's one rule. Absent from an older server. */
+  reason?: DeliveryReason
+  /** The last day any platform under it spent, inside the 7-day window; null when none did. */
+  last_spend?: string | null
   budget: number | null
   spent: number | null
   remaining: number | null
