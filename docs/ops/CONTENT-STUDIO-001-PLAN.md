@@ -18,9 +18,9 @@ nothing. AI generation uses the tenant's own key and is hidden without one. No p
 | 1 | The rules, as pure code with tests: safe margins (10% top, 20% bottom, 6% sides; inner 6% for 4:5/1:1/1.91:1), copy limits (hook ≤ 6, message ≤ 10, CTA ≤ 3, no hashtag/emoji/forbidden word), the 12s/15s Hook-Message-CTA timeline, and the hard readiness checks that block saving | **this PR** |
 | 2 | Image analysis in the browser: product box, 12×20 calm-zone grid, per-zone light/dark, 5-colour palette, quality (resolution, blur, exposure) | **merged #1238** (own saliency, no smartcrop.js) |
 | 3 | Design tokens: Brand Kit schema + derivation from the image, contrast lint (WCAG ≥ 4.5), one font pair, ≤ 3 layer colours | **merged #1241** (fonts named, files not yet hosted) |
-| 4 | Layout families as zod-validated JSON (seven), placement from the calm-zone map, diversity constraint | **this PR** |
-| 5 | Motion recipes and the Canvas previewer (no encoding until Save) with the margin overlay; Arabic text width measurement | next |
-| 6 | Export: WebCodecs + mp4-muxer in a Web Worker, 1080×1920 30fps H.264/AAC, ≤ 15s | |
+| 4 | Layout families as zod-validated JSON (seven), placement from the calm-zone map, diversity constraint | **merged #1247** |
+| 5 | Motion recipes and the Canvas previewer (no encoding until Save) with the margin overlay; Arabic text width measurement | **this PR** (pure scene, recipes and frame renderer; the live Canvas component and real glyph measurement come with batch 7) |
+| 6 | Export (next): WebCodecs + mp4-muxer in a Web Worker, 1080×1920 30fps H.264/AAC, ≤ 15s | |
 | 7 | Studio drawer inside the library: auto-generate on upload, batch of 3 videos + 4 images, save/send-to-approval | |
 | 8 | Migrations: brand_kits, design_tokens, studio_sessions/outputs, layout_families, music_tracks, creative_concepts, readiness_scores | |
 | 9 | Readiness score and the post-launch link (file_hash → ads, quality/engagement/conversion rankings, hook and hold rate, learning loop) | |
