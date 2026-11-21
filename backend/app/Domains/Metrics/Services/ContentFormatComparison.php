@@ -166,6 +166,12 @@ final class ContentFormatComparison
     /** Figures built on spend (null when any of it is withheld). */
     private const SPEND_BUILT = ['spend', 'cpc', 'cpm', 'cost_per_lpv', 'roas', 'cpa', 'cpl', 'cpi', 'cpe', 'cost_per_view'];
 
+    /** Figures whose absence in one family is «not reported there», summed over the families that did report them. */
+    private const MERGE_SKIPS_UNREPORTED = [
+        'impressions', 'clicks', 'landing_page_views', 'add_to_cart', 'purchases', 'conversions', 'revenue', 'leads', 'installs',
+        'engagements', 'video_views',
+    ];
+
     /** A report preset's name for a figure → the name this table carries it under. */
     public const TABLE_ALIASES = ['video_completion_rate' => 'completion_rate', 'orders' => 'purchases'];
 
@@ -337,6 +343,17 @@ final class ContentFormatComparison
                     continue;
                 }
                 if (! is_numeric($set[$k])) {
+                    /*
+                     * FORMAT-COMPARE-MERGE-001 (Owner 2026-11-21) — a family that did not report a count or a revenue for this
+                     * type (its results never reached creative grain) is not a zero and must not blank the type's figure in every
+                     * other family. Ettifaq: image revenue 811.89 (sales) + 0 (traffic) + null (unknown) printed as no revenue at
+                     * all, beside video's 1,870 — a comparison that named video the earner by a gap. Money built on spend stays
+                     * strict: a withheld amount there is FX-001, never skipped.
+                     */
+                    if (in_array($k, self::MERGE_SKIPS_UNREPORTED, true)) {
+                        continue;
+                    }
+
                     return null;
                 }
                 $total = ($total ?? 0.0) + (float) $set[$k];
