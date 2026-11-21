@@ -126,6 +126,9 @@ final class AuthorizationState
             (string) ($record['user_id'] ?? ''),
             (string) ($record['candidate_run_id'] ?? ''),
             (string) ($record['nonce'] ?? ''),
+            // META-MULTI-APP-001 — an atomic reconnect is bound to the ONE connection it may replace; absent for every other state, so
+            // the signature of an ordinary state is unchanged.
+            ...(isset($record['reconnect_connection_id']) ? ['reconnect:'.(string) $record['reconnect_connection_id']] : []),
         ]), 'meta-oauth-state|'.(string) config('app.key'));
     }
 
