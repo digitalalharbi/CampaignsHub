@@ -449,6 +449,19 @@ final class MetricsController extends Controller
         );
     }
 
+    /** ACCOUNTS-PULSE-001 — running or stopped, per ad account, with its days; see MetricsAggregator::accountPulse(). */
+    public function accountPulse(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+
+        return ApiResponse::success(
+            $this->scoped($request)->accountPulse($from, $to),
+            'Ad account pulse.',
+            meta: $this->meta($from, $to),
+        );
+    }
+
     /**
      * UX-MULTISELECT-SCALE-001 — the campaign filter's OPTIONS, searched on the server.
      *

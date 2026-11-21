@@ -187,6 +187,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/drivers', [MetricsController::class, 'drivers'])->middleware('read.cache:60')->name('metrics.drivers');
     Route::get('metrics/platforms', [MetricsController::class, 'platforms'])->middleware('read.cache:60')->name('metrics.platforms');
     Route::get('metrics/accounts', [MetricsController::class, 'accounts'])->middleware('read.cache:60')->name('metrics.accounts');
+    Route::get('metrics/accounts/pulse', [MetricsController::class, 'accountPulse'])->middleware('read.cache:60')->name('metrics.accounts.pulse');
     Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->middleware('read.cache:60')->name('metrics.campaigns');
     /*
      * UX-MULTISELECT-SCALE-001 — the filter's options, searched on the server rather than filled from
