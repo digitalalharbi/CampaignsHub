@@ -54,13 +54,14 @@ test.describe('the period picker', () => {
     await expect(page.getByTestId('campaigns-period-picker-summary')).toContainText('16 أكتوبر – 14 نوفمبر 2026', { timeout: 30_000 })
   })
 
-  test('opens a shared link on the same two dates, and «هذا الشهر» says it is in progress', async ({ page, request }) => {
+  test('opens a shared link on the same two dates; «هذا الشهر» carries no «in progress» badge', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, STORE_PROJECT))
     await page.goto('/agency/analytics?from=2026-09-03&to=2026-09-09')
     await expect(page.getByTestId('dashboard-period-summary').or(page.getByTestId('analytics-period-summary'))).toContainText('3 سبتمبر – 9 سبتمبر 2026', { timeout: 30_000 })
 
     await page.goto('/agency/campaigns?from=2026-11-01&to=2026-11-15')
-    await expect(page.getByTestId('campaigns-period-picker-status-ongoing')).toContainText('جاري — غير مكتمل', { timeout: 30_000 })
+    await expect(page.getByTestId('campaigns-period-picker-summary')).toContainText('1 نوفمبر – 15 نوفمبر 2026', { timeout: 30_000 })
+    await expect(page.getByTestId('campaigns-period-picker-status-ongoing')).toHaveCount(0)
   })
 
   test('picks a range with two clicks and refuses a day that has not come', async ({ page, request }) => {

@@ -28,18 +28,17 @@ export function PeriodStatus({ projectId, period, className = '', testId = 'peri
   const ar = useUi((s) => s.locale) === 'ar'
   const q = usePeriodCoverage(projectId, period)
   const cov = q.data
-  const ongoing = period.ongoing
+  /*
+   * PERIOD-ONGOING-BADGE-OFF-001 — Owner 2026-11-21: «جاري — غير مكتمل» read as doubt about the figures, beside a period that
+   * simply includes today. It is not drawn any more; a real gap in the data still says so («بيانات غير مكتملة»).
+   */
   const incomplete = Boolean(cov?.incomplete)
   const otherZone = (cov?.accounts ?? []).filter((a) => a.timezone_differs)
 
-  if (!ongoing && !incomplete && otherZone.length === 0) return null
+  if (!incomplete && otherZone.length === 0) return null
 
   return (
     <span className={`inline-flex flex-wrap items-center gap-1.5 ${className}`} data-testid={testId}>
-      {ongoing && (
-        <Chip tone="warning" testId={`${testId}-ongoing`} label={ar ? 'جاري — غير مكتمل' : 'In progress — not final'}
-          tip={ar ? 'الفترة تشمل اليوم، وأرقام اليوم لم تكتمل بعد. لا تُقارن بأيام المنصات المكتملة.' : 'The period includes today, and today’s figures are still arriving. Do not compare it with the platforms’ finished days.'} />
-      )}
       {incomplete && cov && (
         <Chip tone="warning" testId={`${testId}-incomplete`} label={ar ? 'بيانات غير مكتملة' : 'Incomplete data'} tip={<CoverageTip cov={cov} ar={ar} />} />
       )}

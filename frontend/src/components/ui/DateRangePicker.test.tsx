@@ -70,12 +70,14 @@ describe('the period picker', () => {
     expect(screen.getByTestId('where')).toHaveTextContent('from=2026-10-16&to=2026-11-14')
   })
 
-  it('«هذا الشهر» runs 1 → 15 November and says it is in progress', async () => {
+  it('«هذا الشهر» runs 1 → 15 November and draws no «in progress» badge (PERIOD-ONGOING-BADGE-OFF-001)', async () => {
     vi.mocked(getData).mockResolvedValue(coverage({ ongoing: true }))
     renderWithProviders(<Pages />, { locale: 'ar' })
     await pick('this_month')
     expect(screen.getByTestId('date-range-summary')).toHaveTextContent('هذا الشهر: 1 نوفمبر – 15 نوفمبر 2026')
-    expect(await screen.findByTestId('date-range-status-ongoing')).toHaveTextContent('جاري — غير مكتمل')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.queryByTestId('date-range-status-ongoing')).toBeNull()
+    expect(document.body.textContent).not.toContain('جاري — غير مكتمل')
   })
 
   it('«الشهر الماضي» is all of October', async () => {
