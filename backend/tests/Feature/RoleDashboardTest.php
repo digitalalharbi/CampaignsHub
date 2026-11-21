@@ -273,6 +273,18 @@ final class RoleDashboardTest extends TestCase
         $f = collect($this->dash($finance)['delivery'])->keyBy('name');
         $this->assertEqualsWithDelta(1000.0, (float) $f['Alpha']['budget'], 0.01);
         $this->assertNotNull($f['Beta']['remaining']);
+
+        // DELIVERY-TODAY-001 — today's spend so far, from the budget's own ledger: refreshed today with nothing spent is a real 0.
+        $this->assertSame(0.0, (float) $f['Alpha']['today_spend']);
+        $this->assertNotNull($f['Alpha']['today_as_of']);
+        $alphaProject = Project::query()->where('client_workspace_id', $this->alpha->id)->firstOrFail();
+        $alphaCampaign = UnifiedCampaign::query()->where('project_id', $alphaProject->id)->firstOrFail();
+        $this->spend($alphaProject, $alphaCampaign, 0, 75);
+        app(FundingSpendRefresher::class)->refresh(ProjectFunding::query()->where('project_id', $alphaProject->id)->firstOrFail());
+        $f = collect($this->dash($finance)['delivery'])->keyBy('name');
+        $this->assertEqualsWithDelta(75.0, (float) $f['Alpha']['today_spend'], 0.01);
+        // Without the money key there is no figure at all.
+        $this->assertNull($b['Alpha']['today_spend']);
     }
 
     /** DASH-MANAGER-PERFORMANCE-001 — the manager reads every reachable campaign's performance, not only his own. */

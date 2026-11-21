@@ -52,6 +52,10 @@ export interface DeliveryRow {
   reason?: DeliveryReason
   /** The last day any platform under it spent, inside the 7-day window; null when none did. */
   last_spend?: string | null
+  /** DELIVERY-TODAY-001 — today's spend so far (Riyadh day, SAR ledger); null when not known, never a guessed zero. */
+  today_spend?: number | null
+  /** When that ledger was last refreshed. */
+  today_as_of?: string | null
   budget: number | null
   spent: number | null
   remaining: number | null

@@ -34,7 +34,9 @@ export function DeliveryPanel({ rows: given, units, portal, className = '' }: { 
   const off = read.length - on
   const money = read.some((u) => u.budget !== null || u.remaining !== null)
   // The same columns for the header and every row, so they line up as one table.
-  const cols = money ? 'sm:grid-cols-[minmax(0,1.6fr)_8rem_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(5.5rem,auto)]' : 'sm:grid-cols-[minmax(0,1.6fr)_8rem_minmax(0,1.2fr)]'
+  // Static strings so the stylesheet carries them; every row renders every cell (an empty one as «—») so nothing slides
+  // under the wrong heading (DELIVERY-TABLE-002 — Owner 2026-11-21: a client with no platform shifted its row left).
+  const cols = money ? 'sm:grid-cols-[minmax(0,1.5fr)_8rem_minmax(0,1fr)_minmax(5.5rem,auto)_minmax(0,1.2fr)_minmax(5.5rem,auto)]' : 'sm:grid-cols-[minmax(0,1.6fr)_8rem_minmax(0,1.2fr)]'
   const path = (u: DeliveryRow) => (portal === 'agency' && u.kind === 'client' ? `/agency/clients/${u.id}` : `/${portal}/budgets`)
 
   return (
@@ -54,7 +56,7 @@ export function DeliveryPanel({ rows: given, units, portal, className = '' }: { 
             [ar ? 'العميل · المشروع' : 'Client · project', ''],
             [ar ? 'الحالة' : 'Status', ''],
             [ar ? 'المنصات' : 'Platforms', ''],
-            ...(money ? [[ar ? 'الإنفاق' : 'Spend', ''], [ar ? 'المتبقي' : 'Remaining', 'text-end']] : []),
+            ...(money ? [[ar ? 'إنفاق اليوم' : 'Today', ''], [ar ? 'الإنفاق' : 'Spend', ''], [ar ? 'المتبقي' : 'Remaining', 'text-end']] : []),
           ].map(([h, c]) => <span key={h} className={`truncate text-xs font-bold text-text-muted ${c}`}>{h}</span>)}
         </div>
         <ul className="space-y-1">
@@ -81,7 +83,21 @@ export function DeliveryPanel({ rows: given, units, portal, className = '' }: { 
                       </span>
                     )}
                   </span>
-                  <PlatformMarks platforms={rowPlatforms({ by_platform: [], delivering_platforms: u.delivering_platforms })} ar={ar} testId={`dash-delivery-platforms-${u.id}`} size={16} />
+                  <span className="min-w-0" data-testid={`dash-delivery-platforms-cell-${u.id}`}>
+                    {Object.keys(u.delivering_platforms).length > 0
+                      ? <PlatformMarks platforms={rowPlatforms({ by_platform: [], delivering_platforms: u.delivering_platforms })} ar={ar} testId={`dash-delivery-platforms-${u.id}`} size={16} />
+                      : <span className="text-text-muted">—</span>}
+                  </span>
+                  {money && (
+                    /* DELIVERY-TODAY-001 — today's spend so far, with the time it was last refreshed. */
+                    <span
+                      className="whitespace-nowrap font-bold text-text-primary"
+                      data-testid={`dash-delivery-today-${u.id}`}
+                      title={u.today_as_of ? `${ar ? 'آخر تحديث' : 'Updated'} ${new Date(u.today_as_of).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' })}` : undefined}
+                    >
+                      {u.today_spend === null || u.today_spend === undefined ? <span className="text-text-muted">—</span> : <Num>{f.money(u.today_spend, u.currency)}</Num>}
+                    </span>
+                  )}
                   {money && (
                     <span className="flex min-w-0 items-center gap-1.5" title={ratio === null ? undefined : `${ar ? 'صُرف' : 'Spent'} ${Math.round((u.ratio ?? 0) * 100)}%`}>
                       {ratio !== null ? (

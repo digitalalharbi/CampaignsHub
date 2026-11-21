@@ -33,6 +33,7 @@ use App\Models\User;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * ROLE-DASHBOARD-001 — one landing page per role, from facts the product already computes.
@@ -456,6 +457,12 @@ final class RoleDashboardBuilder
             }
         }
 
+        // DELIVERY-TODAY-001 — today's spend so far, from the same SAR ledger the budget is drawn from, for money units only.
+        $today = $this->todaySpend(array_values(array_unique(array_merge(...array_map(
+            static fn (array $u): array => array_map(static fn (array $p): string => (string) $p['id'], $u['projects'] ?? []),
+            array_values($money) ?: [[]],
+        )))));
+
         $out = [];
         foreach ($rows as $id => $r) {
             $m = $money[$id] ?? null;
@@ -478,10 +485,82 @@ final class RoleDashboardBuilder
                 'remaining' => $m['remaining'] ?? null,
                 'ratio' => $m['ratio'] ?? null,
                 'currency' => $m['currency'] ?? null,
-            ];
+            ] + $this->todayOf($m, $today);
         }
 
         return $out;
+    }
+
+    /**
+     * DELIVERY-TODAY-001 — Owner 2026-11-21: «إنفاق اليوم حتى الآن» beside the budget, for credibility. Read from the ledger
+     * the budget itself is drawn from (`funding_spend_days`, SAR), on the Riyadh calendar day, with the time it was last
+     * refreshed so the figure says how fresh it is.
+     *
+     * Missing is never zero: a project whose ledger has not been refreshed today has no figure (null); one refreshed today with
+     * no row for today spent nothing (0); a row with no dated rate withholds the whole sum (null).
+     *
+     * @param  list<string>  $projectIds
+     * @return array<string, array{amount: float|null, as_of: string|null}> project id → today so far
+     */
+    private function todaySpend(array $projectIds): array
+    {
+        $projectIds = array_values(array_filter($projectIds, static fn (string $id): bool => $id !== ''));
+        if ($projectIds === []) {
+            return [];
+        }
+        $day = now('Asia/Riyadh')->toDateString();
+        $dayStart = now('Asia/Riyadh')->startOfDay()->utc();
+
+        $refreshed = DB::table('funding_spend_days')->whereIn('project_id', $projectIds)
+            ->groupBy('project_id')->selectRaw('project_id, MAX(updated_at) AS at')->pluck('at', 'project_id')->all();
+        $rows = DB::table('funding_spend_days')->whereIn('project_id', $projectIds)->where('spend_date', $day)
+            ->groupBy('project_id')
+            ->selectRaw('project_id, SUM(amount_sar) AS amount, COUNT(*) AS n, COUNT(amount_sar) AS priced')
+            ->get()->keyBy('project_id');
+
+        $out = [];
+        foreach ($projectIds as $id) {
+            $at = isset($refreshed[$id]) ? Carbon::parse($refreshed[$id]) : null;
+            $row = $rows->get($id);
+            $amount = match (true) {
+                $row !== null && (int) $row->priced < (int) $row->n => null,
+                $row !== null => round((float) $row->amount, 2),
+                $at !== null && $at->greaterThanOrEqualTo($dayStart) => 0.0,
+                default => null,
+            };
+            $out[$id] = ['amount' => $amount, 'as_of' => $at?->toIso8601String()];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $unit  the money unit, or null for a member without the money key
+     * @param  array<string, array{amount: float|null, as_of: string|null}>  $today
+     * @return array{today_spend: float|null, today_as_of: string|null}
+     */
+    private function todayOf(?array $unit, array $today): array
+    {
+        if ($unit === null) {
+            return ['today_spend' => null, 'today_as_of' => null];
+        }
+        $sum = 0.0;
+        $known = false;
+        $asOf = null;
+        foreach ($unit['projects'] ?? [] as $p) {
+            $t = $today[(string) $p['id']] ?? ['amount' => null, 'as_of' => null];
+            if ($t['amount'] === null) {
+                // One project with no figure withholds the client's sum: a part shown as the whole would read as the whole.
+                return ['today_spend' => null, 'today_as_of' => null];
+            }
+            $sum += $t['amount'];
+            $known = true;
+            if ($t['as_of'] !== null && ($asOf === null || $t['as_of'] < $asOf)) {
+                $asOf = $t['as_of'];   // the oldest refresh is how fresh the sum is
+            }
+        }
+
+        return ['today_spend' => $known ? round($sum, 2) : null, 'today_as_of' => $known ? $asOf : null];
     }
 
     /** @return list<array{date: string, spend: float}> the last 14 complete days of the scope's spend */
