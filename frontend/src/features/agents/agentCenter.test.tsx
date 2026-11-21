@@ -13,7 +13,7 @@ vi.mock('./api', () => ({
   listProposals: vi.fn(), decideProposal: vi.fn(), amendProposal: vi.fn(), bulkDecide: vi.fn(), getTeam: vi.fn(),
 }))
 vi.mock('@/features/projects/api', () => ({ listProjects: vi.fn().mockResolvedValue([{ id: 'proj', name: 'متجر الورد' }]) }))
-vi.mock('@/features/funding/fundingApi', () => ({ useFinancialDisclaimer: () => ({ data: { ar: 'الأرقام تقديرية من المنصات.', en: 'Figures come from the platforms.' } }) }))
+vi.mock('@/features/funding/fundingApi', () => ({ useFinancialDisclaimer: () => ({ data: { ar: 'الأرقام تقديرية من المنصات.', en: 'Figures come from the platforms.' } }), useBudgets: () => ({ data: undefined }) }))
 
 import {
   addMemory, getAssistantSettings, getLive, getTeam, getThread, listAiCredentials, listMemories, listProposals, listRoutines, listThreads,

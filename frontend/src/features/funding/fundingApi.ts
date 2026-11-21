@@ -162,9 +162,11 @@ export type BudgetLedgerResult = { entry_id: string } & BudgetRow
 
 /** `deleted` reads the deleted budgets instead (the «المحذوفة» view): hidden by default, never removed. */
 /** CLIENT-SCOPE-001 — `client` narrows the board and its totals to one client (the agency portal's top filter). */
-export function useBudgets(deleted = false, client: string | null = null) {
+export function useBudgets(deleted = false, client: string | null = null, enabled = true) {
   return useQuery({
     queryKey: ['funding', { deleted, client }],
+    /* PROJECT-CHOOSER-VISUAL-001 — a reader without the money key does not ask (no 403 in the console). */
+    enabled,
     queryFn: async () => {
       const q = new URLSearchParams()
       if (deleted) q.set('deleted', '1')
