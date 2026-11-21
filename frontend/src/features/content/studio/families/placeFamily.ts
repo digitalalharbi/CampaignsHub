@@ -1,4 +1,5 @@
 import type { ImageAnalysis } from '../analysis/analyzeImage'
+import { PRODUCT_AIR } from '../analysis/placement'
 import { calmestBlock } from '../analysis/placement'
 import { FORMATS, liveArea, type FormatKey, type Layer, type LayerKind, type Rect } from '../direction/safeZone'
 import type { Anchor, Family, Role } from './familySchema'
@@ -44,7 +45,12 @@ const alignX = (align: 'start' | 'center' | 'end', width: number, live: Rect, lo
   return startIsRight ? left : right
 }
 
-export function placeFamily(family: Family, analysis: ImageAnalysis, format: FormatKey, locale: 'ar' | 'en' = 'ar'): Layer[] {
+export interface PlaceOptions {
+  /** Roles with no copy to show (no price given, no support line): their blocks are left out so no empty badge is drawn and the column closes up. */
+  skip?: ReadonlyArray<Role>
+}
+
+export function placeFamily(family: Family, analysis: ImageAnalysis, format: FormatKey, locale: 'ar' | 'en' = 'ar', options: PlaceOptions = {}): Layer[] {
   const canvas = FORMATS[format]
   const live = liveArea(format)
   const cw = canvas.width / analysis.grid.cols
@@ -57,7 +63,14 @@ export function placeFamily(family: Family, analysis: ImageAnalysis, format: For
 
   if (surface) {
     const s = size(surface.cols, surface.rows)
-    surfaceRect = { x: alignX(surface.align, s.w, live, locale), y: live.y, w: s.w, h: s.h }
+    const product = { x: analysis.product.x * canvas.width, y: analysis.product.y * canvas.height, w: analysis.product.w * canvas.width, h: analysis.product.h * canvas.height }
+    const opposite = surface.align === 'start' ? 'end' : surface.align === 'end' ? 'start' : 'center'
+    const own = { x: alignX(surface.align, s.w, live, locale), y: live.y, w: s.w, h: s.h }
+    const other = { x: alignX(opposite, s.w, live, locale), y: live.y, w: s.w, h: s.h }
+    const covered = (r: Rect): number => Math.max(0, Math.min(r.x + r.w, product.x + product.w) - Math.max(r.x, product.x)) * Math.max(0, Math.min(r.y + r.h, product.y + product.h) - Math.max(r.y, product.y))
+
+    // A panel beside the picture goes on the side that covers less of the product; the family's own side wins a tie.
+    surfaceRect = covered(other) < covered(own) ? other : own
     layers.push({ id: 'surface', kind: 'bar', rect: surfaceRect })
   }
 
@@ -68,7 +81,7 @@ export function placeFamily(family: Family, analysis: ImageAnalysis, format: For
   const stackLimit: Rect = surfaceRect ?? live
 
   for (const block of family.blocks) {
-    if (block.role === 'surface') continue
+    if (block.role === 'surface' || options.skip?.includes(block.role)) continue
 
     const { w, h } = size(block.cols, block.rows)
     let rect: Rect
@@ -124,7 +137,14 @@ export function placeFamily(family: Family, analysis: ImageAnalysis, format: For
     layers.push({ id: block.role, kind: KIND[block.role], rect })
   }
 
-  return resolveOverlaps(layers, live)
+  const product: Rect = {
+    x: analysis.product.x * canvas.width - cw * PRODUCT_AIR.x,
+    y: analysis.product.y * canvas.height - ch * PRODUCT_AIR.y,
+    w: analysis.product.w * canvas.width + cw * PRODUCT_AIR.x * 2,
+    h: analysis.product.h * canvas.height + ch * PRODUCT_AIR.y * 2,
+  }
+
+  return resolveOverlaps(layers, live, product)
 }
 
 /**
@@ -132,7 +152,7 @@ export function placeFamily(family: Family, analysis: ImageAnalysis, format: For
  * starts where the picture asked for it, slides up or down to fit between the pinned layers, and — only when it still does not fit —
  * every block is made proportionally shorter. So the result never overlaps and never leaves the live area.
  */
-function resolveOverlaps(layers: Layer[], live: Rect): Layer[] {
+function resolveOverlaps(layers: Layer[], live: Rect, product: Rect): Layer[] {
   const out = layers.map((l) => ({ ...l, rect: { ...l.rect } }))
   const texts = out.filter((l) => l.kind === 'text' || l.kind === 'price').sort((a, b) => a.rect.y - b.rect.y)
 
@@ -150,6 +170,24 @@ function resolveOverlaps(layers: Layer[], live: Rect): Layer[] {
 
     if (p.rect.y <= firstY) ceiling = Math.max(ceiling, p.rect.y + p.rect.h + GAP)
     else floor = Math.min(floor, p.rect.y - GAP)
+  }
+
+  // The product (with its air) limits the column too, when the column sits over it sideways: the column keeps to the free side of it,
+  // vertically, and shrinks to fit there rather than cover it.
+  if (!(product.x >= x1 || product.x + product.w <= x0)) {
+    const columnMid = firstY + texts[0]!.rect.h / 2
+    const aboveColumn = product.y + product.h / 2 <= columnMid
+    const nextCeiling = aboveColumn ? Math.max(ceiling, product.y + product.h + GAP) : ceiling
+    const nextFloor = aboveColumn ? floor : Math.min(floor, product.y - GAP)
+
+    // Only when a readable column still fits on the free side. A picture that is nearly all product leaves no such side, and then
+    // the live area and the pinned layers win: the text stays legible and inside the margins rather than being squeezed to nothing.
+    const natural = texts.reduce((sum, t) => sum + t.rect.h, 0) + GAP * (texts.length - 1)
+
+    if (nextFloor - nextCeiling >= natural * 0.55) {
+      ceiling = nextCeiling
+      floor = nextFloor
+    }
   }
 
   const gaps = GAP * (texts.length - 1)
