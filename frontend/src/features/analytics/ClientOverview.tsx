@@ -65,8 +65,8 @@ export function ClientOverview(d: OverviewData) {
       {r ? (
         // Results have no day-by-day count; the days are drawn by what the platforms report every day: reach and clicks.
         <div className="grid gap-3 lg:grid-cols-2" data-testid="client-delivery-trend">
-          <RateTrend title={ar ? 'الظهور يومًا بيوم' : 'Impressions, day by day'} data={series.rows} dataKey="impressions" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => compact(v)} headline={Number(current.impressions ?? 0)} />
-          <RateTrend title={ar ? 'النقرات يومًا بيوم' : 'Clicks, day by day'} data={series.rows} dataKey="clicks" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => compact(v)} headline={Number(current.clicks ?? 0)} />
+          <RateTrend title={ar ? 'الظهور يومًا بيوم' : 'Impressions, day by day'} data={points as unknown as Array<Record<string, unknown>>} dataKey="impressions" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => compact(v)} headline={Number(current.impressions ?? 0)} />
+          <RateTrend title={ar ? 'النقرات يومًا بيوم' : 'Clicks, day by day'} data={points as unknown as Array<Record<string, unknown>>} dataKey="clicks" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => compact(v)} headline={Number(current.clicks ?? 0)} />
         </div>
       ) : (
         <TrendPanel {...d} title={showMoney ? undefined : (ar ? 'تحويلات المنصة يومًا بيوم' : 'Platform conversions, day by day')} description={showMoney ? undefined : (ar ? 'الاتجاه اليومي للنتائج خلال الفترة' : 'Results across the period, day by day')} />

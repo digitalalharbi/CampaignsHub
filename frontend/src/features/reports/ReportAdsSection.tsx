@@ -542,9 +542,12 @@ function AdCard({
       <AdPoster preview={ad.preview ?? null} name={ad.name ?? ''} className="h-32 w-full" testid={testidPrefix} fit="cover" forClient />
 
       <div className="min-w-0">
-        <div dir="auto" className="truncate text-start text-sm font-bold text-text-primary" title={ad.name ?? undefined}>
-          {ad.name ?? '—'}
-        </div>
+        {/* CLIENT-CONTENT-001 — the client portal sends no content name (the agency's naming); the card then leads with its platform. */}
+        {ad.name ? (
+          <div dir="auto" className="truncate text-start text-sm font-bold text-text-primary" title={ad.name}>
+            {ad.name}
+          </div>
+        ) : null}
         <div className="flex items-center gap-1 truncate text-[11px] text-text-muted">
           {/* REPORT-PLATFORM-LOGOS-001 — the platform's own logo ahead of its name. */}
           {ad.provider ? <ProviderMark provider={canonicalPlatform(ad.provider)} size={14} /> : null}
