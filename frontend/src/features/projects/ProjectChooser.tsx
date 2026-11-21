@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { usePortalBase } from '@/app/portalPath'
-import { CalendarClock, FolderKanban, Megaphone, RefreshCw } from 'lucide-react'
+import { FolderKanban, Megaphone, RefreshCw } from 'lucide-react'
 import { listClientWorkspaces, listProjects, type Project } from './api'
 import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
@@ -44,7 +44,7 @@ export type ProjectChooserPurpose = 'campaigns' | 'analytics' | 'reports' | 'rec
  *
  * A card is this tall and the grid's gap is 8px.
  */
-const CARD_HEIGHT = 148
+const CARD_HEIGHT = 92
 const CARD_GAP = 8
 
 /**
@@ -66,7 +66,7 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
   const projects = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false) })
   const canMoney = useAuth((st) => st.hasPermission('funding.view'))
   const budgets = useBudgets(false, null, agency && canMoney)
-  const cols = useColumns([[1024, 3], [640, 2]])
+  const cols = useColumns([[1280, 4], [1024, 3], [640, 2]])
   const fit = useFitRows({ rowHeight: CARD_HEIGHT + CARD_GAP, reserve: 0, min: 1, max: 12, fallback: 1000 })
   const [page, setPage] = useState(1)
 
@@ -123,7 +123,7 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
   const pageRows = fitted && fit.locked ? rows.slice((current - 1) * perPage, current * perPage) : rows
 
   if (clients.isLoading || projects.isLoading) {
-    return <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+    return <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
   }
 
   if (rows.length === 0) {
@@ -145,7 +145,7 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
         </p>
       </div>
       <div ref={fitted ? (fit.ref as never) : undefined} className={fitted ? 'min-h-0 flex-1' : undefined}>
-      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {pageRows.map((p) => (
           <li key={p.id} className="min-w-0">
             <button
@@ -153,7 +153,7 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
               data-testid={`project-choice-${p.id}`}
               onClick={() => choose(p)}
               style={fitted ? { height: CARD_HEIGHT } : undefined}
-              className="group flex w-full flex-col overflow-hidden rounded-2xl border border-border bg-surface p-3 text-start transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 motion-reduce:transform-none"
+              className="group flex w-full flex-col overflow-hidden rounded-xl border border-border bg-surface px-3 py-2.5 text-start transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 motion-reduce:transform-none"
             >
               <ChoiceCard p={p} ar={ar} />
             </button>
@@ -205,55 +205,48 @@ function ChoiceCard({ p, ar }: { p: Row; ar: boolean }) {
   const credit = b?.payment_mode === 'credit'
   const synced = ago(p.synced_at, ar)
   const attention = p.summary?.attention ?? null
+  const pct = b && !credit && b.used_ratio !== null ? Math.round(b.used_ratio * 100) : null
 
   return (
     <>
-      <div className="flex items-start gap-2.5">
-        <ClientAvatar name={p.client_name || p.name} logo={p.client_logo} size={32} />
+      <div className="flex items-center gap-2">
+        <ClientAvatar name={p.client_name || p.name} logo={p.client_logo} size={28} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-extrabold text-text-primary group-hover:text-brand-600">{p.name}</div>
-          <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-xs text-text-secondary">{p.client_name && p.client_name !== p.name ? p.client_name : (p.client_name ? (ar ? 'عميل' : 'Client') : (ar ? 'بلا عميل' : 'No client'))}</span>
-          {b && <span data-testid={`chooser-budget-${p.id}`} className={`inline-flex shrink-0 rounded-full px-2 py-px text-xs font-bold ${TONE[t].chip}`}>{budgetLabel(b, ar)}</span>}
-          {!b && attention && (
-            <span className="inline-flex shrink-0 rounded-full bg-warning/10 px-2 py-px text-xs font-bold text-warning">
-              {attention === 'no_accounts' ? (ar ? 'بلا حسابات مربوطة' : 'No accounts linked') : attention === 'never_synced' ? (ar ? 'لم تصل بيانات بعد' : 'No data yet') : (ar ? 'البيانات قديمة' : 'Data is stale')}
-            </span>
-          )}
-          </div>
+          <div className="truncate text-sm font-extrabold leading-tight text-text-primary group-hover:text-brand-600">{p.name}</div>
+          <div className="truncate text-xs leading-tight text-text-secondary">{p.client_name && p.client_name !== p.name ? p.client_name : (p.client_name ? (ar ? 'عميل' : 'Client') : (ar ? 'بلا عميل' : 'No client'))}</div>
         </div>
+        {b && <span data-testid={`chooser-budget-${p.id}`} className={`shrink-0 rounded-full px-2 py-px text-xs font-bold ${TONE[t].chip}`}>{budgetLabel(b, ar)}</span>}
+        {!b && attention && (
+          <span className="shrink-0 rounded-full bg-warning/10 px-2 py-px text-xs font-bold text-warning">
+            {attention === 'no_accounts' ? (ar ? 'بلا حسابات' : 'No accounts') : attention === 'never_synced' ? (ar ? 'لا بيانات' : 'No data') : (ar ? 'بيانات قديمة' : 'Stale')}
+          </span>
+        )}
       </div>
 
       {b && (
-        <div className="mt-2 space-y-1">
-          <div className="flex items-baseline justify-between gap-2 text-xs">
-            <span className="truncate font-bold text-text-primary">
-              <Num>{money(credit ? (b.to_date ?? b.spent) : b.spent, b.currency)}</Num>
-              {!credit && <span className="font-normal text-text-muted"> / <Num>{money(b.approved, b.currency)}</Num></span>}
-            </span>
-            {!credit && b.used_ratio !== null && <span data-testid="chooser-gauge" className={`shrink-0 font-bold ${TONE[t].text}`}><Num>{`${Math.round(b.used_ratio * 100)}%`}</Num></span>}
-          </div>
-          {!credit && (
+        <div className="mt-1.5 flex items-center gap-2 text-xs">
+          <span className="min-w-0 flex-1">
             <span className="block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
-              <span className={`block h-full rounded-full ${TONE[t].bar}`} style={{ width: `${Math.round(Math.min(1, b.used_ratio ?? 0) * 100)}%` }} />
+              <span className={`block h-full rounded-full ${TONE[t].bar}`} style={{ width: `${Math.min(100, pct ?? (credit ? 0 : 0))}%` }} />
             </span>
-          )}
-          <div className="flex items-center justify-between gap-2 truncate text-xs">
-            {!credit && b.remaining !== null && <span className={`truncate ${b.remaining < 0 ? 'font-bold text-danger' : 'text-text-secondary'}`}>{ar ? 'المتبقي' : 'Left'} <Num>{money(b.remaining, b.currency)}</Num></span>}
-            {b.run_out_date && <span className="inline-flex shrink-0 items-center gap-1 text-text-muted" title={ar ? 'تاريخ النفاد بمعدل آخر 3 أيام' : 'Runs out at the last 3 days’ pace'}><CalendarClock size={11} aria-hidden /><Num>{b.run_out_date}</Num></span>}
-          </div>
+          </span>
+          <span className="shrink-0 font-bold text-text-primary">
+            <Num>{money(credit ? (b.to_date ?? b.spent) : b.spent, b.currency)}</Num>
+            {!credit && <span className="font-normal text-text-muted"> / <Num>{money(b.approved, b.currency)}</Num></span>}
+          </span>
+          {pct !== null && <span data-testid="chooser-gauge" className={`shrink-0 font-bold ${TONE[t].text}`}><Num>{`${pct}%`}</Num></span>}
         </div>
       )}
 
-      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-1.5">
+      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
         <span className="flex min-w-0 items-center gap-1" data-testid={`chooser-platforms-${p.id}`}>
-          {p.providers.slice(0, 5).map((pr) => <ProviderMark key={pr} provider={pr} size={16} />)}
+          {p.providers.slice(0, 5).map((pr) => <ProviderMark key={pr} provider={pr} size={14} />)}
           {p.providers.length === 0 && <span className="text-xs text-text-muted">—</span>}
         </span>
-        <span className="flex shrink-0 items-center gap-2.5 text-xs text-text-muted">
-          {p.campaigns !== null && <span className="inline-flex items-center gap-1"><Megaphone size={11} aria-hidden /><Num>{String(p.campaigns)}</Num> {ar ? 'حملة' : 'campaigns'}</span>}
+        <span className="flex shrink-0 items-center gap-2 text-xs text-text-muted">
+          {p.campaigns !== null && <span className="inline-flex items-center gap-1"><Megaphone size={10} aria-hidden /><Num>{String(p.campaigns)}</Num> {ar ? 'حملة' : 'campaigns'}</span>}
           <span className="inline-flex items-center gap-1" title={p.synced_at ? fmtDateTime(p.synced_at) : undefined}>
-            <RefreshCw size={11} aria-hidden />{synced ?? (ar ? 'لم تصل بيانات بعد' : 'No data has arrived yet')}
+            <RefreshCw size={10} aria-hidden />{synced ?? (ar ? 'لم تصل بيانات بعد' : 'No data has arrived yet')}
           </span>
         </span>
       </div>
