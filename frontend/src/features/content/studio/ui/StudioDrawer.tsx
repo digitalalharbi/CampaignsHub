@@ -98,14 +98,14 @@ export function StudioDrawer({ file, onClose, initialCopy }: { file: Blob; onClo
               {batch.outputs.map((o, i) => (
                 <li key={`${o.as}-${o.pick.family.key}`} className="flex min-w-0 flex-col gap-1.5" data-testid={`studio-output-${o.as}`} data-family={o.pick.family.key}>
                   <StudioPreview scene={o.scene} bitmap={picture?.bitmap ?? null} tokens={batch.tokens} showMargins={margins} live={o.as === 'video' && i < 3} />
-                  <div className="flex flex-wrap items-center gap-1 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-1 text-xs">
                     <span className="font-bold text-text-primary">{o.as === 'video' ? t.video : t.image}</span>
                     <span className="truncate text-text-secondary">{o.pick.family.label[locale]}</span>
                   </div>
-                  {o.hard.length === 0 && o.warnings.length > 0 ? <span className="w-fit rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning" data-testid="studio-warning">{t.overProduct}</span> : null}
+                  {o.hard.length === 0 && o.warnings.length > 0 ? <span className="w-fit rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning" data-testid="studio-warning">{t.overProduct}</span> : null}
                   {o.hard.length === 0
-                    ? <span className="w-fit rounded-full bg-success-soft px-2 py-0.5 text-[11px] font-semibold text-success" data-testid="studio-ready">{t.ready}</span>
-                    : <span className="w-fit rounded-full bg-danger-soft px-2 py-0.5 text-[11px] font-semibold text-danger" data-testid="studio-hard">{[...new Set(o.hard.map((h) => t.hard[h.code]))].join(' · ')}</span>}
+                    ? <span className="w-fit rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-success" data-testid="studio-ready">{t.ready}</span>
+                    : <span className="w-fit rounded-full bg-danger-soft px-2 py-0.5 text-xs font-semibold text-danger" data-testid="studio-hard">{[...new Set(o.hard.map((h) => t.hard[h.code]))].join(' · ')}</span>}
                 </li>
               ))}
             </ul>
