@@ -1,4 +1,4 @@
-import { forwardRef, type ReactNode } from 'react'
+import { forwardRef, useLayoutEffect, useState, type ReactNode, type RefObject } from 'react'
 import { AlertTriangle, Loader2, RefreshCw, Search, X } from 'lucide-react'
 import { LucideByName } from '@/components/icons/LucideByName'
 import { controlClass } from '@/components/ui/Field'
@@ -10,10 +10,35 @@ import { TOUCH_TARGET } from '@/components/ui/touch'
 /** Trigger styling shared by every select-style control — mirrors the app's input control exactly. */
 export const triggerClass = `${controlClass} flex items-center gap-2 text-start`
 
-/** Floating listbox panel (RTL-safe: spans the trigger width via inset-x). */
-export const panelClass =
-  'absolute inset-x-0 top-full z-50 mt-1.5 flex flex-col overflow-hidden rounded-[12px] ' +
-  'border border-border bg-surface shadow-[var(--shadow-large)]'
+/**
+ * Floating listbox panel (RTL-safe: spans the trigger width via inset-x).
+ *
+ * DROPDOWN-FLIP-001 — Owner 2026-11-21: a list opened near the bottom of the page dropped below the fold and read as part
+ * of the card under it. It opens upward when there is not room below (`panelClassFor`), and stands off the page with a
+ * stronger border and a ring so it never blends into the surface it covers.
+ */
+const PANEL_BASE = 'absolute inset-x-0 z-50 flex flex-col overflow-hidden rounded-[12px] ' +
+  'border border-border-strong bg-surface shadow-[var(--shadow-large)] ring-1 ring-brand-500/15'
+export const panelClass = `${PANEL_BASE} top-full mt-1.5`
+
+/** The panel's class for the side it opens on. */
+export const panelClassFor = (up: boolean) => (up ? `${PANEL_BASE} bottom-full mb-1.5` : panelClass)
+
+/** Room a panel needs below the trigger (search, a page of options) before it opens upward instead. */
+const PANEL_ROOM = 340
+
+/** Whether the panel should open upward: not enough room below the trigger and more room above it. */
+export function usePanelUp(ref: RefObject<HTMLElement | null>, open: boolean): boolean {
+  const [up, setUp] = useState(false)
+  useLayoutEffect(() => {
+    if (!open || !ref.current || typeof window === 'undefined') return
+    const r = ref.current.getBoundingClientRect()
+    const below = window.innerHeight - r.bottom
+    setUp(below < PANEL_ROOM && r.top > below)
+  }, [open, ref])
+
+  return up
+}
 
 /** Small spinner used inline in triggers and panel headers. */
 export function Spinner({ size = 14 }: { size?: number }) {
