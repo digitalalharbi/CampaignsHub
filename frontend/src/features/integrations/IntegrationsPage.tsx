@@ -33,6 +33,23 @@ import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { accounts as countedAccounts, campaigns as countedCampaigns } from '@/lib/counted'
 
+type Bilingual = { ar: string; en: string }
+const RECONNECT_COPY: { reconnected: Bilingual; untouched: Bilingual; reasons: Record<string, Bilingual> } = {
+  reconnected: { ar: 'تمت إعادة المصادقة بنجاح عبر التطبيق الأساسي، وبقيت حساباتك وارتباطاتها كما هي.', en: 'Reconnected through the primary app. Your accounts and their links are unchanged.' },
+  untouched: { ar: 'لم يتغيّر شيء: اتصالك الحالي ما زال يعمل بمصادقته السابقة.', en: 'Nothing changed: your existing connection keeps working with its previous authorisation.' },
+  reasons: {
+    denied: { ar: 'لم تتم الموافقة على الصلاحيات.', en: 'The permissions were not approved.' },
+    permissions_missing: { ar: 'لم تُمنح صلاحية قراءة الإعلانات المطلوبة.', en: 'The required ads-read permission was not granted.' },
+    accounts_missing: { ar: 'المصادقة الجديدة لا ترى كل الحسابات الإعلانية المرتبطة حاليًا. اختر نفس الحسابات عند الموافقة.', en: 'The new authorisation cannot see every ad account currently linked. Select the same accounts when approving.' },
+    app_mismatch: { ar: 'تعذّر التأكد من أن الرمز صادر عن التطبيق الأساسي.', en: 'Could not confirm the token was issued by the primary app.' },
+    token_exchange_failed: { ar: 'رفضت ميتا رمز التفويض. أعد المحاولة.', en: 'Meta rejected the authorisation code. Try again.' },
+    meta_unreachable: { ar: 'تعذّر الوصول إلى ميتا الآن. أعد المحاولة لاحقًا.', en: 'Meta could not be reached. Try again later.' },
+    target_app_changed: { ar: 'تغيّر التطبيق الأساسي أثناء العملية. ابدأ من جديد.', en: 'The primary app changed meanwhile. Start again.' },
+    invalid_state: { ar: 'انتهت صلاحية رابط الموافقة أو استُخدم سابقًا.', en: 'The approval link expired or was already used.' },
+    reconnect_failed: { ar: 'تعذّرت إعادة المصادقة.', en: 'The reconnect could not be completed.' },
+  },
+}
+
 /**
  * INTEG-PROJECT-SPACE-001 — the project's space has three tabs, in this order:
  * «المصادر» (its linked sources and their controls), «المنصات» (what can be linked, one press each) and
@@ -300,6 +317,13 @@ function ProjectSpace({ projectId: currentProjectId, viewSwitch }: { projectId: 
 
   const live = connections.filter((c) => !isGone(c))
 
+  // META-MULTI-APP-001 — the answer to an atomic Meta reconnect, in the reader's language. A refusal changed nothing.
+  const outcome = params.get('outcome')
+  const reconnectReason = params.get('reason') ?? ''
+  const reconnectBanner = outcome === 'reconnected' || outcome === 'reconnect_failed'
+    ? (outcome === 'reconnected' ? RECONNECT_COPY.reconnected : RECONNECT_COPY.reasons[reconnectReason] ?? RECONNECT_COPY.reasons.reconnect_failed)[ar ? 'ar' : 'en']
+    : null
+
   return (
     <FitPage
       testid="connection-hub"
@@ -340,6 +364,19 @@ function ProjectSpace({ projectId: currentProjectId, viewSwitch }: { projectId: 
       }
     >
     <div className="flex min-h-0 flex-1 flex-col" dir={ar ? 'rtl' : 'ltr'}>
+      {reconnectBanner !== null && (
+        <div
+          role="status"
+          data-testid="meta-reconnect-banner"
+          data-outcome={outcome}
+          className={`mb-3 rounded-lg p-3 text-sm ${outcome === 'reconnected' ? 'bg-success-soft text-success' : 'bg-danger-soft text-danger'}`}
+        >
+          {reconnectBanner}
+          {outcome === 'reconnect_failed' && (
+            <span className="mt-1 block text-xs text-text-secondary">{RECONNECT_COPY.untouched[ar ? 'ar' : 'en']}</span>
+          )}
+        </div>
+      )}
 
       {tab === 'sources' && (
         <ConnectionHub
