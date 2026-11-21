@@ -14,7 +14,7 @@
 @php($monthly = $kind === 'monthly')
 @php($lean = ($external ?? false) || ($readOnly ?? false))
 <div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
-    {{-- DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «ملخص المشاريع • أمس» and the period with its dates. --}}
+    {{-- DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «ملخص المشاريع : أمس» and the period with its dates. --}}
     @include('mail.digest._head', ['title' => \App\Domains\Notifications\Support\DigestSchedule::title('portfolio', $kind, $ar), 'sub' => $periodLabel])
     <div data-block="compared" style="font-size:11px; color:#8b9a97; margin:-8px 0 10px;">{{ $t['kind_note'] }}</div>
 
@@ -54,22 +54,7 @@
         </table>
     @endif
 
-    @unless ($lean)
-    {{-- 4. WHO needs a decision — performance of running campaigns only, one list in global priority order. Linking is in «ملخص الربط». --}}
-    <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:4px 0 8px;">{{ $ar ? 'يحتاج قرارك الآن' : 'Needs your decision now' }}</div>
-    @if ($m['issues_shown'])
-        @include('mail.digest._issues', ['items' => $m['issues_shown'], 'showProject' => true, 'from' => 0])
-        @if ($m['issues_more'] > 0)
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="issues-more" style="margin-bottom:10px;"><tr>
-                <td style="font-size:12px; font-weight:700; color:#5b6b68;"><span dir="ltr">+{{ $m['issues_more'] }}</span> {{ $ar ? 'أقل أولوية' : 'lower priority' }}</td>
-                <td style="text-align:{{ $endSide }};"><a href="{{ $m['links']['alerts'] }}" style="font-size:12px; font-weight:700; color:#0b7a62; text-decoration:underline;">{{ $ar ? 'عرضها كلها' : 'See them all' }} {{ $ar ? '←' : '→' }}</a></td>
-            </tr></table>
-        @endif
-    @else
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:10px;"><tr><td bgcolor="{{ $S::CELL['ok'] }}" style="background-color:{{ $S::CELL['ok'] }}; border-radius:10px; padding:10px 14px; font-size:13px; font-weight:700; color:{{ $S::INK['ok'] }};">✓ {{ $ar ? 'لا شيء يحتاج قرارك' : 'Nothing needs your decision' }}</td></tr></table>
-    @endif
-
-    @endunless
+    {{-- 4. DIGEST-NO-DECISION-SECTION-001 — Owner 2026-11-21: the «يحتاج قرارك الآن» list is removed from the mail. --}}
 
     {{-- 5. DIGESTS-CADENCE-BUDGETS-001 — the month's budget, spend, remaining and pace per project, and the total. --}}
     @include('mail.digest._budgets', ['bud' => $m['budgets']])

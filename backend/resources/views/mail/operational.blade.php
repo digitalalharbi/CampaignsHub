@@ -18,7 +18,7 @@
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="more" style="margin:-2px 0 14px;">
             @foreach ($more as $line)
                 <tr>
-                    <td width="14" valign="top" style="padding:2px 0; font-size:12px; color:#8b9a97;">•</td>
+                    <td width="14" valign="top" style="padding:2px 0; font-size:12px; color:#8b9a97;">—</td>
                     <td style="padding:2px 0; font-size:13px; color:#3d4742; line-height:1.6;">{{ $line }}</td>
                 </tr>
             @endforeach

@@ -1,4 +1,4 @@
-import { Link, Outlet } from 'react-router-dom'
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships, type PortalKey } from './memberships'
@@ -37,6 +37,7 @@ export function RequirePortal({ portal }: { portal: PortalKey }) {
   const isAdmin = useAuth((s) => s.user?.is_platform_admin === true)
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
   const entry = usePortalEntry(portal, state.data)
+  const { pathname, search, hash } = useLocation()
 
   if (state.isLoading || entry.kind === 'moving') {
     return (
@@ -55,8 +56,23 @@ export function RequirePortal({ portal }: { portal: PortalKey }) {
 
   if (holds) return <Outlet />
 
-  const copy = DENIED[portal]
   const held = state.data?.memberships ?? []
+
+  /*
+   * MAIL-LINK-PORTAL-001 — Owner 2026-11-21: «افتح أداء المحتوى» and «افتح التقرير» in a digest opened a wall, and the
+   * wall's one button opened the home page, so the link led nowhere clear. Every mail link is written under `/app/…`, and
+   * an agency member holds no advertiser membership. The agency tree serves the same pages at the same paths
+   * (`analytics`, `reports`, `campaigns/:p/:c`, `alerts`, …), so a reader who holds the agency portal and not this one is
+   * taken to the SAME page there, with its query (`?project=…&tab=…&days=…`) and hash intact. Nothing is widened: the
+   * agency guard and the server still decide what that page shows.
+   */
+  const sibling = portal === 'app' && held.some((m) => m.portal === 'agency') ? 'agency' : null
+  if (sibling !== null) {
+    const rest = pathname.startsWith(`/${portal}`) ? pathname.slice(portal.length + 1) : ''
+    return <Navigate to={`/${sibling}${rest === '' ? '/dashboard' : rest}${search}${hash}`} replace />
+  }
+
+  const copy = DENIED[portal]
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-5 py-10">
