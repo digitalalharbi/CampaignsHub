@@ -7,6 +7,7 @@ namespace App\Domains\Integrations\Webhooks;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Catalogue\WebhookSupport;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\MetaCandidate\MetaSaasCredentials;
 
 /**
  * WEBHOOK-001 — is this delivery really from the provider?
@@ -41,9 +42,9 @@ final class WebhookSignature
     public function __construct(private readonly ProviderConfigurationService $settings) {}
 
     /**
-     * @return array{verified: bool, reason: ?string}
+     * @return array{verified: bool, reason: ?string, app?: string} `app` (Meta only): the app the ENDPOINT is bound to
      */
-    public function check(string $provider, string $rawBody, ?string $presented): array
+    public function check(string $provider, string $rawBody, ?string $presented, ?string $app = null): array
     {
         $definition = ProviderCatalogue::get($provider);
 
@@ -62,9 +63,9 @@ final class WebhookSignature
             return $this->basic($provider, $presented);
         }
 
-        $secret = $this->secretFor($provider);
+        $secret = $provider === 'meta' ? $this->metaSecretFor($app) : $this->secretFor($provider);
 
-        if ($secret === null) {
+        if ($secret === null || $secret === '') {
             return ['verified' => false, 'reason' => 'No webhook secret is configured for this provider.'];
         }
 
@@ -78,31 +79,30 @@ final class WebhookSignature
         // harmless, and NOT stripping one that is there fails every legitimate Meta delivery.
         $offered = str_starts_with($presented, 'sha256=') ? substr($presented, 7) : $presented;
 
-        return hash_equals($expected, $offered)
-            ? ['verified' => true, 'reason' => null]
-            : ['verified' => false, 'reason' => 'The signature did not match.'];
+        if (! hash_equals($expected, $offered)) {
+            return ['verified' => false, 'reason' => 'The signature did not match.'];
+        }
+
+        return $provider === 'meta'
+            ? ['verified' => true, 'reason' => null, 'app' => $app ?? 'live']
+            : ['verified' => true, 'reason' => null];
     }
 
     /**
-     * ZID-WEBHOOK-001 — HTTP Basic, which is the only authentication Zid publishes for webhooks.
+     * META-MULTI-APP-001 — the ONE secret a Meta endpoint verifies with, chosen by the ENDPOINT and never by trying secrets.
      *
-     * From Zid's Create Webhook reference: «If username and password are provided when creating a
-     * webhook, Zid will include a Basic Authentication header when sending webhook requests … This
-     * allows partners to verify that the webhook request is coming from Zid.» There is no signature,
-     * no digest, and no header to compute one into — which is why the previous `x-zid-signature` HMAC
-     * refused every real delivery.
-     *
-     * The whole header is compared in one `hash_equals` rather than the username and password
-     * separately. Two comparisons leak which half was wrong through their timing, and a username is
-     * usually the easier half to guess; one comparison over the expected credential answers only the
-     * question we are willing to answer.
-     *
-     * The three rules at the top of this class are unchanged by the different scheme. A missing
-     * credential still REFUSES — an endpoint that cannot verify is not an endpoint that lets things
-     * through — and the comparison is still timing-safe.
-     *
-     * @return array{verified: bool, reason: ?string}
+     * Each Meta app has its own callback URL, so the route says which app a delivery is for: `null` (the original route) is the Live
+     * app exactly as before, `saas` is the SaaS app. A body signed by the other app's secret is refused on either route.
      */
+    private function metaSecretFor(?string $app): ?string
+    {
+        return match ($app) {
+            null, 'live' => $this->secretFor('meta'),
+            'saas' => app(MetaSaasCredentials::class)->value('client_secret'),
+            default => null,
+        };
+    }
+
     private function basic(string $provider, ?string $presented): array
     {
         $values = $this->settings->values($provider);

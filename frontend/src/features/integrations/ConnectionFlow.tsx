@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ProjectAccountPicker } from './ProjectAccountPicker'
 import { ArrowLeft, ArrowRight, Check, KeyRound, ShieldCheck } from 'lucide-react'
 import {
-  connectWithApiKey, fetchMetaApps, removeConnection, startPlatformOAuth, type ConnectableProvider, type HubConnection,
+  connectWithApiKey, fetchMetaApps, removeConnection, startMetaReconnect, startPlatformOAuth, type ConnectableProvider, type HubConnection,
 } from './api'
 import { ConnectionWizard } from './ConnectionWizard'
 import { LinkSuccess } from './LinkSuccess'
@@ -220,6 +220,7 @@ export function ConnectionFlow({ mode, provider, connection, projectId, onClose,
                 onDestination={setDestination}
                 locked={projectFixed}
                 reauthorise={mode === 'reauthorise'}
+                reconnectConnectionId={mode === 'reauthorise' ? (connection?.id ?? null) : null}
                 allowedProjectIds={mode === 'reauthorise' && (connection?.projects.length ?? 0) > 0
                   ? connection!.projects.map((p) => p.id)
                   : null}
@@ -441,7 +442,7 @@ function KeyEntry({ ar, label, providerKey, destination, onDestination, onConnec
  * reads because they have already decided. This says it in ours, before they leave, and it names the
  * client the accounts will belong to — the one decision that is expensive to change afterwards.
  */
-function Login({ ar, label, providerKey, destination, onDestination, reauthorise = false, allowedProjectIds = null, locked = false }: {
+function Login({ ar, label, providerKey, destination, onDestination, reauthorise = false, reconnectConnectionId = null, allowedProjectIds = null, locked = false }: {
   /** INTEG-PROJECT-LINK-001 — the project was decided before this flow opened and cannot be changed inside it. */
   locked?: boolean
   ar: boolean
@@ -451,6 +452,8 @@ function Login({ ar, label, providerKey, destination, onDestination, reauthorise
   onDestination: (id: string) => void
   /** Renewing an existing connection: the selection is untouched, and only its own clients are offered. */
   reauthorise?: boolean
+  /** META-MULTI-APP-001 — the Meta connection being renewed: it reconnects atomically through the primary app and writes nothing until the callback proves itself. */
+  reconnectConnectionId?: string | null
   allowedProjectIds?: string[] | null
 }) {
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects() })
@@ -476,7 +479,7 @@ function Login({ ar, label, providerKey, destination, onDestination, reauthorise
      * own — its own consent, its own credential — and the account step offers only what that login can see, which the assignment fence
      * already keeps off every other client's projects.
      */
-    mutationFn: () => startPlatformOAuth(providerKey, projects.data?.find((p) => p.id === destination)?.client_workspace_id ?? null, destination, providerKey === 'meta' ? metaApp : null, window.location.pathname.startsWith('/agency') ? 'agency' : 'app'),
+    mutationFn: () => (reauthorise && providerKey === 'meta' && reconnectConnectionId !== null ? startMetaReconnect(reconnectConnectionId) : startPlatformOAuth(providerKey, projects.data?.find((p) => p.id === destination)?.client_workspace_id ?? null, destination, providerKey === 'meta' ? metaApp : null, window.location.pathname.startsWith('/agency') ? 'agency' : 'app')),
     onSuccess: ({ authorization_url: url }) => { window.location.assign(url) },
   })
 

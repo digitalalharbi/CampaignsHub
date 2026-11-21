@@ -16,6 +16,7 @@ import { useProject } from '@/stores/project'
 
 const hub = vi.hoisted(() => ({ data: { connections: [], connectable: [] } as Hub }))
 const started = vi.hoisted(() => ({ calls: [] as Array<{ provider: string; projectId?: string | null; workspaceId?: string | null; appProfile?: string }> }))
+const reconnects = vi.hoisted(() => ({ ids: [] as string[] }))
 const listCalls = vi.hoisted(() => ({ queries: [] as Array<Record<string, unknown>> }))
 const estate = vi.hoisted(() => ({ projects: [] as Array<{ project_id: string; project_name: string; providers: string[]; accounts: number; last_synced_at: string | null; needs_attention: number }> }))
 const metaApps = vi.hoisted(() => ({ saas: false, testWorkspace: false }))
@@ -38,6 +39,11 @@ vi.mock('./api', async (importOriginal) => {
     fetchMetaApps: () => Promise.resolve(metaApps.testWorkspace
       ? { default: 'saas', test_workspace: true, apps: [{ key: 'live', available: false }, { key: 'saas', available: metaApps.saas, reason: metaApps.saas ? null : 'not_configured' }] }
       : { default: 'live', apps: [{ key: 'live', available: true }, { key: 'saas', available: metaApps.saas }] }),
+    // META-MULTI-APP-001 — a Meta connection reconnects atomically through its own endpoint, not through a fresh authorisation.
+    startMetaReconnect: (connectionId: string) => {
+      reconnects.ids.push(connectionId)
+      return Promise.resolve({ authorization_url: 'https://platform.test/meta-reconnect', app_profile: 'live' as const, keeps_own_app: false, reason: null })
+    },
     startPlatformOAuth: (provider: string, workspaceId?: string | null, projectId?: string | null, appProfile?: string | null) => {
       started.calls.push({ provider, projectId, workspaceId, ...(appProfile && appProfile !== 'live' ? { appProfile } : {}) })
       return Promise.resolve({ authorization_url: `https://platform.test/${provider}` })
@@ -90,6 +96,7 @@ describe('the Connection Hub', () => {
     useProject.setState({ currentProjectId: 'p-1' })
     hub.data = { connections: [], connectable: [] }
     started.calls = []
+    reconnects.ids = []
     listCalls.queries = []
     estate.projects = []
   })
@@ -314,7 +321,9 @@ describe('the Connection Hub', () => {
     await waitFor(() => expect(screen.getByTestId('flow-authorise')).toBeEnabled())
     fireEvent.click(screen.getByTestId('flow-authorise'))
 
-    await waitFor(() => expect(started.calls).toEqual([{ provider: 'meta', projectId: 'p-1', workspaceId: 'ws-1' }]))
+    // A Meta connection is renewed ATOMICALLY: through its own reconnect endpoint, never as a fresh authorisation that could open a second connection.
+    await waitFor(() => expect(reconnects.ids).toEqual(['c-1']))
+    expect(started.calls).toEqual([])
   })
 
   /** Disconnecting states how many accounts stop syncing before it will go. */

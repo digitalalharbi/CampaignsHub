@@ -39,6 +39,7 @@ use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\DiscoveryRefreshCommand;
 use App\Domains\Integrations\Console\GoogleAdsAccessCommand;
 use App\Domains\Integrations\Console\IdentityRefreshCommand;
+use App\Domains\Integrations\Console\MetaAppAuditCommand;
 use App\Domains\Integrations\Console\MetaCandidateStatusCommand;
 use App\Domains\Integrations\Console\MetaDiagnoseCommand;
 use App\Domains\Integrations\Console\MetaSyncProbeCommand;
@@ -228,6 +229,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // OBJECTIVE-RECLASSIFY-RUN-001 — the Owner-approved reclassification, dry run first.
         ReclassifyObjectivesCommand::class,
         GoogleAdsAccessCommand::class,
+        MetaAppAuditCommand::class,
         MetaDiagnoseCommand::class,
         MetaSyncProbeCommand::class,
         RenormaliseReportingCurrency::class,
