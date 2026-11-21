@@ -99,14 +99,15 @@ final class DigestSchedule
     }
 
     /**
-     * The title of a digest: «ملخص المشاريع • أمس» across projects, «ملخص المشروع • أمس» for one project.
+     * The title of a digest: «ملخص المشاريع : أمس» across projects, «ملخص المشروع : أمس» for one project.
      * Never the old «portfolio» word (style guide: it is «ملخص المشاريع»).
+     * DIGEST-SUBJECT-FORMAT-001 — Owner 2026-11-21: no «•» anywhere in a mail; the period follows « : ».
      */
     public static function title(string $scope, string $kind, bool $ar): string
     {
         $head = $scope === 'project' ? ($ar ? 'ملخص المشروع' : 'Project summary') : ($ar ? 'ملخص المشاريع' : 'Projects summary');
 
-        return $head.' • '.self::periodWord($kind, $ar);
+        return $head.($ar ? ' : ' : ': ').self::periodWord($kind, $ar);
     }
 
     /**

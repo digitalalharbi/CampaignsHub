@@ -1,6 +1,6 @@
 {{--
   The project summary «ملخص المشروع» — DIGESTS-VISUAL-V2-001, reordered by DIGESTS-YESTERDAY-BY-OBJECTIVE-001: the verdict,
-  the project's total, the breakdown per objective × platform, the decisions on running campaigns, the budget, «ملخص الربط» last.
+  the project's total, the breakdown per objective × platform, the budget (the decision list was removed by the Owner on 2026-11-21), «ملخص الربط» last.
 
   Verdict, the platform strip (one chip per platform), what needs a decision (drawn, ranked), the money with its
   shape, then each platform in one compact row. No paragraph: chips, bars, deltas and buttons. Every figure is
@@ -100,19 +100,7 @@
         @endforelse
     @endif
 
-@unless ($lean)
-    {{-- What needs a decision: ranked, the problem drawn, one button each. --}}
-    @if ($m['issues'])
-        <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:4px 0 8px;">{{ $ar ? 'يحتاج قرارك الآن' : 'Needs your decision now' }}</div>
-        @include('mail.digest._issues', ['items' => array_slice($m['issues'], 0, \App\Domains\Notifications\Support\OperationalDigestModel::TOP_ISSUES), 'showProject' => false, 'from' => 0])
-        @if (count($m['issues']) > \App\Domains\Notifications\Support\OperationalDigestModel::TOP_ISSUES)
-            <div data-block="issues-more" style="font-size:12px; font-weight:700; color:#5b6b68; margin-bottom:10px;">+{{ count($m['issues']) - \App\Domains\Notifications\Support\OperationalDigestModel::TOP_ISSUES }} {{ $ar ? 'أقل أولوية' : 'lower priority' }} · <a href="{{ $m['links']['attention'] }}" style="color:#0b7a62; text-decoration:underline;">{{ $ar ? 'عرضها' : 'See them' }}</a></div>
-        @endif
-    @else
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:10px;"><tr><td bgcolor="{{ $S::CELL['ok'] }}" style="background-color:{{ $S::CELL['ok'] }}; border-radius:10px; padding:10px 14px; font-size:13px; font-weight:700; color:{{ $S::INK['ok'] }};">✓ {{ $ar ? 'لا شيء يحتاج قرارك' : 'Nothing needs your decision' }}</td></tr></table>
-    @endif
-
-@endunless
+    {{-- DIGEST-NO-DECISION-SECTION-001 — Owner 2026-11-21: the «يحتاج قرارك الآن» list is removed from the mail. --}}
     {{-- DIGESTS-CADENCE-BUDGETS-001 — the month's budget, spend, remaining and pace: one bar, three numbers, one chip. --}}
     @if (! empty($m['budget']))
         <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:2px 0 6px;">{{ $ar ? 'ميزانية الشهر' : 'This month’s budget' }}@if ($m['budget']['band']) <span data-chip="pace" style="display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:800; background-color:{{ $S::CELL[$m['budget']['tone']] }}; color:{{ $S::INK[$m['budget']['tone']] }};">{{ $S::GLYPH[$m['budget']['tone']] }} {{ $m['budget']['band_label'] }}</span>@endif</div>
