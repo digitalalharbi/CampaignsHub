@@ -43,12 +43,16 @@ final class XTweetMediaFieldsTest extends TestCase
      * @param  list<array<string, mixed>>  $tweets
      * @param  list<array<string, mixed>>  $cards
      * @param  array<string, mixed>|null  $library
+     * @param  (callable(string): array<string, mixed>)|null  $embed  the public embed read's answer; null = 404
      * @return array<string, array<string, mixed>>
      */
-    private function creatives(array $tweets, array $cards = [], ?array $library = null): array
+    private function creatives(array $tweets, array $cards = [], ?array $library = null, ?callable $embed = null): array
     {
-        Http::fake(function (Request $r) use ($tweets, $cards, $library) {
+        Http::fake(function (Request $r) use ($tweets, $cards, $library, $embed) {
             $u = $r->url();
+            if (str_contains($u, 'cdn.syndication.twimg.com')) {
+                return $embed === null ? Http::response('', 404) : Http::response($embed($u));
+            }
             if (str_contains($u, '/promoted_tweets')) {
                 return Http::response(['data' => array_map(static fn (array $t) => ['id' => 'pt'.$t['id_str'], 'tweet_id' => $t['id_str'], 'line_item_id' => 'li1', 'entity_status' => 'ACTIVE'], $tweets)]);
             }
@@ -149,6 +153,45 @@ final class XTweetMediaFieldsTest extends TestCase
         $this->assertSame('https://pbs.twimg.com/card_img/2116860099381649408/legacy.jpg', $c['2116860102603088099']['thumbnail_url'] ?? null);
         $this->assertSame('تذاكر الاتفاق', $c['2116860102603088099']['headline'] ?? null);
         $this->assertSame('https://webook.com/ettifaq', $c['2116860102603088099']['destination_url'] ?? null);
+    }
+
+    /**
+     * X-CARD-IMAGE-FALLBACK-001 — the Ads API returns no card (Ettifaq, 2026-11-21); the public embed read carries it.
+     */
+    public function test_a_card_the_ads_api_hides_takes_its_picture_from_the_embed_read(): void
+    {
+        $embedAsked = [];
+        $c = $this->creatives(
+            [['id_str' => '2116860102603088099', 'full_text' => 'المواجهة أقوى بحضورك!', 'card_uri' => 'card://2116860099381649408']],
+            [],
+            null,
+            function (string $url) use (&$embedAsked) {
+                $embedAsked[] = $url;
+
+                return ['card' => ['name' => 'summary_large_image', 'binding_values' => [
+                    'photo_image_full_size_large' => ['type' => 'IMAGE', 'image_value' => ['url' => 'https://pbs.twimg.com/card_img/2116860099381649408/embed.jpg']],
+                ]]];
+            },
+        );
+
+        $this->assertSame('image', $c['2116860102603088099']['format']);
+        $this->assertSame('https://pbs.twimg.com/card_img/2116860099381649408/embed.jpg', $c['2116860102603088099']['thumbnail_url'] ?? null);
+        $this->assertSame('x_embed', $c['2116860102603088099']['raw']['media_source'] ?? null);
+        $this->assertCount(1, $embedAsked);
+        $this->assertStringContainsString('id=2116860102603088099', $embedAsked[0]);
+    }
+
+    public function test_an_embed_read_with_a_foreign_host_is_refused(): void
+    {
+        $c = $this->creatives(
+            [['id_str' => '51', 'full_text' => 'نص', 'card_uri' => 'card://51']],
+            [],
+            null,
+            fn () => ['photos' => [['url' => 'https://evil.example/p.jpg']]],
+        );
+
+        $this->assertSame('text_card', $c['51']['format']);
+        $this->assertArrayNotHasKey('thumbnail_url', $c['51']);
     }
 
     public function test_a_card_x_gives_no_picture_for_stays_text_and_invents_nothing(): void

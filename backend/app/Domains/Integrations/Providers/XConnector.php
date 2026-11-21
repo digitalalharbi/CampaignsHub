@@ -10,6 +10,7 @@ use App\Domains\Integrations\Reporting\ReportingWindow;
 use App\Domains\Integrations\Support\PlatformCreatedAt;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
 /**
@@ -256,6 +257,18 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
             $isFilm = $t['_still'] !== null ? $t['_film'] : (bool) ($card['film'] ?? false);
             $text = $t['_text'];
 
+            // X-CARD-IMAGE-FALLBACK-001 — the Ads API answers `cards/all` empty for the composer's cards (Production
+            // 2026-11-21, Ettifaq: 9 card_uris, data: [] even with include_legacy_cards). Owner decision: take the
+            // picture from X's public embed read, and keep the text card when that read gives nothing.
+            $source = null;
+            if ($still === null && is_string($t['_card_uri']) && (bool) config('ad_platforms.platforms.x.embed_fallback', true)) {
+                $embed = $this->embedPicture($id);
+                if ($embed !== null) {
+                    [$still, $isFilm] = $embed;
+                    $source = 'x_embed';
+                }
+            }
+
             $out[$id] = array_filter([
                 'external_id' => $id,
                 'name' => "Tweet {$id}",
@@ -270,7 +283,8 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
                 'raw' => array_filter([
                     'card_uri' => $t['_card_uri'],
                     'card_type' => $card['type'] ?? null,
-                    'media_type' => $t['_media_type'] ?? ($card === null ? null : ($isFilm ? 'video' : ($still === null ? null : 'photo'))),
+                    'media_type' => $t['_media_type'] ?? ($card === null && $source === null ? null : ($isFilm ? 'video' : ($still === null ? null : 'photo'))),
+                    'media_source' => $source,
                 ], static fn ($v) => $v !== null),
             ], static fn ($v) => $v !== null && $v !== []);
         }
@@ -528,6 +542,88 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
         $path = strtolower((string) parse_url($url, PHP_URL_PATH));
 
         return preg_match('/\.(vmap|mp4|m3u8|mov|webm)$/', $path) === 1 ? null : $url;
+    }
+
+    /**
+     * X-CARD-IMAGE-FALLBACK-001 — a promoted tweet's picture from X's public embed read (the endpoint X's own embedded
+     * tweets load), for tweets whose card the Ads API does not return. No credential is sent. Only an https still on
+     * X's own image hosts is accepted; any failure, refusal or unknown shape answers null and the text card stays.
+     *
+     * @return array{0: string, 1: bool}|null [still, is_film]
+     */
+    private function embedPicture(string $tweetId): ?array
+    {
+        if (preg_match('/^\d{5,25}$/', $tweetId) !== 1) {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout(6)->acceptJson()
+                ->get('https://cdn.syndication.twimg.com/tweet-result', ['id' => $tweetId, 'lang' => 'en', 'token' => self::embedToken($tweetId)]);
+        } catch (\Throwable) {
+            return null;
+        }
+        if (! $response->successful() || ! is_array($body = $response->json())) {
+            return null;
+        }
+
+        $twimg = static function (mixed $url): ?string {
+            $url = self::twimgHttps($url);
+
+            return $url !== null && preg_match('#^https://(pbs|ton)\.twimg\.com/#', $url) === 1 ? $url : null;
+        };
+
+        // The post's own media first.
+        foreach ((array) ($body['mediaDetails'] ?? []) as $m) {
+            if (is_array($m) && ($still = $twimg($m['media_url_https'] ?? null)) !== null) {
+                return [$still, in_array($m['type'] ?? null, ['video', 'animated_gif'], true)];
+            }
+        }
+        foreach ((array) ($body['photos'] ?? []) as $p) {
+            if (is_array($p) && ($still = $twimg($p['url'] ?? null)) !== null) {
+                return [$still, false];
+            }
+        }
+
+        // Then the card: classic cards keep their image in binding_values; a unified card keeps a JSON string.
+        $values = (array) ($body['card']['binding_values'] ?? []);
+        foreach (['photo_image_full_size_large', 'summary_photo_image_large', 'thumbnail_image_large', 'player_image_large', 'photo_image_full_size', 'thumbnail_image'] as $key) {
+            if (($still = $twimg($values[$key]['image_value']['url'] ?? null)) !== null) {
+                return [$still, $key === 'player_image_large'];
+            }
+        }
+        $unified = $values['unified_card']['string_value'] ?? null;
+        if (is_string($unified) && is_array($decoded = json_decode($unified, true))) {
+            foreach ((array) ($decoded['media_entities'] ?? []) as $m) {
+                if (is_array($m) && ($still = $twimg($m['media_url_https'] ?? null)) !== null) {
+                    return [$still, in_array($m['type'] ?? null, ['video', 'animated_gif'], true)];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** The token X's embed loader sends with the id: (id / 1e15 · π) in base 36, zeros and the point removed. */
+    private static function embedToken(string $tweetId): string
+    {
+        $n = ((float) $tweetId / 1e15) * M_PI;
+        $int = (int) floor($n);
+        $frac = $n - $int;
+        $digits = '0123456789abcdefghijklmnopqrstuvwxyz';
+        $out = $int === 0 ? '0' : '';
+        for ($i = $int; $i > 0; $i = intdiv($i, 36)) {
+            $out = $digits[$i % 36].$out;
+        }
+        $out .= '.';
+        for ($k = 0; $k < 12 && $frac > 0; $k++) {
+            $frac *= 36;
+            $d = (int) floor($frac);
+            $out .= $digits[$d];
+            $frac -= $d;
+        }
+
+        return (string) preg_replace('/(0+|\.)/', '', $out);
     }
 
     /** @return array<string, mixed> one media library object, or nothing when it cannot be read */
