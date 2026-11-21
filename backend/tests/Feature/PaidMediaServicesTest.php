@@ -140,7 +140,7 @@ final class PaidMediaServicesTest extends TestCase
 
         // Deterministic ordering: sort_order is 1..N in payload order for both lists.
         $catOrders = array_column($res->json('data.categories'), 'sort_order');
-        $this->assertSame(range(1, 10), $catOrders);
+        $this->assertSame(range(1, 11), $catOrders);
         $svcOrders = array_column($res->json('data.services'), 'sort_order');
         $this->assertSame(range(1, 103), $svcOrders);
 
