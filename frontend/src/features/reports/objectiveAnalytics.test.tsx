@@ -84,10 +84,19 @@ describe('objective analytics section', () => {
 
     expect(screen.getByTestId('objective-kpi-leads-leads')).toHaveTextContent('0')
     expect(screen.getByTestId('objective-kpi-leads-leads')).toHaveAttribute('data-state', 'reported')
-    expect(screen.getByTestId('objective-kpi-leads-cpl')).toHaveTextContent('—')
+    // OBJECTIVE-CARDS-PARITY-001 — an unavailable figure reads as the summary's cards read it: «Not available», never a 0.
+    expect(screen.getByTestId('objective-kpi-leads-cpl')).toHaveTextContent('Not available')
     expect(screen.getByTestId('objective-kpi-leads-cpl')).toHaveAttribute('data-state', 'unavailable')
-    expect(screen.getByTestId('objective-kpi-awareness-reach')).toHaveTextContent('—')
+    expect(screen.getByTestId('objective-kpi-awareness-reach')).toHaveTextContent('Not available')
     expect(screen.queryByTestId('objective-kpi-leads-roas')).toBeNull()
+  })
+
+  it('draws each KPI as the summary does: movement where the server stated one, and the daily line of that very figure', () => {
+    const withMove = { ...leads, kpis: leads.kpis.map((k) => (k.key === 'leads' ? { ...k, delta: -0.48 } : k)) }
+    renderWithProviders(<ObjectiveAnalyticsSection section={section([withMove])} currency="SAR" ar={false} />)
+
+    expect(screen.getByTestId('objective-kpi-leads-leads')).toHaveTextContent('48%')
+    expect(screen.getByTestId('objective-kpi-leads-cpl').textContent).not.toMatch(/%/)
   })
 
   it('draws best and weakest only where the server ranked, platform then content', () => {
