@@ -74,7 +74,7 @@ export function PlatformSplit({ items, ar, height = 'h-2.5' }: { items: BudgetRo
  */
 export function LiveDot({ on, ar, testId }: { on: boolean | undefined; ar: boolean; testId?: string }) {
   if (on === undefined) return null
-  const label = on ? (ar ? 'شغّالة — إنفاق وظهور آخر 3 أيام' : 'Running — spend and impressions in the last 3 days') : (ar ? 'متوقفة — لا إنفاق أو ظهور آخر 3 أيام' : 'Stopped — no spend or impressions in the last 3 days')
+  const label = on ? (ar ? 'شغّالة — إنفاق خلال آخر 7 أيام' : 'Running — spend in the last 7 days') : (ar ? 'متوقفة — لا إنفاق خلال آخر 7 أيام' : 'Stopped — no spend in the last 7 days')
   return (
     <span className="relative inline-flex h-2.5 w-2.5 shrink-0" title={label} data-testid={testId} data-on={on ? 'true' : 'false'}>
       {on && <span aria-hidden className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-50" />}
