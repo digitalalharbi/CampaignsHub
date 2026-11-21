@@ -98,6 +98,13 @@ final class ProjectPurgePlan
         'tracking_events' => self::PURGE,
         'commerce_abandoned_carts' => self::PURGE,
         'commerce_orders' => self::PURGE,
+        // CONTENT-STUDIO-001 batch 8 — the studio's working rows. The saved file itself is a content_intake_items row (KEEP_LOG).
+        'readiness_scores' => self::PURGE,
+        'studio_outputs' => self::PURGE,
+        'design_tokens' => self::PURGE,
+        'studio_sessions' => self::PURGE,
+        'creative_concepts' => self::PURGE,
+        'brand_kits' => self::PURGE,
         'commerce_customers' => self::PURGE,
         'commerce_products' => self::PURGE,
         'short_links' => self::PURGE,
@@ -154,6 +161,8 @@ final class ProjectPurgePlan
         'reports' => ['report_annotations', 'report_exports', 'report_recipients', 'report_shares', 'report_versions'],
         'short_links' => ['short_link_hops'],
         'spend_limits' => ['spend_limit_events'],
+        'studio_outputs' => ['readiness_scores'],
+        'studio_sessions' => ['studio_outputs'],
     ];
 
     /** Tables that are logs: never deleted, and no PURGE may cascade into them. */

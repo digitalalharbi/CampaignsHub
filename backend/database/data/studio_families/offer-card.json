@@ -1,0 +1,45 @@
+{
+  "key": "offer-card",
+  "version": 1,
+  "label": {
+    "ar": "بطاقة عرض",
+    "en": "Offer card"
+  },
+  "kind": "both",
+  "anchor": "lower",
+  "blocks": [
+    {
+      "role": "hook",
+      "cols": 8,
+      "rows": 2,
+      "place": "calm",
+      "align": "start"
+    },
+    {
+      "role": "price",
+      "cols": 5,
+      "rows": 2,
+      "place": "calm",
+      "align": "start"
+    },
+    {
+      "role": "support",
+      "cols": 8,
+      "rows": 1,
+      "place": "calm",
+      "align": "start"
+    },
+    {
+      "role": "cta",
+      "cols": 6,
+      "rows": 1,
+      "place": "live-bottom",
+      "align": "start"
+    }
+  ],
+  "motion": [
+    "rise",
+    "badge-pop"
+  ],
+  "detailCuts": 0
+}

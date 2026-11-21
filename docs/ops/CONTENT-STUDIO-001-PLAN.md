@@ -21,8 +21,8 @@ nothing. AI generation uses the tenant's own key and is hidden without one. No p
 | 4 | Layout families as zod-validated JSON (seven), placement from the calm-zone map, diversity constraint | **merged #1247** |
 | 5 | Motion recipes and the Canvas previewer (no encoding until Save) with the margin overlay; Arabic text width measurement | **merged #1248** (pure scene, recipes and frame renderer; the live Canvas component and real glyph measurement come with batch 7) |
 | 6 | Export: WebCodecs + mp4-muxer in a Web Worker, 1080×1920 30fps H.264/AAC, ≤ 15s | **merged #1249** (plan, loop, capability and the browser adapter; the adapter is type-checked, not executed; sound muxing and the Worker host come with batch 7) |
-| 7 | Studio drawer inside the library: auto-generate on upload, batch of 3 videos + 4 images, save/send-to-approval | 7A the batch assembler and no-AI copy (pure); **7B this PR**: the drawer, live canvases and the upload hook, seen in a real browser; save and send-to-approval are still missing |
-| 8 | Migrations: brand_kits, design_tokens, studio_sessions/outputs, layout_families, music_tracks, creative_concepts, readiness_scores | |
+| 7 | Studio drawer inside the library: auto-generate on upload, batch of 3 videos + 4 images, save/send-to-approval | 7A the batch assembler and no-AI copy (pure); **7B merged #1254**: the drawer, live canvases and the upload hook |
+| 8 | Migrations: brand_kits, design_tokens, studio_sessions/outputs, layout_families, music_tracks, creative_concepts, readiness_scores | **#1264** (storage API + server-side hard checks; saved outputs are draft intake items; rankings columns moved to batch 9) |
 | 9 | Readiness score and the post-launch link (file_hash → ads, quality/engagement/conversion rankings, hook and hold rate, learning loop) | |
 | 10 | Tenant-key AI: copy, image enhancement, TTS, outpaint, generated video; hidden without a key | |
 | 11 | The library restructure itself: one classification, create/edit/score/download/upload-to-campaign in one place | |
