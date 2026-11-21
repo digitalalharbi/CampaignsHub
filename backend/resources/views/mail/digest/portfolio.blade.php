@@ -56,7 +56,7 @@
                 </tr></table>
                 @if ($c['share'] > 0)
                     {{-- The project's share of the summary's spend: one thin bar. --}}
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="share" style="margin:4px 0 2px; background-color:#eee9dd; border-radius:3px;"><tr>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="share" style="margin:4px 0 2px; background-color:#e6e2d6; border-radius:3px;"><tr>
                         <td width="{{ max(1, $c['share']) }}%" height="5" bgcolor="#0d8a6f" style="background-color:#0d8a6f; height:5px; line-height:5px; font-size:1px; border-radius:3px;">&nbsp;</td>
                         @if ($c['share'] < 100)<td height="5" style="font-size:1px; line-height:5px;">&nbsp;</td>@endif
                     </tr></table>

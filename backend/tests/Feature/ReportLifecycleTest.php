@@ -311,6 +311,22 @@ final class ReportLifecycleTest extends TestCase
         $this->assertSame('snapshot', AuditLog::query()->where('action', 'report.shared_link_converted')->firstOrFail()->before['mode']);
     }
 
+    /** REPORT-CONVERT-LIVE-001 — a report being regenerated (or a draft) can still go Live; only a Snapshot needs the document. */
+    public function test_a_report_not_yet_generated_converts_to_live_but_not_to_snapshot(): void
+    {
+        $r = $this->report();
+        [$snap] = $this->link($r, ['scope' => $this->ceiling(), 'mode' => 'snapshot']);
+        [$live] = $this->link($r, ['scope' => $this->ceiling(), 'mode' => 'live']);
+        $r->forceFill(['status' => 'processing'])->saveQuietly();
+
+        $this->as($this->owner)->postJson($this->base($r)."/shares/{$snap->getKey()}/convert", ['to' => 'live', 'confirm' => true])
+            ->assertOk()->assertJsonPath('data.link.mode', 'live');
+
+        $this->withHeaders(['Accept-Language' => 'ar'])->postJson($this->base($r)."/shares/{$live->getKey()}/convert", ['to' => 'snapshot', 'confirm' => true])
+            ->assertStatus(409)->assertJsonPath('message', 'لا يمكن تحويل الرابط إلى نسخة ثابتة قبل اكتمال إنشاء التقرير. أعد إنشاء التقرير ثم حاول مرة أخرى.');
+        $this->assertSame('live', $live->fresh()->mode, 'nothing frozen from a document that is not there');
+    }
+
     public function test_a_snapshot_with_no_ceiling_gets_one_bounded_by_the_reports_project(): void
     {
         $r = $this->report();

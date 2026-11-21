@@ -53,7 +53,13 @@ final class XTweetMediaFieldsTest extends TestCase
                 return Http::response(['data' => array_map(static fn (array $t) => ['id' => 'pt'.$t['id_str'], 'tweet_id' => $t['id_str'], 'line_item_id' => 'li1', 'entity_status' => 'ACTIVE'], $tweets)]);
             }
             if (str_contains($u, '/cards/all')) {
-                return Http::response(['data' => $cards]);
+                parse_str((string) parse_url($u, PHP_URL_QUERY), $q);
+
+                // As X answers: legacy cards (the composer's website cards) only with include_legacy_cards=true.
+                return Http::response(['data' => array_values(array_filter(
+                    $cards,
+                    static fn (array $c) => ! ($c['_legacy'] ?? false) || ($q['include_legacy_cards'] ?? 'false') === 'true',
+                ))]);
             }
             if (str_contains($u, '/media_library/')) {
                 return $library === null ? Http::response(['errors' => [['code' => 'NOT_FOUND']]], 404) : Http::response(['data' => $library]);
@@ -120,6 +126,29 @@ final class XTweetMediaFieldsTest extends TestCase
         $this->assertSame('video', $c['31']['format']);
         $this->assertSame('https://pbs.twimg.com/amplify_video_thumb/31/img/p.jpg', $c['31']['thumbnail_url'] ?? null);
         $this->assertArrayNotHasKey('asset_url', $c['31']);
+    }
+
+    /**
+     * X-LEGACY-CARDS-001 — Production 2026-11-21, Ettifaq: 9 promoted tweets, each with a card_uri and no media of its own;
+     * `cards/all` answered `data: []` because `include_legacy_cards` defaults to false.
+     */
+    public function test_a_composer_website_card_is_asked_for_as_a_legacy_card(): void
+    {
+        $c = $this->creatives(
+            [['id_str' => '2116860102603088099', 'full_text' => 'المواجهة أقوى بحضورك!', 'card_uri' => 'card://2116860099381649408']],
+            [[
+                '_legacy' => true,
+                'card_uri' => 'card://2116860099381649408', 'card_type' => 'WEBSITE',
+                'image' => 'https://pbs.twimg.com/card_img/2116860099381649408/legacy.jpg',
+                'website_title' => 'تذاكر الاتفاق',
+                'website_dest_url' => 'https://webook.com/ettifaq',
+            ]],
+        );
+
+        $this->assertSame('image', $c['2116860102603088099']['format']);
+        $this->assertSame('https://pbs.twimg.com/card_img/2116860099381649408/legacy.jpg', $c['2116860102603088099']['thumbnail_url'] ?? null);
+        $this->assertSame('تذاكر الاتفاق', $c['2116860102603088099']['headline'] ?? null);
+        $this->assertSame('https://webook.com/ettifaq', $c['2116860102603088099']['destination_url'] ?? null);
     }
 
     public function test_a_card_x_gives_no_picture_for_stays_text_and_invents_nothing(): void
