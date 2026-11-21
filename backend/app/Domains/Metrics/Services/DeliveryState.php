@@ -79,7 +79,8 @@ final class DeliveryState
             ->selectRaw('daily_metrics.project_id, daily_metrics.provider, MAX(daily_metrics.metric_date) AS last_date')
             ->get()
             ->each(function ($r) use (&$spent): void {
-                $spent[(string) $r->project_id][AdPlatforms::canonical((string) $r->provider)] = Carbon::parse($r->last_date)->toDateString();
+                // An aggregate alias, not a model attribute: read it through getAttribute (PHPStan property.notFound).
+                $spent[(string) $r->project_id][AdPlatforms::canonical((string) $r->provider)] = Carbon::parse((string) $r->getAttribute('last_date'))->toDateString();
             });
 
         // The platforms each project selects, and the freshest successful refresh among their accounts.
