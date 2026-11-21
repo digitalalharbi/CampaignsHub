@@ -409,6 +409,63 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
     }
 
     /**
+     * X-CARDS-PROBE-001 — read-only: which card lookups X answers for this account, by STATUS, COUNT and KEY NAMES. Nothing is stored and no value
+     * is printed (they hold a client's ad copy and links). Production 2026-11-21: `cards/all?card_uris=…&include_legacy_cards=true` answered
+     * 200 with `data: []` for nine promoted tweets that each carry a `card_uri`, so the next mapping needs the lookup that does answer.
+     *
+     * @param  list<string>  $cardUris
+     * @return list<array{label: string, status: int, count: int, keys: list<string>}>
+     */
+    public function probeCards(string $adAccountId, array $cardUris): array
+    {
+        try {
+            $tokens = $this->tokens();
+        } catch (\Throwable) {
+            return [];
+        }
+
+        $first = $cardUris[0] ?? null;
+        $id = is_string($first) ? preg_replace('#^card://#', '', $first) : null;
+        $asks = [
+            'cards/all one uri, legacy' => ['cards/all', ['card_uris' => $first, 'include_legacy_cards' => 'true']],
+            'cards/all one uri, legacy, with_deleted' => ['cards/all', ['card_uris' => $first, 'include_legacy_cards' => 'true', 'with_deleted' => 'true']],
+            'cards/all no filter, legacy' => ['cards/all', ['include_legacy_cards' => 'true', 'count' => 5]],
+            'cards/all no filter' => ['cards/all', ['count' => 5]],
+        ];
+        if ($id !== null) {
+            $asks['cards/:id'] = ["cards/{$id}", []];
+        }
+        foreach (['website', 'image_website', 'video_website', 'image_conversation', 'video_conversation', 'image_app_download', 'video_app_download'] as $type) {
+            $asks["cards/{$type}"] = ["cards/{$type}", ['count' => 5]];
+        }
+
+        $out = [];
+        foreach ($asks as $label => [$path, $query]) {
+            if ($first === null && isset($query['card_uris'])) {
+                continue;
+            }
+            try {
+                $response = $this->api($tokens)->get($this->url("accounts/{$adAccountId}/{$path}"), $query);
+                $json = $response->json();
+                $data = is_array($json['data'] ?? null) ? $json['data'] : [];
+                $items = array_is_list($data) ? $data : [$data];
+                $keys = [];
+                foreach ($items as $item) {
+                    foreach (is_array($item) ? array_keys($item) : [] as $k) {
+                        $keys[(string) $k] = true;
+                    }
+                }
+                ksort($keys);
+                $out[] = ['label' => $label, 'status' => $response->status(), 'count' => count($items), 'keys' => array_keys($keys)];
+            } catch (\Throwable) {
+                $out[] = ['label' => $label, 'status' => 0, 'count' => 0, 'keys' => []];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * The picture, title and destination of these cards, keyed by `card_uri`.
      *
      * @param  list<string>  $cardUris

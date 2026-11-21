@@ -12,6 +12,7 @@ use App\Domains\Integrations\Enums\ConnectorStatus;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
+use App\Domains\Integrations\Providers\XConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
 use Illuminate\Console\Command;
@@ -706,6 +707,7 @@ final class ProbeInsightsCommand extends Command
 
         if ($account->provider === 'x') {
             $this->reportXShapes($connector->peekRawResponses());
+            $this->reportXCards($connector, $account);
 
             return;
         }
@@ -978,6 +980,27 @@ final class ProbeInsightsCommand extends Command
             sort($names);
             $this->line(sprintf('    %s  (%d)', $kind, $counts[$kind]));
             $this->line('      '.implode(', ', $names));
+        }
+    }
+
+    /** X-CARDS-PROBE-001 — which card lookups X answers: status, count and key names; never values. */
+    private function reportXCards(object $connector, ExternalAccount $account): void
+    {
+        if (! $connector instanceof XConnector) {
+            return;
+        }
+        $uris = [];
+        foreach ($connector->peekRawResponses() as $body) {
+            foreach ((array) ($body['data'] ?? []) as $item) {
+                if (is_array($item) && is_string($item['card_uri'] ?? null) && isset($item['id_str'])) {
+                    $uris[] = $item['card_uri'];
+                }
+            }
+        }
+        $this->line('');
+        $this->line('  X CARD LOOKUPS — status, count, key names; never values');
+        foreach ($connector->probeCards($account->external_id, array_values(array_unique($uris))) as $row) {
+            $this->line(sprintf('    %-44s HTTP %-3d items %-3d %s', $row['label'], $row['status'], $row['count'], implode(', ', $row['keys'])));
         }
     }
 
