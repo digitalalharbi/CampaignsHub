@@ -93,7 +93,7 @@ final class ContentStudioStorageTest extends TestCase
         $res = $this->actingAs($user, 'sanctum')->post("/api/v1/content-studio/sessions/{$session}/outputs", $this->outputPayload(), ['Accept' => 'application/json'])
             ->assertCreated();
 
-        $item = ContentIntakeItem::query()->findOrFail($res->json('data.intake_item_id'));
+        $item = ContentIntakeItem::withoutGlobalScopes()->findOrFail($res->json('data.intake_item_id'));
         $this->assertSame('draft', $item->status);
         $this->assertSame($this->projectA->id, $item->project_id);
         $this->assertSame('Shop now', $item->cta);
@@ -102,8 +102,8 @@ final class ContentStudioStorageTest extends TestCase
         $this->assertSame(92, $res->json('data.readiness.score'));
         $this->assertSame('bold-hook', $res->json('data.family_key'));
         $this->assertNotNull($res->json('data.concept_id'));
-        $this->assertSame(1, ReadinessScore::query()->count());
-        $this->assertSame('evaluate', StudioSession::query()->findOrFail($session)->stage);
+        $this->assertSame(1, ReadinessScore::withoutGlobalScopes()->count());
+        $this->assertSame('evaluate', StudioSession::withoutGlobalScopes()->findOrFail($session)->stage);
     }
 
     public function test_the_server_refuses_what_breaks_a_hard_rule(): void
@@ -121,11 +121,11 @@ final class ContentStudioStorageTest extends TestCase
         $post(['name' => 'Untitled 3'])->assertStatus(422)->assertJsonPath('errors.refusals.0', 'name_missing');
         $post(['family_key' => 'no-such-family'])->assertStatus(422)->assertJsonPath('errors.refusals.0', 'unknown_family');
 
-        BrandKit::query()->create(['project_id' => $this->projectA->id, 'forbidden_words' => ['cheap']]);
+        BrandKit::withoutGlobalScopes()->create(['tenant_id' => $this->agency->id, 'project_id' => $this->projectA->id, 'forbidden_words' => ['cheap']]);
         $post(['message' => 'Cheap rings today'])->assertStatus(422)->assertJsonPath('errors.refusals.0', 'forbidden_word');
 
-        $this->assertSame(0, StudioOutput::query()->count());
-        $this->assertSame(0, ContentIntakeItem::query()->count());
+        $this->assertSame(0, StudioOutput::withoutGlobalScopes()->count());
+        $this->assertSame(0, ContentIntakeItem::withoutGlobalScopes()->count());
     }
 
     public function test_a_fifteen_second_video_is_accepted(): void
@@ -147,7 +147,7 @@ final class ContentStudioStorageTest extends TestCase
         $payload = ['project_id' => $this->projectA->id, 'font_display' => 'Cairo', 'font_text' => 'Tajawal', 'colors' => ['accent' => '#C8A24A'], 'tone' => 'calm', 'forbidden_words' => ['cheap']];
         $this->actingAs($editor, 'sanctum')->postJson('/api/v1/content-studio/brand-kit', $payload)->assertOk()->assertJsonPath('data.font_display', 'Cairo');
         $this->actingAs($editor, 'sanctum')->postJson('/api/v1/content-studio/brand-kit', ['font_display' => 'Readex Pro'] + $payload)->assertOk();
-        $this->assertSame(1, BrandKit::query()->where('project_id', $this->projectA->id)->count());
+        $this->assertSame(1, BrandKit::withoutGlobalScopes()->where('project_id', $this->projectA->id)->count());
 
         $this->actingAs($editor, 'sanctum')->postJson('/api/v1/content-studio/brand-kit', ['colors' => ['accent' => 'gold']] + $payload)->assertStatus(422);
         $this->actingAs($reader, 'sanctum')->getJson('/api/v1/content-studio/brand-kit?project='.$this->projectA->id)
@@ -175,7 +175,7 @@ final class ContentStudioStorageTest extends TestCase
         app(TenantContext::class)->setTenantId((string) $tenant->id);
         $elsewhere = $this->makeClient('Else client', $tenant);
         $project = Project::create(['tenant_id' => $tenant->id, 'client_workspace_id' => $elsewhere->id, 'name' => 'Else', 'status' => 'active']);
-        $foreignSession = StudioSession::query()->create(['project_id' => $project->id]);
+        $foreignSession = StudioSession::query()->create(['tenant_id' => $tenant->id, 'project_id' => $project->id]);
         app(TenantContext::class)->setTenantId((string) $this->agency->id);
         $this->actingAs($owner, 'sanctum')->getJson("/api/v1/content-studio/sessions/{$foreignSession->id}")->assertNotFound();
     }
