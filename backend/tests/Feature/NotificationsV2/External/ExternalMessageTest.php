@@ -45,7 +45,8 @@ final class ExternalMessageTest extends TestCase
         $mail = $this->sent()[0]['email'];
         $html = (string) $mail->getHtmlBody();
         $text = (string) $mail->getTextBody();
-        $this->assertSame('Launch — Alpha Agency | ملخص 1 نوفمبر – 14 نوفمبر 2026 · CampaignsHub', $mail->getSubject());
+        // DIGEST-SUBJECT-FORMAT-001 — «—» between parts; no «|» or «·».
+        $this->assertSame('Alpha Agency — ملخص المشروع : 1 نوفمبر – 14 نوفمبر 2026 — Launch', $mail->getSubject());
         $this->assertSame('Alpha Agency عبر كامبينز هَب', $mail->getFrom()[0]->getName());
         $this->assertSame('info@campaignshub.io', $mail->getFrom()[0]->getAddress());
         // The approved weekly spend-summary template in its external mode (Owner, 2026-11-15): the same header, cards and footer.
@@ -103,8 +104,8 @@ final class ExternalMessageTest extends TestCase
 
         $subject = $this->sent()[0]['email']->getSubject();
         $this->assertLessThanOrEqual(90, mb_strlen($subject));
-        $this->assertStringStartsWith('Launch — Alpha Agency | ملخص طويل', $subject);
-        $this->assertStringEndsWith('… · CampaignsHub', $subject);
+        $this->assertStringStartsWith('Alpha Agency — ملخص طويل', $subject);
+        $this->assertStringEndsWith('… — Launch', $subject);
     }
 
     public function test_a_client_with_two_projects_gets_two_separate_messages_naming_only_their_own_project(): void

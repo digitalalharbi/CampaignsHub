@@ -239,6 +239,8 @@ final class OperationalDigestModel
             'cells' => array_map(static fn (array $c): array => array_diff_key($c, ['issue' => 1]), $cells),
             // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the linking health of this project, apart from its performance.
             'linking' => $linking,
+            // DIGEST-PM-ACTIONS-001 — the project's own budget action, in the project-management voice, when its budget proves one.
+            'actions' => self::budgetActions([['name' => (string) ($block['project_name'] ?? '')] + (array) (self::budget(isset($block['budget_month']) && is_array($block['budget_month']) ? $block['budget_month'] : null, $lang) ?? [])], $ar),
             'issues' => $issues,
             'fresh' => ! in_array((string) ($freshness['state'] ?? ''), ['stale', 'sync_failed', 'no_data'], true) && ! ($freshness['sync_failed'] ?? false),
             // Unlike objectives are never averaged: a mixed project's own tile row is the money alone; each group has its own row.
@@ -252,6 +254,8 @@ final class OperationalDigestModel
             'yesterday' => self::lastDay((array) ($block['series'] ?? []), $p, $ar),
             'changes' => self::changes($block, $p, $ar),
             'platforms' => $platforms,
+            // MAIL-NOTES-001 — the platforms that reported spend in the period, named as the mail's sources.
+            'source_names' => array_values(array_unique(array_column(array_filter($platforms, static fn (array $pf): bool => (int) ($pf['share'] ?? 0) > 0), 'name'))),
             'funnel' => self::funnel((array) ($block['funnel'] ?? []), $ar),
             'content' => self::content($block['creatives'] ?? null, $ar),
             'decisions' => $decisions,
@@ -356,6 +360,8 @@ final class OperationalDigestModel
             'mix' => $mix,
             // DIGEST-FIGURES-ONLY-001 — «ملخص كل مشروع»: every project once, by spend, figures only (no verdict, no note).
             'cards' => self::cards($projects),
+            // DIGEST-PM-ACTIONS-001 — «يحتاج قرارك الآن», back in the project-management voice: only what the budgets prove.
+            'actions' => self::budgetActions(array_map(static fn (array $pr): array => ['name' => (string) $pr['name']] + (array) ($pr['budget'] ?? []), $projects), $ar),
             'projects' => $projects,
             'issues' => $issues,
             'issues_shown' => array_slice($issues, 0, self::TOP_ISSUES),
@@ -363,6 +369,48 @@ final class OperationalDigestModel
             'links' => ['alerts' => MailDeepLinks::alerts(), 'dashboard' => MailDeepLinks::dashboard()],
             'raw' => ['totals' => $t],
         ];
+    }
+
+    /**
+     * DIGEST-PM-ACTIONS-001 — Owner 2026-11-21: «يحتاج قرارك الآن» stays, written to project management: what to do with the
+     * client, e.g. «الميزانية قرّبت تخلص — جدّد مع العميل». Only what the month's budget figures PROVE: spend past the budget,
+     * 80% or more of it used, or a projection (the month's measured pace) that runs past it before the month ends. A budget
+     * whose figures could not be stated (another currency, no rate) proposes nothing. The most urgent first.
+     *
+     * @param  list<array<string,mixed>>  $rows  each a project's name plus `self::budget()`
+     * @return list<array{name: string, text: string, tone: string, rank: int}>
+     */
+    private static function budgetActions(array $rows, bool $ar): array
+    {
+        $out = [];
+        foreach ($rows as $r) {
+            if (($r['state'] ?? null) !== 'ok' || ! is_numeric($r['budget_value'] ?? null) || (float) $r['budget_value'] <= 0) {
+                continue;
+            }
+            $used = is_int($r['used'] ?? null) ? (int) $r['used'] : null;
+            $remaining = (string) ($r['remaining'] ?? '');
+            $action = match (true) {
+                (bool) ($r['over'] ?? false) => [0, 'bad', $ar
+                    ? 'الإنفاق تجاوز ميزانية الشهر — جدّد مع العميل أو أوقف الصرف'
+                    : 'Spend is past this month’s budget — renew with the client or stop the spend'],
+                $used !== null && $used >= 100 => [1, 'bad', $ar
+                    ? 'خلصت ميزانية الشهر — جدّد مع العميل'
+                    : 'This month’s budget is used up — renew with the client'],
+                $used !== null && $used >= 80 => [2, 'watch', $ar
+                    ? 'الميزانية قرّبت تخلص (المتبقي '.AlertEventText::ltr($remaining).' — '.AlertEventText::ltr((100 - $used).'%').') — جدّد مع العميل'
+                    : 'The budget is close to running out ('.$remaining.' left — '.(100 - $used).'%) — renew with the client'],
+                is_numeric($r['projected_value'] ?? null) && (float) $r['projected_value'] > (float) $r['budget_value'] => [3, 'watch', $ar
+                    ? 'بمعدل الصرف الحالي تخلص الميزانية قبل نهاية الشهر — رتّب التجديد مع العميل مبكرًا'
+                    : 'At the current pace the budget runs out before the month ends — arrange the renewal with the client early'],
+                default => null,
+            };
+            if ($action !== null) {
+                $out[] = ['name' => (string) $r['name'], 'text' => $action[2], 'tone' => $action[1], 'rank' => $action[0]];
+            }
+        }
+        usort($out, static fn (array $a, array $b): int => ($a['rank'] <=> $b['rank']) ?: strcmp($a['name'], $b['name']));
+
+        return $out;
     }
 
     /**
@@ -403,7 +451,8 @@ final class OperationalDigestModel
                 'spend' => $kpis[0] ?? null,
                 'share' => $total > 0 ? (int) round($spendOf($pr) / $total * 100) : 0,
                 'lines' => array_values(array_filter($lines, static fn (array $l): bool => $l['figures'] !== [])),
-                'platforms' => array_map(static fn (array $pf): array => ['name' => (string) $pf['name'], 'share' => (int) $pf['share']], array_slice($platforms, 0, 4)),
+                // Every platform that spent, never a fixed number of them (CanonicalPlatformOrderTest).
+                'platforms' => array_map(static fn (array $pf): array => ['name' => (string) $pf['name'], 'share' => (int) $pf['share']], $platforms),
             ];
         }, $projects);
     }

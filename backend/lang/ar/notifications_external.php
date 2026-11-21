@@ -9,8 +9,8 @@ declare(strict_types=1);
 return [
     'sender_via' => ':workspace عبر كامبينز هَب',
     'subject' => [
-        'structure' => ':project — :workspace | :custom · CampaignsHub',
-        'digest_periodic' => 'ملخص :period',
+        'structure' => ':workspace — :custom — :project',
+        'digest_periodic' => 'ملخص المشروع : :period',
         'report_rerouted' => 'تقرير شاركه الفريق',
         'digest_month_end' => 'ملخص الشهر: :highlight',
         'digest_month_start' => 'بداية شهر جديد',

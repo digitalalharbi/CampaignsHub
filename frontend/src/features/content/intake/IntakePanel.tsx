@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Film, FileText, Link2, MinusCircle, Plus, 
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { StudioDrawer } from '../studio/ui/StudioDrawer'
 import { Num } from '@/components/ui/Num'
 import { Textarea } from '@/components/ui/Textarea'
 import { Input } from '@/components/ui/Input'
@@ -178,6 +179,7 @@ function UploadModal({ ar, platforms, objectives, maxKb, defaultProject, onClose
   const projects = useQuery({ queryKey: ['projects'], queryFn: () => listProjects(), retry: false })
   const [project, setProject] = useState(defaultProject ?? '')
   const [file, setFile] = useState<File | null>(null)
+  const [studio, setStudio] = useState(false)
   const [kind, setKind] = useState<'copy' | 'link'>('copy')
   const [f, setF] = useState<IntakeInput>({})
   const [error, setError] = useState<string | null>(null)
@@ -212,7 +214,12 @@ function UploadModal({ ar, platforms, objectives, maxKb, defaultProject, onClose
           <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm" onChange={(e) => pick(e.target.files?.[0] ?? null)} data-testid="intake-file"
             className="rounded-xl border border-dashed border-border bg-surface px-3 py-2 text-sm text-text-primary" />
           <span className="text-xs font-normal text-text-muted">{t.form.limit(maxMb)}</span>
+          {file && file.type.startsWith('image/') && (
+            // CONTENT-STUDIO-001 — an image can be opened in the studio before it is uploaded: 3 videos + 4 images from this one picture.
+            <Button type="button" variant="secondary" size="sm" onClick={() => setStudio(true)} data-testid="intake-open-studio">{ar ? 'افتح الاستوديو' : 'Open the studio'}</Button>
+          )}
         </label>
+        {studio && file && <StudioDrawer file={file} onClose={() => setStudio(false)} />}
         {!file && (
           <label className={label}>{t.form.kind}
             <select value={kind} onChange={(e) => setKind(e.target.value as 'copy' | 'link')} className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary">

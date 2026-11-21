@@ -17,6 +17,10 @@ export interface Cell {
   /** Standard deviation of luma inside the cell. */
   contrast: number
   saturation: number
+  /** Mean colour of the cell, 0–255 per channel. */
+  r: number
+  g: number
+  b: number
 }
 
 export interface Grid {
@@ -41,6 +45,9 @@ export function buildGrid(src: Pixels, cols = GRID_COLS, rows = GRID_ROWS): Grid
       let sumL2 = 0
       let sumE = 0
       let sumS = 0
+      let sumR = 0
+      let sumG = 0
+      let sumB = 0
       let n = 0
 
       for (let y = y0; y < y1; y++) {
@@ -51,13 +58,16 @@ export function buildGrid(src: Pixels, cols = GRID_COLS, rows = GRID_ROWS): Grid
           sumL2 += l * l
           sumE += edges[i]!
           sumS += saturation(src.data[i * 4]!, src.data[i * 4 + 1]!, src.data[i * 4 + 2]!)
+          sumR += src.data[i * 4]!
+          sumG += src.data[i * 4 + 1]!
+          sumB += src.data[i * 4 + 2]!
           n++
         }
       }
 
       const mean = sumL / n
 
-      cells.push({ col, row, luma: mean, busy: sumE / n, contrast: Math.sqrt(Math.max(0, sumL2 / n - mean * mean)), saturation: sumS / n })
+      cells.push({ col, row, luma: mean, busy: sumE / n, contrast: Math.sqrt(Math.max(0, sumL2 / n - mean * mean)), saturation: sumS / n, r: sumR / n, g: sumG / n, b: sumB / n })
     }
   }
 

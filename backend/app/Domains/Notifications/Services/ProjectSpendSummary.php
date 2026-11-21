@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Metrics\Enums\SpendLimitScope;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\MetricsAggregator;
@@ -42,11 +43,19 @@ final class ProjectSpendSummary
     {
         $days = (int) max(1, $from->copy()->startOfDay()->diffInDays($to->copy()->startOfDay()) + 1);
         $projects = $projectIds === [] ? collect() : Project::query()->withoutGlobalScopes()
-            ->where('tenant_id', $tenantId)->whereIn('id', $projectIds)->live()->orderBy('name')->get(['id', 'name']); // PROJECT-LIFECYCLE-001
+            ->where('tenant_id', $tenantId)->whereIn('id', $projectIds)->live()->orderBy('name')->get(['id', 'name', 'client_workspace_id']); // PROJECT-LIFECYCLE-001
+
+        // FINANCE-SPEND-ONLY-001 — finance reads the money per CLIENT: each project carries its client's name.
+        $clientIds = $projects->pluck('client_workspace_id')->filter()->unique()->values()->all();
+        $clientNames = $clientIds === [] ? [] : ClientWorkspace::query()->withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)->whereIn('id', $clientIds)->pluck('name', 'id')->all();
 
         $rows = [];
         foreach ($projects as $project) {
-            $rows[] = $this->project($tenantId, (string) $project->id, (string) $project->name, $from, $to, $today, $days);
+            $row = $this->project($tenantId, (string) $project->id, (string) $project->name, $from, $to, $today, $days);
+            $row['client_id'] = $project->client_workspace_id !== null ? (string) $project->client_workspace_id : null;
+            $row['client_name'] = $row['client_id'] !== null ? (string) ($clientNames[$row['client_id']] ?? '') : '';
+            $rows[] = $row;
         }
 
         // Closest to running out first; a project whose limit cannot be stated comes before the healthy ones.
@@ -59,6 +68,9 @@ final class ProjectSpendSummary
             'to' => $to->toDateString(),
             'days' => $days,
             'projects' => $rows,
+            'clients' => $this->clients($rows),
+            // Where the spend figures come from, named in the mail's notes (every platform that reported spend in the period).
+            'sources' => array_values(array_unique(array_merge(...array_map(static fn (array $r): array => (array) ($r['sources'] ?? []), $rows ?: [[]])))),
             'total' => $this->total($rows),
         ];
     }
@@ -73,12 +85,19 @@ final class ProjectSpendSummary
         $withheld = (int) ($totals['spend_withheld_rows'] ?? 0) > 0 || (int) ($basis['bases'] ?? 0) > 1;
         $spend = $withheld ? null : round((float) ($totals['spend'] ?? 0), 2);
         $spendCurrency = is_string($basis['currency'] ?? null) ? (string) $basis['currency'] : null;
+        $sources = [];
+        foreach ($scoped->byProvider($from, $to) as $pr) {
+            if (is_numeric($pr['spend'] ?? null) && (float) $pr['spend'] > 0) {
+                $sources[] = (string) $pr['provider'];
+            }
+        }
 
         $row = [
             'id' => $projectId, 'name' => $name,
             'spend' => $spend, 'spend_currency' => $spendCurrency, 'spend_withheld' => $withheld,
             'cap' => null, 'cap_currency' => null, 'consumed' => null, 'remaining' => null, 'used' => null,
             'limit_from' => null, 'limit_to' => null, 'days_left' => null, 'state' => 'none',
+            'sources' => $sources,
         ];
 
         $limit = SpendLimit::query()->withoutGlobalScopes()
@@ -114,6 +133,31 @@ final class ProjectSpendSummary
         }
 
         return $row;
+    }
+
+    /**
+     * FINANCE-SPEND-ONLY-001 — the projects grouped by client, each client with its own spend and remainder, summed only where
+     * the client's projects share one currency (the same rule as the overall line). A project with no client stands alone.
+     *
+     * @param  list<array<string,mixed>>  $rows
+     * @return list<array<string,mixed>>
+     */
+    private function clients(array $rows): array
+    {
+        $groups = [];
+        foreach ($rows as $r) {
+            $key = $r['client_id'] ?? 'project:'.$r['id'];
+            $groups[$key] ??= ['id' => (string) $key, 'name' => ($r['client_name'] ?? '') !== '' ? (string) $r['client_name'] : (string) $r['name'], 'project_ids' => []];
+            $groups[$key]['project_ids'][] = (string) $r['id'];
+        }
+        $out = [];
+        foreach ($groups as $g) {
+            $own = array_values(array_filter($rows, static fn (array $r): bool => in_array((string) $r['id'], $g['project_ids'], true)));
+            $out[] = $g + ['total' => $this->total($own)];
+        }
+        usort($out, static fn (array $a, array $b): int => strcmp((string) $a['name'], (string) $b['name']));
+
+        return $out;
     }
 
     /**

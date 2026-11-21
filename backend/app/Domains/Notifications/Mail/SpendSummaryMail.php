@@ -13,6 +13,7 @@ use App\Domains\Notifications\Support\MailDisclaimer;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
+use App\Support\AdPlatforms;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -99,6 +100,23 @@ final class SpendSummaryMail extends Mailable
             ];
         }, (array) ($s['projects'] ?? []));
 
+        // FINANCE-SPEND-ONLY-001 — the money per CLIENT: each client's spend and remainder (one currency only), then its projects.
+        $byId = array_column($projects, null, 'id');
+        $clients = array_map(static function (array $c) use ($byId, $p, $noData): array {
+            $ct = (array) $c['total'];
+
+            return [
+                'name' => (string) $c['name'],
+                'spend_text' => $ct['spend'] !== null ? $p($ct['spend_currency'])->headline($ct['spend']) : $noData,
+                'remaining_text' => $ct['remaining'] !== null ? $p($ct['cap_currency'])->headline($ct['remaining']) : $noData,
+                'projects' => array_values(array_filter(array_map(static fn (string $id): ?array => $byId[$id] ?? null, (array) $c['project_ids']))),
+            ];
+        }, (array) ($s['clients'] ?? []));
+        if ($clients === [] && $projects !== []) {
+            $clients = [['name' => '', 'spend_text' => '', 'remaining_text' => '', 'projects' => $projects]];
+        }
+        $sources = array_map(static fn (string $prov): string => AdPlatforms::name($prov, $ar ? 'ar' : 'en'), (array) ($s['sources'] ?? []));
+
         $fmt = [
             'total_spend' => $t['spend'] !== null ? $p($t['spend_currency'])->headline($t['spend']) : $noData,
             'total_remaining' => $t['remaining'] !== null ? $p($t['cap_currency'])->headline($t['remaining']) : $noData,
@@ -122,7 +140,7 @@ final class SpendSummaryMail extends Mailable
             'footprintUrl' => $this->footprintUrl,
             'hideFootprint' => $this->hideFootprint,
             'slot' => view('mail.spend-summary', [
-                's' => ['projects' => $projects] + $s,
+                's' => ['projects' => $projects, 'clients' => $clients, 'source_names' => $sources] + $s,
                 'fmt' => $fmt,
                 'title' => $this->title($ar),
                 'periodLabel' => $periodLabel,

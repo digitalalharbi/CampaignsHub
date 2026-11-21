@@ -216,7 +216,11 @@ final class ReportView
         return $model;
     }
 
-    /** `{project} — {workspace} | {custom} · CampaignsHub`, at most 90 characters; only the custom part is ever cut (spec §8, §12). */
+    /**
+     * `{workspace} — {custom} — {project}`, at most 90 characters; only the custom part is ever cut (spec §8, §12).
+     * DIGEST-SUBJECT-FORMAT-001 — Owner 2026-11-21: one subject grammar for every mail, «—» between parts, no «|», «·» or «•»
+     * (internal: «كامبينز هَب — ملخص المشروع : أمس — فورساتو»). Outside the platform the agency leads, as the sender name does.
+     */
     public static function subject(ExternalContext $c, string $highlight, bool $footprintRemoved): string
     {
         $custom = $c->subjectTemplate ?? ($c->settings['external']['subject_templates'][$c->eventKey] ?? null);
@@ -227,8 +231,8 @@ final class ReportView
         ]);
         $custom = trim((string) preg_replace('/\s+/u', ' ', $custom));
 
-        $prefix = $c->projectName.' — '.$c->workspaceName.' | ';
-        $suffix = $footprintRemoved ? '' : ' · CampaignsHub';
+        $prefix = $c->workspaceName.' — ';
+        $suffix = ' — '.$c->projectName;
         $room = self::SUBJECT_MAX - mb_strlen($prefix) - mb_strlen($suffix);
         if (mb_strlen($custom) > $room) {
             $custom = $room > 1 ? rtrim(mb_substr($custom, 0, $room - 1)).'…' : '';
