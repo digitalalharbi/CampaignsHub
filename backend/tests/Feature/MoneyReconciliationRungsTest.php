@@ -31,6 +31,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -207,7 +208,7 @@ final class MoneyReconciliationRungsTest extends TestCase
         // One riyal spent today is running, by the same rule — a copy of one of its own July rows, moved to today.
         $row = (array) DB::table('daily_metrics')->where('external_account_id', $this->accounts['meta_usd']->id)->where('metric_key', 'spend')->first();
         unset($row['id']);
-        DB::table('daily_metrics')->insert(['id' => (string) \Illuminate\Support\Str::uuid(), 'metric_date' => now()->toDateString()] + $row);
+        DB::table('daily_metrics')->insert(['id' => (string) Str::uuid(), 'metric_date' => now()->toDateString()] + $row);
         $now = collect($this->read('metrics/accounts/pulse')->json('data'))->keyBy('account_id');
         $this->assertSame('running', $now[$id('meta_usd')]['state']);
 

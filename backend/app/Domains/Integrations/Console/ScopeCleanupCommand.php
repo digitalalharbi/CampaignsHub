@@ -292,7 +292,7 @@ final class ScopeCleanupCommand extends Command
                     'tenant_id' => $tenant,
                     'project_id' => $target,
                     'client_workspace_id' => $targetWorkspace,
-                    'name' => $this->availableName($target, (string) $campaign->name),
+                    'name' => $this->availableName((string) $campaign->name),
                     // The provider's word resolved the same way the importer resolves it; unknown stays `other`.
                     'objective' => (app(PlatformObjectiveMap::class)->resolve((string) $campaign->provider, $campaign->objective) ?? CampaignObjective::Other)->value,
                     'status' => (string) $campaign->status,
@@ -580,16 +580,10 @@ final class ScopeCleanupCommand extends Command
         return self::SUCCESS;
     }
 
-    private function availableName(string $project, string $name): string
+    /** CAMPAIGN-NAME-PLATFORM-ONLY-001 — the platform's name as it is, no counter or id appended. */
+    private function availableName(string $name): string
     {
-        $candidate = $name;
-        $n = 2;
-        while (UnifiedCampaign::withoutGlobalScopes()->where('project_id', $project)->where('name', $candidate)->exists()) {
-            $candidate = "{$name} ({$n})";
-            $n++;
-        }
-
-        return $candidate;
+        return mb_substr($name, 0, 160);
     }
 
     private function required(string $name): ?string
