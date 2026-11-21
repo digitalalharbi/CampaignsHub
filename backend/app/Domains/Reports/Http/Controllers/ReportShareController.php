@@ -247,7 +247,17 @@ final class ReportShareController extends Controller
         if (empty($data['confirm'])) {
             return ApiResponse::success(['changed' => false, 'requires_confirmation' => true, 'from' => $from, 'to' => $to, 'notice' => $notice, 'link' => $this->shape($link)], 'Confirm to convert this link.');
         }
-        abort_unless($model->status === 'completed', 409, 'Generate the report before converting its link.');
+        /*
+         * REPORT-CONVERT-LIVE-001 — Owner 2026-11-21: «ما انحفظ: Generate the report before converting its link.»
+         * Only a Snapshot needs a generated document: it freezes one. A Live link renders from the report's own builder on every
+         * open and never reads the stored document, so a report that is a draft or still processing (after a settings edit) can
+         * still go Live. The refusal is said in the reader's language.
+         */
+        if ($to === 'snapshot' && $model->status !== 'completed') {
+            abort(409, app()->getLocale() === 'ar'
+                ? 'لا يمكن تحويل الرابط إلى نسخة ثابتة قبل اكتمال إنشاء التقرير. أعد إنشاء التقرير ثم حاول مرة أخرى.'
+                : 'The report has not finished generating, so there is nothing to freeze yet. Regenerate it, then convert the link to a Snapshot.');
+        }
 
         $fill = ['mode' => $to];
         if ($to === 'live' && (! is_array($link->scope) || $link->scope === [])) {

@@ -263,7 +263,7 @@ What each provider can do lives in one place: `ProviderCatalogue`, one declarati
 | provider | category | resource | auth | discovery | refresh_token | token_expiry | token_exchange | webhooks | hierarchy | entity_grains | creative_insights | period_reach | abandoned_carts | incremental_cursor | rate_limit_policy |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | snapchat | ads | ad_account | oauth | yes | yes | yes | no | no | yes | yes | yes | yes | no | no | yes |
-| tiktok | ads | ad_account | oauth | yes | no | no | no | no | no | no | yes | no | no | no | yes |
+| tiktok | ads | ad_account | oauth | yes | no | no | no | no | no | no | yes | yes | no | no | yes |
 | meta | ads | ad_account | oauth | yes | no | yes | yes | yes | yes | yes | yes | yes | no | no | yes |
 | google | ads | ad_account | oauth | yes | yes | yes | no | no | yes | yes | no | yes | no | no | yes |
 | x | ads | ad_account | oauth | yes | no | no | no | no | no | no | yes | no | no | no | yes |
