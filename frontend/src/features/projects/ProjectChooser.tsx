@@ -244,8 +244,8 @@ function ChoiceCard({ p, ar }: { p: Row; ar: boolean }) {
           <div className="flex items-baseline justify-between gap-2 text-xs">
             <span className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
             <span className="truncate font-bold text-text-primary">
-              <Num>{money(credit ? (b.to_date ?? b.spent) : b.spent, 'SAR')}</Num>
-              {!credit && <span className="font-normal text-text-muted"> / <Num>{money(b.approved, 'SAR')}</Num></span>}
+              <Num>{money(credit ? (b.to_date ?? b.spent) : b.spent, b.currency)}</Num>
+              {!credit && <span className="font-normal text-text-muted"> / <Num>{money(b.approved, b.currency)}</Num></span>}
             </span>
           </div>
           {!credit && (
@@ -254,7 +254,7 @@ function ChoiceCard({ p, ar }: { p: Row; ar: boolean }) {
             </span>
           )}
           <div className="flex items-center justify-between gap-2 text-xs">
-            {!credit && b.remaining !== null && <span className={b.remaining < 0 ? 'font-bold text-danger' : 'text-text-secondary'}>{ar ? 'المتبقي' : 'Left'} <Num>{money(b.remaining, 'SAR')}</Num></span>}
+            {!credit && b.remaining !== null && <span className={b.remaining < 0 ? 'font-bold text-danger' : 'text-text-secondary'}>{ar ? 'المتبقي' : 'Left'} <Num>{money(b.remaining, b.currency)}</Num></span>}
             {b.run_out_date && <span className="inline-flex items-center gap-1 text-text-muted" title={ar ? 'تاريخ النفاد بمعدل آخر 3 أيام' : 'Runs out at the last 3 days’ pace'}><CalendarClock size={11} aria-hidden /><Num>{b.run_out_date}</Num></span>}
           </div>
         </div>
