@@ -176,6 +176,9 @@ final class RoleDashboardBuilder
             'platform_campaign_budgets' => $this->rollup->of($pacing),
         ] : null;
         $out['units'] = $units;
+        // DELIVERY-ALL-ROLES-001 — Owner 2026-11-21: running or stopped concerns every member (finance, project managers, the
+        // platform, marketers): read for the whole reach; the money beside it only for those who may see money.
+        $out['delivery'] = $this->delivery($scope, $units);
         $out['daily_spend'] = $money && $agg !== null ? $this->dailySpend($agg, $today) : [];
 
         if ($view === 'manager') {
@@ -400,6 +403,68 @@ final class RoleDashboardBuilder
         usort($units, static fn (array $a, array $b): int => ($b['ratio'] ?? -1) <=> ($a['ratio'] ?? -1));
 
         return $units;
+    }
+
+    /**
+     * DELIVERY-ALL-ROLES-001 — one row per client (or per client-less project) of the member's reach: running or stopped
+     * (spend AND impressions in the last 3 days) and each platform's own state. The budget, spent and remaining come from
+     * the money units ONLY (so a member without money, or a project whose money is withheld, carries none). A unit with no
+     * platform reading and no budget is left out: nothing to say about it.
+     *
+     * @param  array{clients: array<int|string, string>, projects: array<int|string, array{name: string, client_id: string|null}>, restricted: bool}  $scope
+     * @param  list<array<string, mixed>>  $units
+     * @return list<array<string, mixed>>
+     */
+    private function delivery(array $scope, array $units): array
+    {
+        $pids = array_map('strval', array_keys($scope['projects']));
+        if ($pids === []) {
+            return [];
+        }
+        $live = app(DeliveryState::class)->byProject($pids);
+        $money = [];
+        foreach ($units as $u) {
+            $money[(string) $u['id']] = $u;
+        }
+
+        $rows = [];
+        foreach ($scope['projects'] as $pid => $project) {
+            $pid = (string) $pid;
+            $client = $project['client_id'] ?? null;
+            $id = $client ?? $pid;
+            $rows[$id] ??= [
+                'id' => $id,
+                'kind' => $client !== null ? 'client' : 'project',
+                'name' => $client !== null ? (string) ($scope['clients'][$client] ?? $project['name']) : (string) $project['name'],
+                'platforms' => [],
+            ];
+            foreach ($live[$pid] ?? [] as $provider => $on) {
+                $rows[$id]['platforms'][$provider] = ($rows[$id]['platforms'][$provider] ?? false) || $on;
+            }
+        }
+
+        $out = [];
+        foreach ($rows as $id => $r) {
+            $m = $money[$id] ?? null;
+            if ($r['platforms'] === [] && ($m === null || $m['budget'] === null)) {
+                continue;
+            }
+            ksort($r['platforms']);
+            $out[] = [
+                'id' => $r['id'],
+                'kind' => $r['kind'],
+                'name' => $r['name'],
+                'delivering' => in_array(true, $r['platforms'], true),
+                'delivering_platforms' => $r['platforms'],
+                'budget' => $m['budget'] ?? null,
+                'spent' => $m['spent'] ?? null,
+                'remaining' => $m['remaining'] ?? null,
+                'ratio' => $m['ratio'] ?? null,
+                'currency' => $m['currency'] ?? null,
+            ];
+        }
+
+        return $out;
     }
 
     /** @return list<array{date: string, spend: float}> the last 14 complete days of the scope's spend */

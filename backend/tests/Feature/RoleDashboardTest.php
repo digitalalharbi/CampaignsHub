@@ -246,6 +246,35 @@ final class RoleDashboardTest extends TestCase
         }
     }
 
+    /** DELIVERY-ALL-ROLES-001 — running or stopped reaches every role; the money beside it only with the money key. */
+    public function test_running_or_stopped_reaches_every_member_and_money_only_with_the_key(): void
+    {
+        $both = [(string) $this->alpha->id, (string) $this->beta->id];
+        $running = $this->campaign($this->alpha, 1000, 400, 100);
+        $this->campaign($this->beta, 5000, 200, 50);
+        DailyMetric::create([
+            'id' => (string) Str::uuid(), 'project_id' => $running->project_id, 'external_account_id' => (string) Str::uuid(),
+            'external_campaign_id' => (string) Str::uuid(), 'unified_campaign_id' => $running->id, 'provider' => 'meta',
+            'metric_key' => 'impressions', 'metric_date' => PeriodResolver::today()->subDay()->toDateString(), 'value' => 900,
+        ]);
+
+        $blind = $this->member('blind', array_values(array_diff(WorkspaceRolePresets::all()[WorkspaceRolePresets::MEDIA_BUYER]['permissions'], ['budget.view', 'billing.view'])), $both);
+        $b = collect($this->dash($blind)['delivery'])->keyBy('name');
+        $this->assertSame(['Alpha', 'Beta'], $b->keys()->sort()->values()->all());
+        $this->assertTrue($b['Alpha']['delivering']);
+        $this->assertSame(['meta' => true], $b['Alpha']['delivering_platforms']);
+        $this->assertFalse($b['Beta']['delivering']);
+        foreach ($b as $row) {
+            $this->assertNull($row['budget']);
+            $this->assertNull($row['remaining']);
+        }
+
+        $finance = $this->member(WorkspaceRolePresets::FINANCE, WorkspaceRolePresets::all()[WorkspaceRolePresets::FINANCE]['permissions']);
+        $f = collect($this->dash($finance)['delivery'])->keyBy('name');
+        $this->assertEqualsWithDelta(1000.0, (float) $f['Alpha']['budget'], 0.01);
+        $this->assertNotNull($f['Beta']['remaining']);
+    }
+
     /** DASH-MANAGER-PERFORMANCE-001 — the manager reads every reachable campaign's performance, not only his own. */
     public function test_the_manager_reads_the_performance_of_every_campaign_he_can_reach(): void
     {

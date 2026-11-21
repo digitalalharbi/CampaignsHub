@@ -91,7 +91,7 @@ export function PmView({ d, portal }: { d: RoleDashboard; portal: 'agency' | 'ap
       </div>
 
       {/* DELIVERY-STATE-001 — who is running and who stopped, the same reading as finance. */}
-      <DeliveryPanel units={units} portal={portal} money={m !== null && m !== undefined} />
+      <DeliveryPanel rows={d.delivery} units={units} portal={portal} />
 
       <StatusStrip>
         {(['exceeded', 'near', 'within'] as const).map((s) => (

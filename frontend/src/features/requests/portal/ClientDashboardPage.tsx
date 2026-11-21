@@ -183,7 +183,7 @@ function PortalHomeReport({ ar }: { ar: boolean }) {
   return (
     <section data-testid="portal-home-report">
       {shared.length > 1 && (
-        <div role="tablist" aria-label={ar ? 'التقارير' : 'Reports'} className="mb-3 flex flex-wrap gap-1.5">
+        <div role="tablist" aria-label={ar ? 'التقارير' : 'Reports'} className="mb-3 flex flex-wrap gap-1.5" data-untranslatable>
           {shared.map((r) => (
             <button
               key={r.id}
