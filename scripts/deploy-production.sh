@@ -73,6 +73,12 @@ docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php art
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan queue:contract
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T queue php artisan queue:contract
 
+# TODAY-SPEND-LIVE-001 — a deploy recreates the scheduler container and kills any scheduled command in flight; its
+# `withoutOverlapping` lock does not die with it. With a 24-hour lock every later run of that command was skipped until the
+# next day (2026-11-21: the budget ledger stood still from 02:40). Nothing scheduled is alive at this point, so every lock
+# that remains is stale by definition and is cleared.
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T backend php artisan schedule:clear-cache
+
 # A worker holds the configuration it booted with. `config:cache` above rewrote the backend
 # container's cache and said nothing to Horizon; an environment-only deploy rebuilds no image and so
 # recreates no container, and the master would keep serving the PREVIOUS retry_after while the
