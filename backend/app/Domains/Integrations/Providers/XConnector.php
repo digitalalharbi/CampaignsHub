@@ -320,9 +320,15 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
                 // A promoted retweet carries the post it promotes; its words and media are the original's.
                 $source = is_array($t['retweeted_status'] ?? null) ? $t['retweeted_status'] : $t;
                 $text = $this->plainText($source['full_text'] ?? null) ?? $this->plainText($source['text'] ?? null) ?? $this->plainText($t['full_text'] ?? null);
-                $media = (array) (($source['extended_entities']['media'] ?? null) ?: ($source['entities']['media'] ?? []));
+                // X-MEDIA-FIELDS-002 — X documents a tweet's single image at `entities.media[0].media_url`
+                // (docs.x.com «Identifying media»), and an extended tweet carries its media under `extended_tweet`.
+                // Reading only `media_url_https` left every such promoted tweet with no picture at all.
+                $media = (array) (($source['extended_entities']['media'] ?? null)
+                    ?: ($source['extended_tweet']['extended_entities']['media'] ?? null)
+                    ?: ($source['entities']['media'] ?? null)
+                    ?: ($source['extended_tweet']['entities']['media'] ?? []));
                 $first = is_array($media[0] ?? null) ? $media[0] : [];
-                $still = is_string($first['media_url_https'] ?? null) && str_starts_with($first['media_url_https'], 'https://') ? $first['media_url_https'] : null;
+                $still = self::twimgHttps($first['media_url_https'] ?? null) ?? self::twimgHttps($first['media_url'] ?? null);
                 $cardUri = $source['card_uri'] ?? $t['card_uri'] ?? null;
 
                 $out[$id] = [
@@ -425,33 +431,93 @@ final class XConnector extends ApiAdvertisingConnector implements ReportsCreativ
                     continue;
                 }
 
-                $poster = $https($c['video_poster_url'] ?? null);
-                $still = $poster ?? $https($c['wide_app_image'] ?? null) ?? $https($c['image'] ?? null);
+                // X-MEDIA-FIELDS-002 — every documented still a card body carries: video cards name their poster
+                // `video_poster_url` or `poster_media_url`; image cards `image` / `wide_app_image`, and conversation
+                // cards `media_url` (an image there; a video's `media_url` is a .vmap/.mp4 and is never a still).
+                $poster = self::twimgHttps($c['video_poster_url'] ?? null) ?? self::twimgHttps($c['poster_media_url'] ?? null);
+                $still = $poster ?? self::twimgHttps($c['wide_app_image'] ?? null) ?? self::twimgHttps($c['image'] ?? null)
+                    ?? self::stillImage($c['media_url'] ?? null);
                 $film = $poster !== null;
 
-                if ($still === null) {
-                    foreach ((array) ($c['components'] ?? []) as $component) {
-                        $key = $component['media_key'] ?? ((array) ($component['media_keys'] ?? []))[0] ?? null;
-                        if (is_array($component) && in_array($component['type'] ?? null, ['MEDIA', 'SWIPEABLE_MEDIA'], true) && is_string($key)) {
-                            $media = $this->mediaLibrary($tokens, $adAccountId, $key);
-                            $still = $https($media['poster_media_url'] ?? null) ?? (strtoupper((string) ($media['media_type'] ?? '')) === 'IMAGE' ? $https($media['media_url'] ?? null) : null);
-                            $film = $https($media['poster_media_url'] ?? null) !== null;
-                            break;
-                        }
+                // Component cards (POST accounts/:id/cards): the media is a key, the words sit in DETAILS / BUTTON.
+                // A multi-destination carousel puts the same components inside `slides`; its first slide is the face.
+                $components = (array) ($c['components'] ?? []);
+                if ($components === [] && is_array($c['slides'][0] ?? null)) {
+                    $components = $c['slides'][0];
+                }
+                $title = null;
+                $destination = null;
+                $metadata = is_array($c['media_metadata'] ?? null) ? $c['media_metadata'] : [];
+                foreach ($components as $component) {
+                    if (! is_array($component)) {
+                        continue;
+                    }
+                    if (in_array($component['type'] ?? null, ['DETAILS', 'BUTTON'], true)) {
+                        $title ??= is_string($component['title'] ?? null) && trim($component['title']) !== '' ? trim($component['title']) : null;
+                        $destination ??= $https($component['destination']['url'] ?? null);
+
+                        continue;
+                    }
+                    $key = $component['media_key'] ?? ((array) ($component['media_keys'] ?? []))[0] ?? null;
+                    if ($still !== null || ! in_array($component['type'] ?? null, ['MEDIA', 'SWIPEABLE_MEDIA'], true) || ! is_string($key)) {
+                        continue;
+                    }
+                    // Some card bodies carry the media inline, keyed by media key; read it before asking the library.
+                    $inline = is_array($metadata[$key] ?? null) ? $metadata[$key] : [];
+                    $inlinePoster = self::twimgHttps($inline['poster_media_url'] ?? null) ?? self::twimgHttps($inline['poster_url'] ?? null);
+                    $still = $inlinePoster ?? self::stillImage($inline['url'] ?? null) ?? self::stillImage($inline['media_url'] ?? null);
+                    $film = $inlinePoster !== null;
+                    if ($still === null) {
+                        $media = $this->mediaLibrary($tokens, $adAccountId, $key);
+                        $libraryPoster = self::twimgHttps($media['poster_media_url'] ?? null);
+                        $isVideo = in_array(strtoupper((string) ($media['media_type'] ?? '')), ['VIDEO', 'GIF'], true);
+                        $still = $libraryPoster ?? ($isVideo ? null : self::stillImage($media['media_url'] ?? null));
+                        $film = $libraryPoster !== null;
                     }
                 }
 
                 $out[$c['card_uri']] = [
                     'still' => $still,
                     'film' => $film,
-                    'title' => is_string($c['title'] ?? null) && trim($c['title']) !== '' ? trim($c['title']) : null,
-                    'destination' => $https($c['website_dest_url'] ?? null) ?? $https($c['website_url'] ?? null),
+                    'title' => is_string($c['title'] ?? null) && trim($c['title']) !== '' ? trim($c['title']) : $title,
+                    'destination' => $https($c['website_dest_url'] ?? null) ?? $https($c['website_url'] ?? null) ?? $destination,
                     'type' => is_string($c['card_type'] ?? null) ? $c['card_type'] : null,
                 ];
             }
         }
 
         return $out;
+    }
+
+    /**
+     * X-MEDIA-FIELDS-002 — an X media link, on https. X still serves `media_url` as `http://pbs.twimg.com/…`; the same
+     * object is served on https from the same host, so only X's own image hosts are upgraded — nothing else is trusted.
+     */
+    private static function twimgHttps(mixed $url): ?string
+    {
+        if (! is_string($url) || $url === '') {
+            return null;
+        }
+        if (str_starts_with($url, 'https://')) {
+            return $url;
+        }
+        if (preg_match('#^http://((?:pbs|ton|video)\.twimg\.com)/#', $url) === 1) {
+            return 'https://'.substr($url, 7);
+        }
+
+        return null;
+    }
+
+    /** An image link only: a video's `media_url` (.vmap, .mp4, .m3u8) is never a still. */
+    private static function stillImage(mixed $url): ?string
+    {
+        $url = self::twimgHttps($url);
+        if ($url === null) {
+            return null;
+        }
+        $path = strtolower((string) parse_url($url, PHP_URL_PATH));
+
+        return preg_match('/\.(vmap|mp4|m3u8|mov|webm)$/', $path) === 1 ? null : $url;
     }
 
     /** @return array<string, mixed> one media library object, or nothing when it cannot be read */
