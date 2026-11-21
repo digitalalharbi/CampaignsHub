@@ -286,6 +286,15 @@ describe('running or stopped, merged with the budget, for every role', () => {
     })
   }
 
+  it('reads as a table like the budgets table: one header row, the clients under it (DELIVERY-TABLE-001)', () => {
+    page(base({ view: 'manager', delivery }))
+    const panel = screen.getByTestId('dash-panel-delivery')
+    const header = within(panel).getByTestId('dash-delivery-header')
+    expect(header.children).toHaveLength(5)
+    expect(header).toHaveTextContent(/Client · project.*Status.*Platforms.*Spent.*Remaining/)
+    expect(within(panel).getByTestId('dash-delivery-c1')).toHaveTextContent('Client')
+  })
+
   it('shows the state with no money for a member without the money key', () => {
     page(base({ view: 'marketer', can_money: false, money: null, units: [], delivery: delivery.map((r) => ({ ...r, budget: null, spent: null, remaining: null, ratio: null })) }))
     const panel = screen.getByTestId('dash-panel-delivery')
