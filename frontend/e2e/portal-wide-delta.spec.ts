@@ -27,14 +27,15 @@ test('a +2,681% movement stays inside its card and the page does not scroll side
   })
 
   await page.goto('/portal')
-  await expect(page.getByTestId('client-kpis'), 'the dashboard cards are drawn').toBeVisible({ timeout: 30_000 })
+  // PORTAL-REPORT-HOME-001 — the home opens the client's shared report, or the live dashboard where none is shared.
+  await expect(page.locator('[data-testid="portal-home-report"], [data-testid="client-kpis"]').first(), 'the home draws its figures').toBeVisible({ timeout: 30_000 })
   await page.waitForLoadState('networkidle').catch(() => undefined)
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow, 'page-level horizontal overflow').toBeLessThanOrEqual(0)
 
   // And nothing in the cards pokes out of the viewport on either side.
-  const outside = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-testid="client-kpis"] *')]
+  const outside = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-testid="client-kpis"] *, [data-testid="portal-home-report"] [data-testid$="-kpis"] *')]
     .map((el) => el.getBoundingClientRect())
     .filter((r) => r.width > 0 && (r.left < -1 || r.right > document.documentElement.clientWidth + 1)).length)
   expect(outside, 'card parts outside the screen').toBe(0)
