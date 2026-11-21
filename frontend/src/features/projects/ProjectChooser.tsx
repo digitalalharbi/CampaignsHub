@@ -44,7 +44,7 @@ export type ProjectChooserPurpose = 'campaigns' | 'analytics' | 'reports' | 'rec
  *
  * A card is this tall and the grid's gap is 8px.
  */
-const CARD_HEIGHT = 156
+const CARD_HEIGHT = 148
 const CARD_GAP = 8
 
 /**
@@ -153,7 +153,7 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
               data-testid={`project-choice-${p.id}`}
               onClick={() => choose(p)}
               style={fitted ? { height: CARD_HEIGHT } : undefined}
-              className="group flex w-full flex-col rounded-2xl border border-border bg-surface p-3.5 text-start transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 motion-reduce:transform-none"
+              className="group flex w-full flex-col overflow-hidden rounded-2xl border border-border bg-surface p-3 text-start transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 motion-reduce:transform-none"
             >
               <ChoiceCard p={p} ar={ar} />
             </button>
@@ -167,10 +167,10 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
 }
 
 const TONE = {
-  danger: { ring: 'stroke-danger', chip: 'bg-danger/10 text-danger', bar: 'bg-danger' },
-  warning: { ring: 'stroke-warning', chip: 'bg-warning/10 text-warning', bar: 'bg-warning' },
-  success: { ring: 'stroke-success', chip: 'bg-success/10 text-success', bar: 'bg-success' },
-  neutral: { ring: 'stroke-border-strong', chip: 'bg-surface-secondary text-text-secondary', bar: 'bg-border-strong' },
+  danger: { text: 'text-danger', chip: 'bg-danger/10 text-danger', bar: 'bg-danger' },
+  warning: { text: 'text-warning', chip: 'bg-warning/10 text-warning', bar: 'bg-warning' },
+  success: { text: 'text-success', chip: 'bg-success/10 text-success', bar: 'bg-success' },
+  neutral: { text: 'text-text-secondary', chip: 'bg-surface-secondary text-text-secondary', bar: 'bg-border-strong' },
 } as const
 
 function budgetTone(b: BudgetRow): keyof typeof TONE {
@@ -198,22 +198,6 @@ function ago(iso: string | null, ar: boolean): string | null {
   return fmtDateTime(iso)
 }
 
-function Gauge({ ratio, tone }: { ratio: number | null; tone: keyof typeof TONE }) {
-  const size = 46
-  const r = size / 2 - 4
-  const c = 2 * Math.PI * r
-  const f = ratio === null ? 0 : Math.max(0, Math.min(1, ratio))
-  return (
-    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }} data-testid="chooser-gauge">
-      <svg aria-hidden width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth="5" className="stroke-surface-secondary" />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth="5" strokeLinecap="round" className={`${TONE[tone].ring} transition-[stroke-dasharray] duration-700`} strokeDasharray={`${c * f} ${c}`} />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-text-primary">{ratio === null ? '—' : <Num>{`${Math.round(ratio * 100)}%`}</Num>}</span>
-    </span>
-  )
-}
-
 /** PROJECT-CHOOSER-VISUAL-001 — one project, as a card worth choosing from. */
 function ChoiceCard({ p, ar }: { p: Row; ar: boolean }) {
   const b = p.budget
@@ -225,44 +209,45 @@ function ChoiceCard({ p, ar }: { p: Row; ar: boolean }) {
   return (
     <>
       <div className="flex items-start gap-2.5">
-        <ClientAvatar name={p.client_name || p.name} logo={p.client_logo} size={38} />
+        <ClientAvatar name={p.client_name || p.name} logo={p.client_logo} size={32} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-extrabold text-text-primary group-hover:text-brand-600">{p.name}</div>
-          <div className="truncate text-xs text-text-secondary">{p.client_name && p.client_name !== p.name ? p.client_name : (p.client_name ? (ar ? 'عميل' : 'Client') : (ar ? 'بلا عميل' : 'No client'))}</div>
-          {b && <span data-testid={`chooser-budget-${p.id}`} className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${TONE[t].chip}`}>{budgetLabel(b, ar)}</span>}
+          <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-xs text-text-secondary">{p.client_name && p.client_name !== p.name ? p.client_name : (p.client_name ? (ar ? 'عميل' : 'Client') : (ar ? 'بلا عميل' : 'No client'))}</span>
+          {b && <span data-testid={`chooser-budget-${p.id}`} className={`inline-flex shrink-0 rounded-full px-2 py-px text-xs font-bold ${TONE[t].chip}`}>{budgetLabel(b, ar)}</span>}
           {!b && attention && (
-            <span className="mt-1 inline-flex rounded-full bg-warning/10 px-2 py-0.5 text-xs font-bold text-warning">
+            <span className="inline-flex shrink-0 rounded-full bg-warning/10 px-2 py-px text-xs font-bold text-warning">
               {attention === 'no_accounts' ? (ar ? 'بلا حسابات مربوطة' : 'No accounts linked') : attention === 'never_synced' ? (ar ? 'لم تصل بيانات بعد' : 'No data yet') : (ar ? 'البيانات قديمة' : 'Data is stale')}
             </span>
           )}
+          </div>
         </div>
-        {b && !credit && <Gauge ratio={b.used_ratio} tone={t} />}
       </div>
 
       {b && (
         <div className="mt-2 space-y-1">
           <div className="flex items-baseline justify-between gap-2 text-xs">
-            <span className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
             <span className="truncate font-bold text-text-primary">
               <Num>{money(credit ? (b.to_date ?? b.spent) : b.spent, b.currency)}</Num>
               {!credit && <span className="font-normal text-text-muted"> / <Num>{money(b.approved, b.currency)}</Num></span>}
             </span>
+            {!credit && b.used_ratio !== null && <span data-testid="chooser-gauge" className={`shrink-0 font-bold ${TONE[t].text}`}><Num>{`${Math.round(b.used_ratio * 100)}%`}</Num></span>}
           </div>
           {!credit && (
             <span className="block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
               <span className={`block h-full rounded-full ${TONE[t].bar}`} style={{ width: `${Math.round(Math.min(1, b.used_ratio ?? 0) * 100)}%` }} />
             </span>
           )}
-          <div className="flex items-center justify-between gap-2 text-xs">
-            {!credit && b.remaining !== null && <span className={b.remaining < 0 ? 'font-bold text-danger' : 'text-text-secondary'}>{ar ? 'المتبقي' : 'Left'} <Num>{money(b.remaining, b.currency)}</Num></span>}
-            {b.run_out_date && <span className="inline-flex items-center gap-1 text-text-muted" title={ar ? 'تاريخ النفاد بمعدل آخر 3 أيام' : 'Runs out at the last 3 days’ pace'}><CalendarClock size={11} aria-hidden /><Num>{b.run_out_date}</Num></span>}
+          <div className="flex items-center justify-between gap-2 truncate text-xs">
+            {!credit && b.remaining !== null && <span className={`truncate ${b.remaining < 0 ? 'font-bold text-danger' : 'text-text-secondary'}`}>{ar ? 'المتبقي' : 'Left'} <Num>{money(b.remaining, b.currency)}</Num></span>}
+            {b.run_out_date && <span className="inline-flex shrink-0 items-center gap-1 text-text-muted" title={ar ? 'تاريخ النفاد بمعدل آخر 3 أيام' : 'Runs out at the last 3 days’ pace'}><CalendarClock size={11} aria-hidden /><Num>{b.run_out_date}</Num></span>}
           </div>
         </div>
       )}
 
-      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2">
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-1.5">
         <span className="flex min-w-0 items-center gap-1" data-testid={`chooser-platforms-${p.id}`}>
-          {p.providers.slice(0, 6).map((pr) => <ProviderMark key={pr} provider={pr} size={18} />)}
+          {p.providers.slice(0, 5).map((pr) => <ProviderMark key={pr} provider={pr} size={16} />)}
           {p.providers.length === 0 && <span className="text-xs text-text-muted">—</span>}
         </span>
         <span className="flex shrink-0 items-center gap-2.5 text-xs text-text-muted">
