@@ -1617,8 +1617,9 @@ final class MetricsAggregator
      *  4. the account's own row: what the platform said about it and how its last data refresh went.
      *
      * The state is decided here, once, by priority: a broken connection is never hidden behind «stopped»,
-     * an account the platform switched off is never shown as merely quiet, and «running» needs evidence —
-     * a delivering campaign or spend yesterday/today. Nothing is guessed: an account the platform never
+     * an account the platform switched off is never shown as merely quiet, and «running» is the one rule of
+     * the whole product (DELIVERY-RULE-7D-001): spend in the last 7 days — a campaign the platform still calls
+     * active but that spent nothing is not running. Nothing is guessed: an account the platform never
      * described is judged on its campaigns and its spend alone.
      *
      * @return list<array<string, mixed>>
@@ -1691,7 +1692,8 @@ final class MetricsAggregator
             ->get(['id', 'external_id', 'name', 'currency', 'timezone', 'status', 'access_lost_at', 'last_synced_at', 'last_sync_attempt_at', 'last_sync_error_category'])
             ->keyBy('id');
 
-        $recent = $today->copy()->subDay()->toDateString();
+        // DELIVERY-RULE-7D-001 — «running» is the one rule: spend in the last 7 days ({@see DeliveryState}).
+        $recent = app(DeliveryState::class)->from();
 
         foreach ($out as $k => $row) {
             $a = $row['account_id'] === null ? null : $accounts->get($row['account_id']);
@@ -1708,7 +1710,7 @@ final class MetricsAggregator
             $state = match (true) {
                 $connectionLost || $refreshFailed => 'error',
                 $switchedOff => 'disabled',
-                ($c['active'] ?? 0) > 0 || $spentRecently => 'running',
+                $spentRecently => 'running',
                 default => 'stopped',
             };
 
