@@ -100,7 +100,105 @@ export function LivePlatforms({ platforms, ar }: { platforms: Record<string, boo
   )
 }
 
-export const needsAttention = (r: BudgetRow) => ['over', 'low', 'incomplete', 'credit_over', 'credit_near'].includes(r.status) || r.plan_alerts > 0
+/**
+ * BUDGET-LIVE-MERGED-001 — Owner 2026-11-21: «شغّالة ولا واقفة» is not a column of its own; it rides the budget.
+ * The platforms of one budget, in one order shared by the bar and the marks: by spend, largest first, then any platform that
+ * delivers with no spend in the period yet. Each keeps its series colour so a mark names its own segment.
+ */
+export type RowPlatform = { provider: string; spent: number; color: string; on: boolean | undefined; part?: BudgetRow['by_platform'][number] }
+
+export function rowPlatforms(row: Pick<BudgetRow, 'by_platform' | 'delivering_platforms'>): RowPlatform[] {
+  const live = row.delivering_platforms ?? {}
+  const spent = [...(row.by_platform ?? [])].sort((a, b) => b.spent - a.spent)
+  const seen = new Set(spent.map((p) => p.provider))
+  const list = [
+    ...spent.map((p) => ({ provider: p.provider, spent: p.spent, on: live[p.provider], part: p })),
+    ...Object.keys(live).filter((p) => !seen.has(p)).map((p) => ({ provider: p, spent: 0, on: live[p], part: undefined })),
+  ]
+
+  return list.map((p, n) => ({ ...p, color: CHART_SERIES[n % CHART_SERIES.length] }))
+}
+
+/** The whole budget as one track; the spent part is cut into the platforms' shares, in their colours. */
+export function SpendTrack({ platforms, used, red, tone, ar }: { platforms: RowPlatform[]; used: number | null; red: boolean; tone: 'success' | 'warning' | 'danger' | 'neutral'; ar: boolean }) {
+  const withSpend = platforms.filter((p) => p.part !== undefined)
+  const total = withSpend.reduce((s, p) => s + p.spent, 0)
+  const width = used === null ? 100 : Math.round(used * 100)
+
+  return (
+    <span
+      className={`flex h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-secondary ${red ? 'ring-1 ring-danger' : ''}`}
+      data-testid="platform-split"
+      dir={ar ? 'rtl' : 'ltr'}
+    >
+      <span className="flex h-full overflow-hidden rounded-full" style={{ width: `${width}%` }}>
+        {withSpend.length === 0 ? (
+          <span className={`block h-full w-full ${TONE_BAR[red ? 'danger' : tone]}`} />
+        ) : (
+          withSpend.map((p) => (
+            <span
+              key={p.provider}
+              title={platformTip(p.part!, ar)}
+              data-testid={`split-${p.provider}`}
+              className={`block h-full ${p.part!.unconverted_days ? 'opacity-60' : ''}`}
+              style={{ width: total > 0 ? `${(p.spent / total) * 100}%` : `${100 / withSpend.length}%`, background: p.color }}
+            />
+          ))
+        )}
+      </span>
+    </span>
+  )
+}
+
+/** Each platform's own mark: full colour with a green ring = شغّالة, grey and faded = واقفة; its colour line ties it to the bar. */
+export function PlatformMarks({ platforms, ar, testId = 'live-platforms' }: { platforms: RowPlatform[]; ar: boolean; testId?: string }) {
+  if (platforms.length === 0) return null
+  const ordered = [...platforms].sort((a, b) => Number(b.on === true) - Number(a.on === true))
+
+  return (
+    <span className="flex flex-wrap items-center gap-2" data-testid={testId}>
+      {ordered.map((p) => {
+        const state = p.on === undefined ? null : p.on ? (ar ? 'شغّالة' : 'Running') : (ar ? 'واقفة' : 'Stopped')
+        const money = p.part ? platformTip(p.part, ar) : providerLabel(p.provider, ar ? 'ar' : 'en')
+        return (
+          <span
+            key={p.provider}
+            title={[money, state].filter(Boolean).join(' · ')}
+            data-testid={`live-platform-${p.provider}`}
+            data-on={p.on === undefined ? undefined : p.on ? 'true' : 'false'}
+            className="relative inline-flex flex-col items-center gap-0.5"
+          >
+            <span className={`inline-flex rounded-md ring-2 ring-offset-1 ring-offset-[var(--surface)] ${p.on ? 'ring-success' : 'opacity-45 grayscale ring-border'}`}>
+              <ProviderMark provider={p.provider} size={20} />
+            </span>
+            <span aria-hidden className="h-0.5 w-3.5 rounded-full" style={{ background: p.part ? p.color : 'transparent' }} />
+            {state && <span className="sr-only">{`${providerLabel(p.provider, ar ? 'ar' : 'en')} · ${state}`}</span>}
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
+/** The budget's own state beside the client: one chip, green «شغّالة» or grey «واقفة». */
+export function LiveChip({ on, ar, testId }: { on: boolean | undefined; ar: boolean; testId?: string }) {
+  if (on === undefined) return null
+  const why = on ? (ar ? 'إنفاق وظهور آخر 3 أيام' : 'Spend and impressions in the last 3 days') : (ar ? 'لا إنفاق أو ظهور آخر 3 أيام' : 'No spend or impressions in the last 3 days')
+
+  return (
+    <span
+      title={why}
+      data-testid={testId}
+      data-on={on ? 'true' : 'false'}
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-[var(--radius-pill)] px-1.5 py-px text-[11px] font-bold ${on ? 'bg-success/12 text-success' : 'bg-surface-secondary text-text-muted'}`}
+    >
+      <LiveDot on={on} ar={ar} />
+      {on ? (ar ? 'شغّالة' : 'Running') : (ar ? 'واقفة' : 'Stopped')}
+    </span>
+  )
+}
+
+export const needsAttention =(r: BudgetRow) => ['over', 'low', 'incomplete', 'credit_over', 'credit_near'].includes(r.status) || r.plan_alerts > 0
 const isRed = (r: BudgetRow) => r.status === 'over' || r.status === 'credit_over'
 
 /** The mode chip of a row: مباشر / بالأجل, and مخطّطة beside it when the budget has a platform split. */
@@ -142,13 +240,16 @@ function Fig({ label, children }: { label: { ar: string; en: string }; children:
   )
 }
 
+/** The board's columns on a large screen: client · period · budget with its platforms · status. */
+const ROW_COLS = 'lg:grid-cols-[minmax(0,1.35fr)_10.25rem_minmax(0,3.6fr)_minmax(0,1.25fr)]'
+
 /** The column titles of the board, over the rows (large screens; on a phone each figure names itself). */
 export function BoardHeader({ ar }: { ar: boolean }) {
   const h = (v: { ar: string; en: string }) => <span className="truncate text-xs font-bold text-text-muted">{ar ? v.ar : v.en}</span>
 
   return (
-    <div className="hidden min-w-0 grid-cols-[minmax(0,1.5fr)_10.25rem_minmax(0,2.6fr)_minmax(0,1.3fr)_7.25rem] gap-x-3 px-2.5 leading-none lg:grid" data-testid="board-header">
-      {h({ ar: 'العميل · المشروع', en: 'Client · project' })}{h(L.period)}{h({ ar: 'الأرقام', en: 'Figures' })}{h(L.platforms)}{h({ ar: 'الحالة', en: 'Status' })}
+    <div className={`hidden min-w-0 ${ROW_COLS} gap-x-3 px-2.5 leading-none lg:grid`} data-testid="board-header">
+      {h({ ar: 'العميل · المشروع', en: 'Client · project' })}{h(L.period)}{h({ ar: 'الميزانية والمنصات', en: 'Budget and platforms' })}{h({ ar: 'الحالة', en: 'Status' })}
     </div>
   )
 }
@@ -167,6 +268,8 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
   // BUDGET-ROW-001 — under the alert floor is red only once money has been spent: a small budget that is untouched is not «قرّبت تخلص».
   const red = isRed(row) || (!credit && row.spent > 0 && row.remaining !== null && row.remaining < row.alert_floor)
   const off = row.plan_alerts > 0 || (row.plan ?? []).some((p) => p.flag !== null)
+  const platforms = rowPlatforms(row)
+  const tone = red ? 'danger' : st.tone
 
   return (
     <button
@@ -174,7 +277,7 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
       onClick={onOpen}
       aria-current={active}
       data-testid={`budget-row-${row.project_id}`}
-      className={`grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0 rounded-[10px] border px-2.5 py-0.5 text-start transition lg:grid-cols-[minmax(0,1.5fr)_10.25rem_minmax(0,2.6fr)_minmax(0,1.3fr)_7.25rem] ${active ? 'border-brand-600 bg-surface' : 'border-border bg-surface hover:border-border-strong'}`}
+      className={`grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 rounded-[10px] border px-2.5 py-1.5 text-start transition ${ROW_COLS} ${active ? 'border-brand-600 bg-surface' : 'border-border bg-surface hover:border-border-strong'}`}
     >
       <span className="flex min-w-0 items-center gap-1.5">
         <span
@@ -184,8 +287,8 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
         />
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="flex min-w-0 items-center gap-1.5">
-            <LiveDot on={row.delivering} ar={ar} testId={`budget-live-${row.project_id}`} />
             <span className="truncate text-sm font-bold text-text-primary">{row.client_name}</span>
+            <LiveChip on={row.delivering} ar={ar} testId={`budget-live-${row.project_id}`} />
           </span>
           <span className="flex min-w-0 items-center gap-1.5">
             <span className="truncate text-xs text-text-muted">{row.project_name}</span>
@@ -213,24 +316,26 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
               <Fig label={L.remaining}><Money n={row.remaining} currency="SAR" className={red ? 'text-danger' : ''} /></Fig>
             </span>
           )}
-          {used !== null && (
-            // BUDGET-ROW-001 — the whole track is the budget and the filled part is what was spent, named «صُرف» so the
-            // percentage is never read as what is left.
-            <span className="mt-0.5 flex min-w-0 items-center gap-1.5" title={`${ar ? 'صُرف' : 'Spent'} ${Math.round(used * 100)}% ${ar ? 'من الميزانية' : 'of the budget'}`}>
-              <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
-                <span className={`block h-full rounded-full ${TONE_BAR[red ? 'danger' : st.tone]}`} style={{ width: `${Math.round(used * 100)}%` }} />
-              </span>
-              <span className="shrink-0 whitespace-nowrap text-xs font-semibold leading-none text-text-muted">{ar ? 'صُرف' : 'Spent'}</span>
-              <bdi dir="ltr" className="tnum shrink-0 text-xs font-extrabold leading-none text-text-primary" data-testid="used-percent">{Math.round(used * 100)}%</bdi>
-              {credit && row.ceiling !== null && <span className="text-xs text-text-muted">{ar ? L.ceiling.ar : L.ceiling.en} <Money n={row.ceiling} currency="SAR" /></span>}
+          {/* BUDGET-ROW-001 + BUDGET-LIVE-MERGED-001 — one track is the whole budget; the filled part is what was spent, cut by
+              platform in their colours, named «صُرف» so the percentage is never read as what is left. With no ceiling (بالأجل)
+              the track is the spend itself, split by platform, with no percentage. */}
+          {(used !== null || platforms.some((p) => p.part)) && (
+            <span className="mt-1 flex min-w-0 items-center gap-1.5" title={used === null ? undefined : `${ar ? 'صُرف' : 'Spent'} ${Math.round(used * 100)}% ${ar ? 'من الميزانية' : 'of the budget'}`}>
+              <SpendTrack platforms={platforms} used={used} red={red} tone={tone} ar={ar} />
+              {used !== null && (
+                <>
+                  <span className="shrink-0 whitespace-nowrap text-xs font-semibold leading-none text-text-muted">{ar ? 'صُرف' : 'Spent'}</span>
+                  <bdi dir="ltr" className="tnum shrink-0 text-xs font-extrabold leading-none text-text-primary" data-testid="used-percent">{Math.round(used * 100)}%</bdi>
+                </>
+              )}
+              {credit && row.ceiling !== null && <span className="shrink-0 whitespace-nowrap text-xs text-text-muted">{ar ? L.ceiling.ar : L.ceiling.en} <Money n={row.ceiling} currency="SAR" /></span>}
             </span>
           )}
+          <span className="mt-1.5"><PlatformMarks platforms={platforms} ar={ar} /></span>
         </span>
       </span>
 
-      <span className="col-span-2 min-w-0 lg:col-span-1"><PlatformSplit items={row.by_platform} ar={ar} /><LivePlatforms platforms={row.delivering_platforms} ar={ar} /></span>
-
-      <span className="col-span-2 flex flex-wrap items-center justify-self-start gap-1 lg:col-span-1 lg:justify-self-end">
+      <span className="col-span-2 flex min-w-0 flex-wrap items-center justify-self-start gap-1.5 lg:col-span-1 lg:flex-col lg:items-end lg:justify-self-end">
         <span title={ar ? STATUS_WHY[row.status].ar : STATUS_WHY[row.status].en} data-testid="row-status"><Badge tone={st.tone} className="whitespace-nowrap">{ar ? st.ar : st.en}</Badge></span>
         <PaceNote row={row} ar={ar} />
         {/* PROJECT-LIFECYCLE-001 §7 — what the spend excludes (no rate) and the old rate used, named; the drawer shows the full statement. */}
