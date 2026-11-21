@@ -250,13 +250,11 @@ final class RoleDashboardTest extends TestCase
     public function test_running_or_stopped_reaches_every_member_and_money_only_with_the_key(): void
     {
         $both = [(string) $this->alpha->id, (string) $this->beta->id];
-        $running = $this->campaign($this->alpha, 1000, 400, 100);
-        $this->campaign($this->beta, 5000, 200, 50);
-        DailyMetric::create([
-            'id' => (string) Str::uuid(), 'project_id' => $running->project_id, 'external_account_id' => (string) Str::uuid(),
-            'external_campaign_id' => (string) Str::uuid(), 'unified_campaign_id' => $running->id, 'provider' => 'meta',
-            'metric_key' => 'impressions', 'metric_date' => PeriodResolver::today()->subDay()->toDateString(), 'value' => 900,
-        ]);
+        $this->campaign($this->alpha, 1000, 400, 100);
+        $quiet = $this->campaign($this->beta, 5000, 200, 50);
+        // DELIVERY-RULE-7D-001 — Beta spent 12 days ago and nothing in the last 7: stopped, with budget left.
+        DailyMetric::query()->where('project_id', $quiet->project_id)
+            ->where('metric_date', '>=', PeriodResolver::today()->subDays(6)->toDateString())->delete();
 
         $blind = $this->member('blind', array_values(array_diff(WorkspaceRolePresets::all()[WorkspaceRolePresets::MEDIA_BUYER]['permissions'], ['budget.view', 'billing.view'])), $both);
         $b = collect($this->dash($blind)['delivery'])->keyBy('name');
@@ -264,6 +262,8 @@ final class RoleDashboardTest extends TestCase
         $this->assertTrue($b['Alpha']['delivering']);
         $this->assertSame(['meta' => true], $b['Alpha']['delivering_platforms']);
         $this->assertFalse($b['Beta']['delivering']);
+        $this->assertSame('running', $b['Alpha']['reason']);
+        $this->assertSame('no_spend', $b['Beta']['reason']);
         foreach ($b as $row) {
             $this->assertNull($row['budget']);
             $this->assertNull($row['remaining']);
