@@ -1005,6 +1005,32 @@ export interface AccountRow extends MetricTotals {
 export const useAccounts = (p: string | null, r: Range, f?: MetricFilters) =>
   useMetric<AccountRow[]>('accounts', p, r, 'accounts', f)
 
+/** ACCOUNTS-PULSE-001 — the state the server decided, by priority: a broken connection first, never hidden. */
+export type AccountState = 'error' | 'disabled' | 'running' | 'stopped'
+
+export interface AccountPulse {
+  account_id: string | null
+  provider: string
+  state: AccountState
+  /** One point per reported day inside the window — the SHAPE of the account's days; the money is `AccountRow`'s. */
+  daily: Array<{ date: string; spend: number; clicks: number; impressions: number }>
+  last_spend_date: string | null
+  active_campaigns: number
+  paused_campaigns: number
+  ended_campaigns: number
+  platform_status: string | null
+  external_id: string | null
+  currency: string | null
+  timezone: string | null
+  last_synced_at: string | null
+  last_sync_attempt_at: string | null
+  sync_error: string | null
+}
+
+/** ACCOUNTS-PULSE-001 — running or stopped, per ad account, over the same scope as `useAccounts`. */
+export const useAccountPulse = (p: string | null, r: Range) =>
+  useMetric<AccountPulse[]>('account-pulse', p, r, 'accounts/pulse')
+
 export const useCampaigns = (p: string | null, r: Range, f?: MetricFilters) => useMetric<CampaignRow[]>('campaigns', p, r, 'campaigns', f)
 /**
  * UX-MULTISELECT-SCALE-002 — the campaign selector's options come from the SERVER.
