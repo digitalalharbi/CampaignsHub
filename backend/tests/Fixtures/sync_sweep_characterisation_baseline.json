@@ -610,7 +610,8 @@
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
                 "project_id": null,
-                "requested_scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]"
+                "requested_scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]",
+                "issuing_app_verified_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -642,7 +643,8 @@
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
                 "project_id": null,
-                "requested_scopes": "[\"snapchat-marketing-api\"]"
+                "requested_scopes": "[\"snapchat-marketing-api\"]",
+                "issuing_app_verified_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -674,7 +676,8 @@
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
                 "project_id": null,
-                "requested_scopes": "[]"
+                "requested_scopes": "[]",
+                "issuing_app_verified_at": null
             }
         ],
         "period_reach": [
@@ -2139,7 +2142,8 @@
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
                 "project_id": null,
-                "requested_scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]"
+                "requested_scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]",
+                "issuing_app_verified_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -2171,7 +2175,8 @@
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
                 "project_id": null,
-                "requested_scopes": "[\"snapchat-marketing-api\"]"
+                "requested_scopes": "[\"snapchat-marketing-api\"]",
+                "issuing_app_verified_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -2203,7 +2208,8 @@
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
                 "project_id": null,
-                "requested_scopes": "[]"
+                "requested_scopes": "[]",
+                "issuing_app_verified_at": null
             }
         ],
         "period_reach": [
@@ -4065,7 +4071,8 @@
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
                 "project_id": null,
-                "requested_scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]"
+                "requested_scopes": "[\"ads_read\", \"ads_management\", \"business_management\"]",
+                "issuing_app_verified_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000000568",
@@ -4097,7 +4104,8 @@
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
                 "project_id": null,
-                "requested_scopes": "[\"snapchat-marketing-api\"]"
+                "requested_scopes": "[\"snapchat-marketing-api\"]",
+                "issuing_app_verified_at": null
             },
             {
                 "id": "00000000-0000-4000-8000-000000001290",
@@ -4129,7 +4137,8 @@
                 "provider_identity_email": null,
                 "provider_identity_fetched_at": null,
                 "project_id": null,
-                "requested_scopes": "[]"
+                "requested_scopes": "[]",
+                "issuing_app_verified_at": null
             }
         ],
         "period_reach": [
