@@ -57,6 +57,11 @@ final class AlertSweepCharacterisationTest extends TestCase
         $this->assertNotEmpty($sweeps['mail'], 'the world must mail somebody');
         $this->assertNotEmpty($sweeps['1_first']['spend_limit_events'], 'the workspace limit must be crossed');
 
+        // TEMPORARY PROBE (tmp branch only, never merged): hand the measured document to the CI evidence artifact.
+        if (is_string(getenv('RUNNER_TEMP')) && getenv('RUNNER_TEMP') !== '') {
+            @mkdir(getenv('RUNNER_TEMP').'/backend-evidence', 0777, true);
+            file_put_contents(getenv('RUNNER_TEMP').'/backend-evidence/alert_sweep_now.json', $now."\n");
+        }
         if (getenv('WRITE_ALERT_SWEEP_BASELINE') === '1') {
             file_put_contents(self::BASELINE, $now."\n");
         }
