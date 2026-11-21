@@ -12,7 +12,7 @@ vi.mock('./api', async (importOriginal) => ({
   // WATCH-BOARD-001 — the follow-up board's own request.
   useWatchBoard: () => ({ data: state.watch, isLoading: false, isError: false, isFetching: false, isPlaceholderData: false }),
 }))
-vi.mock('@/features/funding/fundingApi', () => ({ useFinancialDisclaimer: () => ({ data: { ar: 'نص', en: 'Disclaimer' } }) }))
+vi.mock('@/features/funding/fundingApi', () => ({ useFinancialDisclaimer: () => ({ data: { ar: 'نص', en: 'Disclaimer' } }), useBudgets: () => ({ data: undefined }) }))
 
 import { RoleDashboardPage } from './RoleDashboardPage'
 
