@@ -1719,7 +1719,8 @@ final class MetricsAggregator
                 'ended_campaigns' => $c['ended'] ?? 0,
                 'platform_status' => $platformStatus,
                 'external_id' => $a?->external_id,
-                'currency' => $a?->currency,
+                // The account's own currency, as the platform names it — a label, not the unit of `daily` (that is the project's).
+                'account_currency' => $a?->currency,
                 'timezone' => $a?->timezone,
                 'last_synced_at' => $lastOk?->toIso8601String(),
                 'last_sync_attempt_at' => $lastTry?->toIso8601String(),

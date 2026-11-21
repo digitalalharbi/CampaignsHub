@@ -332,7 +332,7 @@ function AccountDetail({ row, pulse, ar, spend, ctr }: {
           )}
         </div>
         <div className="flex gap-2 text-xs text-text-muted">
-          {pulse?.currency && <span className="rounded-md bg-surface-secondary px-2 py-0.5 font-bold">{pulse.currency}</span>}
+          {pulse?.account_currency && <span className="rounded-md bg-surface-secondary px-2 py-0.5 font-bold">{pulse.account_currency}</span>}
           {pulse?.timezone && <span className="rounded-md bg-surface-secondary px-2 py-0.5" dir="ltr">{pulse.timezone}</span>}
         </div>
       </div>

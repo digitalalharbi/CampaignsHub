@@ -10,7 +10,7 @@ const row = (provider: string, id: string, name: string, spend: number, impressi
 const pulse = (provider: string, id: string, state: string, active: number, spends: number[]) => ({
   provider, account_id: id, state, active_campaigns: active, paused_campaigns: 0, ended_campaigns: 0,
   daily: spends.map((s, i) => ({ date: `2026-11-0${i + 1}`, spend: s, clicks: 0, impressions: 0 })),
-  last_spend_date: '2026-11-20', platform_status: 'active', external_id: `ext-${id}`, currency: 'SAR', timezone: 'Asia/Riyadh',
+  last_spend_date: '2026-11-20', platform_status: 'active', external_id: `ext-${id}`, account_currency: 'SAR', timezone: 'Asia/Riyadh',
   last_synced_at: '2026-11-21T02:00:00Z', last_sync_attempt_at: null, sync_error: state === 'error' ? 'access_lost' : null,
 })
 

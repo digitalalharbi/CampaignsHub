@@ -1020,7 +1020,7 @@ export interface AccountPulse {
   ended_campaigns: number
   platform_status: string | null
   external_id: string | null
-  currency: string | null
+  account_currency: string | null
   timezone: string | null
   last_synced_at: string | null
   last_sync_attempt_at: string | null
