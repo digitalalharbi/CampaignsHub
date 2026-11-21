@@ -218,8 +218,8 @@ final class TaxonomyAlignmentTest extends TestCase
             ->where('taxonomy_definition_id', $definition->getKey())
             ->whereNull('tenant_id')->where('is_active', true)->get();
 
-        // 10 categories (roots) + ~90 services (children), all published (is_public).
-        $this->assertSame(10, $options->whereNull('parent_option_id')->count());
+        // 11 categories (roots, SOFTWARE-SERVICES-001 added the software one) + ~100 services, all published (is_public).
+        $this->assertSame(11, $options->whereNull('parent_option_id')->count());
         $this->assertGreaterThanOrEqual(90, $options->whereNotNull('parent_option_id')->count());
         $this->assertSame($options->count(), $options->where('is_public', true)->count());
     }
