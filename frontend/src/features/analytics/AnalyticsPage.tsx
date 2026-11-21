@@ -3764,7 +3764,7 @@ export function EntityTab({ projectId, range, filters, level, workspace, part = 
               still sortable; the reader chooses, and the default is the answer to the question they
               opened the tab with.
             */}
-            <MetricTable head={head} rows={cells} values={values} exact={exact} />
+            <MetricTable head={head} rows={cells} values={values} exact={exact} nameMinWidth={workspace ? 240 : undefined} stickyEnd={Boolean(manage)} />
 
             {openAd && (
               <AdPreviewDialog
