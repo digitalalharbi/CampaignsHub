@@ -48,7 +48,7 @@ const STATED = (root: Element): string[] => {
 
 test('a content card states every figure its own popup states, and the same still', async ({ page, request }) => {
   await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-  await page.goto('/agency/content')
+  await page.goto('/agency/content?view=grid')
 
   const card = page.locator('article').first()
   await expect(card).toBeVisible({ timeout: 30000 })

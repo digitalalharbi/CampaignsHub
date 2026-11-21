@@ -28,7 +28,7 @@ test.describe('a narrowing the reader chose survives', () => {
     test.setTimeout(120_000)
 
     await selectProject(page, await seededProject(request, STORE_PROJECT))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
 
     const list = page.getByRole('button', { name: /^(قائمة|List)$/ })
@@ -70,7 +70,7 @@ test.describe('a narrowing the reader chose survives', () => {
     test.setTimeout(120_000)
 
     await selectProject(page, await seededProject(request, STORE_PROJECT))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
 
     await expect.poll(async () => new URL(page.url()).searchParams.get('from'), { timeout: 20000 }).not.toBeNull()

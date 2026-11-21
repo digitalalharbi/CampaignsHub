@@ -51,7 +51,7 @@ test.describe('the quick panel is read without scrolling', () => {
   test('creative, figures and trend all sit in the first viewport at 1440', async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await openTheQuickPanel(page)
 
     /*
@@ -89,7 +89,7 @@ test.describe('the quick panel is read without scrolling', () => {
   test('it is a panel over the library, not a page — it never fills the screen', async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await openTheQuickPanel(page)
 
     /* The panel is the dialog's only child; the dialog itself is the backdrop and does cover the page. */
@@ -111,7 +111,7 @@ test.describe('the quick panel is read without scrolling', () => {
   test('a phone still reads it as one column', async ({ page, request }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await openTheQuickPanel(page)
 
     const panel = await page.getByTestId('ad-preview-dialog').locator('> div').first().boundingBox()
@@ -141,7 +141,7 @@ test.describe('the quick panel is read without scrolling', () => {
   test('the trend actually loads rather than erroring', async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await openTheQuickPanel(page)
 
     /* Give the request its own wait rather than racing the dialog's appearance. */

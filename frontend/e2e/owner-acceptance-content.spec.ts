@@ -36,7 +36,7 @@ test.describe('the content surfaces the owner checked', () => {
 
   test('the library prints no placeholder value and no cost as a percentage', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await expect(page.locator('[data-testid="content-summary"]')).toBeVisible({ timeout: 30000 })
     await page.waitForLoadState('networkidle')
 
@@ -55,7 +55,7 @@ test.describe('the content surfaces the owner checked', () => {
    */
   test('an absent picture is stated in a few words, not a paragraph', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await page.waitForLoadState('networkidle')
 
     const labels = page.locator('[data-testid$="-absent-label"]')
@@ -83,7 +83,7 @@ test.describe('the content surfaces the owner checked', () => {
    */
   test('a thumbnail opens the popup, and the popup leads to the ad’s page', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await page.waitForLoadState('networkidle')
 
     await page.getByRole('article').first().getByRole('button').first().click()
@@ -117,7 +117,7 @@ test.describe('the content surfaces the owner checked', () => {
   /** The same, in English, because the direction switch has hidden defects before. */
   test('English: the library prints no placeholder value', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await switchToEnglish(page)
     await page.waitForLoadState('networkidle')
 
@@ -212,7 +212,7 @@ test.describe('the content library reads as a content page', () => {
 
   test('the top is a compact summary, not a wall of cards', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
 
     const summary = page.getByTestId('content-summary')
     await expect(summary).toBeVisible({ timeout: 30000 })
@@ -240,7 +240,7 @@ test.describe('the content library reads as a content page', () => {
    */
   test('the page reads summary, then filters, then the grid', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
 
     await expect(page.getByTestId('content-summary')).toBeVisible({ timeout: 30000 })
 
@@ -258,7 +258,7 @@ test.describe('the content library reads as a content page', () => {
   /** And the popup leads with the work and its figures, not with a stack of ids. */
   test('the popup puts the creative and its chart before its metadata', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
 
     await page.getByRole('article').first().getByRole('button').first().click()
 

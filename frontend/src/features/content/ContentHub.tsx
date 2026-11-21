@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BarChart3, ChevronDown, Images, LayoutList, Plus, Sparkles, Upload } from 'lucide-react'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -24,7 +24,7 @@ const TABS = ['creatives', 'insights', 'media'] as const
 type Tab = (typeof TABS)[number]
 const LEGACY_FOLDERS: Record<string, MediaFolder> = { review: 'review', followup: 'followup', drive: 'drive' }
 const FOLDERS: MediaFolder[] = ['files', 'review', 'followup', 'drive']
-const DRILL_KEYS = ['view', 'health', 'search']
+const DRILL_KEYS = ['view', 'health', 'search', 'creative']
 
 function isDrillDown(params: URLSearchParams): boolean {
   return [...params.keys()].some((k) => k.endsWith('[]') || DRILL_KEYS.includes(k))
@@ -37,8 +37,15 @@ export function ContentHub() {
   const canIntake = useAuth((s) => s.hasPermission('content.view'))
   const [composer, setComposer] = useState(false)
   const [menu, setMenu] = useState(false)
+  /*
+   * Decided once, when the address first carries a drill-down (or `?view=grid|list`), and never undone by the analysis page
+   * rewriting its own address: clearing its last filter must not swap the page out from under the reader.
+   */
+  const [analysis, setAnalysis] = useState(() => isDrillDown(params))
+  const drill = isDrillDown(params)
+  useEffect(() => { if (drill) setAnalysis(true) }, [drill])
 
-  if (isDrillDown(params)) return <CreativesPage />
+  if (analysis || drill) return <CreativesPage />
 
   const raw = params.get('tab') ?? ''
   const legacy = LEGACY_FOLDERS[raw]

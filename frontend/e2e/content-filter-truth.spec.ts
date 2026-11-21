@@ -19,7 +19,7 @@ test.describe('the content library filters', () => {
 
   async function openLibrary(page: Page, request: APIRequestContext) {
     await selectProject(page, await seededProject(request, 'Growth — Acquisition'))
-    await page.goto('/app/content')
+    await page.goto('/app/content?view=grid')
     await expect(page.getByTestId('content-filters')).toBeVisible({ timeout: 60000 })
   }
 

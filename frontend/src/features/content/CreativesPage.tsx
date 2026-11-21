@@ -416,7 +416,9 @@ const isoDaysAgo = (days: number) => {
 function addressFor(query: LibraryQuery, view: 'grid' | 'list', creative: string | null): string {
   return [
     libraryQueryString(query).replace(/^\?/, ''),
-    view === 'list' ? 'view=list' : '',
+    // CONTENT-LIBRARY-SNAP-001 — the view is always written, so a refresh or a shared link reopens this analysis view rather
+    // than the library's table, which is what the bare address now is.
+    `view=${view}`,
     creative ? `creative=${creative}` : '',
   ]
     .filter((part) => part !== '')

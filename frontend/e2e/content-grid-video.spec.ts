@@ -54,7 +54,7 @@ async function videoOnlyCreatives(request: APIRequestContext): Promise<Row[]> {
 async function openLibrary(page: Page, request: APIRequestContext): Promise<void> {
   const projectId = await seededProject(request, STORE_PROJECT)
   await selectProject(page, projectId)
-  await page.goto('/agency/content')
+  await page.goto('/agency/content?view=grid')
   await expect(page.getByRole('heading', { name: /مكتبة المحتويات|Content library/ })).toBeVisible({ timeout: 30000 })
 }
 

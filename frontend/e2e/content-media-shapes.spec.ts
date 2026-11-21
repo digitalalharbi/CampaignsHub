@@ -27,7 +27,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
   test(`no content card is a blank frame at ${viewport.width}px`, async ({ page, request }) => {
     await page.setViewportSize(viewport)
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
 
     await expect(page.locator('article').first()).toBeVisible({ timeout: 30000 })
     await page.waitForLoadState('networkidle')
