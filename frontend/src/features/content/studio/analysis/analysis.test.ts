@@ -63,6 +63,26 @@ describe('the product box', () => {
   })
 })
 
+describe('a flat-coloured product is found as well as a detailed one', () => {
+  it('covers the whole bottle even though it has no edges inside, which edge energy alone missed', () => {
+    // A gold ellipse (flat colour, edges only on its rim) on a dark vertical gradient — the case seen in the live preview.
+    const w = 360
+    const h = 640
+    const img = image(w, h, (x, y) => {
+      const inside = ((x - w / 2) / 77) ** 2 + ((y - h * 0.51) / 110) ** 2 <= 1
+
+      return inside ? [212, 160, 23] : [27 + (y / h) * 30, 35 + (y / h) * 35, 48 + (y / h) * 40]
+    })
+    const p = analyzeImage(img).product
+
+    // The ellipse spans x 0.286–0.714 and y 0.34–0.68; the box must cover (almost) all of it.
+    expect(p.x).toBeLessThanOrEqual(0.34)
+    expect(p.x + p.w).toBeGreaterThanOrEqual(0.66)
+    expect(p.y).toBeLessThanOrEqual(0.4)
+    expect(p.y + p.h).toBeGreaterThanOrEqual(0.62)
+  })
+})
+
 describe('the calm place for text', () => {
   it('sits inside the live area and clear of the product', () => {
     const a = analyzeImage(productOnGrey())

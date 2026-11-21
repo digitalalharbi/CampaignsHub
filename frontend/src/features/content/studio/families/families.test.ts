@@ -191,3 +191,38 @@ describe('property: any picture, any family, any format — nothing leaves the l
     }
   })
 })
+
+
+describe('what the live preview showed, now fixed', () => {
+  const productAt = (left: boolean): Pixels => image(360, 640, (x, y) => {
+    const cx = left ? 90 : 270
+    const inside = ((x - cx) / 60) ** 2 + ((y - 320) / 95) ** 2 <= 1
+
+    return inside ? [212, 160, 23] : [30 + (y / 640) * 25, 38 + (y / 640) * 30, 52 + (y / 640) * 35]
+  })
+  const split = SYSTEM_FAMILIES.find((f) => f.key === 'split')!
+
+  it('a side panel goes on the side that covers less of the product, in both languages', () => {
+    for (const locale of ['ar', 'en'] as const) {
+      const onLeft = placeFamily(split, analyzeImage(productAt(true)), '9x16', locale).find((l) => l.id === 'surface')!.rect
+      const onRight = placeFamily(split, analyzeImage(productAt(false)), '9x16', locale).find((l) => l.id === 'surface')!.rect
+
+      // The product on the left → the panel on the right, and the other way round.
+      expect(onLeft.x, locale).toBeGreaterThan(540)
+      expect(onRight.x + onRight.w, locale).toBeLessThan(540)
+    }
+  })
+
+  it('text keeps half a cell of air from the product instead of touching its box', () => {
+    const analysis = analyzeImage(productAt(false))
+    const canvas = FORMATS['9x16']
+    const p = analysis.product
+    const box = { x: p.x * canvas.width - 54, y: p.y * canvas.height - 48, w: p.w * canvas.width + 108, h: p.h * canvas.height + 96 }
+
+    for (const key of ['minimal', 'bold-hook', 'detail-cuts', 'stacked-reveal']) {
+      const hook = placeFamily(SYSTEM_FAMILIES.find((f) => f.key === key)!, analysis, '9x16').find((l) => l.id === 'hook')!.rect
+
+      expect(hook.x < box.x + box.w && hook.x + hook.w > box.x && hook.y < box.y + box.h && hook.y + hook.h > box.y, key).toBe(false)
+    }
+  })
+})
