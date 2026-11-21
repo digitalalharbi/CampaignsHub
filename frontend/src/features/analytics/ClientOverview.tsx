@@ -2,12 +2,11 @@ import { KpiCards } from './KpiCards'
 import { RateTrend, SERIES } from './components'
 import { compact, money, ratio } from './format'
 import { periodRates, TrendPanel, type OverviewData } from './OverviewCompositions'
-import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { Num } from '@/components/ui/Num'
 import { MetricTable } from '@/components/ui/MetricTable'
-import type { CampaignRow, PlatformRow, Summary } from './api'
+import type { PlatformRow, Summary } from './api'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getData } from '@/lib/api/client'
@@ -22,7 +21,7 @@ import { getData } from '@/lib/api/client'
  * answer, so no card is drawn for it — never a dash where a number would be.
  */
 export function ClientOverview(d: OverviewData) {
-  const { ar, s, series, ts, chartCurrency, comparable, unlikeNote, vm, points, objective, projectId, range } = d
+  const { ar, s, series, ts, chartCurrency, comparable, unlikeNote, points, objective, projectId, range } = d
   /*
    * CLIENT-RESULTS-001 — the project's own Results, as its reports count them (NASEL: a native form lead or a landing
    * completion). Where the project defines them they lead the cards, and the platforms' generic «conversions» and the
@@ -79,9 +78,7 @@ export function ClientOverview(d: OverviewData) {
           {has('ctr') && <RateTrend title={ar ? 'معدل النقر' : 'CTR'} data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} headline={periodRates(s.data?.current).ctr} />}
         </div>
       )}
-      {showMoney && !r
-        ? <UnifiedCampaignOverview vm={vm} lang={ar ? 'ar' : 'en'} projectId={null} />
-        : <ClientResults platforms={d.platformRows.data ?? []} campaigns={d.campaigns.data ?? []} results={r} ar={ar} />}
+      <ClientResults platforms={d.platformRows.data ?? []} results={r} ar={ar} />
     </div>
   )
 }
@@ -115,19 +112,15 @@ function withResults(summary: Summary | undefined, r: ProjectResults | null): Su
 const CLIENT_KPI_ORDER: readonly string[] = ['results', 'cost_per_result', 'purchases', 'leads', 'conversions', 'revenue', 'roas', 'spend', 'cpa', 'reach', 'impressions', 'clicks', 'ctr']
 
 /**
- * The platform and campaign comparison for a client who is not shown money: delivery and results only, platforms by
- * results and the campaigns that brought the most results. A platform or campaign with nothing in the window is left out.
+ * The platform comparison for a client: delivery and results by platform, a platform with nothing in the window left out.
+ * Owner 2026-11-21: no campaign list — campaign management is the agency's; the client reads the overview and its content.
  */
-function ClientResults({ platforms, campaigns, results, ar }: { platforms: PlatformRow[]; campaigns: CampaignRow[]; results: ProjectResults | null; ar: boolean }) {
+function ClientResults({ platforms, results, ar }: { platforms: PlatformRow[]; results: ProjectResults | null; ar: boolean }) {
   const resultOf = (provider: string) => (results ? (results.by_platform?.[provider]?.results ?? null) : null)
   const score = (p: PlatformRow) => (results ? (resultOf(p.provider) ?? 0) : (p.conversions ?? 0))
   const pRows = platforms.filter((p) => (p.impressions ?? 0) > 0 || score(p) > 0)
     .sort((a, b) => score(b) - score(a) || (b.impressions ?? 0) - (a.impressions ?? 0))
-  const cRows = results
-    ? (results.by_campaign ?? []).map((c) => ({ id: c.campaign_id, name: c.campaign_name ?? null, provider: c.provider, value: c.results }))
-    : campaigns.filter((c) => (c.conversions ?? 0) > 0).sort((a, b) => (b.conversions ?? 0) - (a.conversions ?? 0)).slice(0, 8)
-      .map((c) => ({ id: c.campaign_id, name: c.campaign_name, provider: c.provider, value: c.conversions ?? 0 }))
-  if (pRows.length === 0 && cRows.length === 0) return null
+  if (pRows.length === 0) return null
   const n = (v: number | null | undefined) => (v === null || v === undefined ? '—' : <Num>{new Intl.NumberFormat('en').format(Math.round(v))}</Num>)
   const resultWord = results ? (ar ? 'النتائج' : 'Results') : (ar ? 'تحويلات المنصة' : 'Conversions')
 
@@ -145,20 +138,6 @@ function ClientResults({ platforms, campaigns, results, ar }: { platforms: Platf
             ])}
             values={pRows.map((p) => [providerLabel(p.provider, ar ? 'ar' : 'en'), p.impressions ?? null, p.clicks ?? null, results ? resultOf(p.provider) : (p.conversions ?? null)])}
           />
-        </section>
-      )}
-      {cRows.length > 0 && (
-        <section className="rounded-2xl border border-border bg-surface p-4">
-          <h3 className="mb-2 text-sm font-bold text-text-primary">{ar ? 'أعلى الحملات نتائج' : 'Campaigns with the most results'}</h3>
-          <ul className="divide-y divide-border/60">
-            {cRows.map((c, i) => (
-              <li key={c.id || i} className="flex items-center gap-2 py-2" data-testid={`client-campaign-${c.id}`}>
-                <ProviderMark provider={c.provider} size={18} />
-                <span dir="auto" className="min-w-0 flex-1 truncate text-sm text-text-primary">{c.name ?? `${providerLabel(c.provider, ar ? 'ar' : 'en')} · ${ar ? 'حملة' : 'Campaign'} ${i + 1}`}</span>
-                <span className="shrink-0 text-sm font-bold text-text-primary">{n(c.value)}</span>
-              </li>
-            ))}
-          </ul>
         </section>
       )}
     </div>

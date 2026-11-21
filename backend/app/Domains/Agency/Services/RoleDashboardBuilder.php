@@ -763,7 +763,14 @@ final class RoleDashboardBuilder
      * @param  list<string>  $projectIds
      * @return array<string, mixed>|null
      */
-    private function content(array $projectIds, Carbon $from, Carbon $to, bool $money): ?array
+    /**
+     * The best and weakest content over projects, the way the report ranks it. Public for the client portal
+     * (CLIENT-CONTENT-001), which reads the same shelves for the client's own projects.
+     *
+     * @param  list<string>  $projectIds
+     * @return array<string, mixed>|null
+     */
+    public function content(array $projectIds, Carbon $from, Carbon $to, bool $money): ?array
     {
         try {
             $built = app(ReportAds::class)->for('custom', $from, $to, ['project_ids' => $projectIds], 'executive_summary');

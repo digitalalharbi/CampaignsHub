@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api/client'
+import { api, getData } from '@/lib/api/client'
+import { ReportAdsSection, type AdGroup, type ReportAd } from '@/features/reports/ReportAdsSection'
 import { useOverviewData } from '@/features/analytics/OverviewCompositions'
 import { ClientOverview } from '@/features/analytics/ClientOverview'
 import { DateRangePicker } from '@/components/ui/DateRangePicker'
@@ -114,5 +115,49 @@ function LiveBoard() {
 function Board({ projectId, range }: { projectId: string; range: { from: string; to: string } }) {
   const d = useOverviewData({ projectId, range, filters: {}, objective: 'all' })
 
-  return <ClientOverview {...d} />
+  return (
+    <>
+      <ClientOverview {...d} />
+      <ClientContent projectId={projectId} range={range} currency={d.reportingCurrency} />
+    </>
+  )
+}
+
+interface PortalContent {
+  best: ReportAd[]
+  worst: ReportAd[]
+  groups?: Array<Omit<AdGroup, 'ads'> & { ads: ReportAd[] }>
+  basis: { family: string | null } | null
+}
+
+/**
+ * CLIENT-CONTENT-001 — Owner 2026-11-21: the client reads its overview and its content, never the campaign list. The
+ * best content by the objective each was bought for and the weakest beside it, drawn as the agency's home and the report
+ * draw them. Absent when the agency keeps content from this client or nothing ran.
+ */
+function ClientContent({ projectId, range, currency }: { projectId: string; range: { from: string; to: string }; currency: string | null }) {
+  const ar = useUi((s) => s.locale) === 'ar'
+  const q = useQuery({
+    queryKey: ['client', 'content', projectId, range.from, range.to],
+    queryFn: () => getData<PortalContent | null>(`/client/projects/${projectId}/content?from=${range.from}&to=${range.to}`),
+  })
+  const c = q.data
+  if (!c || !Array.isArray(c.best)) return null
+  const groups = (c.groups ?? []).filter((g) => g.ads.length > 0)
+  if (c.best.length === 0 && groups.length === 0 && c.worst.length === 0) return null
+
+  return (
+    <div className="mt-4 grid gap-3" data-testid="client-content">
+      {(c.best.length > 0 || groups.length > 0) && (
+        <section className="rounded-2xl border border-border bg-surface p-3" data-testid="client-content-best">
+          <ReportAdsSection ads={c.best} groups={groups as unknown as AdGroup[]} currency={currency} locale={ar ? 'ar' : 'en'} title={ar ? 'أفضل المحتويات' : 'Best content'} limit={6} browsable={false} />
+        </section>
+      )}
+      {c.worst.length > 0 && (
+        <section className="rounded-2xl border border-border bg-surface p-3" data-testid="client-content-worst">
+          <ReportAdsSection ads={c.worst} currency={currency} locale={ar ? 'ar' : 'en'} title={ar ? 'أضعف المحتويات' : 'Weakest content'} limit={6} browsable={false} family={c.basis?.family ?? null} />
+        </section>
+      )}
+    </div>
+  )
 }

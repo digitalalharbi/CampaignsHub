@@ -100,4 +100,13 @@ final class ClientPortalChatTest extends TestCase
         $this->assertNull($r->json('data.total'), 'nothing reported in the window is «not available», never a measured zero');
         $this->assertArrayNotHasKey('cost', (array) $r->json('data'), 'money stays with the agency unless it is switched on');
     }
+
+    public function test_content_follows_the_content_switch_and_hides_names_without_campaign_names(): void
+    {
+        $url = "/api/v1/client/projects/{$this->project->id}/content?from=2026-11-01&to=2026-11-20";
+        $this->getJson($url, $this->spa)->assertOk();
+
+        $this->workspace->forceFill(['settings' => ['portal' => ['visibility' => ['content' => false]]]])->save();
+        $this->getJson($url, $this->spa)->assertForbidden();
+    }
 }

@@ -120,6 +120,8 @@ Route::prefix('client')->name('client.')->group(function (): void {
     // CLIENT-DASHBOARD-PARITY-001 — the agency dashboard's own answers for one of the client's projects.
     Route::get('/projects/{project}/metrics/{name}', [ClientPortalController::class, 'projectMetrics'])->name('projects.metrics')
         ->where('name', '[a-z-]+')->middleware('throttle:240,1');
+    // CLIENT-CONTENT-001 — the best and weakest content of one of the client's projects.
+    Route::get('/projects/{project}/content', [ClientPortalController::class, 'projectContent'])->name('projects.content')->middleware('throttle:120,1');
     Route::get('/campaigns', [ClientPortalController::class, 'campaigns'])->name('campaigns.index')
         ->middleware('throttle:120,1');
     Route::get('/reports', [ClientPortalController::class, 'reports'])->name('reports.index')

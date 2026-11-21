@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Http\Controllers;
 
+use App\Domains\Agency\Services\RoleDashboardBuilder;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\Payment;
@@ -1189,6 +1190,39 @@ final class ClientPortalController
             count($parts) === 2 && $parts[0] === 'creatives' => $call('creative', ['creative' => $parts[1]]),
             default => abort(404),
         };
+    }
+
+    /**
+     * GET /client/projects/{project}/content — CLIENT-CONTENT-001 (Owner 2026-11-21: «اظهر نظرة عامة وتحليلية للمحتويات»).
+     *
+     * The best and weakest content of one of the client's projects, ranked the way the report and the agency's home rank
+     * it (`RoleDashboardBuilder::content`). Needs the space's dashboard and content switches; money only where `spend` is on;
+     * a content's name only where the agency shows campaign names.
+     */
+    public function projectContent(Request $request, string $project): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        abort_unless(Str::isUuid($project), 404);
+        $model = Project::query()->live()->whereKey($project)->whereIn('id', $this->ownedProjectIds($token, 'dashboard'))->first();
+        abort_if($model === null, 404);
+        $workspace = ClientWorkspace::query()->whereKey($model->client_workspace_id)->first();
+        abort_if($workspace === null, 404);
+        $visibility = PortalVisibility::visibilityFor($workspace);
+        abort_unless($visibility['content'] ?? false, 403, 'Not available for this space.');
+
+        $data = $request->validate(['from' => ['required', 'date_format:Y-m-d'], 'to' => ['required', 'date_format:Y-m-d', 'after_or_equal:from']]);
+        $from = Carbon::parse($data['from'])->startOfDay();
+        $to = Carbon::parse($data['to'])->startOfDay();
+        abort_if($from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
+
+        $content = app(RoleDashboardBuilder::class)->content([(string) $model->getKey()], $from, $to, (bool) ($visibility['spend'] ?? false));
+        $content = PortalMetricsFilter::apply($content, $visibility);
+        if (! ($visibility['campaign_names'] ?? false)) {
+            $content = PortalMetricsFilter::withoutKeys($content, ['name', 'campaign_name']);
+        }
+
+        return response()->json(['data' => $content]);
     }
 
     /** CLIENT-DASHBOARD-PARITY-001 — the agency's metrics answers a client may read, by path. */

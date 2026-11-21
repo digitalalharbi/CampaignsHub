@@ -35,16 +35,19 @@ const overview = (projects: Array<{ id: string; name: string | null }>) => ({
 describe('ClientLiveDashboard', () => {
   const urls: string[] = []
   let results: unknown = { configured: false }
+  let content: unknown = null
 
   beforeEach(() => {
     vi.clearAllMocks()
     urls.length = 0
     results = { configured: false }
+    content = null
     const answer = (url: string) => {
       urls.push(url)
       if (url.includes('/metrics/summary')) {
         return { current: { impressions: 1000, clicks: 50, ctr: 5, conversions: 7 }, previous: {}, deltas: {}, currency: null, rows_in_scope: true }
       }
+      if (url.includes('/content?')) return content
       if (url.includes('/metrics/results')) return results
       if (url.includes('/metrics/platforms')) return [{ provider: 'snapchat', impressions: 900, clicks: 40, conversions: 6, ctr: 4.4, spend_share: null }, { provider: 'meta', impressions: 0, clicks: 0, conversions: 0, ctr: null, spend_share: null }]
       if (url.includes('/metrics/campaigns')) return [{ campaign_id: 'c-1', campaign_name: 'Riwaq Snap', provider: 'snapchat', impressions: 900, clicks: 40, conversions: 6, ctr: 4.4 }]
@@ -103,7 +106,7 @@ describe('ClientLiveDashboard', () => {
     expect(await screen.findByTestId('client-results')).toBeInTheDocument()
     expect(screen.getByTestId('client-platform-snapchat').closest('tr')).toHaveTextContent('6')
     expect(screen.queryByTestId('client-platform-meta')).toBeNull()
-    expect(screen.getByTestId('client-campaign-c-1')).toHaveTextContent('Riwaq Snap')
+    expect(screen.queryByTestId('client-campaign-c-1')).toBeNull()
     expect(screen.getByTestId('client-overview').textContent).not.toMatch(/\$\s?0/)
   })
 
@@ -119,8 +122,21 @@ describe('ClientLiveDashboard', () => {
     expect(await screen.findByTestId('client-delivery-trend')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByTestId('client-kpis')).toHaveTextContent('899'))
     expect(screen.getByTestId('client-kpis').textContent).not.toMatch(/Platform conversions/)
-    expect(screen.getByTestId('client-campaign-c-9')).toHaveTextContent('400')
     expect(screen.getByTestId('client-results')).toHaveTextContent('Results')
     expect(screen.getByTestId('client-platform-snapchat').closest('tr')).toHaveTextContent('563')
+  })
+
+  it('shows the client its best and weakest content, and no campaign list', async () => {
+    content = {
+      best: [{ id: 'cr-1', name: null, provider: 'snapchat', preview: null, impressions: 5000, clicks: 120, conversions: 9, ctr: 2.4 }],
+      worst: [{ id: 'cr-2', name: null, provider: 'meta', preview: null, impressions: 900, clicks: 3, conversions: 0, ctr: 0.3 }],
+      basis: { family: 'leads' }, groups: [],
+    }
+    vi.mocked(fetchPortalOverview).mockResolvedValue(overview([{ id: 'p-1', name: 'Riwaq' }]) as never)
+    renderWithProviders(<ClientLiveDashboard />, { locale: 'en', route: '/portal/nasel' })
+
+    expect(await screen.findByTestId('client-content-best')).toBeInTheDocument()
+    expect(screen.getByTestId('client-content-worst')).toBeInTheDocument()
+    expect(urls.some((u) => u.startsWith('/client/projects/p-1/content?'))).toBe(true)
   })
 })

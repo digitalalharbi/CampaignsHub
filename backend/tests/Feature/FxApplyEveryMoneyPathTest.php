@@ -104,7 +104,7 @@ final class FxApplyEveryMoneyPathTest extends TestCase
             "projects/{$p}/metrics/budget-explanation?{$w}", "projects/{$p}/metrics/funnel?{$w}", "projects/{$p}/metrics/drivers?{$w}", "projects/{$p}/metrics/attribution?{$w}",
             "projects/{$p}/metrics/entities/ad_set?{$w}", "projects/{$p}/metrics/objective-performance?{$w}", "projects/{$p}/metrics/objective-paths?{$w}",
             "projects/{$p}/metrics/objective-leaders?{$w}", "projects/{$p}/metrics/objective-trend?{$w}", "projects/{$p}/metrics/objective-explanations?{$w}",
-            "projects/{$p}/metrics/platform-objectives?{$w}",
+            "projects/{$p}/metrics/platform-objectives?{$w}", "projects/{$p}/metrics/results?{$w}",
             "projects/{$p}/metrics/compare?{$w}&".http_build_query(['campaign_ids' => [$c, $this->secondCampaign()]]),
             "projects/{$p}/agent-proposals", "projects/{$p}/approved-budget", "projects/{$p}/spend-limits",
             "projects/{$p}/automation/rules", "projects/{$p}/automation/summary", "projects/{$p}/automation/targets",
