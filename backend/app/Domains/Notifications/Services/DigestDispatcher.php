@@ -458,7 +458,7 @@ final class DigestDispatcher
     {
         try {
             return $user->rolesInCurrentTenant()->contains(static fn ($role): bool => (string) ($role->slug ?? '') === WorkspaceRolePresets::FINANCE);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return false;
         }
     }
