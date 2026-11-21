@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { usePortalBase } from '@/app/portalPath'
-import { ChevronLeft, ChevronRight, FolderKanban, Megaphone, RefreshCw, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FolderKanban, Megaphone, RefreshCw, Search, X } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { listClientWorkspaces, listProjects, type Project } from './api'
 import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
@@ -55,7 +56,9 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
    * request — a 403 in the console on every first visit (the chromium and webkit gates caught it in
    * campaigns-responsive.spec.ts). Client names are asked for only where there are clients to name.
    */
-  const agency = usePortalBase() === '/agency'
+  const base = usePortalBase()
+  const agency = base === '/agency'
+  const navigate = useNavigate()
   const clients = useQuery({ queryKey: ['agency-scope', 'clients'], queryFn: listClientWorkspaces, enabled: agency })
   const projects = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false) })
   const canMoney = useAuth((st) => st.hasPermission('funding.view'))
@@ -129,8 +132,19 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
   const Chevron = ar ? ChevronLeft : ChevronRight
 
   return (
-    <section data-testid="project-chooser" aria-label={ar ? 'اختر المشروع' : 'Choose a project'} className="flex min-h-0 flex-1 items-start justify-center py-4 sm:py-8">
-      <div className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-lg">
+    /*
+     * Owner 2026-11-21: a popup over the same page — the page stays where it is behind it, and the choice carries on in it.
+     * «×» or Escape leaves for the portal's home rather than leaving a page with nothing to show.
+     */
+    <section
+      data-testid="project-chooser"
+      role="dialog"
+      aria-modal="true"
+      aria-label={ar ? 'اختر المشروع' : 'Choose a project'}
+      onKeyDown={(e) => { if (e.key === 'Escape') navigate(base || '/') }}
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-4 backdrop-blur-sm sm:items-center sm:p-8"
+    >
+      <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl">
         <div className="flex items-start gap-3 border-b border-border px-5 py-4">
           <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600" aria-hidden><FolderKanban size={20} /></span>
           <div className="min-w-0 flex-1">
@@ -140,6 +154,7 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
             </p>
           </div>
           <span className="shrink-0 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-bold text-text-secondary"><Num>{String(rows.length)}</Num> {ar ? 'مشروع' : 'projects'}</span>
+          <button type="button" data-testid="project-chooser-close" onClick={() => navigate(base || '/')} aria-label={ar ? 'إغلاق' : 'Close'} className="grid size-8 shrink-0 place-items-center rounded-lg text-text-muted hover:bg-surface-secondary hover:text-text-primary"><X size={16} aria-hidden /></button>
         </div>
         {rows.length > 6 && (
           <div className="border-b border-border px-5 py-3">
@@ -147,6 +162,7 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
               <Search size={15} className="shrink-0 text-text-muted" aria-hidden />
               <input
                 data-testid="project-chooser-search"
+                autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={ar ? 'ابحث باسم المشروع أو العميل' : 'Search by project or client'}
