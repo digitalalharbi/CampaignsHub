@@ -10,8 +10,11 @@ import { usePortalGuard } from './usePortalGuard'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
+import { lazy, Suspense, useState } from 'react'
 import { ClientLiveDashboard } from './ClientLiveDashboard'
 import { PortalAudience } from './PortalAudience'
+import { listClientReports } from './portalAccountApi'
+import { portalReportToken } from '@/features/reports/sharedBase'
 import { PortalAttention } from './PortalAttention'
 
 const COPY = {
@@ -79,10 +82,12 @@ export function ClientDashboardPage() {
         <PortalStat to={spaceTo('/messages')} icon={MessagesSquare} label={t.unread_messages} value={unreadMessages} loading={loading} tone={unreadMessages > 0 ? 'brand' : undefined} />
       </StatGrid>
 
+      {/*
+        PORTAL-REPORT-HOME-001 — Owner 2026-11-21: the client's report IS the dashboard, opening straight away as before. The
+        live dashboard stands in only where no report is shared with this client yet.
+      */}
       <div className="mt-4">
-        <ClientLiveDashboard />
-        {/* AUDIENCE-001 — under the performance dashboard; absent unless the agency switched it on. */}
-        <PortalAudience />
+        <PortalHomeReport ar={ar} />
       </div>
 
       <section className="mt-3 rounded-2xl border border-border bg-surface p-4">
@@ -150,5 +155,53 @@ function RecentRow({ r, ar, details }: { r: PortalRequestCard; ar: boolean; deta
         </div>
       </Link>
     </li>
+  )
+}
+
+// Loaded on demand: the shared report is a large page of its own, and its route (/r/) keeps its own budget.
+const PublicReport = lazy(() => import('@/features/reports/PublicReport').then((m) => ({ default: m.PublicReport })))
+
+/**
+ * PORTAL-REPORT-HOME-001 — the client's shared report, whole, as the first page: the latest one opens directly, and a
+ * client with several reports switches between them here. Without a shared report the live dashboard takes its place.
+ */
+function PortalHomeReport({ ar }: { ar: boolean }) {
+  const q = useQuery({ queryKey: ['client', 'reports'], queryFn: listClientReports, retry: false })
+  const shared = (q.data ?? []).filter((r) => r.share?.shared)
+  const [chosen, setChosen] = useState<string | null>(null)
+  if (q.isLoading) return <div className="h-72 animate-pulse rounded-2xl bg-surface-secondary" />
+  if (shared.length === 0) {
+    return (
+      <>
+        <ClientLiveDashboard />
+        <PortalAudience />
+      </>
+    )
+  }
+  const report = shared.find((r) => r.id === chosen) ?? shared[0]!
+
+  return (
+    <section data-testid="portal-home-report">
+      {shared.length > 1 && (
+        <div role="tablist" aria-label={ar ? 'التقارير' : 'Reports'} className="mb-3 flex flex-wrap gap-1.5">
+          {shared.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              role="tab"
+              aria-selected={r.id === report.id}
+              data-testid={`portal-home-report-${r.id}`}
+              onClick={() => setChosen(r.id)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${r.id === report.id ? 'border-brand-600 bg-brand-600/10 text-brand-600' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
+            >
+              {r.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <Suspense fallback={<div className="h-72 animate-pulse rounded-2xl bg-surface-secondary" />}>
+        <PublicReport key={report.id} token={portalReportToken(report.id)} embedded />
+      </Suspense>
+    </section>
   )
 }
