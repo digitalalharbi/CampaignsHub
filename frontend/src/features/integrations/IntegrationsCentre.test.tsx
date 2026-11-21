@@ -30,6 +30,7 @@ const estate = vi.hoisted(() => ({ projects: [] as EstateProject[] }))
 const projects = vi.hoisted(() => ({ list: [] as Array<{ id: string; name: string; client_workspace_id: string | null; summary?: { accounts: number; providers: string[]; campaigns?: number; data_last_synced_at: null; team_members: number; attention: null } }> }))
 const calls = vi.hoisted(() => ({
   started: [] as Array<{ provider: string; projectId?: string | null }>,
+  reconnects: [] as string[],
   removed: [] as string[],
   audit: [] as Array<Record<string, unknown>>,
   writes: [] as string[],
@@ -54,6 +55,11 @@ vi.mock('./api', async (importOriginal) => {
     }),
     getAccountLogs: () => Promise.resolve({ runs: [] }),
     fetchMetaApps: () => Promise.resolve({ default: 'live', apps: [{ key: 'live', available: true }] }),
+    // META-MULTI-APP-001 — a Meta connection reconnects atomically through its own endpoint.
+    startMetaReconnect: (connectionId: string) => {
+      calls.reconnects.push(connectionId)
+      return Promise.resolve({ authorization_url: 'https://platform.test/meta-reconnect', app_profile: 'live' as const, keeps_own_app: false, reason: null })
+    },
     startPlatformOAuth: (provider: string, _workspace?: string | null, projectId?: string | null) => {
       calls.started.push({ provider, projectId })
       return Promise.resolve({ authorization_url: `https://platform.test/${provider}` })
@@ -167,6 +173,7 @@ beforeEach(() => {
   estate.projects = []
   projects.list = [{ id: 'p-1', name: 'Razzah Avenue', client_workspace_id: 'ws-1' }]
   calls.started = []
+  calls.reconnects = []
   calls.removed = []
   calls.audit = []
   calls.writes = []
@@ -418,7 +425,9 @@ describe('the Integrations Centre: linked sources — search, sort, re-authorise
     await waitFor(() => expect(screen.getByTestId('flow-destination')).toHaveValue('p-1'))
     fireEvent.click(screen.getByTestId('flow-authorise'))
 
-    await waitFor(() => expect(calls.started).toEqual([{ provider: 'meta', projectId: 'p-1' }]))
+    // The renewal of a Meta source is atomic: its own reconnect endpoint, for exactly that connection.
+    await waitFor(() => expect(calls.reconnects).toEqual(['c-2']))
+    expect(calls.started).toEqual([])
   })
 
   it('offers re-authorising in the row menu too, and not at all for an API-key source', async () => {

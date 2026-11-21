@@ -62,11 +62,12 @@ final class IntegrationWebhookController extends Controller
      * operator typed into its console. Echoing the challenge back proves we control the endpoint. The
      * token is compared with `hash_equals` for the same reason every other comparison here is.
      */
-    public function verify(Request $request, string $kind, string $provider): Response
+    public function verify(Request $request, string $kind, string $provider, ?string $app = null): Response
     {
         $definition = $this->definitionOr404($kind, $provider);
 
-        $configured = $this->settings->value($definition->key, 'webhook_verify_token');
+        // META-MULTI-APP-001 — only the Live app has a stored verify token; the SaaS app's endpoint refuses the handshake until it has one.
+        $configured = $app === null ? $this->settings->value($definition->key, 'webhook_verify_token') : null;
         $offered = (string) $request->query('hub_verify_token', (string) $request->query('hub.verify_token', ''));
 
         if ($configured === null || $offered === '' || ! hash_equals($configured, $offered)) {
@@ -79,19 +80,20 @@ final class IntegrationWebhookController extends Controller
     }
 
     /** POST /webhooks/{kind}/{provider} */
-    public function receive(Request $request, string $kind, string $provider): Response
+    public function receive(Request $request, string $kind, string $provider, ?string $app = null): Response
     {
         $definition = $this->definitionOr404($kind, $provider);
 
         // A provider the operator took out of service stops being listened to as well as stops being
         // connectable. Otherwise a suspended integration keeps feeding the funnel it was suspended from.
-        if (! $this->settings->isEnabled($definition->key)) {
+        // (The per-app endpoint is not governed by the LIVE provider's switch.)
+        if ($app === null && ! $this->settings->isEnabled($definition->key)) {
             return response('', 403);
         }
 
         $raw = $request->getContent();
         $header = $definition->webhookSignatureHeader ?? 'X-Signature';
-        $check = $this->signatures->check($definition->key, $raw, $request->header($header));
+        $check = $this->signatures->check($definition->key, $raw, $request->header($header), $app);
 
         if (! $check['verified']) {
             // INTEG-WEBHOOK-ENGINE-001 — the REFUSAL is recorded (verdict, time, body hash, correlation id);
@@ -100,6 +102,11 @@ final class IntegrationWebhookController extends Controller
             $this->inbox->rejected($definition, $raw, 'rejected_signature', (string) $check['reason']);
 
             return response('', 401);
+        }
+
+        // META-MULTI-APP-001 — the app this ENDPOINT is bound to (its secret validated the delivery), for anything downstream of the request.
+        if (isset($check['app'])) {
+            $request->attributes->set('meta_app', $check['app']);
         }
 
         /** @var array<string,mixed> $payload */
@@ -114,7 +121,7 @@ final class IntegrationWebhookController extends Controller
             return response('', 400);
         }
 
-        $result = $this->ingest->record($definition->key, $raw, $payload, verified: true);
+        $result = $this->ingest->record($definition->key, $raw, $payload, verified: true, app: $app);
         $event = $result['event'];
 
         // SALLA-INSTALL-001 lifecycle events are handled in place whatever the row says (an install for a

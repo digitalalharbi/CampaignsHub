@@ -584,9 +584,15 @@ final class UnifiedCampaignController extends Controller
         if ($ignoreId !== null) {
             $nameRule->ignore($ignoreId);
         }
+        // CAMPAIGN-NAME-PLATFORM-ONLY-001 — imported campaigns may share their platform's name, so an edit that
+        // keeps the current name is never refused because a sibling carries the same one.
+        $current = $ignoreId !== null ? UnifiedCampaign::query()->whereKey($ignoreId)->value('name') : null;
+        if ($current !== null && $request->input('name') === $current) {
+            $nameRule = null;
+        }
 
         return $request->validate([
-            'name' => [$creating ? 'required' : 'sometimes', 'string', 'max:160', $nameRule],
+            'name' => array_values(array_filter([$creating ? 'required' : 'sometimes', 'string', 'max:160', $nameRule])),
             'client_display_name' => ['nullable', 'string', 'max:160'], // the name a client sees in reports
             'objective' => ['sometimes', Rule::in(CampaignObjective::values())],
             'status' => ['sometimes', Rule::in(CampaignStatus::values())],

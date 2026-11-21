@@ -320,17 +320,12 @@ final class ImportExternalCampaigns
     }
 
     /**
-     * A name this project does not already hold.
+     * CAMPAIGN-NAME-PLATFORM-ONLY-001 (Owner, 2026-11-21) — the visible name is the platform's name, nothing appended.
      *
-     * `unified_campaigns` is unique on `(project_id, name)`, and two ad accounts in one project
-     * running a campaign of the same name is ordinary — an agency with two Snapchat accounts both
-     * running «Ramadan Sale» would otherwise hit a `23505` and the second account's sync would die
-     * with nothing on screen to explain it.
-     *
-     * Disambiguated by the platform's own campaign id rather than by a counter, so the suffix means
-     * something to whoever reads it and is stable across re-imports. Renaming it afterwards is a
-     * decision the customer can take; guessing that the two are the same campaign is not one we may
-     * take for them.
+     * This used to append the platform's campaign id («Spot Pro · 03682f53-…») whenever the project already
+     * held the name, because `unified_campaigns` was unique on `(project_id, name)`. The Owner rejected an id
+     * in any campaign name. The constraint is gone (migration 2026_11_26_100000) and identity was never the
+     * name: it is the link on the external row, so two platform campaigns sharing a name stay two campaigns.
      */
     /**
      * OBJECTIVE-NORMALIZATION-002 — the canonical column may only ever hold a canonical value.
@@ -367,22 +362,7 @@ final class ImportExternalCampaigns
 
     private function availableName(ExternalCampaign $campaign): string
     {
-        $name = (string) $campaign->name;
-
-        $taken = fn (string $candidate): bool => UnifiedCampaign::withoutGlobalScopes()
-            ->where('project_id', $campaign->project_id)
-            ->where('name', $candidate)
-            ->exists();
-
-        if (! $taken($name)) {
-            return $name;
-        }
-
-        $qualified = mb_substr($name.' · '.$campaign->external_id, 0, 160);
-
-        return $taken($qualified)
-            ? mb_substr($name.' · '.$campaign->external_id.' · '.$campaign->getKey(), 0, 160)
-            : $qualified;
+        return mb_substr((string) $campaign->name, 0, 160);
     }
 
     /**

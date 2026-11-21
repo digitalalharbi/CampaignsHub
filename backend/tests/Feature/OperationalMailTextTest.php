@@ -98,18 +98,22 @@ final class OperationalMailTextTest extends TestCase
         $this->assertStringContainsString('لا بيانات', $text);
     }
 
-    public function test_the_portfolio_lists_the_projects_that_need_attention_first(): void
+    /**
+     * DIGEST-FIGURES-ONLY-001 — Owner 2026-11-21: «ملخص كل مشروع» lists every project once, largest spend first, as figures:
+     * no ✕ ! ✓ chip and no verdict on the card.
+     */
+    public function test_the_portfolio_lists_every_project_as_figures_largest_spend_first(): void
     {
         $html = (string) MailGallery::render('digest-portfolio', 'ar');
-        $risk = strpos($html, 'عيادات النخبة');     // stale sync + rising cost → at risk
-        $good = strpos($html, 'إطلاق العلامة');      // improving → excellent
-        $this->assertNotFalse($risk);
-        $this->assertNotFalse($good);
-        $this->assertLessThan($good, strpos($html, 'data-block="portfolio-row"'));
-        $firstRow = substr($html, (int) strpos($html, 'data-block="portfolio-row"'), 2500);
-        // DIGESTS-VISUAL-V2-001 — the row says it as a state and a ✕ chip, not as a word: the worst project is the first row of the matrix.
-        $this->assertStringContainsString('data-state="bad"', $firstRow);
-        $this->assertStringContainsString('✕', $firstRow);
+        $this->assertNotFalse(strpos($html, 'عيادات النخبة'));
+        $this->assertNotFalse(strpos($html, 'إطلاق العلامة'));
+        $this->assertStringContainsString('ملخص كل مشروع', $html);
+        $cards = array_slice(explode('data-block="portfolio-row"', (string) (strstr($html, 'data-block="budgets"', true) ?: $html)), 1);
+        $this->assertNotEmpty($cards);
+        foreach ($cards as $card) {
+            $this->assertStringNotContainsString('✕', $card);
+            $this->assertStringNotContainsString('مراقبة', $card);
+        }
     }
 
     public function test_each_finding_kind_is_plain_in_both_languages(): void

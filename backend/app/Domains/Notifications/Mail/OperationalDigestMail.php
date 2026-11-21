@@ -71,23 +71,13 @@ final class OperationalDigestMail extends Mailable
         $ar = $this->lang === 'ar';
         $name = $this->scope === 'project' ? (string) $this->model['name'] : '';
         /*
-         * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — «ملخص المشاريع • أمس» / «• الأسبوع الماضي» / «• الشهر الماضي», and the one
-         * project's «ملخص المشروع • أمس»: the period word of each rhythm, then its dates in the mail's head.
+         * DIGEST-SUBJECT-FORMAT-001 — Owner 2026-11-21, superseding the subject part of DIGEST-SUBJECT-LIVE-001 and the «•» of
+         * DIGESTS-YESTERDAY-BY-OBJECTIVE-001: «كامبينز هَب — ملخص المشروع : أمس — فورساتو». The title with its period, then the
+         * project's name for one project. Nothing after it: no «متابعة لحظية», no verdict and no decision count (the decision
+         * section is gone from the mail, so a count of it would point at nothing).
          */
         $title = DigestSchedule::title($this->scope === 'project' ? 'project' : 'portfolio', $this->kind, $ar);
-        $tail = $this->scope === 'project'
-            ? ($this->model['status']['label'] ?? '')
-            : ($this->readOnly ? '' : ($ar ? ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} تحتاج قرار" : 'ما فيه شيء يحتاج قرار') : ($this->model['need_attention'] > 0 ? "{$this->model['need_attention']} need a decision" : 'nothing needs a decision')));
-
-        /*
-         * DIGEST-SUBJECT-LIVE-001 — Owner 2026-11-17: the daily mail is a LIVE follow-up, not an evaluation. A verdict in its subject
-         * («مشكلة», «تحتاج قرار») could be quoted as proof of a shortfall, and the performance reports are the weekly and monthly ones
-         * (every 7–14 days to monthly). So the daily subject names the project and says what the mail is; the verdict stays out of it.
-         */
         $line = $title.($name !== '' ? " — {$name}" : '');
-        $line .= $this->kind === 'daily'
-            ? ' · '.($ar ? 'متابعة لحظية' : 'Live follow-up')
-            : ($tail !== '' ? ": {$tail}" : '');
 
         return new Envelope(subject: MailSubject::of(trim($line), $ar));
     }
