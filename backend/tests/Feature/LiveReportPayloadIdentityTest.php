@@ -88,7 +88,7 @@ final class LiveReportPayloadIdentityTest extends TestCase
         foreach ($now as $name => $json) {
             $this->assertSame(
                 [],
-                array_slice(self::differences(json_decode($stored[$name], true), json_decode($json, true)), 0, 40),
+                array_slice(self::differences(json_decode($stored[$name], true), json_decode($json, true)), 0, 8),
                 "payload «{$name}» differs from the stored baseline at these paths (stored != now)",
             );
             $this->assertSame($stored[$name], $json, "payload «{$name}» differs from the stored baseline byte for byte");
