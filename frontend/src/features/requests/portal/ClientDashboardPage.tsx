@@ -199,9 +199,15 @@ function PortalHomeReport({ ar }: { ar: boolean }) {
           ))}
         </div>
       )}
-      <Suspense fallback={<div className="h-72 animate-pulse rounded-2xl bg-surface-secondary" />}>
-        <PublicReport key={report.id} token={portalReportToken(report.id)} embedded />
-      </Suspense>
+      {/*
+        The report is the client's own document, in the language it was published in (its own locale), not the portal's
+        chrome — so the interface-language guard reads around it, as it does for any tenant value.
+      */}
+      <div data-untranslatable>
+        <Suspense fallback={<div className="h-72 animate-pulse rounded-2xl bg-surface-secondary" />}>
+          <PublicReport key={report.id} token={portalReportToken(report.id)} embedded />
+        </Suspense>
+      </div>
     </section>
   )
 }
