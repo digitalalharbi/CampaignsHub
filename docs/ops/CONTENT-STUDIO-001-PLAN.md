@@ -21,7 +21,7 @@ nothing. AI generation uses the tenant's own key and is hidden without one. No p
 | 4 | Layout families as zod-validated JSON (seven), placement from the calm-zone map, diversity constraint | **merged #1247** |
 | 5 | Motion recipes and the Canvas previewer (no encoding until Save) with the margin overlay; Arabic text width measurement | **this PR** (pure scene, recipes and frame renderer; the live Canvas component and real glyph measurement come with batch 7) |
 | 6 | Export (next): WebCodecs + mp4-muxer in a Web Worker, 1080×1920 30fps H.264/AAC, ≤ 15s | |
-| 7 | Studio drawer inside the library: auto-generate on upload, batch of 3 videos + 4 images, save/send-to-approval | |
+| 7 | Studio drawer inside the library: auto-generate on upload, batch of 3 videos + 4 images, save/send-to-approval | **7A this PR** (the batch assembler and no-AI copy, pure); 7B the drawer, live canvases and the upload hook next |
 | 8 | Migrations: brand_kits, design_tokens, studio_sessions/outputs, layout_families, music_tracks, creative_concepts, readiness_scores | |
 | 9 | Readiness score and the post-launch link (file_hash → ads, quality/engagement/conversion rankings, hook and hold rate, learning loop) | |
 | 10 | Tenant-key AI: copy, image enhancement, TTS, outpaint, generated video; hidden without a key | |
