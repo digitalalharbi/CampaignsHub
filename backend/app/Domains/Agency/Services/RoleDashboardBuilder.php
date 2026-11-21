@@ -15,6 +15,7 @@ use App\Domains\ClientWorkspaces\Models\ContentApproval;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
 use App\Domains\Funding\Services\FundingReach;
 use App\Domains\Funding\Services\ProjectBudgetReader;
+use App\Domains\Funding\Support\BudgetFx;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Fx\FxDisplay;
 use App\Domains\Metrics\Models\SpendLimit;
@@ -23,6 +24,7 @@ use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\PeriodResolver;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
+use App\Domains\Metrics\Spend\SpendLedger;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Services\ReportAds;
@@ -492,12 +494,16 @@ final class RoleDashboardBuilder
     }
 
     /**
-     * DELIVERY-TODAY-001 — Owner 2026-11-21: «إنفاق اليوم حتى الآن» beside the budget, for credibility. Read from the ledger
-     * the budget itself is drawn from (`funding_spend_days`, SAR), on the Riyadh calendar day, with the time it was last
-     * refreshed so the figure says how fresh it is.
+     * DELIVERY-TODAY-001 — Owner 2026-11-21: «إنفاق اليوم حتى الآن» beside the budget, for credibility.
      *
-     * Missing is never zero: a project whose ledger has not been refreshed today has no figure (null); one refreshed today with
-     * no row for today spent nothing (0); a row with no dated rate withholds the whole sum (null).
+     * TODAY-SPEND-LIVE-001 — Owner 2026-11-21: «انفاق اليوم غير صحيح! ليش صفر». It was read from `funding_spend_days`, the
+     * budget ledger, which is rebuilt by a scheduled job; when that job stalled the column said 0 while TikTok and Meta were
+     * spending. It now reads the synced platform rows themselves through the ONE spend definition the ledger is built from
+     * ({@see SpendLedger::accountDays()}) and converts each account-day with the same rate the ledger uses ({@see BudgetFx}),
+     * so it is as fresh as the last platform sync and can never disagree with the budget once the ledger catches up.
+     *
+     * Missing is never zero: 0 only when an account of the project was synced today and reported nothing; a currency with no
+     * rate withholds the sum (null). `as_of` is the latest successful platform sync of the project's selected accounts.
      *
      * @param  list<string>  $projectIds
      * @return array<string, array{amount: float|null, as_of: string|null}> project id → today so far
@@ -508,23 +514,34 @@ final class RoleDashboardBuilder
         if ($projectIds === []) {
             return [];
         }
-        $day = now('Asia/Riyadh')->toDateString();
-        $dayStart = now('Asia/Riyadh')->startOfDay()->utc();
+        $day = now('Asia/Riyadh')->startOfDay();
+        $dayStart = $day->copy()->utc();
+        $date = Carbon::parse($day->toDateString());
 
-        $refreshed = DB::table('funding_spend_days')->whereIn('project_id', $projectIds)
-            ->groupBy('project_id')->selectRaw('project_id, MAX(updated_at) AS at')->pluck('at', 'project_id')->all();
-        $rows = DB::table('funding_spend_days')->whereIn('project_id', $projectIds)->where('spend_date', $day)
-            ->groupBy('project_id')
-            ->selectRaw('project_id, SUM(amount_sar) AS amount, COUNT(*) AS n, COUNT(amount_sar) AS priced')
-            ->get()->keyBy('project_id');
+        $synced = DB::table('project_integration_bindings as b')
+            ->join('external_accounts as a', 'a.id', '=', 'b.external_account_id')
+            ->whereIn('b.project_id', $projectIds)->where('b.is_active', true)->where('b.purpose', 'advertising')
+            ->groupBy('b.project_id')->selectRaw('b.project_id, MAX(a.last_synced_at) AS at')->pluck('at', 'project_id')->all();
+
+        $fx = app(BudgetFx::class);
+        $sum = [];
+        $withheld = [];
+        foreach (SpendLedger::accountDays($projectIds, $date, $date) as $d) {
+            $rate = $d->currency === null ? null : $fx->rate($d->currency, 'SAR', $date);
+            if ($rate === null) {
+                $withheld[$d->projectId] = true;
+
+                continue;
+            }
+            $sum[$d->projectId] = ($sum[$d->projectId] ?? 0.0) + $d->amount * $rate['rate'];
+        }
 
         $out = [];
         foreach ($projectIds as $id) {
-            $at = isset($refreshed[$id]) ? Carbon::parse($refreshed[$id]) : null;
-            $row = $rows->get($id);
+            $at = isset($synced[$id]) ? Carbon::parse($synced[$id]) : null;
             $amount = match (true) {
-                $row !== null && (int) $row->priced < (int) $row->n => null,
-                $row !== null => round((float) $row->amount, 2),
+                isset($withheld[$id]) => null,
+                isset($sum[$id]) => round($sum[$id], 2),
                 $at !== null && $at->greaterThanOrEqualTo($dayStart) => 0.0,
                 default => null,
             };
