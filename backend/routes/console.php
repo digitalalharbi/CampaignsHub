@@ -29,11 +29,22 @@ Schedule::command('reports:dispatch-scheduled')->everyFiveMinutes();
  * that.
  */
 Schedule::command('subscriptions:lifecycle')->dailyAt('01:00')->withoutOverlapping();
+
+/*
+ * PROJECT-LIFECYCLE-001 §4 (N2) — the trash's retention. Purges ONLY projects in «المحذوفات» whose `purge_after` has
+ * passed (set by a delete from the UI; rows soft-deleted before the lifecycle have none and are never purged), and sends
+ * the workspace owner the notice 3 days before. Idempotent; keeps audit + notice logs; never calls an ad platform.
+ */
+Schedule::command('lifecycle:purge-expired --apply')->dailyAt('02:30')->withoutOverlapping();
 // PRICING-SEATS-001 — released ad-account seats stamped within the hour, so the 30-day replacement window starts on time.
 Schedule::command('seats:reconcile')->hourly()->withoutOverlapping();
 
 // PAY-RECONCILE-001 — a payment the gateway took is settled even when its webhook was dropped after the gateway's retries.
 Schedule::command('subscriptions:reconcile-payments')->everyFifteenMinutes()->withoutOverlapping();
+
+// PLATFORM-PAYMENT-ALERTS-001 — tells the platform owner about customers stuck at payment or sign-up. Reads only; a
+// unique key per attempt makes a re-run inert. Offset from the reconcile sweep so a payment it settles is not reported.
+Schedule::command('platform:payment-alerts')->cron('7,22,37,52 * * * *')->withoutOverlapping();
 
 // FORMS-PDPL-001 — the evidence around a form submission expires; the consent record does not.
 Schedule::command('forms:purge-evidence')->dailyAt('02:30')->withoutOverlapping();
@@ -64,7 +75,9 @@ Schedule::call(function (): void {
 })->everyMinute()->name('ops-heartbeat')->withoutOverlapping();
 
 // Evaluate alert rules (budget risk, no results, ROAS drop, sync failure, token expiry) every 15 minutes.
-Schedule::command('alerts:evaluate')->everyFifteenMinutes();
+// PERF-RECOVERY-001 — a sweep never stacks on itself, which could have raised one breach twice. The lock's default life is a day, so a killed run (a deploy, the OOM killer)
+// would silence every alert for a day; 14 minutes means the next tick after a killed run still fires. A run that outlives it can overlap the next, as every run could before.
+Schedule::command('alerts:evaluate')->everyFifteenMinutes()->withoutOverlapping(14);
 
 /*
  * The ad-platform sweep (INTEG-SYNC-001).
@@ -79,6 +92,15 @@ Schedule::command('alerts:evaluate')->everyFifteenMinutes();
  * that out.
  */
 Schedule::command('integrations:sync')->everyThirtyMinutes()->withoutOverlapping();
+// FIN-LOOP-001 — count the spend the sync just stored against each project's approved budget (idempotent per account-day).
+Schedule::command('funding:refresh')->cron('20,50 * * * *')->withoutOverlapping();
+// FIN-LOOP-001 — fix last month's budget summary once; daily so a missed day is caught; a fixed month is never rewritten.
+Schedule::command('funding:close-month')->dailyAt('02:40')->timezone('Asia/Riyadh')->withoutOverlapping();
+
+// PERF-SYNC-ISOLATION-001 — the half-hourly sweep above asks 3 days back; this daily pass re-asks the
+// fortnight in which providers restate (late attribution, corrected spend). Same command, same
+// ledger rows (`scheduled_runs.command` is the artisan name), same assigned-accounts-only gate.
+Schedule::command('integrations:sync --days=14')->dailyAt('03:50')->timezone('Asia/Riyadh')->withoutOverlapping();
 
 // SALLA-ONBOARD-001 — a store uninstalled 30 days ago has its synced data removed (the retention the merchant is promised).
 Schedule::command('commerce:purge-uninstalled')->dailyAt('03:30')->withoutOverlapping();
@@ -95,8 +117,11 @@ Schedule::command('commerce:purge-uninstalled')->dailyAt('03:30')->withoutOverla
  */
 Schedule::command('integrations:sync-structure')->cron('55 */6 * * *')->withoutOverlapping();
 
-// TIKTOK-MEDIA-002 — covers into our own storage, after the night's structure sweep has refreshed the links.
-Schedule::command('creatives:refresh-covers')->dailyAt('03:30')->withoutOverlapping();
+// TIKTOK-MEDIA-002 — covers into our own storage.
+// CREATIVE-PREVIEWS-001 — hourly, not nightly: a TikTok image link lives an hour and a video cover six, so a
+// once-a-night pass met most of them dead. Each run queues only what is due (no copy, or a newer link, and
+// not backing off), spaced out; a lapsed link is renewed through the platform's own rate budget first.
+Schedule::command('creatives:backfill-covers', ['--execute'])->hourlyAt(40)->withoutOverlapping();
 
 /*
  * Close the runs a worker abandoned — before the next sweep reads them as work in progress.
@@ -117,6 +142,15 @@ Schedule::command('creatives:refresh-covers')->dailyAt('03:30')->withoutOverlapp
 Schedule::command('integrations:close-abandoned-runs --apply')->hourlyAt(10)->withoutOverlapping();
 
 /*
+ * INTEG-SOURCE-REMOVAL-001 — hide authorisations that were started in the wizard and never finished.
+ *
+ * Scheduled daily but inert until INTEGRATIONS_ABANDONED_SWEEP_ENABLED=true: without it the command only
+ * reports. It hides (never deletes) a connection older than a day with no selection, no sync and not one
+ * binding, metric, run or mapping row referencing it.
+ */
+Schedule::command('integrations:sweep-abandoned --apply')->dailyAt('04:20')->withoutOverlapping();
+
+/*
  * Refresh tokens BEFORE a sync needs them.
  *
  * The vault refreshes on use too, but discovering a revoked authorisation from a queue worker at 3am
@@ -133,7 +167,27 @@ Schedule::command('integrations:refresh-tokens')->hourly()->withoutOverlapping()
  * own timezone, so the schedule has to come round every hour for that question to be answerable.
  * Sending is idempotent by database constraint, so an overlapping run cannot double-send.
  */
-Schedule::command('notifications:send-digests')->hourly()->withoutOverlapping();
+// DIGESTS-CADENCE-BUDGETS-001 — pinned to Riyadh, as every other morning job here: the app clock is UTC (`config/app.php`, and no `APP_TIMEZONE` in the production env), so
+// the scheduler's own clock is UTC. The sweep is hourly and asks each reader's own hour (08:00 Asia/Riyadh by default), so the pin
+// states the frame the 08:00 promise is made in rather than moving any send.
+Schedule::command('notifications:send-digests')->hourly()->timezone('Asia/Riyadh')->withoutOverlapping();
+// SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق»: hourly, acting from 08:00 in the reader's timezone; idempotent per period. At :10, after the digests.
+Schedule::command('notifications:send-spend-summaries')->hourlyAt(10)->timezone('Asia/Riyadh')->withoutOverlapping();
+// NOTIF-PUSH-001 — pushes held through quiet hours go out as ONE summary per person, once their window has ended.
+Schedule::command('notifications:flush-deferred-push')->everyTenMinutes()->withoutOverlapping();
+// NOTIF-V2-ENGINE-001 — the shared engine: due digests into the outbox, then the sender drains it in spread batches.
+Schedule::command('notifications:v2-digests')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('notifications:v2-send')->everyMinute()->withoutOverlapping();
+Schedule::command('notifications:v2-internal-scan')->everyTenMinutes()->withoutOverlapping();
+Schedule::command('notifications:v2-morning-brief')->everyFiveMinutes()->withoutOverlapping();
+Schedule::command('notifications:v2-grace-heads-up')->dailyAt('09:05')->timezone('Asia/Riyadh')->withoutOverlapping();
+Schedule::command('notifications:v2-consent-sweep')->dailyAt('09:00')->timezone('Asia/Riyadh')->withoutOverlapping();
+// NOTIF-V2-EXTERNAL-001 — held external messages with no decision in the review window are skipped with a notice.
+Schedule::command('notifications:v2-review-sweep')->everyFifteenMinutes()->withoutOverlapping();
+// NOTIF-V2-EXTERNAL-001 — the default external events (continuity planning, improvement, new campaign, month end/start), once a day.
+Schedule::command('notifications:v2-external-events')->dailyAt('07:30')->timezone('Asia/Riyadh')->withoutOverlapping();
+// EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the sweep alone never reached it again.
+Schedule::command('notifications:retry-failed')->everyFifteenMinutes()->withoutOverlapping();
 
 /*
  * The alert sweep (MAIL-006) — four times a day, not hourly.
@@ -161,6 +215,18 @@ Schedule::command('notifications:send-alerts')->cron('40 6,10,14,18 * * *')->wit
  * already been refunded.
  */
 Schedule::command('commerce:sync')->hourlyAt(20)->withoutOverlapping();
+// ANALYTICS-DATA-001 — pre-aggregate the heavy analytics sections every 3 hours, ten minutes after the store sync; queued, bounded.
+Schedule::command('analytics:build-snapshots')->cron('50 */3 * * *')->withoutOverlapping();
+
+/*
+ * INTEG-WEBHOOK-ENGINE-001 — webhook reconciliation: read-only toward the provider, bounded, OFF by default.
+ *
+ * Listed unconditionally so the scheduled-work inventory sees it; `when()` is what keeps it quiet until the
+ * Owner sets WEBHOOK_RECONCILE_ENABLED. Every six hours at :40, clear of the :20 store sweep, and only the
+ * stores bound to a project, at most twenty per run.
+ */
+Schedule::command('webhooks:reconcile')->cron('40 */6 * * *')->withoutOverlapping()
+    ->when(static fn (): bool => (bool) config('integrations.webhooks.reconcile.enabled'));
 
 /*
  * GA4-INTEGRATION-001 — the measurement sweep.
@@ -176,7 +242,7 @@ Schedule::command('commerce:sync')->hourlyAt(20)->withoutOverlapping();
  */
 Schedule::command('measurement:sync')->cron('25 */4 * * *')->withoutOverlapping();
 
-// Retain raw platform payloads for ninety days — long enough to settle a dispute about a figure,
+// Retain raw platform payloads for thirty days (RAW-RETENTION-30-001, Owner 2026-11-19) — long enough to settle a dispute about a figure,
 // short enough that the audit trail does not become the largest table in the database.
 Schedule::command('integrations:prune-raw')->dailyAt('03:30');
 
@@ -192,6 +258,12 @@ Schedule::command('integrations:prune-raw')->dailyAt('03:30');
  * today's rate already on file rather than being withheld until tomorrow.
  */
 Schedule::command('fx:rates')->dailyAt('02:30')->withoutOverlapping();
+
+/*
+ * FX-ENGINE-001 — after the rates have arrived: in-app alerts for a used currency with no rate or one older than 7 days,
+ * and the money guard's cheap scan (the last 3 days of stored figures) for any money that bypassed convert().
+ */
+Schedule::command('fx:monitor')->dailyAt('03:00')->withoutOverlapping();
 
 /*
  * The periodic delivery packs (WD-SCHEDULE-001, DELIVERY-SETTINGS-001) — every morning, Riyadh time; each client is prepared on its own day.
@@ -222,3 +294,6 @@ Schedule::command('agents:run-routines weekly_report')->cron('0 14 * * 4')->time
  * frequency and timezone). Changes go through the approval gateway; nothing here bypasses it.
  */
 Schedule::command('automation:evaluate')->everyFiveMinutes()->withoutOverlapping();
+
+// PERF-RECOVERY-001 — logs an error when a route's p95 or a queue backlog passes its limit.
+Schedule::command('ops:perf-check')->everyFiveMinutes()->withoutOverlapping();

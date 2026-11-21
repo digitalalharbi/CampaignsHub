@@ -1,6 +1,8 @@
 import { realpathSync } from 'node:fs'
 import { fileURLToPath, URL } from 'node:url'
 import { preloadCriticalFonts } from './src/build/preloadCriticalFonts.js'
+import { bundleBudget } from './src/build/bundleBudget.js'
+import { connectionLog } from './src/build/connectionLog.js'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
@@ -20,6 +22,8 @@ const HOPS = {
   '/sanctum': { target: API_TARGET, changeOrigin: true },
   '/l/': { target: API_TARGET, changeOrigin: true },
   '/demo': { target: API_TARGET, changeOrigin: true },
+  // CREATIVE-PREVIEWS-001 — cached creative covers, served by Laravel from the storage volume.
+  '/media/covers': { target: API_TARGET, changeOrigin: true },
 } as const
 
 /**
@@ -48,7 +52,7 @@ const CACHE_DIR = process.env.VITE_CACHE_DIR
 // https://vite.dev/config/
 export default defineConfig({
   ...(CACHE_DIR === undefined ? {} : { cacheDir: CACHE_DIR }),
-  plugins: [react(), tailwindcss(), preloadCriticalFonts()],
+  plugins: [react(), tailwindcss(), preloadCriticalFonts(), bundleBudget(), connectionLog()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -100,6 +104,16 @@ export default defineConfig({
   preview: {
     proxy: HOPS,
   },
+  /*
+   * PERF-RECOVERY-001 — the import graph, written out, so a route's real weight can be measured.
+   *
+   * `scripts/route-bytes.mjs` follows it from the entry and from a route's chunk and sums every
+   * static import either pulls; that figure, not the route chunk's own size, is what a visitor
+   * downloads. The plugin below holds the same figure to a ceiling on every build.
+   */
+  build: {
+    manifest: true,
+  },
 
   test: {
     environment: 'jsdom',
@@ -107,7 +121,7 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     css: false,
     // Playwright e2e specs live in ./e2e and run via `npx playwright test`, not vitest.
-    exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
+    exclude: ['e2e/**', 'e2e-mail/**', 'node_modules/**', 'dist/**'],
     /*
      * 15s, against vitest's 5s default — because the default was failing correct tests.
      *

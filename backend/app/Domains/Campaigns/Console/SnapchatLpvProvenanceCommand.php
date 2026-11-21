@@ -20,7 +20,9 @@ use Illuminate\Support\Facades\DB;
  *   · how far back the scheduled sweep actually re-fetches, MEASURED from the recent Snapchat metric
  *     runs rather than assumed from the default;
  *   · the stored ad-grain rows carrying `landing_page_views`, by month and by grain, split at that
- *     boundary — rows inside it are rewritten by the ordinary sweep, rows outside it are not;
+ *     boundary — rows inside it are re-asked by the ordinary sweep and rewritten where the answer
+ *     differs (PERF-RECOVERY-001: a row the provider repeats is left alone, so `updated_at` is when
+ *     its figures last CHANGED), rows outside it are not asked for;
  *   · how many carry `landing_page_views = page_views`, the old mapping's own signature (both columns
  *     were filled from the same field). A row where they differ was written by the delivery mapping.
  *
@@ -55,7 +57,7 @@ final class SnapchatLpvProvenanceCommand extends Command
             $earliest ?? 'none',
             $runs?->latest_end === null ? 'none' : Carbon::parse((string) $runs->latest_end)->toDateString(),
         ));
-        $this->line('  rows ON or AFTER that start are rewritten by the ordinary sweep; rows BEFORE it keep what they hold.');
+        $this->line('  rows ON or AFTER that start are re-asked by the ordinary sweep and rewritten where the answer differs; rows BEFORE it keep what they hold.');
 
         $rows = DB::table('entity_daily_metrics')
             ->where('provider', 'snapchat')
@@ -66,7 +68,8 @@ final class SnapchatLpvProvenanceCommand extends Command
                 // 0 = 0 is a real day with no views as often as it is the old mapping; only a POSITIVE match is evidence.
                 .'COUNT(*) FILTER (WHERE page_views > 0 AND landing_page_views = page_views) AS equals_positive, '
                 .'COUNT(*) FILTER (WHERE updated_at < ?) AS unwritten_24h, '
-                // The positive old-signature rows the sweep did NOT rewrite: stale pixel values, not a coincidence.
+                // The positive old-signature rows no sweep has CHANGED in a day: outside its reach these are stale pixel values;
+                // inside it the provider was asked again and repeated the figure (an unchanged row is not written again).
                 .'COUNT(*) FILTER (WHERE page_views > 0 AND landing_page_views = page_views AND updated_at < ?) AS positive_unwritten', [$cutoff = Carbon::now()->subDay()->toDateTimeString(), $cutoff])
             ->groupBy('entity_type', 'month')
             ->orderBy('entity_type')
@@ -83,7 +86,7 @@ final class SnapchatLpvProvenanceCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->line(sprintf('  %-8s %-8s %8s %22s %12s %18s %12s %12s', 'grain', 'month', 'rows', '= page_views (old map)', '… and > 0', 'not written 24h', 'first day', 'last day'));
+        $this->line(sprintf('  %-8s %-8s %8s %22s %12s %18s %12s %12s', 'grain', 'month', 'rows', '= page_views (old map)', '… and > 0', 'not changed 24h', 'first day', 'last day'));
 
         foreach ($rows as $row) {
             $this->line(sprintf(
@@ -116,7 +119,7 @@ final class SnapchatLpvProvenanceCommand extends Command
                 (int) ($split->outside_reach ?? 0),
                 (int) ($split->outside_reach_old_map ?? 0),
             ));
-            $this->line(sprintf('  inside the sweep\'s reach: %d row(s) — rewritten by the ordinary sweep once #460 is deployed', (int) ($split->inside_reach ?? 0)));
+            $this->line(sprintf('  inside the sweep\'s reach: %d row(s) — re-asked by the ordinary sweep, and rewritten where the answer differs, once #460 is deployed', (int) ($split->inside_reach ?? 0)));
         }
 
         return self::SUCCESS;

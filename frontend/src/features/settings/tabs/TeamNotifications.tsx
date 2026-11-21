@@ -23,7 +23,8 @@ const PORTALS: Record<string, { ar: string; en: string }> = {
 
 /** The one word for what is happening to this person's email, and what it means. */
 const STATES: Record<string, { ar: string; en: string; tone: string }> = {
-  sent: { ar: 'وصلت آخر رسالة', en: 'Last message delivered', tone: 'text-success' },
+  // EMAIL-DELIVERY-LEDGER-001 — «delivered» here was a claim on the strength of an SMTP 250.
+  sent: { ar: 'قبل خادم البريد آخر رسالة', en: 'Mail server accepted the last message', tone: 'text-success' },
   sandbox: { ar: 'وضع الاختبار', en: 'Sandbox', tone: 'text-warning' },
   awaiting_credentials: { ar: 'بانتظار ربط مزوّد البريد', en: 'Awaiting a mail provider', tone: 'text-warning' },
   failed: { ar: 'تعذّر الإرسال', en: 'Sending failed', tone: 'text-danger' },
@@ -107,14 +108,14 @@ export function TeamNotifications() {
                 <tr key={p.user_id} className="border-b border-border align-top last:border-0">
                   <td className="p-2">
                     <div className="font-medium text-text-primary">{p.name}</div>
-                    <div className="text-[13px] text-text-muted" dir="ltr">{p.email}</div>
-                    <div className="text-[13px] text-text-muted">
+                    <div className="text-xs text-text-muted" dir="ltr">{p.email}</div>
+                    <div className="text-xs text-text-muted">
                       {[...p.roles, PORTALS[p.portal] ? (ar ? PORTALS[p.portal].ar : PORTALS[p.portal].en) : null]
                         .filter(Boolean).join(' · ')}
                     </div>
                   </td>
 
-                  <td className="max-w-[220px] p-2 text-[13px] leading-6 text-text-primary">
+                  <td className="max-w-[220px] p-2 text-xs leading-6 text-text-primary">
                     {p.projects.slice(0, 3).join('، ')}
                     {p.projects.length > 3 && (
                       <span className="text-text-muted">
@@ -123,18 +124,18 @@ export function TeamNotifications() {
                     )}
                   </td>
 
-                  <td className="max-w-[200px] p-2 text-[13px] leading-6 text-text-primary">
+                  <td className="max-w-[200px] p-2 text-xs leading-6 text-text-primary">
                     {p.categories.length === 0
                       ? <span className="text-text-muted">{ar ? 'لا شيء' : 'Nothing'}</span>
                       : p.categories.map((c) => words(CATEGORY_LABELS, c, ar)).join('، ')}
                     {p.arranged_by_manager && (
-                      <div className="text-[13px] text-text-muted">
+                      <div className="text-xs text-text-muted">
                         {ar ? 'مضاف من قائمة المستلمين' : 'On a recipient list'}
                       </div>
                     )}
                   </td>
 
-                  <td className="p-2 text-[13px] leading-6 text-text-primary">
+                  <td className="p-2 text-xs leading-6 text-text-primary">
                     {[
                       p.rhythms.daily && (ar ? 'يومي' : 'Daily'),
                       p.rhythms.weekly && (ar ? 'أسبوعي' : 'Weekly'),
@@ -142,7 +143,7 @@ export function TeamNotifications() {
                     ].filter(Boolean).join('، ') || <span className="text-text-muted">—</span>}
                   </td>
 
-                  <td className="p-2 text-[13px] leading-6 text-text-primary">
+                  <td className="p-2 text-xs leading-6 text-text-primary">
                     {p.last_message === null ? (
                       <span className="text-text-muted">—</span>
                     ) : (
@@ -154,9 +155,9 @@ export function TeamNotifications() {
                   </td>
 
                   <td className="max-w-[240px] p-2">
-                    <span className={`text-[13px] font-semibold ${state(p).tone}`}>{ar ? state(p).ar : state(p).en}</span>
+                    <span className={`text-xs font-semibold ${state(p).tone}`}>{ar ? state(p).ar : state(p).en}</span>
                     {STATE_NOTES[p.state] && (
-                      <p className="text-[13px] leading-6 text-text-secondary">
+                      <p className="text-xs leading-6 text-text-secondary">
                         {ar ? STATE_NOTES[p.state].ar : STATE_NOTES[p.state].en}
                       </p>
                     )}

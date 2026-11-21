@@ -1,16 +1,20 @@
+import { ObjectivePathCards } from '@/features/analytics/ObjectivePathCards'
+import { spendHiddenByLink } from './liveMetrics'
 import { basisLine } from './ExecutiveSummary'
+import { carries } from '../chosenFigures'
 import { useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { ChartCard, MetricLineChart, ProgressRing } from '@/features/analytics/charts'
-import { rowMoney } from '@/features/analytics/format'
-import { canonicalPlatform } from '@/lib/platforms'
-import { type MoneyTotals } from '@/lib/money/contract'
+import { liveRowMoney } from '@/features/analytics/format'
+import { canonicalPlatform, sortPlatforms } from '@/lib/platforms'
+import { moneyParts, type MoneyTotals } from '@/lib/money/contract'
+import { PendingConversionChip } from '../PendingConversionChip'
 import { Num } from '@/components/ui/Num'
 import type { Locale } from '@/stores/ui'
-import type { LivePayload } from '../api'
+import type { AdsBasis, LivePayload } from '../api'
 import { AttentionBlocks } from '../AttentionBlocks'
 import { ClientAttention } from '../ClientAttention'
 import { BusinessStreamsSection } from '../BusinessStreamsSection'
@@ -30,9 +34,14 @@ import {
   TrendAndDistribution,
   useSpendCharting,
 } from './LiveSections'
+import { StoreAnalyticsBlock } from '../StoreAnalyticsBlock'
+import { Ga4ReportBlocks, ga4PartShown, WEBSITE_PARTS, WebsiteStrip, websiteHasContent } from '../Ga4ReportBlocks'
+import { FormatComparisonReportBlock } from '../FormatComparisonBlocks'
 import type { useLiveMetricReader } from './liveMetrics'
 import type { LiveLoad } from './useLivePayload'
 import { sectionShown, type ReportSectionKey } from '../reportSections'
+import { AudienceReportBlocks } from '@/features/audience/AudienceBlocks'
+import type { AudienceParts } from '@/features/audience/types'
 import { resultWords } from './leadResults'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
@@ -43,6 +52,8 @@ type Common = {
   currency: string
   locale: Locale
   onOpenContent: (content: ReportAd) => void
+  /** REPORT-WEBSITE-TAB-001 — the summary's one website strip opens the «الموقع» tab where the link offers it. */
+  onOpenWebsite?: () => void
 }
 
 const LEGACY_FLAG: Partial<Record<ReportSectionKey, keyof NonNullable<LivePayload['sections']>>> = {
@@ -97,7 +108,11 @@ function ContentStrip({
   action,
   empty,
   columns = 4,
+  note,
+  basis,
 }: {
+  basis?: AdsBasis | null
+  note?: string | null
   columns?: 3 | 4
   title: string
   items: ReportAd[]
@@ -114,12 +129,13 @@ function ContentStrip({
   return (
     <section data-testid={testid}>
       <SectionTitle action={action}>{title}</SectionTitle>
+      {items.length > 0 && note && <p className="-mt-1 mb-3 text-xs text-text-muted" data-testid={`${testid}-basis`}>{note}</p>}
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-text-secondary">{empty}</p>
       ) : (
         <div className={`grid grid-cols-2 gap-3 md:grid-cols-3 ${columns === 4 ? 'xl:grid-cols-4' : ''}`}>
           {items.map((c, i) => (
-            <ContentTile key={c.content_key ?? `${c.name}-${i}`} content={c} locale={locale} currency={currency} onOpen={onOpen} rank={ranked ? i + 1 : undefined} />
+            <ContentTile key={c.content_key ?? `${c.name}-${i}`} content={c} locale={locale} currency={currency} onOpen={onOpen} rank={ranked ? i + 1 : undefined} rankedBy={ranked ? basis : undefined} />
           ))}
         </div>
       )}
@@ -156,7 +172,7 @@ function LiveAttention({ payload, ar, onOpenContent }: { payload: LivePayload; a
 
 /* ─────────────────────────────── A — Executive summary ─────────────────────────────── */
 
-export function SummaryView({ payload, reader, currency, locale, onOpenContent }: Common) {
+export function SummaryView({ payload, reader, currency, locale, onOpenContent, onOpenWebsite }: Common) {
   /*
    * REPORT-EXECUTIVE-SUMMARY-001 / CLIENT-REPORT-FRAMING-001 — the summary a shared link opens on is
    * the platforms summary with the results around it: platform cards → results board → results over
@@ -164,14 +180,18 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
    * to improve → funnel and measurement coverage → optimisation steps. No spend, no campaign.
    */
   return (
-    <ExecutiveSummary
-      payload={payload}
-      reader={reader}
-      currency={currency}
-      locale={locale}
-      onOpenContent={onOpenContent}
-      sectionOn={(key) => sectionOn(payload, key)}
-    />
+    <div className="flex flex-col gap-6">
+      {/* REPORT-WEBSITE-TAB-001 — the ONE website headline strip; everything else about the website lives in its own tab. */}
+      <WebsiteStrip payload={payload} ar={locale === 'ar'} onOpen={onOpenWebsite} />
+      <ExecutiveSummary
+        payload={payload}
+        reader={reader}
+        currency={currency}
+        locale={locale}
+        onOpenContent={onOpenContent}
+        sectionOn={(key) => sectionOn(payload, key)}
+      />
+    </div>
   )
 }
 
@@ -186,11 +206,12 @@ export function SummaryView({ payload, reader, currency, locale, onOpenContent }
  * to look at — and it stops there. No tabs, no tables to work in, no pacing, no segmentation, no
  * per-platform drill-down: that depth is the Detailed product's, and it travels only in that payload.
  */
-export function StandardView({ payload, reader, currency, locale, onOpenContent }: Common) {
+export function StandardView({ payload, reader, currency, locale, onOpenContent, onOpenWebsite }: Common) {
   const ar = locale === 'ar'
 
   return (
     <div data-testid="live-mode-standard" className="flex flex-col gap-6">
+      <WebsiteStrip payload={payload} ar={ar} onOpen={onOpenWebsite} />
       <LiveKpiBoard payload={payload} reader={reader} ar={ar} keys={kpiKeysFor(payload, reader)} heroOnly />
       {sectionOn(payload, 'recommendations') && (
         <section data-testid="standard-commentary" className="rounded-2xl border border-border bg-surface p-4">
@@ -212,6 +233,7 @@ export function StandardView({ payload, reader, currency, locale, onOpenContent 
             title={`${ar ? 'أفضل المحتوى' : 'Best content'}${basisLine(payload.ads_basis, ar) ? ` — ${basisLine(payload.ads_basis, ar)}` : ''}`}
             items={(payload.ads ?? []).slice(0, 6)}
             testid="standard-best-content"
+            basis={payload.ads_basis}
             currency={currency}
             locale={locale}
             onOpen={onOpenContent}
@@ -260,6 +282,16 @@ export function DashboardView({
       <LiveKpiBoard payload={payload} reader={reader} ar={ar} keys={kpiKeysFor(payload, reader)} />
       <LiveScopeCounts payload={payload} ar={ar} />
       {/* CLIENT-FACING-PRESENTATION-001 — «at what cost» before «where»; shown only where it says something. */}
+      {/* OBJECTIVE-PATHS-001 — one total, its split by objective, one card per objective. */}
+      {/* Shown where there is more than one objective; one objective is already the KPI board above. */}
+      {sectionOn(payload, 'objective_breakdown') && payload.objective_performance?.objective_paths?.mixed && (
+        <ObjectivePathCards
+          block={payload.objective_performance?.objective_paths}
+          locale={locale}
+          currency={currency}
+          showMoney={!spendHiddenByLink(payload)}
+        />
+      )}
       {splitDiffers(payload) && <ObjectiveSplit payload={payload} ar={ar} reader={reader} />}
       {/* The charts come before the tables: the reader sees the shape of the period first, then the rows. */}
       <TrendAndDistribution payload={payload} ar={ar} currency={currency} />
@@ -341,14 +373,33 @@ export function DashboardView({
       {sectionOn(payload, 'funnel') && <FunnelSection payload={payload} ar={ar} currency={currency} />}
       {sectionOn(payload, 'detailed_tables') && <LiveDetailTables payload={payload} currency={currency} locale={ar ? 'ar' : 'en'} />}
       {sectionOn(payload, 'budget_pacing') && <ClientAttention payload={payload} currency={currency} locale={locale} />}
-      {sectionOn(payload, 'funnel') && <StoreFunnelSection payload={payload} ar={ar} />}
-      {/*
-        GA4-INTEGRATION-001 — after the paid-media story and before the insights, because that is
-        what it is: context for the campaigns, never a verdict on them. Off by default on a
-        client-facing link; `sectionOn` is what the operator's choice flows through.
-      */}
-      {sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
+      {/* REPORT-WEBSITE-TAB-001 — the store's funnel, the site measurement, the store orders and the website reading left the dashboard: they live in the «الموقع» tab, once. */}
       {sectionOn(payload, 'recommendations') && <LiveAttention payload={payload} ar={ar} onOpenContent={onOpenContent} />}
+    </div>
+  )
+}
+
+/* ─────────────────────────────── W — Website ─────────────────────────────── */
+
+/**
+ * REPORT-WEBSITE-TAB-001 — «الموقع»: EVERYTHING about the website and the store, once.
+ *
+ * Key figures (one source per figure), the trend, channels / devices / the website funnel, the attribution match against
+ * the ad platforms, why the gap, the classification, the sources / campaign / landing / product tables, then the store's
+ * own orders. The website's attribution is its own: never added to a platform figure and never an order-level match.
+ * Each part is its own SHOW/HIDE on the server, so a hidden part is absent from the payload and from this page.
+ */
+export function WebsiteView({ payload, ar }: { payload: LivePayload; ar: boolean }) {
+  const ga4Shown = WEBSITE_PARTS.some((p) => ga4PartShown(payload, p))
+
+  return (
+    <div data-testid="live-mode-website" className="flex flex-col gap-6">
+      <Ga4ReportBlocks payload={payload} ar={ar} />
+      {/* The older site reading repeats the tiles above; it stands only where the website reading itself is not carried. */}
+      {!ga4Shown && sectionOn(payload, 'site_measurement') && <SiteMeasurementSection payload={payload} ar={ar} />}
+      {sectionOn(payload, 'funnel') && <StoreFunnelSection payload={payload} ar={ar} />}
+      {sectionOn(payload, 'store_analytics') && payload.store_analytics && <StoreAnalyticsBlock data={payload.store_analytics} ar={ar} />}
+      {!websiteHasContent(payload as never) && <p data-testid="website-empty" className="rounded-2xl border border-border bg-surface px-4 py-6 text-center text-sm text-text-muted">{ar ? 'لا بيانات للموقع في هذه الفترة' : 'No website data in this period'}</p>}
     </div>
   )
 }
@@ -376,10 +427,12 @@ export function LoadGate({ load, ar, children }: { load: LiveLoad; ar: boolean; 
 
 /** The platforms a link actually carries figures for, largest spend first. */
 export function platformsOf(payload: LivePayload): string[] {
-  return [...(payload.platforms ?? [])]
+  const ordered = [...(payload.platforms ?? [])]
     .sort((a, b) => Number(b.spend ?? 0) - Number(a.spend ?? 0))
     .map((p) => canonicalPlatform(p.provider))
     .filter((p, i, all) => all.indexOf(p) === i)
+  // PLATFORM-ORDER-002 — Owner 2026-11-18: the product's order always (سناب · تيك توك · ميتا · جوجل · إكس · لينكدإن · ChatGPT), not by spend.
+  return sortPlatforms(ordered)
 }
 
 /* ─────────────────────────────── C — Platform breakdown ─────────────────────────────── */
@@ -405,6 +458,11 @@ export function PlatformsView({
   const ar = locale === 'ar'
   const platforms = platformsOf(whole)
   const wholeRows = whole.platforms ?? []
+  /*
+   * LIVE-LINK-IDLE-PLATFORM-001 — a platform the link carries but that has sent no figures yet (a freshly linked ChatGPT account)
+   * is a card that says so, not an absence: the reader is told it is connected and has nothing to report, not left to wonder.
+   */
+  const idle = (whole.available?.providers ?? []).map((p) => canonicalPlatform(p)).filter((p, i, all) => !platforms.includes(p) && all.indexOf(p) === i)
   const totalSpend = wholeRows.reduce((a, p) => a + Number(p.spend ?? 0), 0)
   const totalResults = wholeRows.reduce((a, p) => a + Number(p.conversions ?? 0), 0)
   const words = resultWords(whole, ar)
@@ -420,6 +478,15 @@ export function PlatformsView({
   return (
     <div data-testid="live-mode-platforms" className="flex flex-col gap-5">
       <div role="tablist" aria-label={ar ? 'المنصات' : 'Platforms'} className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {idle.map((p) => (
+          <div key={p} data-testid={`live-platform-idle-${p}`} className="min-w-0 overflow-hidden rounded-2xl border border-dashed border-border bg-surface">
+            <span className="block h-1.5" style={{ background: platformColor(p) }} aria-hidden />
+            <span className="flex flex-col gap-1 p-3">
+              <span className="flex min-w-0 text-sm font-bold text-text-primary"><ProviderName provider={p} locale={locale === 'ar' ? 'ar' : 'en'} size={20} /></span>
+              <span className="inline-flex w-fit rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-semibold text-text-secondary">{ar ? 'لا صرف بعد' : 'No spend yet'}</span>
+            </span>
+          </div>
+        ))}
         {platforms.map((p) => {
           const row = wholeRows.find((r) => canonicalPlatform(r.provider) === p)
           const share = totalSpend > 0 && row ? Number(row.spend ?? 0) / totalSpend : null
@@ -438,9 +505,15 @@ export function PlatformsView({
               <span className="block h-1.5" style={{ background: platformColor(p) }} aria-hidden />
               <span className="flex flex-col gap-1 p-3">
                 <span className="flex min-w-0 text-sm font-bold text-text-primary"><ProviderName provider={p} locale={locale === 'ar' ? 'ar' : 'en'} size={20} /></span>
-                <span className="tnum truncate text-lg font-extrabold text-text-primary">
-                  <Num>{row ? rowMoney(row as unknown as MoneyTotals, 'spend', currency) : '—'}</Num>
+                {/* REPORT-FILTERS-FUNCTIONAL-001 — a row that carries no spend (not chosen) prints no line of it. */}
+                {!(row && !('spend' in row)) && (
+                <span className="tnum break-words text-lg font-extrabold text-text-primary">
+                  <Num>{row ? liveRowMoney(row as unknown as MoneyTotals, 'spend', currency) : '—'}</Num>
                 </span>
+                )}
+                {row && moneyParts(row as unknown as MoneyTotals, 'spend') !== null && (
+                  <PendingConversionChip currency={moneyParts(row as unknown as MoneyTotals, 'spend')?.originalCurrency ?? null} ar={ar} />
+                )}
                 <span className="tnum truncate text-xs text-text-secondary">
                   {/* RESULT-EVENTS-001 — the platform's DEFINED result under the link's own name; never its generic conversion (TikTok's 1,126 were page views). */}
                   {words.shown && (
@@ -460,6 +533,9 @@ export function PlatformsView({
           )
         })}
       </div>
+
+      {/* AUDIENCE-001 — the audience parts the server resolved for this link (absent = hidden or no data). */}
+      <AudienceReportBlocks payload={whole as unknown as AudienceParts} locale={ar ? 'ar' : 'en'} />
 
       {platform && (
         <LoadGate load={narrowed} ar={ar}>
@@ -541,6 +617,8 @@ function PlatformDetail({
           </div>
         </ChartCard>
         )}
+        {/* REPORT-FILTERS-FUNCTIONAL-001 — no share to state when the row carries no spend and the result has none: no card of a dash. */}
+        {!(wholeRow && !('spend' in wholeRow) && resultShare === null) && (
         <ChartCard title={ar ? `حصة ${name} من الإجمالي` : `${name}’s share of the total`}>
           <div data-testid="live-platform-shares" className="flex flex-wrap items-center justify-around gap-4 py-2">
             {spendShare !== null && <ProgressRing value={spendShare} sublabel={ar ? 'من الإنفاق' : 'of spend'} size={116} />}
@@ -553,6 +631,7 @@ function PlatformDetail({
             </p>
           )}
         </ChartCard>
+        )}
       </div>
 
       {sectionOn(payload, 'content_performance') && (
@@ -565,6 +644,8 @@ function PlatformDetail({
             locale={locale}
             onOpen={onOpenContent}
             ranked
+            note={basisLine(payload.ads_basis, ar)}
+            basis={payload.ads_basis}
             action={goToContent ? <GoTo testid="live-platform-goto-content" ar={ar} label={ar ? 'كل محتوى المنصة' : 'All content on this platform'} onClick={() => goToContent(platform)} /> : undefined}
             empty={ar ? 'لا يوجد محتوى بأرقام على هذه المنصة في هذه الفترة.' : 'No content with figures on this platform in this period.'}
           />
@@ -648,7 +729,9 @@ export function ContentView({
 
 function ContentBody({ payload, currency, locale, onOpenContent }: Omit<Common, 'reader'>) {
   const ar = locale === 'ar'
-  const [sort, setSort] = useState<SortKey>('spend')
+  // REPORT-FILTERS-FUNCTIONAL-001 — the orders this link can honour: by a figure it carries.
+  const sortable = (['spend', 'conversions', 'ctr'] as const).filter((k) => carries(payload.totals, k))
+  const [sort, setSort] = useState<SortKey>(sortable[0] ?? 'spend')
   const [shown, setShown] = useState(PAGE)
 
   const all = useMemo(() => {
@@ -673,6 +756,8 @@ function ContentBody({ payload, currency, locale, onOpenContent }: Omit<Common, 
 
   return (
     <div className="flex flex-col gap-5">
+      {/* CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى» lives in the «المحتوى» tab only; drawn where the server named it. */}
+      <FormatComparisonReportBlock payload={payload} ar={ar} />
       <ContentStrip
         title={ar ? 'الأفضل أداءً' : 'Best performing'}
         items={(payload.ads ?? []).slice(0, 4)}
@@ -693,7 +778,7 @@ function ContentBody({ payload, currency, locale, onOpenContent }: Omit<Common, 
 
       <section data-testid="live-content-all">
         <SectionTitle
-          action={(
+          action={sortable.length === 0 ? undefined : (
             <label className="inline-flex items-center gap-2 text-xs text-text-secondary">
               {ar ? 'ترتيب' : 'Sort'}
               <select
@@ -702,9 +787,10 @@ function ContentBody({ payload, currency, locale, onOpenContent }: Omit<Common, 
                 onChange={(e) => { setSort(e.target.value as SortKey); setShown(PAGE) }}
                 className="rounded-lg border border-border bg-surface px-2 py-1 text-xs text-text-primary"
               >
-                <option value="spend">{ar ? 'الإنفاق' : 'Spend'}</option>
-                <option value="conversions">{ar ? 'النتائج' : 'Results'}</option>
-                <option value="ctr">{ar ? 'نسبة النقر' : 'CTR'}</option>
+                {/* REPORT-FILTERS-FUNCTIONAL-001 — an order by a figure the link does not carry is not offered (the server refuses it too). */}
+                {carries(payload.totals, 'spend') && <option value="spend">{ar ? 'الإنفاق' : 'Spend'}</option>}
+                {carries(payload.totals, 'conversions') && <option value="conversions">{ar ? 'النتائج' : 'Results'}</option>}
+                {carries(payload.totals, 'ctr') && <option value="ctr">{ar ? 'معدل النقر' : 'CTR'}</option>}
               </select>
             </label>
           )}

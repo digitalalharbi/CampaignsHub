@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Http\Controllers;
 
+use App\Domains\Accounts\Enums\AccountState;
+use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Legal\Models\ContactMessage;
+use App\Domains\Legal\Models\DataRequest;
+use App\Domains\Legal\Models\SupportTicket;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Membership;
@@ -65,7 +70,7 @@ final class PlatformOverviewController extends Controller
             ],
             'workload' => [
                 'client_workspaces' => ClientWorkspace::query()->count(),
-                'open_requests' => ExternalRequest::query()
+                'open_requests' => ExternalRequest::query()->tenantOwned()
                     ->whereHas('status', fn ($q) => $q->where('is_terminal', false))->count(),
                 'unpaid_invoices' => Invoice::query()->whereNotIn('status', ['paid', 'cancelled'])->count(),
             ],
@@ -135,6 +140,8 @@ final class PlatformOverviewController extends Controller
          * customers who are still on the old terms.
          */
         $rows = DB::table('subscriptions')
+            // Complimentary access is owed by nobody, so it is not committed revenue.
+            ->where(fn ($q) => $q->whereNull('commercial_basis')->orWhere('commercial_basis', '!=', RegistrationDecision::BASIS_COMPLIMENTARY))
             ->get(['status', 'billing_interval', 'currency', 'unit_amount']);
 
         $byStatus = $rows->groupBy('status')->map->count()->all();
@@ -173,13 +180,33 @@ final class PlatformOverviewController extends Controller
      */
     private function attention(): array
     {
-        $pendingReview = DB::table('registration_requests')
-            ->whereIn('state', ['pending_review', 'info_requested'])->count();
+        /*
+         * PLATFORM-INBOX-ATTENTION-001 — the states `AccountState` really has. This read `pending_review` and
+         * `info_requested`, neither of which exists (a request for information is a flag, `info_requested_at`, on an
+         * application that stays `pending_approval`), so the badge was 0 whatever was waiting. Applications that
+         * already became a workspace are not waiting for anyone.
+         */
+        $pendingReview = DB::table('registration_requests')->whereNull('tenant_id')
+            ->where('state', AccountState::PendingApproval->value)->count();
+
+        // Stopped at a verification step: nothing for a reviewer to decide, but somebody who may need a fresh code.
+        $unverified = DB::table('registration_requests')->whereNull('tenant_id')
+            ->whereIn('state', [AccountState::EmailVerificationRequired->value, AccountState::MobileVerificationRequired->value])->count();
+
+        $inboxUnread = ContactMessage::query()->whereNull('read_at')->count()
+            + SupportTicket::query()->whereNull('read_at')->count()
+            + DataRequest::query()->whereNull('read_at')->count();
 
         $pastDue = DB::table('subscriptions')->whereIn('status', ['past_due', 'unpaid'])->count();
 
         return [
             ['key' => 'registrations_pending', 'count' => (int) $pendingReview, 'to' => '/admin/registrations', 'tone' => 'warning'],
+            ['key' => 'registrations_unverified', 'count' => (int) $unverified, 'to' => '/admin/registrations', 'tone' => 'info'],
+            // PLATFORM-INBOX-ATTENTION-001 — contact messages, support tickets and data requests nobody has opened.
+            ['key' => 'platform_inbox_unread', 'count' => (int) $inboxUnread, 'to' => '/admin/inbox', 'tone' => 'warning'],
+            // PLATFORM-SERVICE-INBOX-001 — services ordered from the official site that nobody has picked up yet.
+            ['key' => 'service_requests_new', 'count' => ExternalRequest::query()->platformOwned()->whereNull('archived_at')
+                ->whereNull('assigned_to')->whereHas('status', fn ($q) => $q->where('is_terminal', false))->count(), 'to' => '/admin/requests', 'tone' => 'warning'],
             ['key' => 'subscriptions_past_due', 'count' => (int) $pastDue, 'to' => '/admin/billing', 'tone' => 'danger'],
             ['key' => 'tenants_suspended', 'count' => Tenant::query()->where('status', 'suspended')->count(), 'to' => '/admin/tenants', 'tone' => 'danger'],
             ['key' => 'connections_need_reconnect', 'count' => $this->reconnectQuery()->count(), 'to' => '/admin/tenants', 'tone' => 'warning'],

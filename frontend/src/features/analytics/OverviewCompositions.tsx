@@ -2,7 +2,6 @@ import { comparableWindows, windowsUnlikeNote } from '@/lib/coverage/contract'
 import { providerLabel } from '@/features/campaigns/labels'
 import { useMemo } from 'react'
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { MetricStrip } from '@/components/ui/MetricStrip'
 import { UnifiedCampaignOverview } from '@/features/campaigns/overview/UnifiedCampaignOverview'
 import { useOverviewVm } from '@/features/campaigns/overview/useOverviewVm'
 import { Panel, RateTrend, SERIES, tooltipProps } from './components'
@@ -10,7 +9,7 @@ import { ChangeDiagnosis } from './ChangeDiagnosis'
 import { DiagnosticPanel } from './DiagnosticPanel'
 import { DistributionBars } from './DistributionBars'
 import { Link } from 'react-router-dom'
-import { ArrowUpRight } from 'lucide-react'
+import { ArrowUpRight, Info } from 'lucide-react'
 import { compact, money, num, ratio } from './format'
 import { plotSeries } from './timeseriesMoney'
 import { dashboardMetrics } from './metricCatalog'
@@ -78,7 +77,8 @@ export function useOverviewData({ projectId, range, filters, objective }: Overvi
    * reading instead, so a line and the card above it cannot disagree about the same window.
    */
   const series = plotSeries(points, reportingCurrency, ar)
-  const chartCurrency = series.currency ?? reportingCurrency ?? 'SAR'
+  // FX-APPLY-001 — the series' own currency, else the reporting one, else none — never a guessed «SAR».
+  const chartCurrency = series.currency ?? reportingCurrency ?? null
 
   /*
    * ANALYTICS-COMPARE-001 — six mute dashes were the page's way of saying «there is no yesterday».
@@ -185,14 +185,15 @@ const axis = { fill: 'var(--text-secondary)', fontSize: 12 }
 function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: boolean }) {
   if (!commerce) return null
 
-  const cur = commerce.reporting_currency || 'SAR'
+  // FX-APPLY-001 — the store figures' own reporting currency, never a guessed «SAR».
+  const cur = commerce.reporting_currency || null
 
   return (
     <div data-testid="dashboard-store" className="rounded-2xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-lg font-bold text-text-primary">{ar ? 'المتجر المرتبط' : 'Connected store'}</h2>
-          <p className="text-[13px] text-text-secondary">
+          <p className="text-xs text-text-secondary">
             {ar ? 'من سجل التاجر نفسه — لا من بكسل المنصات.' : 'From the merchant’s own ledger — not the platforms’ pixel.'}
           </p>
         </div>
@@ -207,10 +208,10 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
           { key: 'revenue', label: ar ? 'إيرادات المتجر' : 'Store revenue', value: commerce.revenue == null ? '—' : money(commerce.revenue, cur) },
           { key: 'orders', label: ar ? 'الطلبات' : 'Orders', value: num(commerce.orders) },
           { key: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order value', value: commerce.aov == null ? '—' : money(commerce.aov, cur) },
-          { key: 'roas', label: ar ? 'العائد على الإنفاق' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
+          { key: 'roas', label: ar ? 'معدل العائد' : 'ROAS', value: commerce.roas == null ? '—' : ratio(commerce.roas, '×') },
         ].map((k) => (
           <div key={k.key} data-testid={`store-kpi-${k.key}`} className="rounded-xl border border-border bg-surface-secondary px-3 py-2">
-            <p className="text-[13px] text-text-secondary">{k.label}</p>
+            <p className="text-xs text-text-secondary">{k.label}</p>
             <p className="tnum mt-0.5 text-xl font-bold text-text-primary">{k.value}</p>
           </div>
         ))}
@@ -222,13 +223,13 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
         so these figures cover the whole shop whatever the filter above says.
       */}
       {commerce.filtered_view && (
-        <p data-testid="dashboard-store-unfiltered" className="mt-3 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-[13px] text-text-secondary">
+        <p data-testid="dashboard-store-unfiltered" className="mt-3 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary">
           {ar ? commerce.unfiltered_note_ar : commerce.unfiltered_note_en}
         </p>
       )}
 
       {commerce.unattributed_orders > 0 && (
-        <p data-testid="dashboard-store-unattributed" className="mt-3 text-[13px] text-text-secondary">
+        <p data-testid="dashboard-store-unattributed" className="mt-3 text-xs text-text-secondary">
           {ar
             ? `${num(commerce.unattributed_orders)} من ${num(commerce.orders)} طلبًا وصلت بلا إسناد لأي حملة.`
             : `${num(commerce.unattributed_orders)} of ${num(commerce.orders)} orders arrived with no campaign attribution.`}
@@ -238,7 +239,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
       {/* COMMERCE-TZ-001 — an order whose store states no timezone may belong to the day either
           side of where it is counted, and the reader is told rather than left to assume. */}
       {(commerce.orders_with_assumed_timezone ?? 0) > 0 && (
-        <p data-testid="dashboard-store-assumed-tz" className="mt-2 text-[13px] text-warning">
+        <p data-testid="dashboard-store-assumed-tz" className="mt-2 text-xs text-warning">
           {ar
             ? `${num(commerce.orders_with_assumed_timezone ?? 0)} طلبًا لم يذكر متجرها المنطقة الزمنية، فاعتُبرت UTC.`
             : `${num(commerce.orders_with_assumed_timezone ?? 0)} order(s) come from a store that states no timezone, so UTC was assumed.`}
@@ -247,7 +248,7 @@ function StoreLedger({ commerce, ar }: { commerce: CommerceSummary | null; ar: b
 
       {/* The revenue above is SHORT by these orders, and a short total must never look whole. */}
       {(commerce.orders_with_money_withheld ?? 0) > 0 && (
-        <p data-testid="dashboard-store-withheld" className="mt-2 text-[13px] text-warning">
+        <p data-testid="dashboard-store-withheld" className="mt-2 text-xs text-warning">
           {ar
             ? `${num(commerce.orders_with_money_withheld ?? 0)} طلبًا بعملة (${(commerce.money_withheld_currencies ?? []).join('، ')}) لا يوجد لها سعر صرف مؤرّخ، فلم تُحتسب ضمن الإيرادات.`
             : `${num(commerce.orders_with_money_withheld ?? 0)} order(s) in ${(commerce.money_withheld_currencies ?? []).join(', ')} have no dated exchange rate and are not included in the revenue.`}
@@ -319,13 +320,16 @@ export function DashboardOverview(d: OverviewData) {
          * overlap with itself, and a warning about an impossible risk trains readers to ignore warnings.
          */}
         {s.data?.conversions_basis?.may_double_count && (
-          <p
+          // NO-OPERATOR-NOTES-001 — a tag, not a paragraph: the sentence is the tooltip and the screen reader's.
+          <span
             data-testid="conversions-basis"
-            className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
+            title={ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}
+            className="inline-flex w-fit items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-text-secondary"
           >
-            <span className="font-semibold text-text-primary">{ar ? '«النتائج»: ' : 'Results: '}</span>
-            {ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}
-          </p>
+            <Info size={12} aria-hidden />
+            {ar ? 'النتائج: مجموع المنصات' : 'Results: summed across platforms'}
+            <span className="sr-only">{ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}</span>
+          </span>
         )}
         {/*
           SURFACE-SEPARATION-001, corrected — the curve, the rate trends and the store ledger STAY.
@@ -349,54 +353,7 @@ export function DashboardOverview(d: OverviewData) {
           lines are drawn from the same reading, in whatever currency that reading is honestly in, and
           the axis says which.
         */}
-        <Panel
-          title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'}
-          description={
-            series.basis === 'original'
-              ? ar
-                ? `المال معروض بعملة المنصة (${series.currency}) — ${series.note ?? ''}`
-                : `Money shown in the platform's own currency (${series.currency}) — ${series.note ?? ''}`
-              : ar
-                ? 'الاتجاه اليومي للإنفاق والإيرادات والنتائج'
-                : 'Spend, revenue and results, day by day'
-          }
-          loading={ts.isLoading}
-          error={ts.isError}
-          empty={!ts.isLoading && series.rows.length === 0}
-        >
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={series.rows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="date" tick={axis} tickFormatter={(v) => String(v).slice(5)} minTickGap={24} />
-                {/*
-                  Money and counts are different units, so they get different axes. Drawing 4,787 USD
-                  and 218 results against one scale flattens the smaller series onto the floor — which
-                  is the shape the old chart had even before the money went missing.
-                */}
-                <YAxis yAxisId="money" tick={axis} tickFormatter={(v) => compact(Number(v))} width={52} />
-                <YAxis yAxisId="count" orientation={ar ? 'left' : 'right'} tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
-                <Tooltip
-                  {...tooltipProps}
-                  formatter={(v: number, name: string) =>
-                    name === (ar ? 'النتائج' : 'Results') ? num(v) : money(v, chartCurrency)
-                  }
-                />
-                <Legend wrapperStyle={{ fontSize: 13 }} />
-                {series.hasMoney && series.basis !== 'mixed' && (
-                  <Line yAxisId="money" name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} connectNulls />
-                )}
-                {series.hasMoney && series.basis !== 'mixed' && (
-                  <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
-                )}
-                <Line yAxisId="count" name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          {series.basis === 'mixed' && (
-            <p data-testid="series-currency-mixed" className="mt-2 text-xs text-text-secondary">{series.note}</p>
-          )}
-        </Panel>
+        <TrendPanel {...d} />
         {/*
           Three metrics, three units — «3.20x», «21.96 USD» and «0.72%» share no axis. On one scale the
           two small numbers lie flat on the floor and the chart says nothing, which is what shipped:
@@ -404,9 +361,9 @@ export function DashboardOverview(d: OverviewData) {
           Each gets its own panel and its own scale, so each is readable.
         */}
         <div className="grid gap-3 lg:grid-cols-3">
-          <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} />
-          <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
-          <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
+          <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} headline={periodRates(s.data?.current).roas} />
+          <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} headline={periodRates(s.data?.current).cpa} />
+          <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} headline={periodRates(s.data?.current).ctr} />
         </div>
         <StoreLedger commerce={s.data?.commerce ?? null} ar={ar} />
 
@@ -515,28 +472,53 @@ export function DashboardOverview(d: OverviewData) {
  * store, attribution and data quality — are the rest of this system and are unchanged; this is only
  * the door into it.
  */
+/**
+ * ANALYTICS-HEADLINE-001 — the headline figures lead the page.
+ *
+ * On a phone the figures were 2,100px down, below the drawings that explain them (the failure
+ * `mobile-hierarchy.spec.ts` holds). The headline — the objective layout's own four to six cards, any of which the reader may
+ * change (KPI-SELECTION-001) — is the first thing in the Summary section; the drawings and the evidence follow it.
+ */
+export function AnalyticsHeadline(d: OverviewData) {
+  const { ar, s, points, comparable, unlikeNote, strip, objective } = d
+
+  return (
+    <div className="space-y-3" data-testid="analytics-headline">
+      {!comparable && s.data && (
+        <p
+          data-testid="no-comparison-period"
+          className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
+        >
+          <span className="font-semibold text-text-primary">{ar ? 'لا توجد مقارنة: ' : 'No comparison: '}</span>
+          {unlikeNote}
+        </p>
+      )}
+      <KpiCards
+        id="analytics"
+        objective={objective}
+        defaults={strip.primary.map((m) => m.key)}
+        summary={s.data}
+        ar={ar}
+        series={points}
+        comparable={comparable}
+        loading={s.isPending}
+        error={s.isError ? s.error : undefined}
+        onRetry={() => void s.refetch()}
+      />
+    </div>
+  )
+}
+
 export function AnalyticsOverview(d: OverviewData) {
-  const { ar, s, ts, series, chartCurrency, comparable, unlikeNote, drivers, strip, vm, points } = d
+  const { ar, s, ts, series, chartCurrency, drivers, vm, points } = d
 
   return (
     <div className="space-y-4" data-testid="analytics-overview" data-composition="analytics">
       {/*
-        WHERE the weakness is — read on the stages of the journey, never asserted without the
-        measurement behind it. First, because that is the question this surface exists to answer.
-        Same `useSummary` entry the strip below reads, so the diagnosis and its evidence cannot
-        disagree about the account they describe.
+        ANALYTICS-VISUAL-FIRST-001 (owner: «احتاج جانب ابداعي وبياني بدون النصي») — the page opens on DRAWINGS: where the
+        money sits and the three rates the operator acts on. The reading of the journey follows them, and the figures
+        after that, as before.
       */}
-      <DiagnosticPanel
-        objective={d.objective}
-        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
-        reported={s.data?.reported}
-        rowsInScope={s.data?.rows_in_scope}
-        loading={s.isPending}
-        error={s.isError ? s.error : undefined}
-        onRetry={() => void s.refetch()}
-        ar={ar}
-      />
-
       {/*
         Then WHERE THE MONEY SITS. «What moved» and «what carries the weight» are different
         questions, and a stable account can still hold most of its budget behind one platform.
@@ -557,10 +539,27 @@ export function AnalyticsOverview(d: OverviewData) {
         beneath a headline.
       */}
       <div className="grid gap-3 lg:grid-cols-3">
-        <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} />
-        <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} />
-        <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} />
+        <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} headline={periodRates(s.data?.current).roas} />
+        <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} headline={periodRates(s.data?.current).cpa} />
+        <RateTrend title="CTR" data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} headline={periodRates(s.data?.current).ctr} />
       </div>
+
+      {/*
+        WHERE the weakness is — read on the stages of the journey, never asserted without the
+        measurement behind it. First, because that is the question this surface exists to answer.
+        Same `useSummary` entry the strip below reads, so the diagnosis and its evidence cannot
+        disagree about the account they describe.
+      */}
+      <DiagnosticPanel
+        objective={d.objective}
+        totals={s.data?.current as Record<string, number | null | undefined> | undefined}
+        reported={s.data?.reported}
+        rowsInScope={s.data?.rows_in_scope}
+        loading={s.isPending}
+        error={s.isError ? s.error : undefined}
+        onRetry={() => void s.refetch()}
+        ar={ar}
+      />
 
       {/*
         SURFACE-SEPARATION-001 — the store ledger reads here, where «why» is the question.
@@ -577,43 +576,23 @@ export function AnalyticsOverview(d: OverviewData) {
         a reader who is here is checking an argument.
       */}
       <section data-testid="analytics-evidence" className="space-y-4">
-        <h2 className="text-sm font-bold text-text-primary">
-          {ar ? 'الأرقام التي بُني عليها ما سبق' : 'The figures the reading above was drawn from'}
-        </h2>
 
-        {!comparable && s.data && (
-          <p
-            data-testid="no-comparison-period"
-            className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
-          >
-            <span className="font-semibold text-text-primary">{ar ? 'لا توجد مقارنة: ' : 'No comparison: '}</span>
-            {unlikeNote}
-          </p>
-        )}
-
-        <MetricStrip
-          id="analytics"
-          ar={ar}
-          primary={strip.primary}
-          secondary={strip.secondary}
-          hasRows={s.data === undefined ? undefined : s.data.rows_in_scope}
-          loading={s.isPending}
-          error={s.isError ? s.error : undefined}
-          onRetry={() => void s.refetch()}
-        />
 
         {s.data?.conversions_basis?.may_double_count && (
-          <p
+          // NO-OPERATOR-NOTES-001 — a tag, not a paragraph: the sentence is the tooltip and the screen reader's.
+          <span
             data-testid="conversions-basis"
-            className="rounded-lg border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary"
+            title={ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}
+            className="inline-flex w-fit items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-text-secondary"
           >
-            <span className="font-semibold text-text-primary">{ar ? '«النتائج»: ' : 'Results: '}</span>
-            {ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}
-          </p>
+            <Info size={12} aria-hidden />
+            {ar ? 'النتائج: مجموع المنصات' : 'Results: summed across platforms'}
+            <span className="sr-only">{ar ? s.data.conversions_basis?.note_ar : s.data.conversions_basis?.note_en}</span>
+          </span>
         )}
 
         <Panel
-          title={ar ? 'الإنفاق والنتائج والإيرادات' : 'Spend, results and revenue'}
+          title={ar ? 'الإنفاق وتحويلات المنصة والإيرادات' : 'Spend, platform conversions and revenue'}
           description={
             series.basis === 'original'
               ? ar
@@ -637,7 +616,7 @@ export function AnalyticsOverview(d: OverviewData) {
                 <Tooltip
                   {...tooltipProps}
                   formatter={(v: number, name: string) =>
-                    name === (ar ? 'النتائج' : 'Results') ? num(v) : money(v, chartCurrency)
+                    name === (ar ? 'تحويلات المنصة' : 'Platform conversions') ? num(v) : money(v, chartCurrency)
                   }
                 />
                 <Legend wrapperStyle={{ fontSize: 13 }} />
@@ -647,7 +626,7 @@ export function AnalyticsOverview(d: OverviewData) {
                 {series.hasMoney && series.basis !== 'mixed' && (
                   <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
                 )}
-                <Line yAxisId="count" name={ar ? 'النتائج' : 'Results'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="count" name={ar ? 'تحويلات المنصة' : 'Platform conversions'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -666,7 +645,7 @@ export function AnalyticsOverview(d: OverviewData) {
       */}
       <ChangeDiagnosis
         data={drivers.data}
-        currency={d.reportingCurrency ?? 'SAR'}
+        currency={d.reportingCurrency ?? null}
         loading={drivers.isPending}
         error={drivers.isError}
         subtitle={d.unlikeNote ?? undefined}
@@ -674,5 +653,74 @@ export function AnalyticsOverview(d: OverviewData) {
         series={points}
       />
     </div>
+  )
+}
+
+/**
+ * RATE-TREND-HEADLINE-001 — the period's own rates for the three trend cards: ROAS and CPA as the summary states them,
+ * CTR recomputed from the period's clicks and impressions (as a percentage, the unit the daily line is drawn in).
+ */
+export function periodRates(current: { roas?: number | null; cpa?: number | null; clicks?: number | null; impressions?: number | null } | null | undefined) {
+  const impressions = current?.impressions ?? 0
+  return {
+    roas: current?.roas ?? null,
+    cpa: current?.cpa ?? null,
+    ctr: impressions > 0 && current?.clicks != null ? (current.clicks / impressions) * 100 : null,
+  }
+}
+
+/** The day-by-day curve of the Overview, shared by the agency dashboard and the client's (CLIENT-DASHBOARD-PARITY-001). */
+export function TrendPanel(d: OverviewData & { title?: string; description?: string }) {
+  const { ar, series, ts, chartCurrency } = d
+
+  return (
+    <Panel
+      title={d.title ?? (ar ? 'الإنفاق وتحويلات المنصة والإيرادات' : 'Spend, platform conversions and revenue')}
+      description={d.description ?? (
+        series.basis === 'original'
+          ? ar
+            ? `المال معروض بعملة المنصة (${series.currency}) — ${series.note ?? ''}`
+            : `Money shown in the platform's own currency (${series.currency}) — ${series.note ?? ''}`
+          : ar
+            ? 'الاتجاه اليومي للإنفاق والإيرادات والنتائج'
+            : 'Spend, revenue and results, day by day')
+      }
+      loading={ts.isLoading}
+      error={ts.isError}
+      empty={!ts.isLoading && series.rows.length === 0}
+    >
+      <div className="h-80">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={series.rows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="date" tick={axis} tickFormatter={(v) => String(v).slice(5)} minTickGap={24} />
+            {/*
+              Money and counts are different units, so they get different axes. Drawing 4,787 USD
+              and 218 results against one scale flattens the smaller series onto the floor — which
+              is the shape the old chart had even before the money went missing.
+            */}
+            <YAxis yAxisId="money" tick={axis} tickFormatter={(v) => compact(Number(v))} width={52} />
+            <YAxis yAxisId="count" orientation={ar ? 'left' : 'right'} tick={axis} tickFormatter={(v) => compact(Number(v))} width={44} />
+            <Tooltip
+              {...tooltipProps}
+              formatter={(v: number, name: string) =>
+                name === (ar ? 'تحويلات المنصة' : 'Platform conversions') ? num(v) : money(v, chartCurrency)
+              }
+            />
+            <Legend wrapperStyle={{ fontSize: 13 }} />
+            {series.hasMoney && series.basis !== 'mixed' && (
+              <Line yAxisId="money" name={ar ? 'الإنفاق' : 'Spend'} type="monotone" dataKey="spend" stroke={SERIES.spend} strokeWidth={2} dot={false} connectNulls />
+            )}
+            {series.hasMoney && series.basis !== 'mixed' && (
+              <Line yAxisId="money" name={ar ? 'الإيرادات' : 'Revenue'} type="monotone" dataKey="revenue" stroke={SERIES.revenue} strokeWidth={2} dot={false} connectNulls />
+            )}
+            <Line yAxisId="count" name={ar ? 'تحويلات المنصة' : 'Platform conversions'} type="monotone" dataKey="conversions" stroke={SERIES.conversions} strokeWidth={2} dot={false} connectNulls />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      {series.basis === 'mixed' && (
+        <p data-testid="series-currency-mixed" className="mt-2 text-xs text-text-secondary">{series.note}</p>
+      )}
+    </Panel>
   )
 }

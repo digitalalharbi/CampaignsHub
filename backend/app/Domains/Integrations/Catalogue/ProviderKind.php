@@ -62,6 +62,21 @@ enum ProviderKind: string
         };
     }
 
+    /**
+     * INTEG-CAPABILITY-CONTRACT-001 — the category §1.5 names providers by.
+     *
+     * Not a rename of the case values: `advertising` and `measurement` are stored, routed on and sent
+     * to the interface, and nothing here asks for those to change.
+     */
+    public function category(): string
+    {
+        return match ($this) {
+            self::Advertising => 'ads',
+            self::Commerce => 'commerce',
+            self::Measurement => 'analytics',
+        };
+    }
+
     /** What the Connection Hub files it under — «Paid Media» is not where a measurement source goes. */
     public function group(): string
     {

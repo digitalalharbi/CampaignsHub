@@ -23,7 +23,7 @@ const brand: ReportData = {
   timeseries: [{ date: '2026-07-01', spend: 1000, impressions: 300_000 }],
   platforms: [{ provider: 'meta', spend: 30000, impressions: 6_000_000, reach: 1_500_000, cpm: 5, ctr: 0.004 }],
   campaigns: [],
-  best: { basis: { key: 'cpm', label_ar: 'تكلفة الألف ظهور' }, platform: 'snapchat', platform_value: '2.50 SAR', platform_by_roas: null, platform_by_cpa: null, campaign: 'حملة وعي' },
+  best: { basis: { key: 'cpm', label_ar: 'تكلفة الألف ظهور' }, platform: 'snapchat', platform_value: '2.50 ر.س', platform_by_roas: null, platform_by_cpa: null, campaign: 'حملة وعي' },
   slides: [],
 }
 
@@ -113,7 +113,7 @@ describe('the executive slide', () => {
     expect(screen.getByText('أفضل منصة (تكلفة الألف ظهور)')).toBeInTheDocument()
     // The platform's NAME, not its key: «snapchat» is a database value in a document a client keeps.
     expect(screen.getByText('سناب شات')).toBeInTheDocument()
-    expect(screen.getByText('2.50 SAR')).toBeInTheDocument()
+    expect(screen.getByText('2.50 ر.س')).toBeInTheDocument()
   })
 
   it('still leads a sales report with the return, named the way a client reads it', () => {
@@ -236,10 +236,10 @@ describe('the period comparison', () => {
     /*
      * The cell is formatted like the card it sits under, and that card stopped rounding — NUMBER-
      * PRESENTATION-001 §58: «Do NOT compact figures where the exact figure itself is the decision-
-     * critical value, such as CPC / CPL / CPA / ROAS». It read «80 SAR» for 80.21, which is the same
-     * shape of loss as the «2 SAR» this rule was written about.
+     * critical value, such as CPC / CPL / CPA / ROAS». It read «80 ر.س» for 80.21, which is the same
+     * shape of loss as the «2 ر.س» this rule was written about.
      */
-    expect(before.text).toBe('80.21 SAR')
+    expect(before.text).toBe('80.21 ر.س')
     /*
      * The change is the discriminator, and it is why this test exists. Direct against Direct is
      * 74.54 ÷ 80.21 — a 7% improvement. Against the blended 87.42 it would read as 15%, and half of
@@ -253,7 +253,7 @@ describe('the period comparison', () => {
     const spend = reportMetrics(split).find((m) => m.key === 'spend')!
 
     expect(spend.substituted).toBe(false)
-    expect(previousReading(spend, split).text).toBe('15K SAR')
+    expect(previousReading(spend, split).text).toBe('15K ر.س')
   })
 
   it('leaves the comparison empty rather than inventing one when the previous period is absent', () => {
@@ -268,10 +268,10 @@ describe('the period comparison', () => {
 
     expect(screen.getByText('المقارنات والاتجاهات')).toBeInTheDocument()
     // A cost per result carries its decimals — NUMBER-PRESENTATION-001 §58.
-    expect(screen.getByText('80.21 SAR')).toBeInTheDocument()
+    expect(screen.getByText('80.21 ر.س')).toBeInTheDocument()
     // The blended previous figure must not appear anywhere in the table.
-    expect(screen.queryByText('87.42 SAR')).not.toBeInTheDocument()
-    expect(screen.queryByText('87 SAR')).not.toBeInTheDocument()
+    expect(screen.queryByText('87.42 ر.س')).not.toBeInTheDocument()
+    expect(screen.queryByText('87 ر.س')).not.toBeInTheDocument()
     expect(screen.getByText('11.28×')).toBeInTheDocument()
   })
 })
@@ -288,13 +288,13 @@ describe('the observations slide', () => {
     const withNotes = {
       ...brand,
       observations: [
-        { id: 'a', kind: 'budget_pace', severity: 'critical' as const, title: 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة', detail: 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR.', value: '1.60×', scope: { type: 'campaign', name: 'الصيف' } },
+        { id: 'a', kind: 'budget_pace', severity: 'critical' as const, title: 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة', detail: 'صُرف 8,000.00 ر.س من أصل 10,000.00 ر.س.', value: '1.60×', scope: { type: 'campaign', name: 'الصيف' } },
       ],
     }
     render(<SlideBody slide={{ id: 'observations', type: 'observations', order: 1, visible: true }} data={withNotes} meta={meta} />)
 
     expect(screen.getByText('1.60×')).toBeInTheDocument()
-    expect(screen.getByText('صُرف 8,000.00 SAR من أصل 10,000.00 SAR.')).toBeInTheDocument()
+    expect(screen.getByText('صُرف 8,000.00 ر.س من أصل 10,000.00 ر.س.')).toBeInTheDocument()
   })
 })
 
@@ -353,7 +353,7 @@ describe('creative analysis by objective', () => {
     const readings = creativeReadings(row, 'awareness', { reach: false, cpm: true, impressions: true, engagements: false }, true, 'SAR')
 
     expect(readings.find((r) => r.key === 'reach')!.reading).toEqual({ kind: 'not_provided' })
-    expect(readings.find((r) => r.key === 'cpm')!.reading).toEqual({ kind: 'value', text: '12 SAR' })
+    expect(readings.find((r) => r.key === 'cpm')!.reading).toEqual({ kind: 'value', text: '12 ر.س' })
   })
 
   /**

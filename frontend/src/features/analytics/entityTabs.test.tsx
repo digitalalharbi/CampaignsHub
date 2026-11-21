@@ -64,7 +64,8 @@ function route(entities: unknown[]) {
  */
 async function openAdSets() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-  fireEvent.click(await screen.findByRole('tab', { name: 'Ad sets' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
+  fireEvent.click(await screen.findByRole('tab', { name: 'Ad groups' }))
 }
 
 /**
@@ -143,7 +144,7 @@ describe('the ad set table shows the objective’s own figures', () => {
     expect(table).toHaveTextContent('Spend')
     /* Withheld: the amount states its own currency — never converted, never zeroed. */
     expect(table).toHaveTextContent(/412\.5/)
-    expect(table).toHaveTextContent(/USD/)
+    expect(table).toHaveTextContent(/\$/)
   })
 
   it('refuses a blended verdict when the rows span objectives, and says why', async () => {
@@ -276,7 +277,7 @@ describe('the ad set analysis tab', () => {
 
     expect(table).toHaveTextContent('—')
     // A CPA of 0 over real delivery would read as free results.
-    expect(table).not.toHaveTextContent('0.00 SAR')
+    expect(table).not.toHaveTextContent('0.00 ر.س')
   })
 
   /** Withheld money states its own currency rather than wearing the project's. */
@@ -287,8 +288,8 @@ describe('the ad set analysis tab', () => {
 
     const table = await screen.findByTestId('entity-table-ad_set')
 
-    expect(table).toHaveTextContent('412.50 USD')
-    expect(table).not.toHaveTextContent('0 SAR')
+    expect(table).toHaveTextContent('412.50 $')
+    expect(table).not.toHaveTextContent('0 ر.س')
   })
 
   /** An entity the structure sweep removed keeps its provider id rather than becoming «Unknown». */
@@ -325,22 +326,24 @@ describe('ads and content are named for what they are', () => {
     route([ROW])
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     await screen.findByRole('tab', { name: 'Ads' })
 
     /* «Ads» and «Ad» differ by a plural, and nothing in this bar may read that way again. */
     expect(screen.queryByRole('tab', { name: 'Ad' }), 'the ambiguous singular is back').toBeNull()
     expect(screen.getAllByRole('tab', { name: /^Ads?$/ })).toHaveLength(1)
-    expect(screen.getByRole('tab', { name: /Content/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Content' })).toBeInTheDocument()
   })
 
   it('names them apart in Arabic too', async () => {
     route([ROW])
     renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
+    fireEvent.click(await screen.findByRole('button', { name: 'لوحة الأداء' }))
     await screen.findByRole('tab', { name: 'الإعلانات' })
 
     expect(screen.queryByRole('tab', { name: 'الإعلان' }), 'the ambiguous singular is back').toBeNull()
-    expect(screen.getByRole('tab', { name: /المحتويات/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'المحتوى' })).toBeInTheDocument()
   })
 
   /**
@@ -360,7 +363,7 @@ describe('ads and content are named for what they are', () => {
     const content = await screen.findByRole('tab', { name: /Content/ })
 
     expect(content.getAttribute('aria-selected'), 'a content link did not open content').toBe('true')
-    expect(screen.getByRole('tab', { name: 'Ads' }).getAttribute('aria-selected')).toBe('false')
+    expect(screen.queryByRole('tab', { name: 'Ads' }), 'ads live in the Campaigns section').toBeNull()
   })
 })
 

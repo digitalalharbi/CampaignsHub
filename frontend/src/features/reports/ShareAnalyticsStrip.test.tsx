@@ -82,7 +82,7 @@ describe('ShareAnalyticsStrip', () => {
     expect(screen.getByTestId('share-analytics')).toHaveTextContent('التنزيلات')
 
     const cmp = screen.getByTestId('share-comparison')
-    expect(cmp).toHaveTextContent('2026-10-10 → 2026-10-14 مقابل 2026-10-05 → 2026-10-09')
+    expect(cmp).toHaveTextContent('10 أكتوبر – 14 أكتوبر 2026 مقابل 5 أكتوبر – 9 أكتوبر 2026')
     expect(screen.getByTestId('share-compare-views')).toHaveTextContent('+50%')
     expect(screen.getByTestId('share-compare-devices')).toHaveTextContent('0%')
     expect(screen.getByTestId('share-compare-downloads')).toHaveTextContent('+∞')

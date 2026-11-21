@@ -41,7 +41,7 @@ async function openSection(page: import('@playwright/test').Page, href: string) 
    */
   await expect(page).toHaveURL(new RegExp(`${href.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(/|\\?|$)`))
   /*
-   * NAV-TAXONOMY-001 — «إطلاق الحملات» is the campaigns page with its builder OPEN (`?launch=1`). That is the
+   * NAV-TAXONOMY-001 — «حملة جديدة» is the campaigns page with its builder OPEN (`?launch=1`). That is the
    * section arriving, not a stray overlay: the dialog must be the builder, and a person closes it before
    * reaching for the rail again — exactly what the walk now does. Any other link that leaves a dialog
    * open still fails here, on the link that opened it.
@@ -57,34 +57,30 @@ async function openSection(page: import('@playwright/test').Page, href: string) 
 test.describe('the advertiser portal', () => {
   test.use({ storageState: AUTH.advertiser })
 
-  const arabicWords = (text: string) => (text.match(/[؀-ۿ]+/g) ?? []).length
+  // The SAR currency mark «ر.س» is the same in both languages by the Owner's money rule (MONEY-MARKS-001); it is not untranslated copy.
+  const arabicWords = (text: string) => (text.replace(/ر\.س/g, '').match(/[؀-ۿ]+/g) ?? []).length
 
   async function toggleLanguage(page: Page) {
     await page.getByRole('button', { name: 'Toggle language' }).first().click()
   }
 
   /**
-   * SURFACE-SEPARATION-001 — the dashboard and the analysis are different products.
+   * ANALYTICS-ONE-BOARD-001 (Owner, 2026-11-19) — there is ONE board, named «التحليلات».
    *
-   * Both routes rendered the same twelve tabs, so «the dashboard» and «the analysis» were one screen
-   * with its first panel swapped. In a real browser: the dashboard carries no analysis tab bar, the
-   * analysis does, and the dashboard offers a door into it rather than a dead end.
+   * This used to assert that the dashboard was a concise surface with a door into a deeper analysis. The order retired the
+   * second board: its address lands on the analysis, the rail no longer offers «لوحة التحليلات», and the analysis carries
+   * the section bar. In a real browser: the old address redirects, the tab bar is there, and the rail has one entry.
    */
-  test('the dashboard is concise and the analysis is the deep one', async ({ page }) => {
-    await page.goto('/app/dashboard')
+  // DASHBOARD-PATH-001 — the landing is `/app/dashboard`; the old `/app/home` lands there.
+  test('the old home address lands on the dashboard', async ({ page }) => {
+    await page.goto('/app/home')
+    await expect(page).toHaveURL(/\/app\/dashboard/)
     await expect(page.locator('main')).toBeVisible()
-
-    await expect(page.getByRole('tablist')).toHaveCount(0)
-    const door = page.getByTestId('dashboard-to-analytics')
-    await expect(door).toBeVisible()
-
-    await door.click()
-    await expect(page).toHaveURL(/\/app\/analytics/)
-    await expect(page.getByRole('tablist')).toBeVisible()
+    await expect(page.getByRole('link', { name: /لوحة التحليلات|Analytics board/ })).toHaveCount(0)
   })
 
   test('the dashboard is genuinely bilingual, not just re-directed', async ({ page }) => {
-    await page.goto('/app/dashboard')
+    await page.goto('/app/analytics')
     const main = page.locator('main')
     await expect(main).toBeVisible()
 
@@ -149,7 +145,7 @@ test.describe('the advertiser portal', () => {
      * and not the other. Asking the card directly cannot be answered by a control that happens to
      * share a word.
      */
-    await page.getByTestId('analytics-objective').selectOption('sales')
+    await page.getByTestId('analytics-objective').locator(`[data-value="sales"]`).click()
 
     const roas = page.getByTestId('metric-roas')
 
@@ -167,7 +163,7 @@ test.describe('the advertiser portal', () => {
       expect(await roas.count(), `the ROAS card is absent and the strip is in «${state}»`).toBeGreaterThan(0)
     }).toPass({ timeout: 20000 })
 
-    await expect(roas).toContainText('العائد على الإنفاق', { timeout: 20000 })
+    await expect(roas).toContainText('معدل العائد', { timeout: 20000 })
 
     /*
      * FILTER-LOCALE-EMPTY-STATE-OBS — watch EVERY state the strip passes through, not the last one.
@@ -202,7 +198,7 @@ test.describe('the advertiser portal', () => {
 
     await toggleLanguage(page)
     await expect(roas).toContainText('Return on ad spend', { timeout: 20000 })
-    await expect(roas).not.toContainText('العائد على الإنفاق')
+    await expect(roas).not.toContainText('معدل العائد')
 
     const states = await page.evaluate(() => (window as unknown as { __stripStates: string[] }).__stripStates)
 
@@ -217,23 +213,23 @@ test.describe('the advertiser portal', () => {
   /**
    * METRICS-EMPTY-SCOPE-001 — a filter matching nothing speaks about the FILTER, in either language.
    *
-   * Narrowing to an objective this account never bought used to produce a row of cards each saying
-   * «لم ترسله المنصة» — a claim about Meta and Snapchat derived from an absence of CAMPAIGNS.
+   * OBJECTIVE-FILTERS-INCLUSIVE-001 (Owner, 2026-11-13) — an objective this account never bought no longer empties anything: it
+   * picks the KPIs and every (sales) campaign stays, so the cards stay. A filter that really matches nothing is a PLATFORM this
+   * account never ran on, and it still must not produce a row of cards each saying «لم ترسله المنصة».
    */
-  test('an objective with no campaigns says so, and says nothing about the platform', async ({ page }) => {
-    await page.goto('/app/dashboard')
+  test('an objective keeps every campaign; a platform with no campaigns says so, and nothing about the platform', async ({ page }) => {
+    await page.goto('/app/analytics')
     await expect(page.locator('main')).toBeVisible()
 
-    /*
-     * The canonical bucket, not the raw objective it replaced — ANALYTICS-OBJECTIVE-SYSTEM-001.
-     *
-     * Every seeded campaign on this account carries `sales`, so «الوعي والتفاعل» covers four raw
-     * objectives and matches none of them. That is exactly the scope this test needs: a filter that
-     * really does match nothing, rather than one that happens to be empty today.
-     */
-    await page.getByTestId('dashboard-objective').selectOption('awareness_engagement')
+    // Every seeded campaign on this account carries `sales`; choosing «الوعي والتفاعل» changes the KPIs and removes none of them.
+    await page.getByTestId('analytics-objective').locator(`[data-value="awareness_engagement"]`).click()
+    await expect(page.getByTestId('analytics-metrics')).toHaveAttribute('data-strip-state', 'rows', { timeout: 20000 })
+    await expect(page.getByTestId('analytics-metrics-empty-scope')).toHaveCount(0)
 
-    const panel = page.getByTestId('dashboard-metrics-empty-scope')
+    // LinkedIn is in the control and has no campaign on this account: a scope that genuinely holds nothing.
+    await page.getByTestId('analytics-platform-linkedin').click()
+
+    const panel = page.getByTestId('analytics-metrics-empty-scope')
 
     await expect(panel).toBeVisible({ timeout: 20000 })
     await expect(panel).toContainText('لا توجد بيانات ضمن هذه الفلاتر')

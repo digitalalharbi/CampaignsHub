@@ -75,10 +75,10 @@ final class SiteMeasurementIsolationTest extends TestCase
             $this->tenant->id, $this->nova->id, Carbon::parse('2026-07-01'), Carbon::parse('2026-07-31'),
         );
 
-        $this->assertSame('111', $acme['property']['id']);
+        // REPORT-WEBSITE-GAP-READING-001 — the reading carries no property id; each client's own totals prove the isolation.
+        $this->assertArrayNotHasKey('id', $acme['property']);
         $this->assertSame(9000.0, $acme['totals']['sessions']);
 
-        $this->assertSame('222', $nova['property']['id']);
         $this->assertSame(400.0, $nova['totals']['sessions'], 'one client\'s sessions were summed into another\'s');
     }
 

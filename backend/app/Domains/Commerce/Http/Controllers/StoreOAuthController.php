@@ -14,8 +14,10 @@ use App\Domains\Integrations\Catalogue\ProviderKind;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\AuthorizationState;
+use App\Domains\Integrations\OAuth\PendingProjectLink;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\PlatformOAuth;
+use App\Domains\Integrations\OAuth\ProjectJourney;
 use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -105,7 +107,7 @@ final class StoreOAuthController extends Controller
             'client_workspace_id' => ['sometimes', 'nullable', 'uuid', Rule::exists('client_workspaces', 'id')
                 ->where('tenant_id', $tenant->tenantId())
                 ->whereNull('deleted_at')],
-        ]);
+        ] + ProjectJourney::rules((string) $tenant->tenantId()));
 
         abort_unless(
             ($validated['client_workspace_id'] ?? null) === null
@@ -113,6 +115,14 @@ final class StoreOAuthController extends Controller
             403,
             'You cannot connect a store for this client.',
         );
+
+        /*
+         * INTEG-PROJECT-LINK-STORES-GA4-001 — an authorisation opened FOR a project is refused here unless this
+         * person may link sources to that project. Asked before a state exists.
+         */
+        if (($validated['project_id'] ?? null) !== null) {
+            abort_unless(ProjectJourney::allows($request->user(), (string) $validated['project_id']), 403, 'You may not link a source to this project.');
+        }
 
         /*
          * X-PKCE-001 — neither Salla nor Zid publishes PKCE, so this is null for both today. It is
@@ -127,7 +137,7 @@ final class StoreOAuthController extends Controller
             provider: $creds->platform,
             userId: $request->user()->getKey(),
             clientWorkspaceId: $validated['client_workspace_id'] ?? null,
-            extra: $verifier === null ? [] : ['code_verifier' => $verifier],
+            extra: ($verifier === null ? [] : ['code_verifier' => $verifier]) + ProjectJourney::stateOf($validated),
         );
 
         return ApiResponse::success([
@@ -147,7 +157,10 @@ final class StoreOAuthController extends Controller
         $creds = $this->credentialsOr404($provider);
 
         if ($request->has('error')) {
-            return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')));
+            // The state is spent by the refusal too: it is the only record of which project the person left from.
+            $refused = AuthorizationState::claim((string) $request->query('state', ''), $creds->platform);
+
+            return $this->back($creds->platform, 'denied', (string) $request->query('error_description', (string) $request->query('error')), record: $refused);
         }
 
         /*
@@ -201,11 +214,17 @@ final class StoreOAuthController extends Controller
         $code = (string) $request->query('code', '');
 
         if ($code === '') {
-            return $this->back($creds->platform, 'failed', 'The platform returned no authorisation code.');
+            return $this->back($creds->platform, 'failed', 'The platform returned no authorisation code.', record: $record);
         }
 
         $tenantId = (string) $record['tenant_id'];
         $tenant->setTenantId($tenantId);
+
+        // The project is proven AGAIN before the code is exchanged; the refusal names no project.
+        $projectId = ProjectJourney::projectId($record);
+        if ($projectId !== null && ! ProjectJourney::mayStillLink($record, $tenantId, $projectId)) {
+            return $this->back($creds->platform, 'project_refused', 'This project can no longer be linked by the person who started the authorisation.');
+        }
 
         try {
             // Out of the RECORD, never the query string — the same rule as the tenant and workspace.
@@ -222,14 +241,26 @@ final class StoreOAuthController extends Controller
                 connectionName: $creds->label(),
                 clientWorkspaceId: isset($record['client_workspace_id']) ? (string) $record['client_workspace_id'] : null,
                 createdBy: isset($record['user_id']) ? (int) $record['user_id'] : null,
+                // A journey started from a project opens that project's OWN connection.
+                projectId: $projectId,
             );
 
-            // The first real round trip. Until this returns a store, nothing is called connected.
-            $discovered = $this->discoverStores($connection);
+            /*
+             * INTEG-PROJECT-LINK-STORES-GA4-001 — a project's authorisation stores NO store and assigns nothing.
+             * The store the platform returns is shown at the next step and written when it is confirmed
+             * ({@see \App\Domains\Integrations\Http\Controllers\ProjectLinkSourceController}). The workspace-wide
+             * connect keeps its discovery: until it returns a store, nothing there is called connected.
+             */
+            $discovered = $projectId === null ? $this->discoverStores($connection) : 0;
         } catch (Throwable $e) {
             // Redacted before it is trimmed, for the same reason as the advertising callback: a
             // provider's failure message can name the URL that failed, query string included.
-            return $this->back($creds->platform, 'failed', ProviderErrorText::forDisplay($e->getMessage()));
+            return $this->back($creds->platform, 'failed', ProviderErrorText::forDisplay($e->getMessage()), record: $record);
+        }
+
+        // Which project this connection came back for is kept on the server, never trusted from the address.
+        if ($projectId !== null && isset($record['user_id'])) {
+            PendingProjectLink::put((string) $connection->getKey(), $tenantId, $projectId, (int) $record['user_id']);
         }
 
         $audit->log(
@@ -239,7 +270,7 @@ final class StoreOAuthController extends Controller
             after: ['provider' => $creds->platform, 'stores' => $discovered],
         );
 
-        return $this->back($creds->platform, 'connected', null, $discovered);
+        return $this->back($creds->platform, 'connected', null, $discovered, (string) $connection->getKey(), $record);
     }
 
     /** GET /commerce/store-installs/{claim} — what a claim page shows: the store, never its tokens. */
@@ -313,13 +344,21 @@ final class StoreOAuthController extends Controller
         return PlatformCredentials::for($key);
     }
 
-    /** Back to the SPA's integrations page, carrying an outcome it can render in the reader's language. */
-    private function back(string $provider, string $outcome, ?string $reason, int $stores = 0): RedirectResponse
+    /**
+     * Back to the SPA: the project's own page for a journey that started from one, the integrations page otherwise.
+     *
+     * @param  array<string,mixed>|null  $record  the claimed state, when there is one
+     */
+    private function back(string $provider, string $outcome, ?string $reason, int $stores = 0, ?string $connectionId = null, ?array $record = null): RedirectResponse
     {
-        return redirect()->away(Frontend::origin().'/app/integrations?'.http_build_query(array_filter([
+        $project = ProjectJourney::returnUrl($record);
+
+        return redirect()->away(($project ?? Frontend::origin().'/app/integrations').'?'.http_build_query(array_filter([
             'provider' => $provider,
             'outcome' => $outcome,
-            'stores' => $outcome === 'connected' ? (string) $stores : null,
+            'stores' => $outcome === 'connected' && $project === null ? (string) $stores : null,
+            // On a project page this is the link to resume; the workspace-wide return carries none.
+            'link' => $project === null ? null : $connectionId,
             'reason' => $reason === null ? null : mb_substr($reason, 0, 180),
         ], static fn ($v) => $v !== null && $v !== '')));
     }

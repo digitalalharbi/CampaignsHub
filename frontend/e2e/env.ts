@@ -8,12 +8,27 @@
  */
 
 /** Deliberately NOT :5173 and :8000 — see `global-setup.ts` for why sharing them defeats isolation. */
-export const E2E_FRONTEND_PORT = 5273
-export const E2E_BACKEND_PORT = 8100
+/*
+ * Every value below is today's unless the environment names another. Several checkouts of this repository
+ * live on one machine, and with `reuseExistingServer` a second local run on the same ports adopts the first
+ * run's servers and resets its database under it. A checkout that must run beside another sets its own:
+ *
+ *   E2E_FRONTEND_PORT, E2E_BACKEND_PORT, E2E_PRINT_PORT, E2E_DB_DATABASE (must end in `_e2e`), E2E_REDIS_PREFIX
+ *
+ * Unset — which is CI and every existing script — nothing changes.
+ */
+function port(name: string, fallback: number): number {
+  const value = Number(process.env[name])
+
+  return Number.isInteger(value) && value > 0 ? value : fallback
+}
+
+export const E2E_FRONTEND_PORT = port('E2E_FRONTEND_PORT', 5273)
+export const E2E_BACKEND_PORT = port('E2E_BACKEND_PORT', 8100)
 
 export const E2E_ORIGIN = `http://localhost:${E2E_FRONTEND_PORT}`
 /** A second frontend, for the report print browser alone — see `REPORTS_PRINT_APP_URL`. */
-export const E2E_PRINT_PORT = 5373
+export const E2E_PRINT_PORT = port('E2E_PRINT_PORT', 5373)
 export const E2E_PRINT_ORIGIN = `http://localhost:${E2E_PRINT_PORT}`
 export const E2E_API_TARGET = `http://127.0.0.1:${E2E_BACKEND_PORT}`
 
@@ -55,15 +70,26 @@ export const E2E_BACKEND_ENV: Record<string, string> = {
    * tests all run there.
    */
   E2E_RELAX_RATE_LIMITS: 'true',
+  /*
+   * GATE-WK-CPU-001 — password hashing at the cost PHPUnit already uses (`phpunit.xml`: 4).
+   *
+   * `backend/.env` says 12, and every sign-in, registration, code check and reset hashes at it. On an idle machine that is
+   * 0.5 s for `POST /auth/register`; with a browser, two Vite servers, a queue worker and a print Chromium sharing the
+   * runner it is 4-5 s (CI: register 4 s, verify-email 5 s, login 2-3 s, all in the failing tests), and a spec that asserts
+   * after Playwright's 5 s default fails on a request that was merely queued behind the CPU. Locally, six busy loops on an
+   * eight-core Mac turned `login-paths.spec.ts:81` into 7 failures in 8 runs. The cost is a production work factor; nothing
+   * in the gate asserts it.
+   */
+  BCRYPT_ROUNDS: '4',
   // The mobile gate already issues a challenge on entry. E2E has no SMS inbox, so it immediately
   // resends to retrieve the local-only dev code; deployed environments retain the 60-second default.
   REGISTRATION_MOBILE_RESEND_COOLDOWN_SECONDS: '0',
-  DB_DATABASE: 'mediabuying_e2e',
+  DB_DATABASE: process.env.E2E_DB_DATABASE || 'mediabuying_e2e',
   APP_URL: E2E_API_TARGET,
   // Sessions, cache and queues all live in Redis and are all keyed by this prefix. Without its own,
   // the gate's queue worker would drain jobs a developer's own stack had queued, and vice versa —
   // isolation of the database alone would leave the two runs sharing everything else.
-  REDIS_PREFIX: 'campaignshub-e2e-',
+  REDIS_PREFIX: process.env.E2E_REDIS_PREFIX || 'campaignshub-e2e-',
   // Sanctum treats a request as stateful only when its Origin matches this list; the gate's frontend
   // is on 5273, so the default 5173 entry from `.env` would refuse every authenticated call.
   SANCTUM_STATEFUL_DOMAINS: `localhost:${E2E_FRONTEND_PORT},127.0.0.1:${E2E_FRONTEND_PORT}`,
@@ -128,4 +154,8 @@ export const E2E_BACKEND_ENV: Record<string, string> = {
   REPORTS_CHROMIUM_ENABLED: 'true',
   // The gate walks the paid-signup journey, which needs a provider it can actually settle against.
   SUBSCRIPTION_PROVIDER: 'sandbox',
+  // AGENTS-SANDBOX-001 — the assistant answers from a local script that reads the real tools; no model provider is ever called.
+  AGENTS_MODEL_DRIVER: 'sandbox',
+  // An approved agent proposal is recorded and never carried to an ad platform from the gate (no real write, no real token).
+  AGENTS_EXECUTE_PROVIDERS: 'none',
 }

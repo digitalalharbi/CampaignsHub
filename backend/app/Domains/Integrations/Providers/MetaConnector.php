@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Providers;
 
+use App\Domains\Integrations\MetaCandidate\MetaUsageHeader;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Support\AssetExpiry;
+use App\Domains\Integrations\Support\MetaGraphRefusal;
+use App\Domains\Integrations\Support\PlatformCreatedAt;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Domains\Integrations\ValueObjects\SyncResult;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -24,12 +29,18 @@ use Illuminate\Support\Facades\Log;
  *
  * Awaiting credentials on this install.
  */
-final class MetaConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights, ReportsEntityGrains, ReportsPeriodReach
+final class MetaConnector extends ApiAdvertisingConnector implements ReportsAudienceBreakdowns, ReportsCreativeInsights, ReportsEntityGrains, ReportsPeriodReach
 {
     /**
      * A ceiling on paging, so a wrong `paging.next` cannot become an unbounded loop.
      */
     private const MAX_PAGES = 50;
+
+    /** META-RESILIENCE-001 — how small a page may become before a too-large refusal is reported as it stands. */
+    private const MIN_PAGE_SIZE = 25;
+
+    /** META-RESILIENCE-001 — this many per-node refusals in a row, of one kind, is the kind and not the node. */
+    private const MAX_CONSECUTIVE_REFUSALS = 10;
 
     /**
      * META-ATTRIB-001 — the window these figures are measured over, ASKED FOR rather than inherited.
@@ -133,18 +144,62 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
         $items = [];
 
         for ($page = 0; $page < self::MAX_PAGES && $url !== null; $page++) {
-            // Only the FIRST request carries the query; every later one is the cursor URL entire.
-            $body = $this->read(
-                $page === 0 ? $this->api($tokens)->get($url, $query) : $this->api($tokens)->get($url),
-                $what,
-            );
+            try {
+                // Only the FIRST request carries the query; every later one is the cursor URL entire.
+                $body = $this->read(
+                    $page === 0 ? $this->api($tokens)->get($url, $query) : $this->api($tokens)->get($url),
+                    $what,
+                );
+            } catch (\RuntimeException $e) {
+                /*
+                 * META-RESILIENCE-001 — «Please reduce the amount of data you're asking for». Meta sends it
+                 * for a page too heavy to build (`creative{…}` over 500 ads), and the same page never
+                 * succeeds. `limit` is the documented paging parameter: the same page is asked for smaller
+                 * rather than the whole account being lost, down to a floor.
+                 */
+                $smaller = MetaGraphRefusal::read($e->getMessage())?->kind === MetaGraphRefusal::DATA_VOLUME
+                    ? intdiv((int) ($query['limit'] ?? 0), 2)
+                    : 0;
 
-            foreach ((array) ($body['data'] ?? []) as $item) {
+                if ($smaller < self::MIN_PAGE_SIZE) {
+                    throw $e;
+                }
+
+                $query['limit'] = $smaller;
+                $url = $page === 0 ? $url : (string) preg_replace('/([?&]limit=)\d+/', '${1}'.$smaller, $url);
+                $page--;
+
+                continue;
+            }
+
+            /*
+             * META-NO-DATA-READING-001 — a 2xx answer with no `data` list is not an empty list.
+             *
+             * Every Graph collection edge answers `{"data":[…]}`, and `{"data":[]}` is how it says «nothing».
+             * A body with no such list — an async report handle, a proxy's page, an empty or unparseable
+             * body — used to be read as zero items, so an answer that said nothing at all was filed as
+             * «the account had no delivery» (or «no campaigns»). Refused in the platform's name instead,
+             * with the key names it did carry and never a value.
+             */
+            if (! is_array($body['data'] ?? null)) {
+                throw new \RuntimeException(sprintf(
+                    '%s could not return %s: the answer arrived without a `data` list (keys: %s).',
+                    $this->label(),
+                    $what,
+                    $body === [] ? 'none' : implode(', ', array_map(strval(...), array_slice(array_keys($body), 0, 8))),
+                ));
+            }
+
+            foreach ($body['data'] as $item) {
                 $items[] = (array) $item;
             }
 
             $next = $body['paging']['next'] ?? null;
             $url = is_string($next) && $next !== '' ? $next : null;
+        }
+
+        if ($url !== null) {
+            $this->noteTruncatedRead($what);
         }
 
         return $items;
@@ -179,9 +234,12 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
         try {
             $businesses = $this->readAll($tokens, 'me/businesses', 'businesses', ['fields' => 'id,name', 'limit' => 200]);
         } catch (\RuntimeException $e) {
+            // Only a permission refusal is about the grant; a throttle told to re-authorise sends somebody the wrong way.
             $this->discoveryWarnings[] = [
                 'customer' => 'business_management',
-                'reason' => 'Partner and client ad accounts need a re-authorisation that grants business_management: '.$e->getMessage(),
+                'reason' => (MetaGraphRefusal::read($e->getMessage())?->kind === MetaGraphRefusal::PERMISSION_MISSING
+                    ? 'Partner and client ad accounts need a re-authorisation that grants business_management: '
+                    : 'Partner and client ad accounts could not be read on this pass: ').$e->getMessage(),
             ];
             $businesses = [];
         }
@@ -214,11 +272,94 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                     }
                 } catch (\RuntimeException $e) {
                     $this->discoveryWarnings[] = ['customer' => $businessId, 'reason' => "{$edge}: ".$e->getMessage()];
+
+                    // META-RESILIENCE-001 — a dead token or a throttle answers every remaining edge the same way.
+                    if (MetaGraphRefusal::read($e->getMessage())?->stopsFurtherCalls() === true) {
+                        break 2;
+                    }
                 }
             }
         }
 
         return array_values($accounts);
+    }
+
+    /**
+     * INTEG-ON-DEMAND-DISCOVERY-001 — the businesses, in ONE call, plus «direct» for the accounts the person
+     * was added to themselves. No ad account is read here.
+     *
+     * A token without `business_management` cannot list businesses; that is not a failure of the journey —
+     * the directly-held accounts are still reachable, so «direct» is all it offers.
+     */
+    protected function fetchOrganisations(OAuthTokens $tokens): array
+    {
+        $organisations = [];
+
+        try {
+            foreach ($this->readAll($tokens, 'me/businesses', 'businesses', ['fields' => 'id,name', 'limit' => 200]) as $business) {
+                if (($business['id'] ?? null) !== null) {
+                    $organisations[] = ['external_id' => (string) $business['id'], 'name' => isset($business['name']) ? (string) $business['name'] : null];
+                }
+            }
+        } catch (\RuntimeException) {
+            // Offered below: the accounts held without a business.
+        }
+
+        $organisations[] = ['external_id' => null, 'name' => null];
+
+        return $organisations;
+    }
+
+    /** INTEG-ON-DEMAND-DISCOVERY-001 — the two edges of the CHOSEN business, or `me/adaccounts` for «direct». Nothing else is walked. */
+    protected function fetchAdAccountsOf(OAuthTokens $tokens, ?string $organisationId): array
+    {
+        $accounts = [];
+        $query = ['fields' => self::ACCOUNT_FIELDS, 'limit' => 200];
+
+        if ($organisationId === null) {
+            foreach ($this->readAll($tokens, 'me/adaccounts', 'ad accounts', $query) as $a) {
+                $row = $this->accountRow($a, null, null);
+                if ($row !== null) {
+                    $accounts[$row['external_id']] = $row;
+                }
+            }
+
+            return array_values($accounts);
+        }
+
+        $refused = null;
+        $answered = false;
+        foreach (['owned_ad_accounts', 'client_ad_accounts'] as $edge) {
+            try {
+                foreach ($this->readAll($tokens, "{$organisationId}/{$edge}", 'business ad accounts', $query) as $a) {
+                    $row = $this->accountRow($a, $organisationId, null);
+                    if ($row !== null) {
+                        $accounts[$row['external_id']] ??= $row;
+                    }
+                }
+                $answered = true;
+            } catch (\RuntimeException $e) {
+                $refused = $e;
+            }
+        }
+
+        // One refused edge is a partial answer; both refused is the provider saying no, and is said.
+        if (! $answered && $refused !== null) {
+            throw $refused;
+        }
+
+        return array_values($accounts);
+    }
+
+    /** INTEG-ON-DEMAND-DISCOVERY-001 — one ad account, asked by its own id (`act_<number>`). */
+    protected function fetchAdAccount(OAuthTokens $tokens, string $externalId): ?array
+    {
+        $body = $this->read(
+            $this->api($tokens)->get($this->url($externalId), ['fields' => self::ACCOUNT_FIELDS]),
+            'ad account',
+        );
+
+        return $this->accountRow($body, null, null);
     }
 
     private const ACCOUNT_FIELDS = 'id,account_id,name,currency,timezone_name,account_status';
@@ -265,7 +406,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
         $campaigns = [];
 
         foreach ($this->readAll($tokens, "{$adAccountId}/campaigns", 'campaigns', [
-            'fields' => 'id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time',
+            'fields' => 'id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time,created_time',
             'limit' => 500,
         ]) as $c) {
             if (($c['id'] ?? null) === null) {
@@ -281,6 +422,8 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                 'daily_budget' => isset($c['daily_budget']) ? (float) $c['daily_budget'] / 100 : null,
                 'lifetime_budget' => isset($c['lifetime_budget']) ? (float) $c['lifetime_budget'] / 100 : null,
                 'currency' => null,
+                // CONS-I-AGE — when the campaign was CREATED on the platform, not when we first synced it.
+                'platform_created_at' => PlatformCreatedAt::from($c['created_time'] ?? null),
                 'raw' => (array) $c,
             ];
         }
@@ -329,7 +472,9 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
 
         foreach ($this->readAll($tokens, "{$adAccountId}/ads", 'ads', [
             'fields' => 'id,name,status,effective_status,adset_id,campaign_id,preview_shareable_link,'
-                .'creative{id,name,thumbnail_url,object_type,image_url,image_hash,video_id,object_story_spec}',
+                // CONTENT-TEXT-CTA-001 — `body`, `title`, `call_to_action_type` and `asset_feed_spec` are AdCreative fields
+                // (Marketing API reference, «Ad Creative»): the copy of a post-based or dynamic creative lives there, not in a story spec.
+                .'creative{id,name,thumbnail_url,object_type,image_url,image_hash,video_id,object_story_spec,body,title,call_to_action_type,asset_feed_spec}',
             'limit' => 500,
         ]) as $a) {
             if (($a['id'] ?? null) === null) {
@@ -352,7 +497,126 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
             ], static fn ($v) => $v !== null);
         }
 
+        $this->resetMediaOutcome();
+
         return $this->withFullSizeMedia($tokens, $adAccountId, $ads);
+    }
+
+    /* META-RESILIENCE-001 — what the media reads of the last pass did. Counts and a reason, never a link. */
+    private int $mediaAsked = 0;
+
+    private int $mediaResolved = 0;
+
+    private int $mediaNotAsked = 0;
+
+    private ?string $mediaFailure = null;
+
+    private ?string $mediaStoppedBy = null;
+
+    /** @var array{max_call_count: int|null, max_total_cputime: int|null, max_total_time: int|null, regain_minutes: int}|null */
+    private ?array $usage = null;
+
+    private function resetMediaOutcome(): void
+    {
+        $this->mediaAsked = $this->mediaResolved = $this->mediaNotAsked = 0;
+        $this->mediaFailure = $this->mediaStoppedBy = null;
+    }
+
+    /**
+     * The same shape as Snapchat's outcome, so `integrations:diagnose` reads both, plus how the pass ended.
+     *
+     * @return array{asked:int,resolved:int,not_asked:int,stopped_by:?string,error:?string}
+     */
+    public function lastMediaOutcome(): array
+    {
+        return [
+            'asked' => $this->mediaAsked,
+            'resolved' => $this->mediaResolved,
+            'not_asked' => $this->mediaNotAsked,
+            'stopped_by' => $this->mediaStoppedBy,
+            'error' => $this->mediaFailure,
+        ];
+    }
+
+    /** @return array{max_call_count: int|null, max_total_cputime: int|null, max_total_time: int|null, regain_minutes: int}|null */
+    public function lastUsage(): ?array
+    {
+        return $this->usage;
+    }
+
+    /**
+     * Every answer passes here, so Meta's own statement of how close the app is to its ceiling is never missed.
+     *
+     * @return array<string,mixed>
+     */
+    protected function read(Response $response, string $what): array
+    {
+        $header = $response->header('X-Business-Use-Case-Usage') ?: $response->header('X-Business-Use-Case');
+        $seen = MetaUsageHeader::summarise($header);
+
+        if ($seen['present']) {
+            $known = $this->usage ?? ['max_call_count' => null, 'max_total_cputime' => null, 'max_total_time' => null, 'regain_minutes' => 0];
+
+            foreach (['max_call_count', 'max_total_cputime', 'max_total_time'] as $key) {
+                $known[$key] = $seen[$key] === null ? $known[$key] : max((int) $known[$key], $seen[$key]);
+            }
+
+            $known['regain_minutes'] = max($known['regain_minutes'], MetaUsageHeader::regainMinutes($header));
+            $this->usage = $known;
+        }
+
+        return parent::read($response, $what);
+    }
+
+    /** Meta said it is throttling, or the call count is spent: asking per node now only extends the wait. */
+    private function usageExhausted(): bool
+    {
+        return $this->usage !== null
+            && ($this->usage['regain_minutes'] > 0 || (int) $this->usage['max_call_count'] >= 100);
+    }
+
+    /**
+     * Record one refused media read. Credentials are removed before it reaches a log or a run row.
+     *
+     * @param  array<string,mixed>  $context
+     */
+    private function noteMediaRefusal(\RuntimeException $e, string $line, array $context = []): ?MetaGraphRefusal
+    {
+        $this->mediaFailure ??= ProviderErrorText::forStorage($e->getMessage());
+        Log::warning($line, [...$context, 'reason' => ProviderErrorText::forDisplay($e->getMessage())]);
+
+        return MetaGraphRefusal::read($e->getMessage());
+    }
+
+    /**
+     * EXPIRED-MEDIA-RENEWAL — the same reads a sweep makes, for creatives no listing returned this pass.
+     *
+     * `/act_{id}/ads` answers with the ads it lists today, so a creative outside it (its ad archived, say) keeps
+     * a CDN link that has expired, and no sweep ever touches it. Its own node still answers.
+     *
+     * @param  list<array{external_id:string,format:?string,media_refs:array<string,mixed>}>  $creatives
+     * @return array{creatives: array<string, array<string,mixed>>, outcome: array{asked:int,resolved:int,not_asked:int,stopped_by:?string,error:?string}}
+     */
+    public function renewCreativeMedia(string $adAccountId, array $creatives): array
+    {
+        $this->resetMediaOutcome();
+
+        $ads = array_map(static function (array $c): array {
+            // `poster` says the listing named a poster; here the poster is what expired, so its node is read again.
+            $refs = array_diff_key($c['media_refs'], ['poster' => true]);
+
+            return ['creative' => ['external_id' => $c['external_id'], 'format' => $c['format'], 'raw' => ['media_refs' => $refs]]];
+        }, $creatives);
+
+        $renewed = [];
+        foreach ($this->withFullSizeMedia($this->tokens(), $adAccountId, $ads) as $ad) {
+            $renewed[(string) $ad['creative']['external_id']] = array_intersect_key(
+                (array) $ad['creative'],
+                ['asset_url' => true, 'video_url' => true, 'thumbnail_url' => true, 'asset_expires_at' => true],
+            );
+        }
+
+        return ['creatives' => $renewed, 'outcome' => $this->lastMediaOutcome()];
     }
 
     /**
@@ -383,8 +647,10 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
         }
 
         $images = [];
+        $uniqueHashes = array_values(array_unique($hashes));
+        $this->mediaAsked += count($uniqueHashes);
         try {
-            foreach (array_chunk(array_values(array_unique($hashes)), 50) as $chunk) {
+            foreach (array_chunk($uniqueHashes, 50) as $chunk) {
                 foreach ($this->readAll($tokens, "{$adAccountId}/adimages", 'ad images', [
                     'hashes' => json_encode($chunk, JSON_THROW_ON_ERROR),
                     'fields' => 'hash,url,permalink_url',
@@ -395,7 +661,11 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                 }
             }
         } catch (\RuntimeException $e) {
-            Log::warning('Meta full-size media could not be read; thumbnails kept.', ['reason' => $e->getMessage()]);
+            $refusal = $this->noteMediaRefusal($e, 'Meta full-size media could not be read; thumbnails kept.');
+
+            if ($refusal?->stopsFurtherCalls() === true) {
+                $this->mediaStoppedBy = $refusal->kind;
+            }
         }
         $files = $this->readEach($tokens, $videos, ['fields' => 'source,picture'], 'ad video');
 
@@ -413,10 +683,12 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
             if ($image !== null && ($url = $str($image['url'] ?? null) ?? $str($image['permalink_url'] ?? null)) !== null) {
                 $creative['asset_url'] = $url;
                 $creative['thumbnail_url'] = $url;
+                $this->mediaResolved++;
             }
             if ($video !== null) {
                 if (($source = $str($video['source'] ?? null)) !== null) {
                     $creative['video_url'] = $source;
+                    $this->mediaResolved++;
                 }
                 if (($picture = $str($video['picture'] ?? null)) !== null && ! isset($creative['asset_url']) && ($refs['poster'] ?? false) !== true) {
                     $creative['thumbnail_url'] = $picture;
@@ -446,6 +718,10 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
      * Each node is read at its own path. One refused node is logged and skipped; it no longer costs
      * the rest of the batch.
      *
+     * META-RESILIENCE-001 — and that loop cannot be allowed to run on. A sweep holds thousands of nodes, each a
+     * call: a dead token or a throttle stops it at once, Meta's usage header stops it before the refusal, and a
+     * run of refusals of one kind says the kind is the cause. What was not asked is counted on the run.
+     *
      * @param  list<string>  $ids
      * @param  array<string,mixed>  $query
      * @return array<string, array<string,mixed>>
@@ -453,12 +729,36 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
     private function readEach(OAuthTokens $tokens, array $ids, array $query, string $what): array
     {
         $out = [];
-        foreach (array_values(array_unique(array_filter($ids, static fn (string $id): bool => $id !== ''))) as $id) {
+        $nodes = array_values(array_unique(array_filter($ids, static fn (string $id): bool => $id !== '')));
+        $this->mediaAsked += count($nodes);
+        $inARow = 0;
+        $lastKind = null;
+
+        foreach ($nodes as $position => $id) {
+            if ($this->mediaStoppedBy === null && $this->usageExhausted()) {
+                $this->mediaStoppedBy = MetaGraphRefusal::RATE_LIMITED;
+            }
+
+            if ($this->mediaStoppedBy !== null) {
+                $this->mediaNotAsked += count($nodes) - $position;
+
+                break;
+            }
+
             try {
                 $body = $this->read($this->api($tokens)->get($this->url($id), $query), $what);
                 $out[$id] = $body;
+                $inARow = 0;
+                $lastKind = null;
             } catch (\RuntimeException $e) {
-                Log::warning("Meta {$what} could not be read; kept what the listing gave.", ['id' => $id, 'reason' => $e->getMessage()]);
+                $refusal = $this->noteMediaRefusal($e, "Meta {$what} could not be read; kept what the listing gave.", ['id' => $id]);
+                $kind = $refusal === null ? MetaGraphRefusal::UNCLASSIFIED : $refusal->kind;
+                $inARow = $kind === $lastKind ? $inARow + 1 : 1;
+                $lastKind = $kind;
+
+                if ($refusal?->stopsFurtherCalls() === true || $inARow >= self::MAX_CONSECUTIVE_REFUSALS) {
+                    $this->mediaStoppedBy = $kind;
+                }
             }
         }
 
@@ -494,6 +794,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
         ], 'creative thumbnail') as $id => $creative) {
             if (is_string($creative['thumbnail_url'] ?? null) && $creative['thumbnail_url'] !== '') {
                 $sized[$id] = $creative['thumbnail_url'];
+                $this->mediaResolved++;
             }
         }
 
@@ -608,7 +909,9 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                 ?? $str($video['image_url'] ?? null),
             )?->toIso8601String(),
             'destination_url' => $str($link['link'] ?? null)
-                ?? $str($video['call_to_action']['value']['link'] ?? null),
+                ?? $str($video['call_to_action']['value']['link'] ?? null)
+                // CONTENT-TEXT-CTA-001 — a dynamic creative states its landing page in the asset feed's `link_urls`.
+                ?? $str(((array) (((array) ($creative['asset_feed_spec']['link_urls'] ?? []))[0] ?? []))['website_url'] ?? null),
             /*
              * `null` when Meta sent no `child_attachments`, `[]` when it sent an empty list — two
              * different sentences the presenter already knows how to tell apart, and the reason an
@@ -625,6 +928,7 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                     ], static fn ($v) => $v !== null),
                     $children,
                 ),
+            ...$this->copyFrom($creative, $spec),
             // META-CONTENT-MEDIA-001 — what the full-size reads ask for: the image's hash, the video's id.
             'raw' => ($refs = array_filter([
                 'image_hash' => $str($creative['image_hash'] ?? null) ?? $str($link['image_hash'] ?? null),
@@ -632,6 +936,64 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                 // Whether Meta named a full-size poster for the video — the 64px thumb does not count.
                 'poster' => $str($video['image_url'] ?? null) === null ? null : true,
             ], static fn ($v) => $v !== null)) === [] ? null : ['media_refs' => $refs],
+        ], static fn ($v) => $v !== null);
+    }
+
+    /**
+     * CONTENT-TEXT-CTA-001 — the ad's own words and its call to action, from the fields Meta states them in.
+     *
+     * Production 2026-11-13: 0 of 959 Meta creatives carried a body, a headline or a call to action, although
+     * `object_story_spec` was already requested — this mapping read only its media. Meta's Marketing API reference
+     * names where each one lives, and they are read in that order, the most specific first:
+     *
+     *   * `object_story_spec.link_data` (AdCreativeLinkData): `message` (the primary text), `name` (the headline),
+     *     `description`, `call_to_action.type`.
+     *   * `object_story_spec.video_data` (AdCreativeVideoData): `message`, `title`, `link_description`,
+     *     `call_to_action.type`.
+     *   * `object_story_spec.template_data` (a catalogue template, same shape as link_data). A value holding Meta's
+     *     `{{product.…}}` tokens is a template, rendered per product at delivery — never stored as if it were copy.
+     *   * The AdCreative's own `body`, `title` and `call_to_action_type` — where a creative built from an existing
+     *     post (`object_story_id`) states its copy, with no story spec at all.
+     *   * `asset_feed_spec` (AdAssetFeedSpec, dynamic / Advantage+ creative): `bodies[].text`, `titles[].text`,
+     *     `descriptions[].text`, `call_to_action_types[]`. Meta tries several and shows one; the first is kept,
+     *     which is the one the advertiser listed first.
+     *
+     * Every value is a string Meta sent; nothing is composed. A creative with none keeps none.
+     *
+     * @param  array<string,mixed>  $creative
+     * @param  array<string,mixed>  $spec
+     * @return array{body?: string, headline?: string, description?: string, cta?: string}
+     */
+    private function copyFrom(array $creative, array $spec): array
+    {
+        $text = static function (mixed $v): ?string {
+            if (! is_string($v) || trim($v) === '') {
+                return null;
+            }
+
+            return preg_match('/\{\{\s*product\./i', $v) === 1 ? null : trim($v);
+        };
+        $first = static fn (mixed $list, string $key): ?string => $text(((array) (((array) ($list ?? []))[0] ?? []))[$key] ?? null);
+
+        $link = (array) ($spec['link_data'] ?? []);
+        $video = (array) ($spec['video_data'] ?? []);
+        $template = (array) ($spec['template_data'] ?? []);
+        $feed = (array) ($creative['asset_feed_spec'] ?? []);
+
+        $cta = $text($link['call_to_action']['type'] ?? null)
+            ?? $text($video['call_to_action']['type'] ?? null)
+            ?? $text($template['call_to_action']['type'] ?? null)
+            ?? $text($creative['call_to_action_type'] ?? null)
+            ?? $text(((array) ($feed['call_to_action_types'] ?? []))[0] ?? null);
+
+        return array_filter([
+            'body' => $text($link['message'] ?? null) ?? $text($video['message'] ?? null) ?? $text($template['message'] ?? null)
+                ?? $text($creative['body'] ?? null) ?? $first($feed['bodies'] ?? null, 'text'),
+            'headline' => $text($link['name'] ?? null) ?? $text($video['title'] ?? null) ?? $text($template['name'] ?? null)
+                ?? $text($creative['title'] ?? null) ?? $first($feed['titles'] ?? null, 'text'),
+            'description' => $text($link['description'] ?? null) ?? $text($video['link_description'] ?? null)
+                ?? $text($template['description'] ?? null) ?? $first($feed['descriptions'] ?? null, 'text'),
+            'cta' => $cta === null ? null : strtoupper($cta),
         ], static fn ($v) => $v !== null);
     }
 
@@ -794,6 +1156,15 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
             'video_views' => $this->total($row['video_play_actions'] ?? null),
             'video_completions' => $this->total($row['video_p100_watched_actions'] ?? null),
             /*
+             * METRIC-COVERAGE-001 — the watch quartiles at the ad set and ad grains, where `entity_daily_metrics` has the
+             * columns. Only the entity request asks for the p25–p75 fields, so the campaign and creative rows never carry
+             * them (absent, not zero) and the campaign store ignores keys it does not read.
+             */
+            'video_p25' => $this->total($row['video_p25_watched_actions'] ?? null),
+            'video_p50' => $this->total($row['video_p50_watched_actions'] ?? null),
+            'video_p75' => $this->total($row['video_p75_watched_actions'] ?? null),
+            'video_p100' => $this->total($row['video_p100_watched_actions'] ?? null),
+            /*
              * Meta publishes no generic «conversions» figure — it publishes actions, and which of
              * them is the result depends on the objective. This connector's definition of a
              * conversion has always been a purchase, so the two are the same number HERE and are
@@ -868,7 +1239,8 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
                 'level' => $grain === ReportsEntityGrains::AD_SET ? 'adset' : 'ad',
                 'time_increment' => 1,
                 'fields' => "{$idField},campaign_id,date_start,spend,impressions,clicks,reach,actions,"
-                    .'action_values,video_play_actions,video_p100_watched_actions',
+                    .'action_values,video_play_actions,video_p25_watched_actions,video_p50_watched_actions,'
+                    .'video_p75_watched_actions,video_p100_watched_actions',
                 'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
                 'action_attribution_windows' => json_encode(self::ATTRIBUTION_WINDOWS, JSON_THROW_ON_ERROR),
                 'limit' => 500,
@@ -900,6 +1272,84 @@ final class MetaConnector extends ApiAdvertisingConnector implements ReportsCrea
         }
 
         return SyncResult::of($rows);
+    }
+
+    /**
+     * AUDIENCE-001 — paid delivery by REGION, per ad set and day: one Graph call per account.
+     *
+     * Documented at https://developers.facebook.com/docs/marketing-api/insights/breakdowns — `region` is
+     * «the regions where people reached are located», derived by Meta from signals such as a person's
+     * current city and hometown. It is therefore NOT the location targeted and NOT proof of where a
+     * single impression was served; the label is stored verbatim and never re-mapped to a city.
+     *
+     * Only delivery fields are asked (impressions, reach, clicks, spend): off-Meta action metrics are
+     * not returned with `region` (Type 1 breakdown), so no conversion is ever attributed to a region.
+     * `reach` here is the daily unique count and is never added across days by any reader.
+     */
+    public function audienceDimensions(): array
+    {
+        return ['region'];
+    }
+
+    public function audienceMinimumImpressions(): int
+    {
+        return 1;
+    }
+
+    public function audienceSourceField(string $dimension): string
+    {
+        return 'meta:insights.level=adset.breakdowns='.$dimension;
+    }
+
+    public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to, array $delivering = []): SyncResult
+    {
+        if (! in_array($dimension, $this->audienceDimensions(), true)) {
+            return SyncResult::failed("Meta audience dimension «{$dimension}» is not asked for by this product.");
+        }
+
+        try {
+            $reported = $this->readAll($this->tokens(), "{$adAccountId}/insights", "{$dimension} breakdown", [
+                'level' => 'adset',
+                'time_increment' => 1,
+                'breakdowns' => $dimension,
+                'fields' => 'adset_id,campaign_id,date_start,impressions,reach,clicks,spend,account_currency',
+                'time_range' => json_encode(['since' => $from, 'until' => $to], JSON_THROW_ON_ERROR),
+                'limit' => 500,
+            ]);
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+
+        return SyncResult::of(self::mapAudienceRows($reported, $dimension));
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $reported
+     * @return list<array<string,mixed>>
+     */
+    public static function mapAudienceRows(array $reported, string $dimension): array
+    {
+        $rows = [];
+        foreach ($reported as $r) {
+            $value = trim((string) ($r[$dimension] ?? ''));
+            $entity = (string) ($r['adset_id'] ?? '');
+            $date = substr((string) ($r['date_start'] ?? ''), 0, 10);
+            if ($value === '' || $entity === '' || $date === '') {
+                continue;
+            }
+            $row = ['entity_id' => $entity, 'campaign_id' => isset($r['campaign_id']) ? (string) $r['campaign_id'] : null, 'date' => $date, 'value' => $value];
+            foreach (['impressions', 'reach', 'clicks', 'spend'] as $m) {
+                if (isset($r[$m]) && is_numeric($r[$m])) {
+                    $row[$m] = (float) $r[$m];
+                }
+            }
+            if (isset($r['account_currency']) && is_string($r['account_currency']) && strlen($r['account_currency']) === 3) {
+                $row['currency'] = strtoupper($r['account_currency']);
+            }
+            $rows[] = $row;
+        }
+
+        return $rows;
     }
 
     /**

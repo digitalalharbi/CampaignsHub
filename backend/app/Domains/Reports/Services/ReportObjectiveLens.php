@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Services;
 
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Funding\Support\FundingMoney;
 
 /**
  * What a report of this kind is allowed to say — §14.6.
@@ -88,6 +89,29 @@ final class ReportObjectiveLens
     }
 
     /**
+     * REPORT-MULTI-OBJECTIVE-001 — EVERY template a scope's objective choice names, in the order chosen.
+     *
+     * `fromScopeObjectives()` returns the first match, which is what folded «زيارات + مبيعات» into one template. This keeps them all; one
+     * entry means one objective, exactly as before.
+     *
+     * @param  list<string>  $objectives
+     * @return list<string>
+     */
+    public static function templatesOf(array $objectives): array
+    {
+        $out = [];
+        foreach ($objectives as $objective) {
+            foreach (self::TEMPLATE_MEMBERS as $template => $members) {
+                if (in_array($objective, $members, true) || $objective === $template) {
+                    $out[$template] = true;
+                }
+            }
+        }
+
+        return array_keys($out);
+    }
+
+    /**
      * The report objective for a scope, from the campaigns' own declarations.
      *
      * @param  list<array<string,mixed>>  $campaigns  rows from `MetricsAggregator::byCampaign()`
@@ -101,10 +125,18 @@ final class ReportObjectiveLens
             if ((float) ($c['spend'] ?? 0) <= 0) {
                 continue;
             }
-            if (($c['objective_source'] ?? 'unset') === 'unset') {
+            $objective = CampaignObjective::tryFrom((string) ($c['objective'] ?? ''));
+            /*
+             * OBJECTIVE-GAPS-001 — the column DEFAULT is the placeholder, not `unset` itself.
+             *
+             * `objective_source = unset` also covers a real objective the importer seeded (17 TikTok
+             * WEB_CONVERSIONS campaigns on Production carry `conversions` that way), and skipping
+             * those let a traffic or sales month fall back to the outcome heuristic. Only `other` —
+             * what the column defaults to — under an `unset` source is «nobody classified it».
+             */
+            if (($c['objective_source'] ?? 'unset') === 'unset' && ($objective === null || $objective === CampaignObjective::Other)) {
                 continue;
             }
-            $objective = CampaignObjective::tryFrom((string) ($c['objective'] ?? ''));
             if ($objective !== null) {
                 $declared[] = $objective;
             }
@@ -146,6 +178,17 @@ final class ReportObjectiveLens
         $conversions = array_sum(array_map(fn ($c) => (float) ($c['conversions'] ?? 0), $campaigns));
 
         return $revenue > 0 ? self::SALES : ($conversions > 0 ? self::LEADS : self::TRAFFIC);
+    }
+
+    /**
+     * DIGESTS-OBJECTIVE-KPIS-001 — the report objective a stored campaign objective belongs to (sales, leads, traffic, awareness, video, app_installs).
+     * The same mapping `infer()` uses; exposed so a digest can group a mixed project's campaigns without a second catalog.
+     */
+    public static function groupOf(string $objective): ?string
+    {
+        $case = CampaignObjective::tryFrom($objective);
+
+        return $case === null ? null : self::reportObjectiveOf($case);
     }
 
     private static function reportObjectiveOf(CampaignObjective $objective): string
@@ -197,13 +240,13 @@ final class ReportObjectiveLens
             // METRIC-NAMES-001 — the words the person paying for the campaign already uses. «ROAS»
             // is jargon to everyone outside media buying, and it is the figure a client is most
             // likely to be quoted back.
-            self::SALES => ['key' => 'roas', 'label_ar' => 'العائد على الإنفاق', 'lower_is_better' => false],
+            self::SALES => ['key' => 'roas', 'label_ar' => 'معدل العائد', 'lower_is_better' => false],
             self::LEADS => ['key' => 'cpa', 'label_ar' => 'تكلفة العميل المحتمل', 'lower_is_better' => true],
             self::APP_INSTALLS => ['key' => 'cpa', 'label_ar' => 'تكلفة التحميل', 'lower_is_better' => true],
             self::TRAFFIC => ['key' => 'cpc', 'label_ar' => 'تكلفة النقرة', 'lower_is_better' => true],
             self::AWARENESS, self::VIDEO => ['key' => 'cpm', 'label_ar' => 'تكلفة الألف ظهور', 'lower_is_better' => true],
             // Mixed: the one figure that means the same thing whatever each campaign was for.
-            default => ['key' => 'ctr', 'label_ar' => 'نسبة النقر', 'lower_is_better' => false],
+            default => ['key' => 'ctr', 'label_ar' => 'معدل النقر', 'lower_is_better' => false],
         };
     }
 
@@ -213,7 +256,7 @@ final class ReportObjectiveLens
         return match ($this->rankingMetric()['key']) {
             'roas' => number_format($value, 2).'×',
             'ctr' => number_format($value * 100, 2).'%',
-            default => number_format($value, 2).' '.$currency,
+            default => FundingMoney::withMark(number_format($value, 2), $currency),
         };
     }
 }

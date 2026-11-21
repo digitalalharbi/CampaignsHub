@@ -40,6 +40,15 @@ final class WithholdMoneyForMember
 
     public function handle(Request $request, Closure $next): Response
     {
+        /*
+         * CLIENT-DASHBOARD-PARITY-001 — the client portal's metrics route decides money by the agency's switch for the
+         * client's space (`PortalMetricsFilter`), which is the rule a client reader is under; a client membership holds no
+         * project capability for this middleware to read, so it would strip what the agency chose to show.
+         */
+        if ($request->routeIs('api.v1.client.projects.metrics')) {
+            return $next($request);
+        }
+
         $user = $request->user();
         $projectId = $this->context->projectId() ?? (string) $request->route('project');
 

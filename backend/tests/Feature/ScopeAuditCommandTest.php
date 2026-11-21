@@ -32,6 +32,8 @@ final class ScopeAuditCommandTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected bool $selectsSeededAccounts = false;
+
     private Tenant $tenant;
 
     private ClientWorkspace $workspace;
@@ -178,6 +180,45 @@ final class ScopeAuditCommandTest extends TestCase
         $this->assertStringNotContainsString('SECRET-NAME', $output, 'an account name reached the output');
         $this->assertStringNotContainsString('act-selected', $output, 'a provider account id reached the output');
         $this->assertStringNotContainsString('https://', $output, 'a url reached the output');
+    }
+
+    public function test_cross_linked_creatives_are_listed_with_where_they_are_readable(): void
+    {
+        $active = $this->account('act-cross-active', 'SECRET-NAME-X1');
+        $deselected = $this->account('act-cross-off', 'SECRET-NAME-X2');
+        $this->bind($active, $this->otherProject, true);
+        $this->bind($deselected, $this->otherProject, false);
+
+        $ids = [];
+        foreach ([$active, $deselected] as $account) {
+            $campaign = (string) Str::uuid();
+            $ids[$account->id] = (string) Str::uuid();
+            $base = ['tenant_id' => $this->tenant->id, 'created_at' => now(), 'updated_at' => now()];
+            DB::table('external_campaigns')->insert($base + [
+                'id' => $campaign, 'project_id' => $this->otherProject->id, 'external_account_id' => $account->id,
+                'provider' => 'snapchat', 'external_id' => 'cmp-'.$account->external_id, 'name' => 'n', 'status' => 'active',
+            ]);
+            // Filed in THIS project, linked to a campaign of the other one.
+            DB::table('external_creatives')->insert($base + [
+                'id' => $ids[$account->id], 'project_id' => $this->project->id, 'external_campaign_id' => $campaign, 'provider' => 'snapchat',
+                'external_creative_id' => 'cr-'.$account->external_id, 'name' => 'n', 'asset_url' => 'https://cdn.example/x',
+            ]);
+        }
+
+        $output = $this->audit();
+        $line = fn (string $id): string => (string) collect(explode("\n", $output))->first(fn (string $l): bool => str_contains($l, 'creative '.substr($id, 0, 8)));
+
+        $head = 'filed in project '.substr($this->project->id, 0, 8).' · campaign\'s project '.substr($this->otherProject->id, 0, 8);
+
+        // Account bound only to the campaign's project, binding deselected: readable nowhere.
+        $off = $line($ids[$deselected->id]);
+        $this->assertStringContainsString($head, $off);
+        $this->assertStringContainsString('readable-here: no · readable-in-campaign-project: no', $off);
+
+        // Same shape with an ACTIVE binding: not readable under the project it is filed in, readable under its campaign's.
+        $on = $line($ids[$active->id]);
+        $this->assertStringContainsString('readable-here: no · readable-in-campaign-project: yes', $on);
+        $this->assertStringNotContainsString('SECRET-NAME', $output);
     }
 
     // ── fixture ────────────────────────────────────────────────────────────────────────────────────

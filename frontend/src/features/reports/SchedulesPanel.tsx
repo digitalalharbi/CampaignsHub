@@ -11,6 +11,7 @@ import { Select } from '@/components/ui/Select'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { useAuth } from '@/stores/auth'
 import { fmtDateTime } from '@/lib/datetime'
+import { DELIVERY_LABEL, HOLD_REASON } from './scheduleDeliveryWords'
 
 const FREQUENCIES = [
   { value: 'daily', label: 'يومي' },
@@ -30,14 +31,6 @@ const AUDIENCES = [
   { value: 'internal', label: 'داخلي' },
   { value: 'executive', label: 'تنفيذي' },
 ]
-
-/** Delivery states as the ledger records them — never invented, never upgraded to "تم الإرسال". */
-const DELIVERY_LABEL: Record<string, { ar: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
-  sent: { ar: 'مُرسلة', tone: 'success' },
-  awaiting_provider_credentials: { ar: 'بانتظار مزود بريد', tone: 'warning' },
-  suppressed_internal: { ar: 'محجوبة (تقرير داخلي)', tone: 'neutral' },
-  failed: { ar: 'فاشلة', tone: 'danger' },
-}
 
 const freqLabel = (s: ReportScheduleRow) => {
   if (s.frequency === 'weekly') return `أسبوعي · ${WEEKDAYS.find((d) => d.value === s.day)?.label ?? s.day ?? ''}`
@@ -66,7 +59,7 @@ export function SchedulesPanel({ projectId }: { projectId: string }) {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['report-schedules', projectId] })
 
   const toggle = useMutation({ mutationFn: (id: string) => toggleSchedule(projectId, id), onSuccess: invalidate })
-  const run = useMutation({ mutationFn: (id: string) => runScheduleNow(projectId, id), onSuccess: invalidate })
+  const run = useMutation({ meta: { feedback: 'none' }, mutationFn: (id: string) => runScheduleNow(projectId, id), onSuccess: invalidate })
   const remove = useMutation({ mutationFn: (id: string) => deleteSchedule(projectId, id), onSuccess: invalidate })
 
   const rows = q.data ?? []
@@ -106,7 +99,10 @@ export function SchedulesPanel({ projectId }: { projectId: string }) {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-bold text-text-primary">{s.name}</span>
-                    <Badge tone={s.active ? 'success' : 'neutral'}>{s.active ? 'مفعّلة' : 'موقوفة'}</Badge>
+                    {/* CONS-SCHEDULE-ONE — a copy switched off because another schedule builds the same report. */}
+                    {s.disabled_reason === 'duplicate_schedule'
+                      ? <Badge tone="warning" data-testid={`schedule-copy-${s.id}`}>نسخة غير مجدولة</Badge>
+                      : <Badge tone={s.active ? 'success' : 'neutral'}>{s.active ? 'مفعّلة' : 'موقوفة'}</Badge>}
                     {s.is_demo && <Badge tone="warning">تجريبية</Badge>}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
@@ -125,6 +121,9 @@ export function SchedulesPanel({ projectId }: { projectId: string }) {
                         const meta = DELIVERY_LABEL[status] ?? { ar: status, tone: 'neutral' as const }
                         return <Badge key={status} tone={meta.tone}>{meta.ar}: <span className="tnum">{count}</span></Badge>
                       })}
+                      {Object.entries(s.delivery_reasons ?? {}).map(([reason, count]) => (
+                        <span key={reason} className="text-xs text-text-secondary">{HOLD_REASON[reason] ?? reason}: <span className="tnum">{count}</span></span>
+                      ))}
                     </div>
                   )}
                 </div>

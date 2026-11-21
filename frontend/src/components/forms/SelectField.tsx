@@ -10,7 +10,7 @@ import {
   PanelSearch,
   PanelState,
   Spinner,
-  panelClass,
+  panelClassFor, usePanelUp,
   triggerClass,
 } from './internals'
 
@@ -89,6 +89,7 @@ export function SelectField({
     setQuery('')
   }
   const containerRef = useClickOutside<HTMLDivElement>(open, close)
+  const up = usePanelUp(containerRef, open)
 
   const selectIndex = (index: number) => {
     if (index < filtered.length) {
@@ -161,7 +162,7 @@ export function SelectField({
         {name && <input type="hidden" name={name} value={value ?? ''} />}
 
         {open && (
-          <div className={panelClass}>
+          <div className={panelClassFor(up)}>
             {isSearchable && (
               <PanelSearch
                 ref={searchInputRef}

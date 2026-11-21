@@ -1,3 +1,6 @@
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { FitPaged } from '@/components/fit/FitPaged'
+import { InfoTip } from '@/components/fit/InfoTip'
 import { useMemo, useState } from 'react'
 import { Skeleton } from '@/components/ui/States'
 import { Num } from '@/components/ui/Num'
@@ -37,6 +40,7 @@ export function FindingsBoard({
   activeCampaigns?: number | null
 }) {
   const [nature, setNature] = useState<FindingNature | 'all'>('all')
+  const compact = useFitCompact()
   const counts = useMemo(() => natureCounts(findings), [findings])
   const health = useMemo(() => healthSummary(findings), [findings])
   const shown = nature === 'all' ? findings : findings.filter((f) => f.nature === nature)
@@ -45,11 +49,15 @@ export function FindingsBoard({
     <section className="flex flex-col gap-3" data-testid="action-center">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-bold text-text-primary">{ar ? 'ما يحتاج قرارًا الآن' : 'What needs a decision now'}</h2>
-        <span className="text-[11px] text-text-secondary">
-          {ar
-            ? 'مُستنتجة من بيانات الحساب نفسه — كل بطاقة تفتح دليلها.'
-            : 'Derived from this account’s own data — every card opens its evidence.'}
-        </span>
+        {compact
+          ? <InfoTip text={ar ? 'مُستنتجة من بيانات مساحة العمل نفسها — كل بطاقة تفتح دليلها.' : 'Derived from this workspace’s own data — every card opens its evidence.'} />
+          : (
+            <span className="text-[11px] text-text-secondary">
+              {ar
+                ? 'مُستنتجة من بيانات مساحة العمل نفسها — كل بطاقة تفتح دليلها.'
+                : 'Derived from this workspace’s own data — every card opens its evidence.'}
+            </span>
+          )}
       </div>
 
       {failed.length > 0 && (
@@ -83,7 +91,7 @@ export function FindingsBoard({
           */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="action-center-summary">
             <HealthTile testId="health-active" label={ar ? 'حملات نشطة' : 'Active campaigns'} value={activeCampaigns} tone="brand" />
-            <HealthTile testId="health-attention" label={ar ? 'تحتاج انتباهًا' : 'Need attention'} value={health.attention} tone="warning" />
+            <HealthTile testId="health-attention" label={ar ? 'تنبيهات' : 'Need attention'} value={health.attention} tone="warning" />
             <HealthTile testId="health-critical" label={ar ? 'حرجة' : 'Critical'} value={health.critical} tone="danger" />
             <HealthTile testId="health-next" label={ar ? 'الإجراءات التالية' : 'Next actions'} value={health.nextActions} tone="success" />
           </div>
@@ -107,13 +115,26 @@ export function FindingsBoard({
             })}
           </div>
 
-          <ul className="grid gap-3 lg:grid-cols-2" data-testid="action-center-list">
-            {shown.map((f) => (
-              <li key={f.id} className="min-w-0">
-                <FindingCard finding={f} projectId={projectId} ar={ar} currency={currency} />
-              </li>
-            ))}
-          </ul>
+          {compact ? (
+            <FitPaged
+              items={shown}
+              itemHeight={104}
+              columns={2}
+              listClassName="grid grid-cols-1 lg:grid-cols-2"
+              rowKey={(f) => f.id}
+              render={(f) => <FindingCard finding={f} projectId={projectId} ar={ar} currency={currency} />}
+              ar={ar}
+              testid="action-center-list"
+            />
+          ) : (
+            <ul className="grid gap-3 lg:grid-cols-2" data-testid="action-center-list">
+              {shown.map((f) => (
+                <li key={f.id} className="min-w-0">
+                  <FindingCard finding={f} projectId={projectId} ar={ar} currency={currency} />
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       )}
     </section>
@@ -131,8 +152,10 @@ const SOURCE: Record<SourceKey, { ar: string; en: string }> = {
 function HealthTile({ testId, label, value, tone }: { testId: string; label: string; value: number | null; tone: 'brand' | 'warning' | 'danger' | 'success' }) {
   const color = { brand: 'text-text-primary', warning: 'text-warning', danger: 'text-danger', success: 'text-success' }[tone]
 
+  const compact = useFitCompact()
+
   return (
-    <div className="rounded-xl border border-border bg-surface p-3" data-testid={testId}>
+    <div className={`rounded-xl border border-border bg-surface ${compact ? 'flex items-center justify-between gap-2 px-3 py-2' : 'p-3'}`} data-testid={testId}>
       <p className="text-[11px] text-text-muted">{label}</p>
       <p className={`text-2xl font-extrabold ${color}`}>{value === null ? '—' : <Num>{value}</Num>}</p>
     </div>

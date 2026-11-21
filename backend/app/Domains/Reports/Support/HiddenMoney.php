@@ -32,6 +32,8 @@ final class HiddenMoney
         'funnel_spend', 'blended_cpa', 'roas', 'blended_roas', 'attributed_roas',
         'spent', 'remaining', 'consumed_pct', 'pace', 'projected_spend', 'daily_average', 'over_under',
         'excluded_spend', 'includes_non_sales_spend', 'spend_share', 'platform_value',
+        // OBJECTIVE-PATHS-001 — the one total of the objective split.
+        'total_spend',
     ];
 
     /** Revenue, and everything that is revenue or returns it. */
@@ -173,7 +175,7 @@ final class HiddenMoney
      * @param  array<string, mixed>  $item
      * @param  list<string>  $keys
      */
-    private static function revealsHidden(array $item, array $keys): bool
+    public static function revealsHidden(array $item, array $keys): bool
     {
         if (isset($item['reveals']) && is_array($item['reveals'])) {
             return array_intersect($item['reveals'], $keys) !== [];
@@ -189,7 +191,7 @@ final class HiddenMoney
     }
 
     /** The metric key an Arabic KPI label names, or null when it names none this product ranks on. */
-    private static function metricForLabel(string $label): ?string
+    public static function metricForLabel(string $label): ?string
     {
         static $map = null;
         if ($map === null) {
@@ -197,7 +199,7 @@ final class HiddenMoney
                 'الإنفاق' => 'spend', 'الإيرادات' => 'revenue', 'النتائج' => 'conversions',
                 // ReportObjectiveLens words for the same figures.
                 'تكلفة العميل المحتمل' => 'cpa', 'تكلفة التحميل' => 'cpa', 'تكلفة النقرة' => 'cpc',
-                'تكلفة الألف ظهور' => 'cpm', 'نسبة النقر' => 'ctr', 'العائد على الإنفاق' => 'roas',
+                'تكلفة الألف ظهور' => 'cpm', 'معدل النقر' => 'ctr', 'معدل العائد' => 'roas',
             ];
             foreach (['impressions', 'reach', 'cpm', 'clicks', 'landing_page_views', 'ctr', 'cpc', 'engagements', 'engagement_rate', 'cpe',
                 'video_views', 'video_completions', 'video_completion_rate', 'cost_per_view', 'leads', 'qualified_leads', 'cpl',

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { ChevronDown, Search } from 'lucide-react'
 import { MetricStrip } from '@/components/ui/MetricStrip'
 import { metricsForKeys, selectableMetrics } from './metricCatalog'
+import type { MetricItem } from '@/components/ui/MetricStrip'
 import type { Summary, TimePoint } from './api'
 
 /**
@@ -24,19 +25,23 @@ export const DEFAULT_KPIS = ['spend', 'impressions', 'clicks', 'ctr'] as const
 /** Per user and per browser, which is what a display preference is. */
 const STORE_KEY = 'campaignshub.dashboard.kpis'
 
-function remembered(): string[] {
+function remembered(defaults?: readonly string[]): string[] {
+  // ANALYTICS-ONE-BOARD-001 — on the board the cards are the objective layout's own headline, so a reader's choice is kept per layout.
+  const storeKey = defaults ? `${STORE_KEY}.${defaults.join(',')}` : STORE_KEY
+  const size = defaults ? defaults.length : 4
+
   try {
-    const raw = window.localStorage.getItem(STORE_KEY)
+    const raw = window.localStorage.getItem(storeKey)
     const parsed = raw === null ? null : (JSON.parse(raw) as unknown)
 
-    if (Array.isArray(parsed) && parsed.length === 4 && parsed.every((k) => typeof k === 'string')) {
+    if (Array.isArray(parsed) && parsed.length === size && parsed.every((k) => typeof k === 'string')) {
       return parsed as string[]
     }
   } catch {
     /* A browser that refuses storage still gets a dashboard; the default is not an error state. */
   }
 
-  return [...DEFAULT_KPIS]
+  return defaults ? [...defaults] : [...DEFAULT_KPIS]
 }
 
 export function KpiCards({
@@ -48,7 +53,15 @@ export function KpiCards({
   loading,
   error,
   onRetry,
+  id = 'dashboard',
+  defaults,
+  secondary,
 }: {
+  /** The strip's test-id prefix: `dashboard` for the old board, `analytics` on the one board. */
+  id?: string
+  /** The headline keys the objective layout chose; the reader may replace any of them. Absent: the four defaults. */
+  defaults?: readonly string[]
+  secondary?: MetricItem[]
   objective: string
   summary: Summary | undefined
   ar: boolean
@@ -59,7 +72,9 @@ export function KpiCards({
   error?: unknown
   onRetry?: () => void
 }) {
-  const [keys, setKeys] = useState<string[]>(remembered)
+  const sig = defaults ? defaults.join(',') : ''
+  const [byLayout, setByLayout] = useState<Record<string, string[]>>({})
+  const keys = byLayout[sig] ?? remembered(defaults)
   const [picking, setPicking] = useState<number | null>(null)
   const [term, setTerm] = useState('')
 
@@ -72,17 +87,17 @@ export function KpiCards({
   }, [keys, objective, summary, ar, series, comparable])
 
   const choose = (index: number, key: string) => {
-    setKeys((current) => {
-      const next = [...current]
+    setByLayout((all) => {
+      const next = [...(all[sig] ?? remembered(defaults))]
       next[index] = key
 
       try {
-        window.localStorage.setItem(STORE_KEY, JSON.stringify(next))
+        window.localStorage.setItem(defaults ? `${STORE_KEY}.${defaults.join(',')}` : STORE_KEY, JSON.stringify(next))
       } catch {
         /* The choice still applies for this visit even where it cannot be remembered. */
       }
 
-      return next
+      return { ...all, [sig]: next }
     })
     setPicking(null)
     setTerm('')
@@ -102,7 +117,7 @@ export function KpiCards({
       })
 
   return (
-    <div data-testid="dashboard-kpis" className="relative">
+    <div data-testid={`${id}-kpis`} className="relative">
       {/*
         Rendered THROUGH `MetricStrip`, not beside it.
 
@@ -113,9 +128,10 @@ export function KpiCards({
         covering the dashboard.
       */}
       <MetricStrip
-        id="dashboard"
+        id={id}
         ar={ar}
         primary={items}
+        secondary={secondary}
         hasRows={summary === undefined ? undefined : summary.rows_in_scope}
         loading={loading}
         error={error}

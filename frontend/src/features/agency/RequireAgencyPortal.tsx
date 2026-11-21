@@ -1,9 +1,12 @@
-import { Outlet } from 'react-router-dom'
+import { Link, Outlet } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { fetchMemberships } from '@/features/auth/memberships'
 import { AccessRecovery } from '@/features/auth/AccessRecovery'
+import { PortalEntryChoice } from '@/features/auth/PortalEntryChoice'
+import { usePortalEntry } from '@/features/auth/usePortalEntry'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
 
 /**
  * The agency portal's entry gate (ADR 0002).
@@ -19,9 +22,11 @@ import { useUi } from '@/stores/ui'
  */
 export function RequireAgencyPortal() {
   const ar = useUi((s) => s.locale) === 'ar'
+  const isAdmin = useAuth((s) => s.user?.is_platform_admin === true)
   const state = useQuery({ queryKey: ['memberships'], queryFn: () => fetchMemberships(), staleTime: 60_000 })
+  const entry = usePortalEntry('agency', state.data)
 
-  if (state.isLoading) {
+  if (state.isLoading || entry.kind === 'moving') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-6 w-6 animate-spin text-brand-600" aria-label={ar ? 'جارٍ التحميل' : 'Loading'} />
@@ -50,10 +55,18 @@ export function RequireAgencyPortal() {
             It sent them to a screen that said «no workspace yet» and offered nothing.
           */}
           <AccessRecovery memberships={held} onboarding={held.length === 0} />
+          {/* CONS-ADMIN-SWITCH — the admin panel is this account's own; say where it is instead of leaving a wall. */}
+          {isAdmin && (
+            <Link to="/admin" data-testid="denied-back-to-admin" className="mt-3 inline-block text-sm font-semibold text-brand-600 hover:underline">
+              {ar ? 'العودة إلى لوحة الإدارة' : 'Back to the admin panel'}
+            </Link>
+          )}
         </div>
       </div>
     )
   }
+
+  if (entry.kind === 'choose') return <PortalEntryChoice portal="agency" current={entry.current} targets={entry.targets} />
 
   return <Outlet />
 }

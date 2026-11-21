@@ -58,7 +58,7 @@ describe('NASEL client link', () => {
     expect(rows[0]).toHaveTextContent('Riwaq — LandingPage')
     expect(rows[0]).toHaveTextContent('غير متاح')
     expect(rows[0]).toHaveTextContent(/9\.18/)
-    expect(rows[0]).toHaveTextContent(/USD/)
+    expect(rows[0]).toHaveTextContent(/\$/)
     expect(rows[1]).toHaveTextContent('Riwaq — LeadForm')
   })
 

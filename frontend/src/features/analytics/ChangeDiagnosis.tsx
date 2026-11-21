@@ -8,6 +8,7 @@ import { canonicalPlatform } from '@/lib/platforms'
 import { compact, money, moneyExact, num } from '@/features/analytics/format'
 import { useUi } from '@/stores/ui'
 import type { Decomposition, DriverRow, DriversPayload, TimePoint, TimelinePoint } from './api'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * ANALYTICS-DIFFERENTIATION-001 — the block that makes Analytics a different product.
@@ -87,7 +88,7 @@ const DIMENSION_SINGULAR: Record<string, { ar: string; en: string }> = {
   account: { ar: 'حساب', en: 'account' },
   campaign: { ar: 'حملة', en: 'campaign' },
   objective: { ar: 'هدف', en: 'objective' },
-  ad_set: { ar: 'مجموعة إعلانية', en: 'ad set' },
+  ad_set: { ar: 'مجموعة', en: 'ad group' },
 }
 
 /**
@@ -155,7 +156,7 @@ function driverName(d: DriverRow, by: string, ar: boolean): string {
    * in front of a reader is the raw-identifier defect the portal audit has an E2E against.
    */
   if (by === 'ad_set' && !d.name) {
-    return ar ? 'مجموعة إعلانية لم يعد اسمها محفوظًا' : 'An ad set whose name is no longer held'
+    return ar ? 'مجموعة لم يعد اسمها محفوظًا' : 'An ad group whose name is no longer held'
   }
 
   if (by === 'objective') {
@@ -181,7 +182,7 @@ const OBJECTIVE_LABEL: Record<string, { ar: string; en: string }> = {
 
 const METRIC_LABEL: Record<string, { ar: string; en: string }> = {
   spend: { ar: 'الإنفاق', en: 'Spend' },
-  conversions: { ar: 'النتائج', en: 'Results' },
+  conversions: { ar: 'تحويلات المنصة', en: 'Platform conversions' },
   clicks: { ar: 'النقرات', en: 'Clicks' },
   impressions: { ar: 'الظهور', en: 'Impressions' },
   revenue: { ar: 'الإيرادات', en: 'Revenue' },
@@ -201,7 +202,7 @@ const DIMENSION_PLURAL: Record<string, { ar: string; en: string }> = {
   account: { ar: 'كل الحسابات', en: 'Every account' },
   objective: { ar: 'كل الأهداف', en: 'Every objective' },
   campaign: { ar: 'كل الحملات', en: 'Every campaign' },
-  ad_set: { ar: 'كل المجموعات الإعلانية', en: 'Every ad set' },
+  ad_set: { ar: 'كل المجموعات', en: 'Every ad group' },
 }
 
 const everythingMovedTogether = (by: string, ar: boolean): string => {
@@ -221,77 +222,7 @@ const everythingMovedTogether = (by: string, ar: boolean): string => {
  * Drawn as an SVG path rather than a charting component because it is one series and a handful of
  * dots — pulling in a chart library for that would cost more than it explains.
  */
-function AnomalyTrend({
-  metric, series, marks, ar,
-}: {
-  metric: string
-  series: readonly TimePoint[]
-  marks: Array<{ date: string; direction: 'up' | 'down' }>
-  ar: boolean
-}) {
-  /*
-   * Read by KEY, because which metric this chart draws is decided at runtime by what the timeline
-   * flagged. A day the series does not carry the metric for is null, not zero — the curve breaks
-   * there rather than dipping to the floor and inventing a fall.
-   */
-  const values = series.map((d) => {
-    const v = (d as unknown as Record<string, unknown>)[metric]
-    return typeof v === 'number' ? v : null
-  })
-  const known = values.filter((v): v is number => v !== null)
-
-  // Two points is a line between two points, not a trend — and a flat series has no shape to show.
-  if (known.length < 3) return null
-
-  const min = Math.min(...known)
-  const max = Math.max(...known)
-  const span = max - min || 1
-  const W = 100
-  const H = 28
-
-  const x = (i: number) => (series.length === 1 ? 0 : (i / (series.length - 1)) * W)
-  const y = (v: number) => H - ((v - min) / span) * H
-
-  const path = values
-    .map((v, i) => (v === null ? null : `${i === 0 ? 'M' : 'L'}${x(i).toFixed(2)},${y(v).toFixed(2)}`))
-    .filter(Boolean)
-    .join(' ')
-
-  const marked = marks
-    .map((m) => {
-      const i = series.findIndex((d) => d.date === m.date)
-      const v = i === -1 ? null : values[i]
-      return v === null || i === -1 ? null : { cx: x(i), cy: y(v), direction: m.direction, date: m.date }
-    })
-    .filter((m): m is { cx: number; cy: number; direction: 'up' | 'down'; date: string } => m !== null)
-
-  return (
-    <div data-testid={`anomaly-trend-${metric}`}>
-      <span className="text-[11px] font-semibold text-text-secondary">{metricLabel(metric, ar)}</span>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        className="mt-1 h-8 w-full"
-        role="img"
-        aria-label={ar ? `${metricLabel(metric, true)} — الأيام المعلَّمة خرجت عن سلوكها` : `${metricLabel(metric, false)} — marked days departed from their own baseline`}
-      >
-        <path d={path} fill="none" stroke="var(--border-strong)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-        {marked.map((m) => (
-          <circle
-            key={m.date}
-            cx={m.cx}
-            cy={m.cy}
-            r={2.5}
-            vectorEffect="non-scaling-stroke"
-            className={m.direction === 'up' ? 'fill-success' : 'fill-warning'}
-          />
-        ))}
-      </svg>
-    </div>
-  )
-}
-
-/** A card that says why it is empty instead of being empty. */
+/* ANALYTICS-REPORT-LAYOUT-001 — the curve with markers was replaced by day cards in AnomalyExplorer. */
 function Declined({ text, testid }: { text: string; testid: string }) {
   return (
     <p data-testid={testid} className="py-6 text-center text-sm leading-relaxed text-text-secondary">
@@ -499,14 +430,16 @@ export function ChangeDiagnosis({
         WIDE — the decomposition. Two thirds of the row, because a comparison needs the width and the
         reader is meant to read DOWN it rather than across a row of cards.
       */}
+      {/* SHOW-AVAILABLE-001 — no comparable previous period, nothing to decompose: the card is not drawn; the days below still stand. */}
+      {comparable ? (
       <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-2">
         <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-base font-bold text-text-primary">
-            {title ?? (ar ? 'ما الذي تغيّر — ومن حرّكه' : 'What changed — and who moved it')}
+            {title ?? (ar ? 'أسباب التغيّر' : 'What changed — and who moved it')}
           </h3>
           <span className="text-xs text-text-muted">
             {ar ? 'مقابل ' : 'vs '}
-            {data.previous?.from ?? '—'} → {data.previous?.to ?? '—'}
+            {data.previous?.from && data.previous?.to ? <PeriodText from={data.previous.from} to={data.previous.to} /> : '—'}
           </span>
         </div>
 
@@ -518,15 +451,9 @@ export function ChangeDiagnosis({
           the money contract exists to prevent, arriving from a fallback rather than from a sum. A
           refusal stands alone.
         */}
-        {subtitle !== undefined && <p className="mb-2 text-xs text-text-muted">{subtitle}</p>}
+        {/* NO-OPERATOR-NOTES-001 — the windows' caveat is the heading's tooltip, not a paragraph under it. */}
+        {subtitle !== undefined && <span data-testid="change-subtitle" className="sr-only">{subtitle}</span>}
 
-        {!comparable && (
-          <p data-testid="change-withheld" className="rounded-xl border border-warning/40 bg-warning/5 px-3 py-2 text-sm text-text-secondary">
-            {ar
-              ? 'تحليل التغيّر محجوب: لا يُقارَن ما قيس جزئيًا بما قيس كاملًا. الأيام الخارجة عن سلوك الفترة أدناه تبقى صالحة لأنها تُقاس داخل الفترة نفسها.'
-              : 'The change analysis is withheld: a partly measured window is not compared with a whole one. The days below that departed from the period\'s own behaviour still stand, because each is measured inside the same window.'}
-          </p>
-        )}
 
         {comparable && rows.length > 0 && (
           <p className="mb-3 text-sm text-text-secondary">
@@ -560,6 +487,7 @@ export function ChangeDiagnosis({
 
         {comparable && <Decomposed d={lead} currency={currency} />}
       </div>
+      ) : <span data-testid="change-withheld" className="sr-only">{ar ? 'لا مقارنة بالفترة السابقة — تحليل التغيّر محجوب' : 'No comparison with the previous period — the change analysis is withheld'}</span>}
 
       {/* SQUARE — the focused signals. One number each, and each one a different question. */}
       <div className="grid grid-cols-2 gap-3">
@@ -622,7 +550,7 @@ export function ChangeDiagnosis({
       */}
       <div className="rounded-2xl border border-border bg-surface p-4 lg:col-span-3">
         <h3 className="mb-1 text-base font-bold text-text-primary">
-          {ar ? 'الأيام التي خرجت عن سلوك الفترة' : 'The days that departed from the period’s behaviour'}
+          {ar ? 'أيام غير معتادة' : 'The days that departed from the period’s behaviour'}
         </h3>
         {/*
           VISUAL-FIRST-001 — «I do not want any text details at all, except in a few simple places.»
@@ -695,7 +623,7 @@ const SEVERITY: Record<'strong' | 'clear' | 'notable', { ar: string; en: string;
  * What it does not claim: which campaign moved the day. The timeline is measured on the project's total, so the
  * scope column says the project, and nothing pretends to know more.
  */
-function AnomalyExplorer({ points, series, currency, ar }: { points: TimelinePoint[]; series: readonly TimePoint[]; currency: string | null; ar: boolean }) {
+function AnomalyExplorer({ points, currency, ar }: { points: TimelinePoint[]; series: readonly TimePoint[]; currency: string | null; ar: boolean }) {
   const metrics = useMemo(() => [...new Set(points.map((p) => p.metric))], [points])
   const [metric, setMetric] = useState<string>('all')
   const [sort, setSort] = useState<'date' | 'deviation'>('date')
@@ -704,7 +632,6 @@ function AnomalyExplorer({ points, series, currency, ar }: { points: TimelinePoi
   const filtered = points.filter((p) => metric === 'all' || p.metric === metric)
   const rows = [...filtered].sort((a, b) => (sort === 'date' ? b.date.localeCompare(a.date) || Math.abs(b.deviation) - Math.abs(a.deviation) : Math.abs(b.deviation) - Math.abs(a.deviation)))
   const shown = showAll ? rows : rows.slice(0, 10)
-  const charted = (metric === 'all' ? metrics : [metric]).slice(0, 2)
 
   return (
     <div className="min-w-0 space-y-3">
@@ -726,22 +653,37 @@ function AnomalyExplorer({ points, series, currency, ar }: { points: TimelinePoi
       )}
 
       {/*
-        VISUAL-FIRST-001 / clause D — the day drawn on the metric's own curve, the series the page already fetched. Where
-        the series is absent the table still stands: markers with nothing to mark would pretend to be a trend.
+        ANALYTICS-REPORT-LAYOUT-001 — Owner 2026-11-18: the curve with markers and the bare table did not read. Each
+        unusual day is a card, the way the live report shows a figure: the day, the metric, the value set large, its
+        reference, and the change as a coloured badge. The exact table stays one click away under «الجدول».
       */}
-      {series.length > 2 && (
-        <div className="flex flex-col gap-3" data-testid="anomaly-charts">
-          {charted.map((m) => (
-            <AnomalyTrend key={m} metric={m} series={series} marks={points.filter((p) => p.metric === m)} ar={ar} />
-          ))}
-        </div>
-      )}
+      <div data-testid="anomaly-cards" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.slice(0, 6).map((p) => {
+          const sev = SEVERITY[severityOf(p.deviation)]
+          const pct = p.baseline !== 0 ? (p.value - p.baseline) / Math.abs(p.baseline) : null
+          const up = p.direction === 'up'
+          return (
+            <div key={`${p.date}-${p.metric}`} data-testid={`anomaly-card-${p.date}-${p.metric}`} className={`flex flex-col gap-1.5 rounded-xl border-s-4 bg-surface-secondary/60 p-3 ${up ? 'border-success' : 'border-warning'}`}>
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="font-semibold text-text-secondary">{metricLabel(p.metric, ar)}</span>
+                <span className={`rounded-full px-2 py-0.5 font-bold ${sev.cls}`}>{ar ? sev.ar : sev.en}</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-2">
+                <span dir="ltr" className="tnum text-xl font-extrabold text-text-primary">{formatFor(p.metric, currency)(p.value)}</span>
+                <span dir="ltr" className={`tnum text-sm font-bold ${up ? 'text-success' : 'text-warning'}`}>{pct === null ? '—' : `${pct > 0 ? '+' : ''}${Math.round(pct * 100)}%`}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
+                <span dir="ltr" className="tnum">{p.date}</span>
+                <span>{ar ? 'المعتاد' : 'Usual'} <span dir="ltr" className="tnum">{formatFor(p.metric, currency)(p.baseline)}</span></span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
 
-      {/*
-        The analytical-table primitive, not a hand-rolled table: `MetricTable` owns numeric alignment under RTL
-        (TABLE-NUMERIC-ALIGNMENT-001) and the horizontal scroll. The order is chosen by the two controls above the
-        table — a day order or a severity order — so the primitive receives the rows already sorted.
-      */}
+      <details className="text-xs">
+      <summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
+      <div className="mt-2 space-y-2">
       <div className="flex flex-wrap items-center gap-2 text-xs" role="group" aria-label={ar ? 'الترتيب' : 'Order'}>
         <span className="text-text-muted">{ar ? 'الترتيب:' : 'Order:'}</span>
         <button type="button" onClick={() => setSort('date')} aria-pressed={sort === 'date'} data-testid="anomaly-sort-date" className={`rounded-lg border px-2 py-0.5 font-bold ${sort === 'date' ? 'border-brand-600 text-brand-600' : 'border-border text-text-secondary'}`}>{ar ? 'اليوم' : 'Day'}</button>
@@ -771,6 +713,8 @@ function AnomalyExplorer({ points, series, currency, ar }: { points: TimelinePoi
           {showAll ? (ar ? 'عرض أقل' : 'Show fewer') : (ar ? `عرض الكل (${rows.length})` : `Show all (${rows.length})`)}
         </button>
       )}
+      </div>
+      </details>
     </div>
   )
 }

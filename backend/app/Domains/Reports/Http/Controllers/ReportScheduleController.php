@@ -8,9 +8,11 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Reports\Models\ReportSchedule;
 use App\Domains\Reports\Services\ScheduledReportDispatcher;
+use App\Domains\Reports\Support\ReportScheduleKey;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -52,9 +54,9 @@ final class ReportScheduleController extends Controller
             ? collect()
             : DB::table('report_deliveries')
                 ->whereIn('schedule_id', $schedules->pluck('id'))
-                ->select('schedule_id', 'status')
+                ->select('schedule_id', 'status', 'reason')
                 ->selectRaw('COUNT(*) AS total')
-                ->groupBy('schedule_id', 'status')
+                ->groupBy('schedule_id', 'status', 'reason')
                 ->get()
                 ->groupBy('schedule_id');
 
@@ -78,7 +80,10 @@ final class ReportScheduleController extends Controller
             'created_by' => $request->user()->id,
             // Creating a schedule means you want it to run; pausing is an explicit, separate action.
             'active' => true,
-        ])->save();
+        ]);
+        $schedule->schedule_key = ReportScheduleKey::for($schedule);
+        $this->refuseDuplicate($schedule);
+        $this->saveOrRefuse($schedule);
 
         $schedule->forceFill(['next_run_at' => $this->dispatcher->nextRun($schedule, Carbon::now())])->save();
 
@@ -95,7 +100,12 @@ final class ReportScheduleController extends Controller
         $model = ReportSchedule::query()->findOrFail($schedule);
         $before = $this->shape($model);
 
-        $model->forceFill($this->validated($request, partial: true))->save();
+        $model->forceFill($this->validated($request, partial: true));
+        $model->schedule_key = ReportScheduleKey::for($model);
+        if ($model->active) {
+            $this->refuseDuplicate($model);
+        }
+        $this->saveOrRefuse($model);
         $model->forceFill(['next_run_at' => $this->dispatcher->nextRun($model, Carbon::now())])->save();
 
         $this->audit->log('report_schedule.updated', 'report_schedule', (string) $model->getKey(), before: $before, after: $this->shape($model));
@@ -115,10 +125,20 @@ final class ReportScheduleController extends Controller
         $model = ReportSchedule::query()->findOrFail($schedule);
         $active = ! $model->active;
 
+        if ($active) {
+            // CONS-SCHEDULE-ONE — resuming is how a disabled copy comes back, so it may not come back beside its twin.
+            $model->schedule_key = ReportScheduleKey::for($model);
+            $model->active = true;
+            $this->refuseDuplicate($model);
+        }
+
         $model->forceFill([
             'active' => $active,
             'next_run_at' => $active ? $this->dispatcher->nextRun($model, Carbon::now()) : null,
-        ])->save();
+            // Resumed: no longer an unscheduled copy. Paused: a plain pause, not a duplicate.
+            ...($active ? ['disabled_reason' => null, 'disabled_at' => null, 'duplicate_of' => null] : []),
+        ]);
+        $this->saveOrRefuse($model);
 
         $this->audit->log($active ? 'report_schedule.resumed' : 'report_schedule.paused', 'report_schedule', (string) $model->getKey());
 
@@ -157,6 +177,38 @@ final class ReportScheduleController extends Controller
             'schedule' => $this->shape($model->refresh()),
             'report_id' => $report->id,
         ], 'Schedule run started.');
+    }
+
+    /**
+     * CONS-SCHEDULE-ONE — one active schedule per report.
+     *
+     * Compared by the key COMPUTED for every active schedule of the project, not only the stored column: rows saved before
+     * the key existed carry none until `reports:dedupe-schedules` runs, and they still count.
+     */
+    private function refuseDuplicate(ReportSchedule $schedule): void
+    {
+        $key = (string) $schedule->schedule_key;
+
+        $twin = ReportSchedule::withoutGlobalScopes()
+            ->where('tenant_id', $schedule->tenant_id)
+            ->where('project_id', $schedule->project_id)
+            ->where('active', true)
+            ->when($schedule->exists, fn ($q) => $q->whereKeyNot($schedule->getKey()))
+            ->get()
+            ->first(fn (ReportSchedule $s) => ($s->schedule_key ?? ReportScheduleKey::for($s)) === $key);
+
+        abort_if($twin !== null, 409, __('api.schedule_duplicate'));
+    }
+
+    /** Two requests racing past the check meet the partial unique index; the loser is told the same thing. */
+    private function saveOrRefuse(ReportSchedule $schedule): void
+    {
+        try {
+            $schedule->save();
+        } catch (QueryException $e) {
+            abort_if(str_contains($e->getMessage(), 'report_schedules_active_key_unique'), 409, __('api.schedule_duplicate'));
+            throw $e;
+        }
     }
 
     /** @return array<string,mixed> */
@@ -214,12 +266,18 @@ final class ReportScheduleController extends Controller
             'cron' => $s->cron,
             'report_id' => $s->report_id,
             'active' => (bool) $s->active,
+            // CONS-SCHEDULE-ONE — a copy switched off because another schedule builds the same report: «نسخة غير مجدولة».
+            'disabled_reason' => $s->disabled_reason,
+            'disabled_at' => optional($s->disabled_at)->toIso8601String(),
+            'duplicate_of' => $s->duplicate_of,
             'is_demo' => (bool) $s->is_demo,
             'last_run_at' => optional($s->last_run_at)->toIso8601String(),
             'next_run_at' => optional($s->next_run_at)->toIso8601String(),
             // Delivery states are reported exactly as recorded — nothing is ever presented as "sent"
             // unless a provider acknowledged it.
-            'deliveries' => collect($deliveries ?? [])->mapWithKeys(fn ($r) => [$r->status => (int) $r->total])->all(),
+            'deliveries' => collect($deliveries ?? [])->groupBy('status')->map(fn ($rows) => (int) $rows->sum('total'))->all(),
+            // EMAIL-GAPS — why rows were held back, which the states alone cannot say.
+            'delivery_reasons' => collect($deliveries ?? [])->whereNotNull('reason')->groupBy('reason')->map(fn ($rows) => (int) $rows->sum('total'))->all(),
         ];
     }
 }

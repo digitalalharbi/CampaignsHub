@@ -63,6 +63,7 @@ describe('the budget hierarchy reaches the platform rung', () => {
 
   it('lists each platform against its budget', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     expect(await screen.findByText(/Budget by platform/i)).toBeVisible()
@@ -81,6 +82,7 @@ describe('the budget hierarchy reaches the platform rung', () => {
    */
   it('refuses a pace it cannot compute rather than inventing one', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     await screen.findByText(/Budget by platform/i)
@@ -101,6 +103,7 @@ describe('the budget hierarchy reaches the platform rung', () => {
    */
   it('states what should have been spent by today, and by how much the forecast misses', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     const table = (await screen.findAllByRole('table'))[0]!
@@ -112,29 +115,30 @@ describe('the budget hierarchy reaches the platform rung', () => {
     const meta = within(table).getByText('Meta').closest('tr')!
     /*
       Asserted CELL BY CELL, not against the row's text.
-      Matching `/5K SAR/` across the whole row passes on the spend cell's «7.5K SAR» — so the
+      Matching `/5K ر.س/` across the whole row passes on the spend cell's «7.5K ر.س» — so the
       assertion survived blanking the column it was meant to be about. `money()` compacts, and the
       compacted forms of these figures overlap; only the position distinguishes them.
     */
     /* The platform name is the row's header cell, so the data cells start at Budget. */
     const cells = within(meta).getAllByRole('cell').map((c) => c.textContent?.trim() ?? '')
 
-    expect(cells[4]).toBe('5K SAR')
-    expect(cells[5]).toBe('500 SAR')
+    expect(cells[4]).toBe('5K ر.س')
+    expect(cells[5]).toBe('500 ر.س')
     /* Signed, so one column carries both directions and an overrun reads as one. */
-    expect(cells[8]).toBe('+4K SAR')
+    expect(cells[8]).toBe('+4K ر.س')
   })
 
   /** A row the contract refuses withholds these three with everything else on it. */
   it('withholds all three where the row itself is withheld', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     const table = (await screen.findAllByRole('table'))[0]!
     const snap = within(table).getByText('Snapchat').closest('tr')!
 
     /* Its BUDGET is known — 4K — and the eight figures derived from a spend it cannot state are not. */
-    expect(snap.textContent).toContain('4K SAR')
+    expect(snap.textContent).toContain('4K ر.س')
     expect(snap.textContent).not.toMatch(/\+/)
     expect((snap.textContent ?? '').match(/—/g) ?? []).toHaveLength(8)
   })

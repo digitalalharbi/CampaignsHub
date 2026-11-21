@@ -176,7 +176,7 @@ final class MembershipPortalTest extends TestCase
 
         $resolver = app(PortalResolver::class);
         $this->assertFalse($resolver->needsSwitcher($user));
-        $this->assertSame('/agency', $resolver->landingPathFor($user, Portal::App));
+        $this->assertSame('/agency/dashboard', $resolver->landingPathFor($user, Portal::App));
     }
 
     /** A user with no membership is sent to onboarding, never guessed into someone's workspace. */
@@ -237,7 +237,7 @@ final class MembershipPortalTest extends TestCase
 
         $user->tenant?->forceFill(['onboarding_completed_at' => now()])->save();
 
-        $this->assertSame('/agency', app(PortalResolver::class)->landingPathFor($user->refresh()));
+        $this->assertSame('/agency/dashboard', app(PortalResolver::class)->landingPathFor($user->refresh()));
     }
 
     /** An advertiser signup lands in the campaigns portal, not the agency one. */

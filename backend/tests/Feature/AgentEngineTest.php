@@ -9,7 +9,6 @@ use App\Domains\Access\Models\Role;
 use App\Domains\Agents\Engine\ModelClient;
 use App\Domains\Agents\Engine\ModelTurn;
 use App\Domains\Agents\Models\ActionProposal;
-use App\Domains\Agents\Models\AgentMessage;
 use App\Domains\Agents\Models\AgentThread;
 use App\Domains\AI\Models\AIProviderCredential;
 use App\Domains\Campaigns\Models\ExternalCampaign;
@@ -22,6 +21,9 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Subscriptions\Usage\CreditTransaction;
+use App\Domains\Subscriptions\Usage\UsageEvent;
+use App\Domains\Subscriptions\Usage\UsageLedger;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -96,11 +98,12 @@ final class AgentEngineTest extends TestCase
         return $this->actingAs($this->user)->getJson("/api/v1/projects/{$this->project->id}/agent-threads/{$id}")->assertOk()->json('data');
     }
 
-    public function test_the_six_agents_are_listed_and_leads_says_why_it_is_off(): void
+    public function test_the_assistant_and_its_specialists_are_listed_and_leads_says_why_it_is_off(): void
     {
         $agents = collect($this->actingAs($this->user)->getJson("/api/v1/projects/{$this->project->id}/agents")->assertOk()->json('data.agents'))->keyBy('key');
 
-        $this->assertSame(['orchestrator', 'campaign', 'analyst', 'creative', 'leads', 'reports'], $agents->keys()->all());
+        // AGENTS-ASSISTANT-001 — one assistant in front; the earlier orchestrator is no longer offered for a new conversation.
+        $this->assertSame(['assistant', 'campaign', 'analyst', 'creative', 'leads', 'reports', 'builder'], $agents->keys()->all());
         $this->assertFalse($agents['leads']['enabled']);
         $this->assertSame('needs_lead_sources', $agents['leads']['why_disabled']);
     }
@@ -233,15 +236,44 @@ final class AgentEngineTest extends TestCase
     {
         AIProviderCredential::withoutGlobalScopes()->update(['monthly_token_limit' => 10]);
         $this->model->script([$this->toolTurn('get_rules', []), $this->textTurn('never reached')]);
-        // Every scripted turn reports usage; push this month over the ceiling with one earlier reply.
-        $old = AgentThread::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'agent_key' => 'analyst']);
-        AgentMessage::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'thread_id' => $old->getKey(), 'role' => 'assistant', 'content' => [], 'usage' => ['input_tokens' => 8, 'output_tokens' => 4]]);
+        // Push THIS key over its ceiling for the month — measured from the usage ledger, per key (PRICING-USAGE-CREDITS-001).
+        $key = (string) AIProviderCredential::withoutGlobalScopes()->value('id');
+        app(UsageLedger::class)->record((string) $this->tenant->id, 'ai_tokens_own_key', 12, 'earlier-reply', scope: $key);
 
         $thread = $this->thread($this->send('Hello'));
 
         $this->assertSame('failed', $thread['status']);
         $this->assertSame('ai_token_limit_reached', $thread['error']);
         $this->assertCount(0, $this->model->calls);
+    }
+
+    /** Another key's usage never spends this key's allowance. */
+    public function test_another_key_s_usage_does_not_stop_this_key(): void
+    {
+        AIProviderCredential::withoutGlobalScopes()->update(['monthly_token_limit' => 10]);
+        app(UsageLedger::class)->record((string) $this->tenant->id, 'ai_tokens_own_key', 50, 'other-key-reply', scope: 'some-other-key');
+        $this->model->script([$this->textTurn('Still answering.')]);
+
+        $thread = $this->thread($this->send('Hello'));
+
+        $this->assertSame('idle', $thread['status']);
+        $this->assertCount(1, $this->model->calls);
+    }
+
+    /** PRICING-USAGE-CREDITS-001 — each model call on the workspace's own key is metered once, against that key, and costs no credits. */
+    public function test_each_call_on_the_workspace_s_own_key_is_metered_and_never_charged(): void
+    {
+        $this->model->script([$this->toolTurn('get_rules', []), $this->textTurn('Done.')]);
+
+        $this->thread($this->send('Hello'));
+
+        $events = UsageEvent::query()->where('tenant_id', $this->tenant->id)->get();
+        $this->assertCount(2, $events, 'one row per model call');
+        $this->assertSame(['ai_tokens_own_key'], $events->pluck('meter_code')->unique()->values()->all());
+        $this->assertSame((string) AIProviderCredential::withoutGlobalScopes()->value('id'), $events->first()->scope);
+        $this->assertSame('customer', $events->first()->funded_by);
+        $this->assertSame(0.0, (float) $events->sum('credits_charged'));
+        $this->assertSame(0, CreditTransaction::query()->count());
     }
 
     public function test_the_creative_agent_reads_this_project_s_ads_and_copy_only(): void

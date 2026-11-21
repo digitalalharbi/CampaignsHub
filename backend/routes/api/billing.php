@@ -25,6 +25,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency'])->group(function (
     Route::get('billing/clients/{client}/profile', [ClientInvoicesController::class, 'profile'])->name('billing.clients.profile.show');
     Route::put('billing/clients/{client}/profile', [ClientInvoicesController::class, 'saveProfile'])->name('billing.clients.profile.save');
     Route::post('billing/clients/{client}/invoices/draft', [ClientInvoicesController::class, 'draft'])->name('billing.clients.invoices.draft');
+    // FIN-WALLET-001 — «شحن رصيد إعلاني»: a confirmed payment of it tops up the project's budget.
+    Route::post('billing/clients/{client}/invoices/wallet-top-up', [ClientInvoicesController::class, 'walletTopUp'])->name('billing.clients.invoices.wallet-top-up');
     Route::post('billing/invoices/{invoice}/{action}', [ClientInvoicesController::class, 'act'])->whereIn('action', ['review', 'issue', 'send', 'payment', 'correct'])->name('billing.invoices.act');
     Route::get('billing/invoices/{invoice}/pdf', [ClientInvoicesController::class, 'pdf'])->name('billing.invoices.pdf');
     Route::post('billing/invoices/{invoice}/pay', [BillingController::class, 'startPayment'])->name('billing.invoices.pay');

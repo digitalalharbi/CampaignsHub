@@ -83,12 +83,19 @@ final class DailyDigestCoversAWeekTest extends TestCase
         ]);
     }
 
-    public function test_the_daily_window_reaches_back_seven_days(): void
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the Owner replaced this file's original rule (2026-11-12): the DAILY mail reports
+     * yesterday alone, compared with the day before; the seven-day span belongs to the weekly mail. The tests below still hold
+     * for the seven-day window, which `buildRange()` builds for the weekly.
+     */
+    public function test_the_daily_window_is_yesterday_alone_and_compares_with_the_day_before(): void
     {
-        $end = Carbon::today()->subDay();          // the window's last day
-        $this->spendOn($end, 100.0);               // 1 day ago
-        $this->spendOn($end->copy()->subDays(5), 900.0);  // 6 days ago — outside the OLD window
+        $end = Carbon::today()->subDay();          // yesterday
+        $this->spendOn($end, 100.0);
+        $this->spendOn($end->copy()->subDay(), 40.0);          // the day before — the comparison
+        $this->spendOn($end->copy()->subDays(5), 900.0);       // six days ago — the weekly's, never the daily's
 
+        $this->assertSame(1, DigestDispatcher::DAILY_WINDOW_DAYS);
         $start = $end->copy()->subDays(DigestDispatcher::DAILY_WINDOW_DAYS - 1)->startOfDay();
         $digest = app(DailyDigest::class)->buildRange(
             $this->user,
@@ -98,12 +105,9 @@ final class DailyDigestCoversAWeekTest extends TestCase
             $end->copy()->endOfDay(),
         );
 
-        $this->assertSame(7, $digest['days'], 'The daily digest must report a seven-day window.');
-        $this->assertSame(
-            1000.0,
-            round((float) ($digest['totals']['spend'] ?? 0), 2),
-            'Spend from six days ago is missing — the window did not reach back.'
-        );
+        $this->assertSame(1, $digest['days'], 'The daily digest reports one day: yesterday.');
+        $this->assertSame(100.0, round((float) ($digest['totals']['spend'] ?? 0), 2));
+        $this->assertSame(40.0, round((float) ($digest['projects'][0]['previous']['spend'] ?? 0), 2), 'compared with the day before');
     }
 
     public function test_the_comparison_window_is_the_seven_days_before_it(): void

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Subscriptions\Models;
 
+use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
 use Illuminate\Database\Eloquent\Model;
@@ -38,7 +39,7 @@ final class Subscription extends Model
         'tenant_id', 'plan_id', 'status', 'billing_interval', 'unit_amount', 'currency',
         'current_period_start', 'current_period_end', 'trial_ends_at', 'grace_ends_at',
         'auto_convert_consent_at', 'commitment_consent_at', 'commitment_ends_at',
-        'cancel_at_period_end', 'seats',
+        'cancel_at_period_end', 'seats', 'tax_treatment', 'prices_include_vat',
     ];
 
     /*
@@ -52,6 +53,7 @@ final class Subscription extends Model
         'current_period_end' => 'datetime',
         'scheduled_change_at' => 'datetime',
         'scheduled_unit_amount' => 'decimal:2',
+        'prices_include_vat' => 'boolean',
         'trial_ends_at' => 'datetime',
         'grace_ends_at' => 'datetime',
         'auto_convert_consent_at' => 'datetime',
@@ -60,7 +62,14 @@ final class Subscription extends Model
         'cancel_at_period_end' => 'boolean',
         'unit_amount' => 'decimal:2',
         'seats' => 'integer',
+        'next_charge_discount_percent' => 'integer',
     ];
+
+    /** Open-ended access the platform owner granted (ADMIN-FULL-CONTROL-001): no end date, and nothing is ever charged while it stands. */
+    public function isComplimentary(): bool
+    {
+        return $this->commercial_basis === RegistrationDecision::BASIS_COMPLIMENTARY;
+    }
 
     /** Is this subscription still inside its paid trial? */
     public function isTrialing(): bool

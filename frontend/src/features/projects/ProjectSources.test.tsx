@@ -49,6 +49,24 @@ describe('the platforms panel on a project', () => {
   })
   afterEach(() => signOut())
 
+  /** META-GRAPH-REFUSAL-001 — this card printed Meta's raw sentence in English, with nothing to do about it. */
+  it('turns a Meta refusal into the action, keeping Meta’s words behind a disclosure', async () => {
+    vi.mocked(getData).mockResolvedValue({
+      platforms: [platform({
+        status: 'connected',
+        connections: [{ id: 'c1', name: 'Meta', status: 'error', last_health_check_at: null, last_successful_sync_at: null, last_error: 'Error validating access token · code 190 · subcode 460' }],
+      })],
+      summary: { total: 6, with_credentials: 1, with_accounts: 0, discovered_campaigns: 0 },
+    } as never)
+
+    renderWithProviders(<PlatformIntegrationsPanel projectId="p1" />, { locale: 'ar' })
+
+    const note = await screen.findByTestId('platform-connection-error-c1')
+    expect(note).toHaveAttribute('data-category', 'authorisation_lost')
+    expect(note).toHaveTextContent('أعِد الربط')
+    expect(screen.getByTestId('platform-connection-error-c1-raw')).toHaveTextContent('code 190')
+  })
+
   it('counts what this project has, not what the install has keys for', async () => {
     renderWithProviders(<PlatformIntegrationsPanel projectId="p1" />, { locale: 'en' })
 

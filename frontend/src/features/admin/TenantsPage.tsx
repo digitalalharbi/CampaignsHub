@@ -14,6 +14,10 @@ import { AccountGrantsPanel } from './AccountGrants'
 import { TenantCapabilitiesPanel } from './TenantCapabilitiesPanel'
 import { SupportAccessDialog } from './SupportAccessDialog'
 import { TenantLimitsPanel } from './TenantLimitsPanel'
+import { TenantSubscriptionPanel } from './TenantSubscriptionPanel'
+import { AddTenantMember, PendingInvitations } from './TenantPeoplePanel'
+import { TenantAddonsPanel } from './TenantAddonsPanel'
+import { TenantCreditsPanel } from './TenantCreditsPanel'
 import { CreateWorkspaceDialog, InvitationLink } from './CreateWorkspaceDialog'
 
 /**
@@ -40,7 +44,8 @@ export function TenantsPage() {
   const [submitted, setSubmitted] = useState('')
   const [status, setStatus] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
-  const [suspending, setSuspending] = useState<PlatformTenant | null>(null)
+  // Both directions decide who can get in, so both ask why.
+  const [switching, setSwitching] = useState<{ tenant: PlatformTenant; next: 'active' | 'suspended' } | null>(null)
   const [reason, setReason] = useState('')
   const [supporting, setSupporting] = useState<PlatformTenant | null>(null)
   const [creating, setCreating] = useState(false)
@@ -51,11 +56,11 @@ export function TenantsPage() {
   })
 
   const change = useMutation({
-    mutationFn: ({ id, next, why }: { id: string; next: 'active' | 'suspended'; why?: string }) =>
+    mutationFn: ({ id, next, why }: { id: string; next: 'active' | 'suspended'; why: string }) =>
       setTenantStatus(id, next, why),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['admin'] })
-      setSuspending(null)
+      setSwitching(null)
       setReason('')
     },
   })
@@ -136,7 +141,7 @@ export function TenantsPage() {
                 t.status === 'suspended' ? 'border-warning/40' : 'border-border'
               }`}>
               <button type="button" onClick={() => setOpenId(t.id)} className="min-w-0 flex-1 text-start">
-                <p className="flex items-center gap-2 text-[14px] font-bold text-text-primary">
+                <p className="flex items-center gap-2 text-sm font-bold text-text-primary">
                   <Building2 size={15} className="shrink-0 text-text-muted" aria-hidden />
                   {t.name}
                   {t.status === 'suspended' && (
@@ -145,7 +150,7 @@ export function TenantsPage() {
                     </span>
                   )}
                 </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[12px] text-text-muted">
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-text-muted">
                   <span dir="ltr">{t.slug}</span>
                   {/* Named, not printed. `self_serve_company` is a column value, not a word — and
                       rendering it raw made half an Arabic-first page stop being Arabic. */}
@@ -160,12 +165,11 @@ export function TenantsPage() {
                 <LifeBuoy size={14} /> {ar ? 'الدخول للدعم' : 'Support access'}
               </Button>
               {t.status === 'active' ? (
-                <Button size="sm" variant="secondary" onClick={() => setSuspending(t)}>
+                <Button data-testid={`tenant-suspend-${t.slug}`} size="sm" variant="secondary" onClick={() => setSwitching({ tenant: t, next: 'suspended' })}>
                   <ShieldOff size={14} /> {ar ? 'إيقاف' : 'Suspend'}
                 </Button>
               ) : (
-                <Button size="sm" variant="secondary" disabled={change.isPending}
-                  onClick={() => change.mutate({ id: t.id, next: 'active' })}>
+                <Button data-testid={`tenant-reactivate-${t.slug}`} size="sm" variant="secondary" onClick={() => setSwitching({ tenant: t, next: 'active' })}>
                   <ShieldCheck size={14} /> {ar ? 'إعادة التفعيل' : 'Reactivate'}
                 </Button>
               )}
@@ -176,23 +180,32 @@ export function TenantsPage() {
 
       {openId && <TenantDrawer id={openId} onClose={() => setOpenId(null)} ar={ar} />}
 
-      {suspending && (
-        <Modal open onClose={() => { setSuspending(null); setReason('') }}
-          title={ar ? `إيقاف ${suspending.name}` : `Suspend ${suspending.name}`}>
-          <div className="flex items-start gap-2.5 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
-            <AlertTriangle size={17} className="mt-0.5 shrink-0 text-warning" aria-hidden />
-            <span className="text-text-primary">
-              {ar
-                ? 'كل شخص لا يملك مساحة عمل أخرى سيفقد الدخول إلى المنصة فورًا.'
-                : 'Everyone whose only workspace this is will lose access to the product immediately.'}
-            </span>
-          </div>
+      {switching && (
+        <Modal open onClose={() => { setSwitching(null); setReason('') }}
+          title={switching.next === 'suspended'
+            ? (ar ? `إيقاف ${switching.tenant.name}` : `Suspend ${switching.tenant.name}`)
+            : (ar ? `إعادة تفعيل ${switching.tenant.name}` : `Reactivate ${switching.tenant.name}`)}>
+          {switching.next === 'suspended' ? (
+            <div className="flex items-start gap-2.5 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
+              <AlertTriangle size={17} className="mt-0.5 shrink-0 text-warning" aria-hidden />
+              <span className="text-text-primary">
+                {ar
+                  ? 'كل شخص لا يملك مساحة عمل أخرى سيفقد الدخول إلى المنصة فورًا.'
+                  : 'Everyone whose only workspace this is will lose access to the product immediately.'}
+              </span>
+            </div>
+          ) : (
+            <p className="text-sm text-text-secondary">
+              {ar ? 'يعود دخول كل أعضاء هذه المساحة إليها فورًا.' : 'Everyone in this workspace gets back in immediately.'}
+            </p>
+          )}
 
-          <label className="mt-4 block text-sm font-semibold text-text-primary" htmlFor="suspend-reason">
+          <label className="mt-4 block text-sm font-semibold text-text-primary" htmlFor="tenant-status-reason">
             {ar ? 'السبب (مطلوب)' : 'Reason (required)'}
           </label>
           <textarea
-            id="suspend-reason"
+            id="tenant-status-reason"
+            data-testid="tenant-status-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={3}
@@ -201,15 +214,16 @@ export function TenantsPage() {
           />
 
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => { setSuspending(null); setReason('') }}>
+            <Button variant="ghost" onClick={() => { setSwitching(null); setReason('') }}>
               {ar ? 'إلغاء' : 'Cancel'}
             </Button>
             <Button
-              variant="danger"
+              data-testid="tenant-status-confirm"
+              variant={switching.next === 'suspended' ? 'danger' : 'primary'}
               disabled={reason.trim() === '' || change.isPending}
-              onClick={() => change.mutate({ id: suspending.id, next: 'suspended', why: reason.trim() })}
+              onClick={() => change.mutate({ id: switching.tenant.id, next: switching.next, why: reason.trim() })}
             >
-              {ar ? 'إيقاف المستأجر' : 'Suspend tenant'}
+              {switching.next === 'suspended' ? (ar ? 'إيقاف المستأجر' : 'Suspend tenant') : (ar ? 'إعادة التفعيل' : 'Reactivate')}
             </Button>
           </div>
         </Modal>
@@ -247,12 +261,15 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
           </dl>
 
           {detail.data.tenant.is_default_portal && (
-            <p className="mt-3 rounded-xl border border-info/30 bg-info/10 px-3.5 py-2.5 text-[13px] text-text-primary">
+            <p className="mt-3 rounded-xl border border-info/30 bg-info/10 px-3.5 py-2.5 text-xs text-text-primary">
               {ar
                 ? 'هذا المستأجر يخدم بوابة الطلبات العامة — إيقافه يوقف استقبال الطلبات للجميع.'
                 : 'This tenant serves public request intake — suspending it stops the form for everyone.'}
             </p>
           )}
+
+          {/* ADMIN-FULL-CONTROL-001 — the plan and subscription state, with no money moving. */}
+          <TenantSubscriptionPanel tenantId={id} ar={ar} />
 
           {/* GRANT-001 — what this account has beyond its plan, and who gave it. */}
           <AccountGrantsPanel tenantId={id} ar={ar} />
@@ -261,8 +278,12 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
 
           {/* SUPERADMIN-FEATURES-001 — this workspace's own switch per capability. */}
           <TenantCapabilitiesPanel tenantId={id} ar={ar} />
+          {/* PRICING-ADDONS-001 — requests to approve, add-ons to cancel or grant. */}
+          <TenantAddonsPanel tenantId={id} ar={ar} />
+          {/* PRICING-USAGE-CREDITS-001 — this month's metered usage, the usage balance and hand adjustments. */}
+          <TenantCreditsPanel tenantId={id} ar={ar} />
 
-          <h3 className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-text-muted">
+          <h3 className="mt-5 text-xs font-semibold uppercase tracking-wide text-text-muted">
             {ar ? 'من يستطيع الدخول' : 'Who can get in'}
           </h3>
           {detail.data.people.length === 0 ? (
@@ -272,15 +293,16 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
           ) : (
             <ul className="mt-2 grid gap-1.5">
               {detail.data.people.map((p) => (
-                <li key={`${p.user_id}-${p.portal}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+                <li key={`${p.user_id}-${p.portal}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-xs">
                   <span className="min-w-0">
                     <span className="font-semibold text-text-primary">{p.name ?? '—'}</span>
                     <span className="ms-2 text-text-muted" dir="ltr">{p.email}</span>
                   </span>
-                  <span className="flex items-center gap-2 text-[12px] text-text-secondary">
+                  <span className="flex items-center gap-2 text-xs text-text-secondary">
                     <span className="rounded-full bg-surface px-2 py-0.5 font-semibold">{p.portal}</span>
                     <span>{(p.roles ?? []).join(', ') || p.role}</span>
                     {p.status !== 'active' && <span className="rounded-full bg-warning/15 px-2 py-0.5 font-semibold text-warning">{p.status}</span>}
+                    {p.disabled && <span data-testid={`person-disabled-${p.user_uuid}`} className="rounded-full bg-warning/15 px-2 py-0.5 font-semibold text-warning">{ar ? 'حساب موقوف' : 'Account deactivated'}</span>}
                     {p.user_uuid && !p.is_platform_admin && (
                       <button type="button" data-testid={`membership-${p.user_uuid}`} onClick={() => setMember(p)}
                         className="rounded-lg border border-border px-2 py-0.5 font-semibold text-text-secondary hover:text-text-primary">
@@ -298,6 +320,10 @@ function TenantDrawer({ id, onClose, ar }: { id: string; onClose: () => void; ar
               ))}
             </ul>
           )}
+
+          {/* ADMIN-FULL-CONTROL-001 — a person in with a role, and who has been asked and has not answered. */}
+          <AddTenantMember tenantId={id} roles={detail.data.available_roles ?? []} ar={ar} />
+          <PendingInvitations tenantId={id} invitations={detail.data.pending_invitations ?? []} ar={ar} />
 
           {/* SUPERADMIN-WORKSPACE-001 — a fresh one-time owner link; the previous one stops working. */}
           <ReissueOwnerInvitation tenantId={id} ar={ar} />
@@ -322,7 +348,7 @@ function ReissueOwnerInvitation({ tenantId, ar }: { tenantId: string; ar: boolea
 
   return (
     <section className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'دعوة المالك' : 'Owner invitation'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'دعوة المالك' : 'Owner invitation'}</h3>
       <form data-testid="reissue-owner-form" className="mt-2 flex flex-wrap items-center gap-2" onSubmit={(e) => { e.preventDefault(); reissue.mutate() }}>
         <input data-testid="reissue-owner-email" type="email" required dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)}
           placeholder={ar ? 'بريد المالك' : 'Owner email'} aria-label={ar ? 'بريد المالك' : 'Owner email'}

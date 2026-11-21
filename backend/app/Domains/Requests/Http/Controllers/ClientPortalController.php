@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Http\Controllers;
 
+use App\Domains\Agency\Services\RoleDashboardBuilder;
+use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\Quote;
@@ -16,18 +18,30 @@ use App\Domains\Branding\Models\BrandingSetting;
 use App\Domains\Branding\Services\BrandingService;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\ClientWorkspaces\Models\ContentApproval;
 use App\Domains\ClientWorkspaces\Services\ClientPortalUsers;
+use App\Domains\ClientWorkspaces\Services\ContentApprovals;
+use App\Domains\ClientWorkspaces\Services\PortalMetricsFilter;
 use App\Domains\ClientWorkspaces\Services\PortalOverview;
 use App\Domains\ClientWorkspaces\Services\PortalVisibility;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Identity\Actions\EstablishSession;
+use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Identity\Support\SessionRevocations;
 use App\Domains\Messaging\Models\Message;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
+use App\Domains\Metrics\Audience\AudienceCenter;
+use App\Domains\Metrics\Http\Controllers\MetricsController;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Notifications\Mail\CredentialMail;
+use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Services\TransactionalMailer;
+use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Http\Controllers\PublicReportController;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Requests\Journey\RequestStage;
@@ -36,19 +50,25 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestComment;
 use App\Domains\Requests\Models\RequestEvent;
 use App\Domains\Requests\Models\RequestFile;
+use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Services\ClientPortalIdentity;
 use App\Domains\Requests\Services\ClientRequestCreator;
+use App\Domains\Requests\Services\ClientRequestManagerNotifier;
 use App\Domains\Requests\Services\ContactVerificationService;
 use App\Domains\Requests\Services\PortalTenantResolver;
 use App\Domains\Requests\Services\RequestJourneyService;
+use App\Domains\Requests\Services\RequestMailer;
 use App\Domains\Requests\Services\RequestUploadAttacher;
+use App\Domains\Requests\Support\PortalIdShape;
 use App\Domains\Taxonomy\Models\TaxonomyDefinition;
 use App\Domains\Taxonomy\Models\TaxonomyOption;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
+use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Scopes\TenantScope;
+use App\Domains\Tenancy\Services\PortalResolver;
 use App\Models\User;
 use App\Support\PhoneNumber;
 use Illuminate\Database\Eloquent\Builder;
@@ -57,13 +77,16 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 /**
  * External Client Portal — a single place for a verified client to see ALL their requests, track status,
@@ -103,17 +126,22 @@ final class ClientPortalController
         private readonly PaidServiceCatalog $paidServices,
         private readonly ClientPortalIdentity $identity,
         private readonly ClientPortalUsers $portalUsers,
+        private readonly TransactionalMailer $mailer,
+        private readonly ProviderRegistry $notificationProviders,
     ) {}
 
     /** POST /client/login/start — send an OTP to the client's phone or email (portal login). */
     public function loginStart(Request $request): JsonResponse
     {
+        abort_unless((bool) config('requests.verification.portal_code_on_login', false), 404);
+
         $data = $request->validate([
             'channel' => ['required', Rule::in(['sms', 'whatsapp', 'email'])],
             'destination' => ['required', 'string', 'max:190'],
         ]);
         $destination = $this->normalize($data['channel'], $data['destination']);
         $tenant = $this->portal->resolve($request);
+        $ttl = (int) config('requests.verification.code_ttl_minutes', 10);
         $result = $this->verification->start(
             $data['channel'],
             $destination,
@@ -121,23 +149,117 @@ final class ClientPortalController
             $tenant ? (string) $tenant->id : null,
             cooldownSeconds: self::RESEND_COOLDOWN,
             invalidatePrevious: true,
+            deliver: $data['channel'] === 'email' ? $this->portalCodeMail($destination, $ttl) : null,
             ownerKey: $this->verificationOwnerKey($request),
         );
+
+        $this->auditPortalLogin($request, 'auth.portal_code.requested', ['channel' => $data['channel'], 'destination' => $destination]);
 
         return response()->json(['data' => [
             'verification_id' => $result['id'],
             'delivery_status' => $result['delivery_status'],
             'resend_after' => self::RESEND_COOLDOWN,
+            'expires_in_minutes' => $ttl,
             'dev_code' => $result['dev_code'],
         ]], 201);
+    }
+
+    /**
+     * LOGIN-NO-EMAIL-CODE-001 — the email that carries a portal code, sent only to somebody the portal knows.
+     *
+     * This endpoint minted a code and sent nothing: no `deliver` was ever passed, so a contact's code reached no inbox. An address the
+     * portal does not know follows the identical path, row and cooldown included, and answers the state a real send would report, so
+     * this neither mails a stranger nor tells them they are one.
+     *
+     * @return \Closure(string, string): string
+     */
+    private function portalCodeMail(string $destination, int $ttl): \Closure
+    {
+        return function (string $code, string $id) use ($destination, $ttl): string {
+            if (! $this->isPortalContact($destination)) {
+                return $this->notificationProviders->isConfigured('email') ? 'sent' : 'awaiting_credentials';
+            }
+
+            $locale = app()->getLocale() === 'en' ? 'en' : 'ar';
+
+            return $this->mailer->send(
+                recipient: $destination,
+                mail: new CredentialMail(purpose: CredentialMail::SIGN_IN_CODE, lang: $locale, code: $code, expiresInMinutes: $ttl),
+                kind: CredentialMail::SIGN_IN_CODE,
+                template: 'credential.sign_in_code',
+                locale: $locale,
+                dedupKey: $id,
+            );
+        };
+    }
+
+    /** Named on a request, or holding a client-portal membership. Asked across tenants on purpose: nothing about the tenant is returned. */
+    private function isPortalContact(string $email): bool
+    {
+        return ExternalRequest::query()->withoutGlobalScopes()->tenantOwned()->whereRaw('lower(contact_email) = ?', [Str::lower($email)])->exists()
+            || Membership::query()->withoutGlobalScopes()
+                ->where('portal', Portal::ClientPortal->value)
+                ->whereIn('user_id', User::query()->whereRaw('lower(email) = ?', [Str::lower($email)])->select('id'))
+                ->active()->exists();
+    }
+
+    /**
+     * The agency a contact's session opens in, proven by the code they just spent.
+     *
+     * An agency's own portal domain decides. On the shared domain the default portal would open an empty session for a contact of any
+     * other agency, and with no default a contact could not sign in at all, so the agency that actually holds their record answers. A
+     * contact of several agencies gets their most recent; an address nobody holds gets what the resolver says.
+     */
+    private function portalTenantFor(Request $request, string $email): ?Tenant
+    {
+        $resolved = $this->portal->resolve($request);
+        if ($resolved !== null && Str::lower((string) $resolved->portal_domain) === Str::lower($request->getHost())) {
+            return $resolved;
+        }
+
+        $address = Str::lower($email);
+        $held = Membership::query()->withoutGlobalScopes()
+            ->where('portal', Portal::ClientPortal->value)
+            ->whereIn('user_id', User::query()->whereRaw('lower(email) = ?', [$address])->select('id'))
+            ->active()->pluck('tenant_id')
+            ->merge(ExternalRequest::query()->withoutGlobalScopes()->tenantOwned()->whereRaw('lower(contact_email) = ?', [$address])->latest('created_at')->pluck('tenant_id'))
+            ->map(static fn ($id): string => (string) $id)->unique()->values();
+
+        if ($held->isEmpty() || ($resolved !== null && $held->contains((string) $resolved->id))) {
+            return $resolved;
+        }
+
+        return Tenant::query()->whereKey($held->first())->first();
+    }
+
+    /**
+     * The security trail: the address and the outcome, never the code and never its hash.
+     *
+     * @param  array<string, mixed>  $after
+     */
+    private function auditPortalLogin(Request $request, string $action, array $after, ?User $user = null): void
+    {
+        AuditLog::create([
+            'tenant_id' => null,
+            'user_id' => $user?->id,
+            'action' => $action,
+            'entity_type' => User::class,
+            'entity_id' => $user?->id === null ? null : (string) $user->id,
+            'after' => $after,
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 500),
+        ]);
     }
 
     /** POST /client/login/verify — verify the OTP and open a portal session (httpOnly cookie). */
     public function loginVerify(Request $request): JsonResponse
     {
+        abort_unless((bool) config('requests.verification.portal_code_on_login', false), 404);
+
         $data = $request->validate([
             'verification_id' => ['required', 'string'],
             'code' => ['required', 'string', 'size:6'],
+            'redirect' => ['sometimes', 'nullable', 'string', 'max:2048'],
         ]);
         $v = $this->verification->verify(
             $data['verification_id'],
@@ -146,7 +268,33 @@ final class ClientPortalController
         );
         abort_unless($v->purpose === 'portal_login', 422);
 
-        $tenant = $this->portal->resolve($request);
+        // Spent before it can buy a second session: `verify()` leaves a challenge usable, which is wrong for a credential.
+        if ($v->consumed_at !== null) {
+            $this->auditPortalLogin($request, 'auth.portal_code.replayed', ['destination' => (string) $v->destination]);
+
+            throw ValidationException::withMessages(['code' => [__('auth.failed')]]);
+        }
+        $v->forceFill(['consumed_at' => Carbon::now()])->save();
+
+        // The same rule the password path applies: a second credential with a laxer opinion about suspension is a way around it.
+        $account = $v->channel === 'email' ? User::query()->whereRaw('lower(email) = ?', [Str::lower((string) $v->destination)])->first() : null;
+
+        /*
+         * A code sent to an address nobody proved is not proof of the account (SIGNUP-VERIFY-POLICY-001). That address was typed at signup
+         * with no check, so its inbox may be a stranger's. The token is refused too, not only the session: `ClientPortalIdentity` resolves
+         * a token's address to that account's client-portal membership. Same answer as a wrong code, so this is no oracle.
+         */
+        if ($account?->emailUnprovenByPolicy() === true) {
+            $this->auditPortalLogin($request, 'auth.portal_code.unproven_address', ['destination' => (string) $v->destination], $account);
+
+            throw ValidationException::withMessages(['code' => [__('auth.failed')]]);
+        }
+
+        abort_if($account !== null && ($account->disabled_at !== null || (! $account->is_platform_admin && AccountSuspension::everyWorkspaceSuspendedFor($account))), 403, __('auth.unavailable'));
+
+        $tenant = $v->channel === 'email'
+            ? $this->portalTenantFor($request, (string) $v->destination)
+            : $this->portal->resolve($request);
         abort_if($tenant === null, 404);
 
         $plain = Str::random(48);
@@ -176,11 +324,13 @@ final class ClientPortalController
             // path and any non-browser client. Those keep the token engine and lose nothing — the
             // shared session is an ADDITION for browsers, not a new requirement.
             if ($holdsPortalMembership && $request->hasSession()) {
-                // Regenerated so an OTP login cannot be fixed to a session id an attacker planted.
-                $request->session()->regenerate();
-                Auth::guard('web')->login($user);
+                // TWO-STEP-001 — through the one place a session opens (it regenerates the id). An account with a second step
+                // on is NOT given the shared session by a contact code: it is held at the second step like every other door.
+                app(EstablishSession::class)->open($request, $user);
             }
         }
+
+        $this->auditPortalLogin($request, 'auth.portal_code.signed_in', ['destination' => (string) $v->destination], $account);
 
         $minutes = (int) config('requests.verification.portal_session_days', 14) * 24 * 60;
 
@@ -190,7 +340,7 @@ final class ClientPortalController
         $devToken = ContactVerificationService::exposeDevSecrets() ? $plain : null;
 
         // Secure only in production (over HTTPS); http://localhost dev + tests must keep the cookie.
-        return response()->json(['data' => ['authenticated' => true, 'contact' => $v->destination, 'dev_token' => $devToken]])
+        return response()->json(['data' => ['authenticated' => true, 'contact' => $v->destination, 'dev_token' => $devToken, 'destination' => PortalResolver::contactDestination($data['redirect'] ?? null)]])
             ->cookie(self::COOKIE, $plain, $minutes, '/', null, app()->environment('production'), true, false, 'lax');
     }
 
@@ -301,18 +451,31 @@ final class ClientPortalController
             'related' => ['nullable', 'array'],
             'related.kind' => ['required_with:related', Rule::in(['campaign', 'report', 'invoice'])],
             'related.id' => ['required_with:related', 'string', 'max:64'],
+            // CP-REQ-ONE-001 — files uploaded first into a temporary session (the same private, size- and type-checked
+            // uploads the public form and the reply use), claimed by the request once it exists.
+            'upload_token' => ['nullable', 'string', 'max:128'],
         ]);
 
         try {
-            $created = $creator->create($space, $token, $data, $this->restrictedProjectIds($token));
+            $created = $creator->create($space, $token, collect($data)->except('upload_token')->all(), $this->restrictedProjectIds($token));
         } catch (InvalidArgumentException) {
             // The same answer for «not yours» and «does not exist».
             abort(404);
         }
 
+        // EMAIL-GAPS — the team is told. Off by default, and it cannot change this answer.
+        app(RequestMailer::class)->newRequestToTeam($created);
+        // CLIENT-REQUEST-PM-NOTICE-001 — and THIS client's project manager specifically (owner when none).
+        app(ClientRequestManagerNotifier::class)->notify($created);
+
+        if (! empty($data['upload_token'])) {
+            $this->uploads->attach($created, $data['upload_token']);
+        }
+
         return response()->json(['data' => [
             'reference' => $created->reference,
             'status' => 'new',
+            'files' => $created->files()->count(),
             'submitted_at' => optional($created->submitted_at)->toIso8601String(),
         ]], 201);
     }
@@ -323,13 +486,21 @@ final class ClientPortalController
         $token = $this->requireSession($request);
         $req = $this->resolveOwnedRequest($token, $reference);
 
-        $timeline = $req->events()->where('is_client_visible', true)->orderBy('created_at')
+        /*
+         * CLIENT-CHAT-001 — the history reads in the client's language and leaves messages to the conversation: a «Client added a
+         * message» row beside the message itself was noise, and the stored English sentences are an engine's log, not the
+         * client's. Each row is named here, by its kind, in both languages.
+         */
+        $timeline = $req->events()->where('is_client_visible', true)->where('type', '!=', 'comment')->orderBy('created_at')
             ->get(['type', 'to_status', 'message', 'created_at'])
-            ->map(fn (RequestEvent $e) => ['type' => $e->type, 'status' => $e->to_status, 'message' => $e->message, 'at' => optional($e->created_at)->toIso8601String()]);
+            ->map(fn (RequestEvent $e) => ['type' => $e->type, 'status' => $e->to_status, 'message' => $e->message, 'label_ar' => $this->eventLabel($e, 'ar'), 'label_en' => $this->eventLabel($e, 'en'), 'at' => optional($e->created_at)->toIso8601String()]);
 
+        // The client opening its request has read the team's messages: the team sees ✓✓.
+        $req->comments()->where('visibility', 'client')->where(fn ($q) => $q->whereNull('author_label')->orWhere('author_label', '!=', 'Client'))
+            ->whereNull('read_by_client_at')->update(['read_by_client_at' => now()]);
         $comments = $req->comments()->where('visibility', 'client')->orderBy('created_at')
-            ->get(['author_label', 'body', 'created_at'])
-            ->map(fn (RequestComment $c) => ['author' => $c->author_label ?? 'Team', 'body' => $c->body, 'at' => optional($c->created_at)->toIso8601String()]);
+            ->get(['author_label', 'body', 'created_at', 'read_by_team_at'])
+            ->map(fn (RequestComment $c) => ['author' => $c->author_label ?? 'Team', 'body' => $c->body, 'at' => optional($c->created_at)->toIso8601String(), 'read_by_team_at' => optional($c->read_by_team_at)->toIso8601String()]);
 
         $files = $req->files()->where('is_client_visible', true)->whereNotNull('request_id')
             ->get(['id', 'original_name', 'size'])
@@ -473,6 +644,97 @@ final class ClientPortalController
         $model->update(['status' => 'rejected']);
 
         return response()->json(['data' => ['quote' => $this->quoteShape($model->refresh())]]);
+    }
+
+    // ============================================================================================
+    // CLIENT-CONTENT-APPROVAL-001 — «بانتظار اعتمادك»: content the agency put before this client.
+    // Read with the `content` section on; answered by an approver/admin (never a viewer) where the agency
+    // granted `approve_content`. A project-confined user reads and answers only their projects' asks.
+    // ============================================================================================
+
+    /** GET /client/approvals — open asks first, then the latest answered ones. */
+    public function contentApprovals(Request $request, ContentApprovals $approvals): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $ids = $this->visibleWorkspaceIds($token, 'content');
+        $projects = $this->restrictedProjectIds($token);
+
+        $page = $ids === []
+            ? ['rows' => collect(), 'total' => 0, 'withheld' => 0]
+            : $this->capped(ContentApproval::query()->with('creative')
+                ->whereIn('client_workspace_id', $ids)
+                ->where('status', '!=', 'withdrawn')
+                ->when($projects !== null, fn ($q) => $q->whereIn('project_id', $projects))
+                ->orderByRaw("case when status = 'pending' then 0 else 1 end")
+                ->latest('created_at'));
+
+        $models = $this->ownedWorkspaceModels($token);
+        $canDecide = $this->identity->clientRole($request, $token) !== 'client_viewer';
+
+        return response()->json(['data' => [
+            'approvals' => $page['rows']->map(fn (ContentApproval $a) => $approvals->clientShape($a) + [
+                'can_decide' => $canDecide && $a->status === 'pending'
+                    && isset($models[(string) $a->client_workspace_id])
+                    && (PortalVisibility::capabilitiesFor($models[(string) $a->client_workspace_id])['approve_content'] ?? false) === true,
+            ])->values(),
+            'total' => $page['total'],
+            'withheld' => $page['withheld'],
+        ]]);
+    }
+
+    /** POST /client/approvals/{approval}/approve */
+    public function approveContent(Request $request, string $approval, ContentApprovals $approvals): JsonResponse
+    {
+        return $this->decideContent($request, $approval, 'approved', $approvals);
+    }
+
+    /** POST /client/approvals/{approval}/request-changes — a note saying what should change is required. */
+    public function requestContentChanges(Request $request, string $approval, ContentApprovals $approvals): JsonResponse
+    {
+        return $this->decideContent($request, $approval, 'changes_requested', $approvals);
+    }
+
+    private function decideContent(Request $request, string $approval, string $decision, ContentApprovals $approvals): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->requireActor($token);
+        $this->bindTenant($token);
+        $model = $this->ownedContentApproval($token, $approval);
+
+        $workspace = $this->ownedWorkspaceModels($token)[(string) $model->client_workspace_id] ?? null;
+        abort_if($workspace === null, 404);
+        abort_unless((PortalVisibility::capabilitiesFor($workspace)['approve_content'] ?? false) === true, 403, 'Your agency has not enabled content approval here.');
+
+        $data = $request->validate([
+            'note' => [$decision === 'changes_requested' ? 'required' : 'nullable', 'string', 'max:2000'],
+        ]);
+
+        try {
+            // The person is recorded only when the MEMBERSHIP engine opened this session — a staff account that happens
+            // to be signed in beside a contact's cookie is not the one answering.
+            $actor = $this->identity->reach($request, $token)['engine'] === 'membership' ? $request->user() : null;
+            $decided = $approvals->decide($model, $decision, $data['note'] ?? null, $actor, $token->contact_email, $request->ip(), $request->userAgent());
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['data' => ['error' => $e->getMessage()]], 422);
+        }
+
+        return response()->json(['data' => ['approval' => $approvals->clientShape($decided->load('creative'))]]);
+    }
+
+    private function ownedContentApproval(ClientPortalToken $token, string $id): ContentApproval
+    {
+        $ids = $this->visibleWorkspaceIds($token, 'content');
+        $projects = $this->restrictedProjectIds($token);
+        /** @var ContentApproval|null $model */
+        $model = $ids === [] || ! PortalIdShape::uuid($id) ? null : ContentApproval::query()
+            ->whereIn('client_workspace_id', $ids)
+            ->where('status', '!=', 'withdrawn')
+            ->when($projects !== null, fn ($q) => $q->whereIn('project_id', $projects))
+            ->whereKey($id)->first();
+        abort_if($model === null, 404);
+
+        return $model;
     }
 
     /**
@@ -872,6 +1134,173 @@ final class ClientPortalController
         ]]);
     }
 
+    /**
+     * PORTAL-FULL-REPORTS-001 — Owner 2026-11-20: «البوابة يجب أن تحتوي على كل تفاصيل التقارير». A signed-in client opens a
+     * report of their own INSIDE the portal, with everything its shared page carries (performance, platforms, content, funnel,
+     * website, attribution, downloads where allowed), without being handed the link.
+     *
+     * Gates: the portal session, the report's project inside the client's workspaces with «reports» visible, a client-audience
+     * report, and an ACTIVE link. The link's own settings (what it hides, downloads) still apply — the same controller answers.
+     * Only the link's password is not asked again, because the session already proved who this is.
+     */
+    public function reportView(Request $request, string $report, ?string $path = null): mixed
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        $projectIds = $this->ownedProjectIds($token, 'reports');
+        abort_if($projectIds === [], 404);
+        $model = Report::query()->whereKey($report)->whereIn('project_id', $projectIds)->where('audience', 'client')->first();
+        abort_if($model === null, 404);
+        // The newest active link of this report. A link made before links kept a sealed token is used all the same: the share
+        // itself is handed to the shared-report controller, so no token is needed.
+        $share = $this->activeShareQuery()->where('report_id', $model->getKey())->orderByDesc('created_at')->get()
+            ->first(fn ($s): bool => $s instanceof ReportShare && $s->isActive());
+        abort_if($share === null, 404);
+        $raw = '';
+        $sealed = $share->getAttribute('token_encrypted');
+        if (is_string($sealed) && $sealed !== '') {
+            try {
+                $raw = Crypt::decryptString($sealed);
+            } catch (Throwable) {
+                $raw = '';
+            }
+        }
+        $request->attributes->set('portal_share', $share);
+        $request->attributes->set('portal_share_id', (string) $share->getKey());
+
+        $public = app(PublicReportController::class);
+        $path = trim((string) $path, '/');
+        $parts = $path === '' ? [] : explode('/', $path);
+        $call = fn (string $method, array $more = []) => app()->call([$public, $method], ['request' => $request, 'token' => $raw] + $more);
+
+        return match (true) {
+            $parts === [] => $call('show'),
+            $parts === ['live'] => $call('live'),
+            count($parts) === 3 && $parts[0] === 'live' && $parts[1] === 'content' => $call('liveContent', ['key' => $parts[2]]),
+            count($parts) === 3 && $parts[0] === 'live' && $parts[1] === 'platform' && preg_match('/^[a-z_]{2,32}$/', $parts[2]) === 1 => $call('livePlatform', ['provider' => $parts[2]]),
+            count($parts) === 2 && $parts[0] === 'download' => $call('download', ['format' => $parts[1]]),
+            $parts === ['branding'] => $call('sharedBranding'),
+            $parts === ['branding', 'logo'] => $call('sharedBrandingLogo'),
+            count($parts) === 3 && $parts[0] === 'branding' && $parts[1] === 'logo' => $call('sharedBrandingLogo', ['role' => $parts[2]]),
+            $parts === ['attribution'] => $call('attribution'),
+            $parts === ['widgets'] => $call('widgets'),
+            $parts === ['creatives'] => $call('creatives'),
+            $parts === ['creatives', 'summary'] => $call('creativeSummary'),
+            $parts === ['creatives', 'comparison'] => $call('creativeComparison'),
+            count($parts) === 2 && $parts[0] === 'creatives' => $call('creative', ['creative' => $parts[1]]),
+            default => abort(404),
+        };
+    }
+
+    /**
+     * GET /client/projects/{project}/content — CLIENT-CONTENT-001 (Owner 2026-11-21: «اظهر نظرة عامة وتحليلية للمحتويات»).
+     *
+     * The best and weakest content of one of the client's projects, ranked the way the report and the agency's home rank
+     * it (`RoleDashboardBuilder::content`). Needs the space's dashboard and content switches; money only where `spend` is on;
+     * a content's name only where the agency shows campaign names.
+     */
+    public function projectContent(Request $request, string $project): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        abort_unless(Str::isUuid($project), 404);
+        $model = Project::query()->live()->whereKey($project)->whereIn('id', $this->ownedProjectIds($token, 'dashboard'))->first();
+        abort_if($model === null, 404);
+        $workspace = ClientWorkspace::query()->whereKey($model->client_workspace_id)->first();
+        abort_if($workspace === null, 404);
+        $visibility = PortalVisibility::visibilityFor($workspace);
+        abort_unless($visibility['content'] ?? false, 403, 'Not available for this space.');
+
+        $data = $request->validate(['from' => ['required', 'date_format:Y-m-d'], 'to' => ['required', 'date_format:Y-m-d', 'after_or_equal:from']]);
+        $from = Carbon::parse($data['from'])->startOfDay();
+        $to = Carbon::parse($data['to'])->startOfDay();
+        abort_if($from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
+
+        $content = app(RoleDashboardBuilder::class)->content([(string) $model->getKey()], $from, $to, (bool) ($visibility['spend'] ?? false));
+        // Owner 2026-11-21: the client reads its content, never the agency's management names (ad and campaign names
+        // follow the agency's naming convention). The card shows the content itself, its platform and its figures.
+        $content = PortalMetricsFilter::withoutKeys(PortalMetricsFilter::apply($content, $visibility), ['name', 'campaign_name']);
+
+        return response()->json(['data' => $content]);
+    }
+
+    /** CLIENT-DASHBOARD-PARITY-001 — the agency's metrics answers a client may read, by path. */
+    private const PORTAL_METRICS = [
+        'summary' => ['summary', null],
+        'timeseries' => ['timeseries', null],
+        'platforms' => ['platforms', null],
+        'freshness' => ['freshness', null],
+        'results' => ['results', null],
+        'funnel' => ['funnel', null],
+        'objective-performance' => ['objectivePerformance', null],
+        'platform-objectives' => ['platformObjectives', null],
+        'objective-trend' => ['objectiveTrend', null],
+        // These name campaigns: only where the agency lets this client see campaign names.
+        'campaigns' => ['campaigns', 'campaign_names'],
+        'objective-leaders' => ['objectiveLeaders', 'campaign_names'],
+    ];
+
+    /**
+     * GET /client/projects/{project}/metrics/{name} — CLIENT-DASHBOARD-PARITY-001.
+     *
+     * The client's dashboard reads the agency dashboard's own answers (one engine, one set of numbers), for one of
+     * the client's own projects, under the agency's switches for that space: the dashboard must be on, a project-
+     * restricted contact reaches only their projects, names need `campaign_names`, and money leaves only where
+     * `spend` / `revenue` are on ({@see PortalMetricsFilter}). Read-only: nothing here writes.
+     */
+    public function projectMetrics(Request $request, string $project, string $name): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        abort_unless(array_key_exists($name, self::PORTAL_METRICS), 404);
+        abort_unless(Str::isUuid($project), 404);
+
+        $model = Project::query()->live()->whereKey($project)->whereIn('id', $this->ownedProjectIds($token, 'dashboard'))->first();
+        abort_if($model === null, 404);
+        $workspace = ClientWorkspace::query()->whereKey($model->client_workspace_id)->first();
+        abort_if($workspace === null, 404);
+
+        [$method, $needs] = self::PORTAL_METRICS[$name];
+        $visibility = PortalVisibility::visibilityFor($workspace);
+        abort_if($needs !== null && ! ($visibility[$needs] ?? false), 403, 'Not available for this space.');
+
+        app(ProjectContext::class)->setProjectId((string) $model->getKey());
+        $request->attributes->set('portal_project', (string) $model->getKey());
+
+        $response = app()->call([app(MetricsController::class), $method], ['request' => $request]);
+        abort_unless($response instanceof JsonResponse, 500);
+        $payload = $response->getData(true);
+        if (is_array($payload) && array_key_exists('data', $payload)) {
+            $payload['data'] = PortalMetricsFilter::apply($payload['data'], $visibility);
+            // A campaign is named to the client only where the agency shows campaign names.
+            if (! ($visibility['campaign_names'] ?? false)) {
+                $payload['data'] = PortalMetricsFilter::withoutKeys($payload['data'], ['campaign_name', 'name']);
+            }
+        }
+
+        return response()->json($payload, $response->getStatusCode());
+    }
+
+    /** CLIENT-CHAT-001 — a client-visible history row, named in the reader's language from its kind. */
+    private function eventLabel(RequestEvent $e, string $locale): string
+    {
+        $ar = $locale === 'ar';
+        $stage = is_string($e->to_status) ? RequestStage::tryFrom($e->to_status) : null;
+        $status = null;
+        if ($e->type === 'status_changed' && is_string($e->to_status)) {
+            $status = RequestStatus::query()->where('key', $e->to_status)->first();
+        }
+
+        return match ($e->type) {
+            'created' => $ar ? 'تم استلام طلبك' : 'Your request was received',
+            'journey_transition' => $stage !== null ? ($ar ? 'انتقل طلبك إلى: '.$stage->labelAr() : 'Your request moved to: '.$stage->label()) : ($ar ? 'تحديث على طلبك' : 'Your request was updated'),
+            'status_changed' => $status !== null ? ($ar ? 'الحالة الآن: '.$status->name_ar : 'Status is now: '.$status->name_en) : ($ar ? 'تحديث على حالة طلبك' : 'Your request status was updated'),
+            'file_uploaded', 'file' => $ar ? 'أُضيف ملف' : 'A file was added',
+            'converted' => $ar ? 'بدأ تنفيذ طلبك' : 'Your request is now in delivery',
+            default => $ar ? 'تحديث على طلبك' : 'Your request was updated',
+        };
+    }
+
     // ---- client-facing scoping + shapes ----
 
     /**
@@ -965,8 +1394,17 @@ final class ClientPortalController
     private function campaignShape(UnifiedCampaign $c, array $workspaces): array
     {
         // Reuse the SAME metrics engine (MetricsAggregator) the internal surfaces use, scoped to this campaign.
-        $totals = $this->metrics->forCampaign((string) $c->getKey())
-            ->totals(Carbon::now()->subDays(30), Carbon::now());
+        $engine = $this->metrics->forCampaign((string) $c->getKey());
+        $totals = $engine->totals(Carbon::now()->subDays(30), Carbon::now());
+        /*
+         * OBJECTIVE-RESULT-001 — the campaign's result for ITS objective, from the one table, so the
+         * client is not shown a traffic campaign's «النتائج 0». Counts and words only: the cost of a
+         * result is money and is never sent here.
+         */
+        $result = array_intersect_key(
+            $engine->resultOfTotals($c->objective === null ? null : (string) $c->objective, $totals, Carbon::now()->subDays(30), Carbon::now()),
+            array_flip(['result_key', 'result', 'result_label', 'result_missing_reason', 'result_missing_label', 'result_note']),
+        );
 
         $workspace = $workspaces[(string) $c->client_workspace_id] ?? null;
         $shows = static fn (string $key): bool => $workspace !== null && PortalVisibility::allows($workspace, $key);
@@ -987,7 +1425,7 @@ final class ClientPortalController
                 'clicks' => $totals['clicks'] ?? 0,
                 'conversions' => $totals['conversions'] ?? 0,
                 'ctr' => $totals['ctr'] ?? null,
-            ],
+            ] + $result,
         ];
 
         /*
@@ -1226,7 +1664,7 @@ final class ClientPortalController
     {
         $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
         /** @var Quote|null $quote */
-        $quote = $ids === [] ? null : Quote::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
+        $quote = $ids === [] || ! PortalIdShape::number($id) ? null : Quote::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($quote === null, 404);
 
         return $quote;
@@ -1236,7 +1674,7 @@ final class ClientPortalController
     {
         $ids = $this->wholeClientWorkspaceIds($token, 'invoices');
         /** @var Invoice|null $invoice */
-        $invoice = $ids === [] ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->whereKey($id)->first();
+        $invoice = $ids === [] || ! PortalIdShape::number($id) ? null : Invoice::query()->whereIn('client_workspace_id', $ids)->whereNotIn('status', self::UNISSUED_INVOICE)->whereKey($id)->first();
         abort_if($invoice === null, 404);
 
         return $invoice;
@@ -1246,7 +1684,7 @@ final class ClientPortalController
     {
         $ids = $this->wholeClientWorkspaceIds($token, 'messages');
         /** @var MessageThread|null $thread */
-        $thread = $ids === [] ? null : MessageThread::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
+        $thread = $ids === [] || ! PortalIdShape::uuid($id) ? null : MessageThread::query()->whereIn('client_workspace_id', $ids)->whereKey($id)->first();
         abort_if($thread === null, 404);
 
         return $thread;
@@ -1362,6 +1800,8 @@ final class ClientPortalController
             'attachments' => $m->attachments,
             'created_at' => optional($m->created_at)->toIso8601String(),
             'read_by_client_at' => optional($m->read_by_client_at)->toIso8601String(),
+            // CLIENT-CHAT-001 — the client's own message shows ✓✓ once the team has read it.
+            'read_by_team_at' => optional($m->read_by_team_at)->toIso8601String(),
         ];
     }
 
@@ -1560,7 +2000,13 @@ final class ClientPortalController
      */
     private function selectedSpaceId(ClientPortalToken $token): ?string
     {
-        $slug = trim((string) (request()->header('X-Client-Space') ?? request()->query('space', '')));
+        $raw = request()->header('X-Client-Space') ?? request()->query('space', '');
+
+        // `?space[]=a&space[]=b` is an array. It is no slug of this contact's, and casting it would be a 500 («Array to string»), which is a
+        // different answer from the 404 every other slug that is not theirs gets.
+        abort_unless(is_string($raw), 404);
+
+        $slug = trim($raw);
 
         if ($slug === '') {
             return null;
@@ -1769,6 +2215,52 @@ final class ClientPortalController
         abort_if($from->gt($to) || $from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
 
         return response()->json(['data' => app(PortalOverview::class)->for($workspace, $from->startOfDay(), $to->startOfDay(), $this->restrictedProjectIds($token))]);
+    }
+
+    /**
+     * GET /client/audience — AUDIENCE-001: the audience of this space's projects, under the performance dashboard.
+     *
+     * Two switches, both the agency's: the dashboard and the audience (off until switched on). The reading is the
+     * client-facing one — no money, no campaign or ad-set names, no internal ids — for the projects this contact may
+     * reach (a project-restricted user reads only theirs). Each project is its own reading: projects are never added.
+     */
+    public function audience(Request $request): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+
+        $models = $this->ownedWorkspaceModels($token);
+        abort_if($models === [], 404);
+        abort_if(count($models) > 1, 422, 'Choose a client space first.');
+
+        /** @var ClientWorkspace $workspace */
+        $workspace = array_values($models)[0];
+        abort_unless(PortalVisibility::allows($workspace, 'dashboard') && PortalVisibility::allows($workspace, 'audience'), 403, 'The audience is not available for this space.');
+        $request->validate(['from' => ['nullable', 'date_format:Y-m-d'], 'to' => ['nullable', 'date_format:Y-m-d']]);
+
+        $to = $request->filled('to') ? Carbon::parse($request->string('to')->toString()) : Carbon::today();
+        $from = $request->filled('from') ? Carbon::parse($request->string('from')->toString()) : $to->copy()->subDays(29);
+        abort_if($from->gt($to) || $from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
+
+        $only = $this->restrictedProjectIds($token);
+        $projects = Project::query()->live()->where('client_workspace_id', $workspace->getKey()) // PROJECT-LIFECYCLE-001
+            ->when($only !== null, fn ($q) => $q->whereIn('id', $only))
+            ->orderBy('name')->get(['id', 'name', 'tenant_id']);
+
+        $out = [];
+        foreach ($projects as $project) {
+            $reading = app(AudienceCenter::class)->build((string) $project->tenant_id, (string) $project->getKey(), $from->copy()->startOfDay(), $to->copy()->startOfDay(), clientFacing: true, hideMoney: true);
+            unset($reading['capabilities']);
+            // No internal identifiers on a client's screen.
+            $reading['targeting']['items'] = array_map(static function (array $i): array {
+                unset($i['ad_set_id']);
+
+                return $i;
+            }, $reading['targeting']['items']);
+            $out[] = ['project' => ['id' => (string) $project->getKey(), 'name' => (string) $project->name], 'reading' => $reading];
+        }
+
+        return response()->json(['data' => ['period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()], 'projects' => $out]]);
     }
 
     /**

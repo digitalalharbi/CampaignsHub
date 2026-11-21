@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domains\Settings\Http\Controllers;
 
+use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
+use App\Domains\Notifications\Services\MailUnsubscribes;
 use App\Domains\Notifications\Services\NotificationChoices;
 use App\Domains\Notifications\Support\DigestSchedule;
+use App\Domains\Notifications\Support\MailGallery;
 use App\Domains\Notifications\Support\MessageCatalogue;
+use App\Domains\Notifications\Support\NotificationChannelPolicy;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
@@ -78,6 +82,8 @@ final class NotificationPreferenceController extends Controller
         private readonly NotificationChoices $choices,
         private readonly DigestScope $scope,
         private readonly TenantContext $tenants,
+        private readonly ProviderRegistry $providers,
+        private readonly MailUnsubscribes $unsubscribes,
     ) {}
 
     public function show(Request $request): JsonResponse
@@ -110,9 +116,10 @@ final class NotificationPreferenceController extends Controller
              */
             'digest_scope' => $this->digestScopeOf($row->project_ids),
             'available_categories' => self::LEGACY_CATEGORIES,
+            'available_channels' => $this->availableChannels(),
             // `recommendations` defaults false beside the rest: a row stored before the setting
             // existed has no key, and an absent preference is not consent.
-            'digests' => ($row->digests ?? []) + ['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'recommendations' => false],
+            'digests' => self::digestsFor((array) ($row->digests ?? [])),
             'available_digests' => self::DIGESTS,
             // The reader's own clock and language, which is what makes «daily» mean their morning.
             'timezone' => $row->timezone ?? 'Asia/Riyadh',
@@ -134,8 +141,62 @@ final class NotificationPreferenceController extends Controller
             // MAIL-011 — the catalogue, and this person's effective answer for every entry in it.
             'catalogue' => $this->catalogue(),
             'types' => $this->effectiveTypes($userId, $tenantId),
+            // NOTIFICATION-CHANNELS-001 — whether WhatsApp can be switched on by THIS person today, and why not.
+            'whatsapp' => WhatsAppOptInController::state($request->user(), $this->providers),
             'projects' => $this->reachableProjects($request, $tenantId),
         ], 'Notification preferences retrieved.');
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — the digest switches as the screen shows them: every key present, absent meaning off — exactly
+     * what `DigestSchedule::perProjectKinds()` sends, so the screen and the sweep cannot disagree.
+     *
+     * @param  array<string,mixed>  $stored
+     * @return array<string,bool>
+     */
+    public static function digestsFor(array $stored): array
+    {
+        // One key order whatever order the row was written in, so reading the document back and saving it is an exact echo.
+        return array_replace(['daily' => false, 'weekly' => false, 'monthly' => false, 'alerts' => false, 'recommendations' => false,
+            'per_project' => false, 'per_project_weekly' => false, 'per_project_monthly' => false, 'spend_summary' => false], $stored);
+    }
+
+    /**
+     * The channels this install has, stated rather than implied — §17.4.1.
+     *
+     * SMS and WhatsApp are listed so nobody hunts for them, and marked unavailable while their adapter
+     * is the Null one. A switch for a channel with no provider is a promise the product cannot keep.
+     *
+     * @return list<array{key: string, available: bool}>
+     */
+    private function availableChannels(): array
+    {
+        return [
+            ['key' => 'in_app', 'available' => true],
+            ['key' => 'email', 'available' => $this->providers->isConfigured('email')],
+            ['key' => 'sms', 'available' => $this->providers->isConfigured('sms')],
+            ['key' => 'whatsapp', 'available' => $this->providers->isConfigured('whatsapp')],
+        ];
+    }
+
+    /** GET /settings/notifications/previews — the messages a manager may review. Fixtures, never a customer's mail. */
+    public function previews(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('settings.manage'), 403);
+
+        return ApiResponse::success(['keys' => MailGallery::keys(), 'locales' => ['ar', 'en']], 'Available previews retrieved.');
+    }
+
+    /** One rendered fixture as a string, for a sandboxed frame, exactly as the operator console does it. */
+    public function preview(Request $request, string $key): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('settings.manage'), 403);
+
+        $locale = $request->query('locale') === 'en' ? 'en' : 'ar';
+        $html = MailGallery::render($key, $locale);
+        abort_if($html === null, 404, 'There is no such message.');
+
+        return ApiResponse::success(['key' => $key, 'locale' => $locale, 'html' => $html], 'Preview rendered.');
     }
 
     public function update(Request $request): JsonResponse
@@ -152,7 +213,9 @@ final class NotificationPreferenceController extends Controller
             'types.*' => ['array'],
             'types.*.email' => ['boolean'],
             'types.*.in_app' => ['boolean'],
+            'types.*.whatsapp' => ['boolean'],
             'types.*.rhythm' => ['string'],
+            'types.*.min_severity' => ['nullable', 'string'],
             'quiet_hours' => ['sometimes', 'nullable', 'array'],
             'quiet_hours.enabled' => ['boolean'],
             'quiet_hours.start' => ['nullable', 'date_format:H:i'],
@@ -181,6 +244,13 @@ final class NotificationPreferenceController extends Controller
              * only when it actually arrives.
              */
             'digests.recommendations' => ['boolean'],
+            // DIGESTS-VISUAL-V2-001 — one digest per project, in addition to the portfolio one. Off unless chosen.
+            'digests.per_project' => ['boolean'],
+            // DIGESTS-CADENCE-BUDGETS-001 — the weekly and monthly report per project, each switched on its own.
+            'digests.per_project_weekly' => ['boolean'],
+            'digests.per_project_monthly' => ['boolean'],
+            // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — the weekly «ملخص الإنفاق». Off unless chosen.
+            'digests.spend_summary' => ['boolean'],
             /*
              * The timezone is validated against PHP's OWN list rather than a regex.
              *
@@ -216,6 +286,18 @@ final class NotificationPreferenceController extends Controller
          * that is present and null is still an instruction («no project scope») and is written; a
          * key that is absent is left exactly as it was.
          */
+        /*
+         * DIGESTS-CADENCE-BUDGETS-001 — `digests` is MERGED key by key into what is stored.
+         *
+         * It used to replace the whole map, so a client that sent the five switches it knew about erased `per_project` (and
+         * would erase the two new per-project rhythms) without anybody touching them — the same «a client that does not know
+         * about a setting must not be able to clear it» rule the columns below already keep. A null `digests` still clears.
+         */
+        if (array_key_exists('digests', $data) && is_array($data['digests'])) {
+            $stored = $existing === null || $existing->digests === null ? [] : (array) json_decode((string) $existing->digests, true);
+            $data['digests'] = array_replace($stored, $data['digests']);
+        }
+
         $write = [];
         foreach (['channels', 'categories', 'types', 'quiet_hours', 'project_ids', 'digests'] as $json) {
             if (array_key_exists($json, $data)) {
@@ -247,8 +329,47 @@ final class NotificationPreferenceController extends Controller
         // The resolver memoises per request; without this the response would describe the row as it
         // was before this write.
         $this->choices->forget();
+        $this->restoreWhatWasTurnedBackOn((int) $userId, $tenantId, $data);
 
         return $this->show($request);
+    }
+
+    /**
+     * EMAIL-GAPS — a person who switches a message back on has overruled their old unsubscribe click.
+     *
+     * Only an explicit `true` does. An unsubscribe also switched the preference off, so reading the
+     * document back and saving it unchanged sends `false` for that type and leaves the row alone.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function restoreWhatWasTurnedBackOn(int $userId, string $tenantId, array $data): void
+    {
+        foreach ((array) ($data['types'] ?? []) as $type => $choice) {
+            if (((array) $choice)['email'] ?? false) {
+                $this->unsubscribes->restore($userId, $tenantId, (string) $type);
+            }
+        }
+
+        foreach (MessageCatalogue::DIGEST_SWITCH as $type => $digest) {
+            if (($data['digests'][$digest] ?? false) === true) {
+                $this->unsubscribes->restore($userId, $tenantId, $type);
+            }
+        }
+
+        if (($data['digests']['alerts'] ?? false) === true) {
+            $this->unsubscribes->restore($userId, $tenantId, MailUnsubscribes::ALERTS);
+        }
+
+        if (($data['digests']['spend_summary'] ?? false) === true) {
+            $this->unsubscribes->restore($userId, $tenantId, MailUnsubscribes::SPEND);
+        }
+
+        // DIGESTS-CADENCE-BUDGETS-001 — the report per project has its own unsubscribe per rhythm, and switching it back on lifts it.
+        foreach (MailUnsubscribes::PROJECT_SCOPES as $scope => $key) {
+            if (($data['digests'][$key] ?? false) === true) {
+                $this->unsubscribes->restore($userId, $tenantId, $scope);
+            }
+        }
     }
 
     /**
@@ -292,11 +413,22 @@ final class NotificationPreferenceController extends Controller
                 abort(422, "There is no message type called «{$type}».");
             }
 
+            $this->assertWhatsAppMayBeChosen($request, $type, $choice);
+
             if (MessageCatalogue::isMandatory($type)) {
+                if (($choice['min_severity'] ?? null) !== null) {
+                    abort(422, "«{$type}» is sent whenever it applies and cannot be narrowed.");
+                }
+
                 foreach (['email', 'in_app'] as $channel) {
                     if (array_key_exists($channel, $choice) && $choice[$channel] !== true) {
                         abort(422, "«{$type}» is sent whenever it applies and cannot be switched off.");
                     }
+                }
+
+                // The one thing a person may add to a message that cannot be switched off: a second place to be told.
+                if (array_key_exists('whatsapp', $choice)) {
+                    $stored[$type] = ['whatsapp' => (bool) $choice['whatsapp']];
                 }
 
                 continue;
@@ -315,6 +447,11 @@ final class NotificationPreferenceController extends Controller
                 continue;
             }
 
+            $importance = $choice['min_severity'] ?? null;
+            if ($importance !== null && ! in_array($importance, MessageCatalogue::IMPORTANCE, true)) {
+                abort(422, "«{$importance}» is not an importance level.");
+            }
+
             $rhythm = $choice['rhythm'] ?? null;
             if ($rhythm !== null && ! in_array($rhythm, MessageCatalogue::rhythmsFor($type), true)) {
                 abort(422, "«{$type}» cannot be sent on a «{$rhythm}» rhythm.");
@@ -324,6 +461,48 @@ final class NotificationPreferenceController extends Controller
         }
 
         return $stored;
+    }
+
+    /**
+     * WhatsApp is the one channel nobody has by default, so «on» is refused unless it could actually work.
+     *
+     * Reading the document back sends `false` for every type and must stay a no-op; only a CONTRADICTION is
+     * refused: `true` for a type the policy never sends there, or for a person with no provider or no
+     * confirmed opt-in. A switch that shows on and sends nothing is the promise this product does not make.
+     *
+     * @param  array<string, mixed>  $choice
+     */
+    private function assertWhatsAppMayBeChosen(Request $request, string $type, array $choice): void
+    {
+        if (($choice['whatsapp'] ?? false) !== true) {
+            return;
+        }
+
+        if ((NotificationChannelPolicy::for($type)['whatsapp'] ?? 'never') !== 'planned') {
+            abort(422, "«{$type}» is never sent on WhatsApp.");
+        }
+
+        $state = WhatsAppOptInController::state($request->user(), $this->providers);
+
+        if (! $state['provider_configured']) {
+            abort(422, 'WhatsApp is not available yet: no provider is configured.');
+        }
+
+        if (! $state['opted_in']) {
+            abort(422, 'WhatsApp cannot be switched on before this number has a confirmed opt-in.');
+        }
+    }
+
+    /** @return array{in_app: bool, email: string, whatsapp: string} */
+    private function channelsOf(string $type): array
+    {
+        $policy = NotificationChannelPolicy::for($type);
+
+        return [
+            'in_app' => $policy['in_app'] ?? true,
+            'email' => $policy['email'] ?? 'immediate',
+            'whatsapp' => $policy['whatsapp'] ?? 'never',
+        ];
     }
 
     /**
@@ -350,6 +529,9 @@ final class NotificationPreferenceController extends Controller
                     // that or it renders a checkbox that writes to nothing.
                     'digest_switch' => MessageCatalogue::DIGEST_SWITCH[$type] ?? null,
                     'sent_by' => $definition['sent_by'],
+                    // NOTIFICATION-CHANNELS-001 — what the PRODUCT does with it, from the one policy: a dash on the
+                    // screen where there is no bell item, a lock where there is no switch.
+                    'channels' => $this->channelsOf($type),
                 ];
             }
 
@@ -364,7 +546,7 @@ final class NotificationPreferenceController extends Controller
     /**
      * What will actually happen, per type, for this person today.
      *
-     * @return array<string, array{email: bool, in_app: bool, rhythm: string}>
+     * @return array<string, array{email: bool, in_app: bool, rhythm: string, min_severity: ?string, whatsapp: bool}>
      */
     private function effectiveTypes(int $userId, string $tenantId): array
     {
@@ -375,6 +557,8 @@ final class NotificationPreferenceController extends Controller
                 'email' => $this->choices->wants($userId, $tenantId, $type, 'email'),
                 'in_app' => $this->choices->wants($userId, $tenantId, $type, 'in_app'),
                 'rhythm' => $this->choices->rhythm($userId, $tenantId, $type),
+                'min_severity' => $this->choices->minSeverity($userId, $tenantId, $type),
+                'whatsapp' => $this->choices->whatsapp($userId, $tenantId, $type),
             ];
         }
 

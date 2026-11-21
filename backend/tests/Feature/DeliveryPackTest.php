@@ -17,6 +17,7 @@ use App\Domains\Reports\Jobs\GenerateReportJob;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportAnnotation;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Models\ReportVersion;
 use App\Domains\Tasks\Models\Task;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Enums\Portal;
@@ -28,6 +29,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Tests\Concerns\KeepsStoredCopies;
 use Tests\TestCase;
 
 /**
@@ -38,6 +40,7 @@ use Tests\TestCase;
  */
 final class DeliveryPackTest extends TestCase
 {
+    use KeepsStoredCopies;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -163,7 +166,7 @@ final class DeliveryPackTest extends TestCase
         $this->assertStringNotContainsString('Spend', $text, 'spend is off unless the Owner switches it on');
 
         $service->setComponents($pack->fresh(), ['spend' => true]);
-        $this->assertStringContainsString('Spend: 11,979.96 USD', $service->whatsappSummary($pack->fresh(), 'en'));
+        $this->assertStringContainsString('Spend: 11,979.96 $', $service->whatsappSummary($pack->fresh(), 'en'));
     }
 
     public function test_the_amount_due_is_stated_from_an_issued_invoice_and_sending_never_touches_it(): void
@@ -178,7 +181,7 @@ final class DeliveryPackTest extends TestCase
         $service->attachInvoice($pack, $invoice);
         $service->approve($pack->fresh(), $this->owner);
 
-        $this->assertStringContainsString('amount due 1,000.00 SAR', $service->whatsappSummary($pack->fresh(), 'en'));
+        $this->assertStringContainsString('amount due 1,000.00 ر.س', $service->whatsappSummary($pack->fresh(), 'en'));
 
         $service->markSent($pack->fresh());
         $this->assertSame('sent', $pack->fresh()->status);
@@ -334,7 +337,7 @@ final class DeliveryPackTest extends TestCase
         $this->assertSame((string) $pack->id, $row['source']['id']);
         $this->assertSame((string) $this->workspace->id, $row['source']['client_workspace_id']);
         $this->assertSame('draft', $row['source']['status']);
-        $this->assertSame('2026-10-05 → 2026-10-11', $row['source']['period']);
+        $this->assertSame('5 أكتوبر – 11 أكتوبر 2026', $row['source']['period']);
     }
 
     /** DELIV-DASH-001 — one row per client, one next action, and the follow-up signal only where both facts hold. */
@@ -410,5 +413,38 @@ final class DeliveryPackTest extends TestCase
     private function bindTenant(): void
     {
         app(TenantContext::class)->setTenantId($this->tenant->id);
+    }
+
+    /** REPORT-SNAPSHOT-PROTECT-001 — editing a recommendation on a pack rebuilds its report without a second question, and keeps the copy it replaces. */
+    public function test_an_edited_recommendation_keeps_the_copy_its_rebuild_replaces(): void
+    {
+        $this->actingAs($this->owner, 'sanctum');
+        $pack = $this->pack();
+        $ann = $this->annotate($pack, 'approved', 'Machine words');
+        $original = $this->storeCopy((string) $pack->report_id);
+        Queue::fake();
+
+        $this->patchJson("/api/v1/delivery/packs/{$pack->id}/recommendations/{$ann->id}", ['text_ar' => 'My own words'])->assertOk();
+
+        Queue::assertPushed(GenerateReportJob::class, 1);
+        $this->assertCopyKeptThroughRebuild((string) $pack->report_id, $original);
+    }
+
+    /** REPORT-SNAPSHOT-PROTECT-001 — a system path: preparing a pack builds a report of its own and never waits on a confirmation or touches another report. */
+    public function test_preparing_a_pack_builds_its_own_report_and_leaves_every_stored_copy_alone(): void
+    {
+        $first = $this->pack();
+        $original = $this->storeCopy((string) $first->report_id);
+        Queue::fake();
+
+        $second = app(DeliveryPackService::class)->prepare($this->project, Carbon::parse('2026-10-24'), $this->owner);
+
+        $this->assertNotSame((string) $first->report_id, (string) $second->report_id);
+        Queue::assertPushed(GenerateReportJob::class, fn (GenerateReportJob $job): bool => $job->reportId === (string) $second->report_id);
+        Queue::assertPushed(GenerateReportJob::class, 1);
+        $kept = Report::withoutGlobalScopes()->findOrFail($first->report_id);
+        $this->assertSame('completed', $kept->status);
+        $this->assertEquals($original, $kept->data);
+        $this->assertSame(0, ReportVersion::withoutGlobalScopes()->count());
     }
 }

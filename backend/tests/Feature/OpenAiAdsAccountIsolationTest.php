@@ -292,7 +292,7 @@ final class OpenAiAdsAccountIsolationTest extends TestCase
                 return Http::response(['data' => [], 'has_more' => false]);
             }
 
-            return Http::response(['id' => 'acct_b', 'object' => 'ad_account', 'name' => 'Advertiser B', 'currency' => 'SAR']);
+            return Http::response(['id' => 'acct_b', 'object' => 'ad_account', 'name' => 'Advertiser B', 'currency_code' => 'SAR']);
         });
     }
 

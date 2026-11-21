@@ -103,10 +103,16 @@ describe('a finding is only drawn when something measured stands behind it', () 
   })
 
   it('keeps a finding that has a recorded fact even with no figure', () => {
-    const [f] = one({ alerts: [alert({ type: 'token_expiry', entity_type: null, entity_id: null, context: { provider: 'meta', expires_at: '2026-09-20T00:00:00Z' } })] })
+    const [f] = one({ alerts: [alert({ type: 'sync_failure', entity_type: null, entity_id: null, context: { provider: 'meta', link_state: 'not_synced', required_day: '2026-11-11', last_day: '2026-11-10' } })] })
     expect(f.nature).toBe('tracking')
-    expect(f.facts).toContainEqual({ key: 'expires_at', value: '2026-09-20' })
+    expect(f.code).toBe('link_not_synced')
+    expect(f.facts).toContainEqual({ key: 'missing_day', value: '2026-11-11' })
     expect(hasEvidence(f)).toBe(true)
+  })
+
+  /** LINK-HEALTH-YESTERDAY-001 — an «expiring» access token on a link that renews itself is not a card. */
+  it('draws no card for an expiring access token whose data still arrives', () => {
+    expect(one({ alerts: [alert({ type: 'token_expiry', entity_type: null, entity_id: null, context: { provider: 'google', expires_at: '2026-11-12T06:00:00Z' } })] })).toEqual([])
   })
 })
 

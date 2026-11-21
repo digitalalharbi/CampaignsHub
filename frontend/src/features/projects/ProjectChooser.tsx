@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { usePortalBase } from '@/app/portalPath'
 import { FolderKanban } from 'lucide-react'
@@ -8,6 +8,9 @@ import { useAgencyClient } from '@/stores/agencyClient'
 import { useUi } from '@/stores/ui'
 import { Skeleton } from '@/components/ui/States'
 import { fmtDateTime } from '@/lib/datetime'
+import { Pager } from '@/components/fit/Pager'
+import { useFitRows } from '@/components/fit/useFitRows'
+import { useColumns } from '@/components/fit/useColumns'
 
 /**
  * PROJECT-FIRST-VISIT-001 — a project-scoped page with no project chosen shows the CHOICE, on the page.
@@ -27,7 +30,15 @@ type Row = Project & { client_name: string; synced_at: string | null; campaigns:
 
 export type ProjectChooserPurpose = 'campaigns' | 'analytics' | 'reports' | 'recommendations' | 'spend-limits'
 
-export function ProjectChooser({ purpose }: { purpose: ProjectChooserPurpose }) {
+/** A card is about this tall (name, client, one line of facts) and the grid's gap is 8px. */
+const CARD_HEIGHT = 104
+const CARD_GAP = 8
+
+/**
+ * `fit` (AGENCY-FIT-001): inside a fitted page the choices are a page of whole rows that fit the screen, with a pager for
+ * the rest. Without it the list is as it always was.
+ */
+export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: ProjectChooserPurpose; fit?: boolean }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const { setCurrentProjectId } = useProject()
   const { setCurrentClientId } = useAgencyClient()
@@ -40,6 +51,9 @@ export function ProjectChooser({ purpose }: { purpose: ProjectChooserPurpose }) 
   const agency = usePortalBase() === '/agency'
   const clients = useQuery({ queryKey: ['agency-scope', 'clients'], queryFn: listClientWorkspaces, enabled: agency })
   const projects = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false) })
+  const cols = useColumns([[1024, 3], [640, 2]])
+  const fit = useFitRows({ rowHeight: CARD_HEIGHT + CARD_GAP, reserve: 0, min: 1, max: 12, fallback: 1000 })
+  const [page, setPage] = useState(1)
 
   const rows: Row[] = useMemo(() => {
     const byClient = new Map((clients.data ?? []).map((c) => [c.id, c.name]))
@@ -81,6 +95,11 @@ export function ProjectChooser({ purpose }: { purpose: ProjectChooserPurpose }) 
     'spend-limits': { ar: 'لعرض حدود إنفاقه وضبطها', en: 'to see and set its spend limits' },
   }[purpose]
 
+  const perPage = fitted && fit.locked ? Math.max(1, fit.rows * cols) : Number.MAX_SAFE_INTEGER
+  const pages = Math.max(1, Math.ceil(rows.length / perPage))
+  const current = Math.min(page, pages)
+  const pageRows = fitted && fit.locked ? rows.slice((current - 1) * perPage, current * perPage) : rows
+
   if (clients.isLoading || projects.isLoading) {
     return <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
   }
@@ -96,20 +115,22 @@ export function ProjectChooser({ purpose }: { purpose: ProjectChooserPurpose }) 
   }
 
   return (
-    <section data-testid="project-chooser" aria-label={ar ? 'اختر مشروعًا' : 'Choose a project'} className="space-y-3">
+    <section data-testid="project-chooser" aria-label={ar ? 'اختر مشروعًا' : 'Choose a project'} className={fitted ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-3'}>
       <div>
         <h2 className="text-base font-bold text-text-primary">{ar ? 'اختر مشروعًا' : 'Choose a project'}</h2>
         <p className="mt-0.5 text-sm text-text-secondary">
           {ar ? `كل مشروع مستقل — اختر واحدًا ${purposeWords.ar}.` : `Each project stands alone — pick one ${purposeWords.en}.`}
         </p>
       </div>
+      <div ref={fitted ? (fit.ref as never) : undefined} className={fitted ? 'min-h-0 flex-1' : undefined}>
       <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {rows.map((p) => (
+        {pageRows.map((p) => (
           <li key={p.id} className="min-w-0">
             <button
               type="button"
               data-testid={`project-choice-${p.id}`}
               onClick={() => choose(p)}
+              style={fitted ? { height: CARD_HEIGHT } : undefined}
               className="w-full rounded-2xl border border-border bg-surface p-4 text-start transition hover:border-brand-500 hover:bg-surface-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
             >
               <div className="truncate text-sm font-bold text-text-primary">{p.name}</div>
@@ -129,6 +150,8 @@ export function ProjectChooser({ purpose }: { purpose: ProjectChooserPurpose }) 
           </li>
         ))}
       </ul>
+      </div>
+      {fitted && fit.locked && <Pager testid="project-chooser-pager" page={current} pages={pages} onPage={setPage} total={rows.length} ar={ar} hideWhenSingle />}
     </section>
   )
 }

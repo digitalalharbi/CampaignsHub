@@ -19,11 +19,13 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /** Client analytics: client-only isolation, currency-mode guardrails, objective-gated ROAS, permission. */
 final class ClientAnalyticsTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -71,6 +73,7 @@ final class ClientAnalyticsTest extends TestCase
     /** Insert a daily_metrics row directly (deterministic; avoids the ingestion pipeline). */
     private function metric(string $projectId, string $key, float $value, string $date, string $currency = 'SAR', string $acct = 'a1'): void
     {
+        $this->bindSeededAccount($projectId, $this->uid($acct));
         DB::table('daily_metrics')->insert([
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->id,

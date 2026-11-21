@@ -9,6 +9,7 @@ use App\Domains\Billing\Models\Invoice;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Delivery\Models\DeliveryPack;
 use App\Domains\Delivery\Models\PlatformEvidence;
+use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Projects\Models\Project;
@@ -18,6 +19,7 @@ use App\Domains\Reports\Models\ReportAnnotation;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Services\ShareService;
 use App\Models\User;
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 
@@ -74,7 +76,7 @@ final class DeliveryPackService
         $report->forceFill([
             'tenant_id' => $project->tenant_id,
             'project_id' => $project->getKey(),
-            'name' => $workspace->name.' — '.$from->toDateString().' → '.$to->toDateString(),
+            'name' => $workspace->name.' — '.PeriodLabel::range($from, $to, 'ar'),
             'type' => $settings['cadence'] === 'monthly' ? 'monthly' : 'weekly',
             'audience' => 'client',
             'mode' => $settings['mode'],
@@ -98,7 +100,7 @@ final class DeliveryPackService
             'components' => $this->componentsFor($workspace),
             'created_by' => $by?->id,
         ]);
-        $this->audit->log('delivery_pack.prepared', 'delivery_pack', (string) $pack->id, null, ['period' => $from->toDateString().' → '.$to->toDateString()]);
+        $this->audit->log('delivery_pack.prepared', 'delivery_pack', (string) $pack->id, null, ['period' => PeriodLabel::range($from, $to, 'en')]);
         DeliveryTasks::ensureFor($pack);
 
         return $pack;
@@ -283,7 +285,7 @@ final class DeliveryPackService
         $data = $report === null ? [] : (array) $report->data;
         $totals = (array) ($data['totals'] ?? []);
         $workspace = ClientWorkspace::query()->find($pack->client_workspace_id);
-        $period = $pack->period_start->toDateString().' → '.$pack->period_end->toDateString();
+        $period = PeriodLabel::range($pack->period_start, $pack->period_end, 'ar');
         $num = static fn ($v): string => number_format((float) $v, 0, '.', ',');
 
         $lines = [];
@@ -296,7 +298,7 @@ final class DeliveryPackService
             $lines[] = ($ar ? '• مرات الظهور: ' : '• Impressions: ').$num($totals['impressions']);
         }
         if ($pack->includes('spend') && isset($totals['spend']) && ((int) ($totals['spend_withheld_rows'] ?? 0)) === 0) {
-            $lines[] = ($ar ? '• الإنفاق: ' : '• Spend: ').number_format((float) $totals['spend'], 2, '.', ',').' '.($data['currency'] ?? ReportingCurrency::DEFAULT);
+            $lines[] = ($ar ? '• الإنفاق: ' : '• Spend: ').FundingMoney::withMark(number_format((float) $totals['spend'], 2, '.', ','), (string) ($data['currency'] ?? ReportingCurrency::DEFAULT));
         }
 
         $steps = ReportAnnotation::withoutGlobalScopes()->where('report_id', $pack->report_id)
@@ -317,8 +319,8 @@ final class DeliveryPackService
         if ($invoice !== null && $pack->includes('amount_due') && in_array($invoice->status, Invoice::FROZEN_STATUSES, true)) {
             $due = max(0, (float) $invoice->total - (float) $invoice->amount_paid);
             $lines[] = $ar
-                ? "الفاتورة {$invoice->number}: المبلغ المستحق ".number_format($due, 2, '.', ',')." {$invoice->currency} — الاستحقاق {$invoice->due_date?->toDateString()}"
-                : "Invoice {$invoice->number}: amount due ".number_format($due, 2, '.', ',')." {$invoice->currency} — due {$invoice->due_date?->toDateString()}";
+                ? "الفاتورة {$invoice->number}: المبلغ المستحق ".FundingMoney::withMark(number_format($due, 2, '.', ','), $invoice->currency)." — الاستحقاق {$invoice->due_date?->toDateString()}"
+                : "Invoice {$invoice->number}: amount due ".FundingMoney::withMark(number_format($due, 2, '.', ','), $invoice->currency)." — due {$invoice->due_date?->toDateString()}";
         }
 
         return implode("\n", $lines);

@@ -30,6 +30,8 @@ final class PermissionSeeder extends Seeder
         'leads' => ['view', 'create', 'update', 'delete', 'convert', 'pii.view', 'assign', 'export'],
         /** Internal spend governance — reading a ceiling and setting one are different acts. */
         'budget' => ['view', 'manage'],
+        /** FIN-LOOP-001 — an approved project budget (money the client put in), apart from `budget` (monitoring lines) and `billing`. */
+        'funding' => ['view', 'manage'],
         'proposals' => ['view', 'create', 'update', 'approve'],
         'campaigns' => ['view', 'create', 'update', 'launch', 'pause', 'link', 'budget.change'],
         'content' => ['view', 'create', 'update', 'approve', 'reject'],
@@ -48,7 +50,7 @@ final class PermissionSeeder extends Seeder
         'audit' => ['view'],
         'settings' => ['manage'],
         'workspaces' => ['view', 'create', 'update', 'delete', 'members.manage'],
-        'projects' => ['view', 'view.all', 'create', 'update', 'delete', 'manage_members'],
+        'projects' => ['view', 'view.all', 'create', 'update', 'delete', 'manage_members', 'archive', 'restore', 'purge', 'move'],
         'ai' => ['view', 'manage', 'use'],
         'notifications' => ['view'],
         'tasks' => ['view', 'create', 'update', 'delete'],

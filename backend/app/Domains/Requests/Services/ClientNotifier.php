@@ -7,15 +7,22 @@ namespace App\Domains\Requests\Services;
 use App\Domains\Requests\Models\ExternalRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Records client-facing notifications (email + WhatsApp) for request lifecycle events. Honest: with no
  * provider configured nothing is sent — each row is "awaiting_provider_credentials", never "sent".
  * Deduplicated per (request, event, channel) so repeats don't spam. Each row carries a secure portal deep
  * link. When a real provider is wired, dispatch happens where noted; we never fake a send.
+ *
+ * EMAIL-GAPS — with `requests.client_mail_enabled` on, the email row is really mailed through
+ * {@see RequestMailer}, and the mail ledger writes each outcome back to the row. Off, nothing changes.
+ * A mail failure cannot reach the caller: the status change or reply it follows has already happened.
  */
 final class ClientNotifier
 {
+    public function __construct(private readonly RequestMailer $mailer) {}
+
     /** @var list<string> */
     private const CHANNELS = ['email', 'whatsapp'];
 
@@ -32,7 +39,9 @@ final class ClientNotifier
             $dedupKey = hash('sha256', implode('|', [$request->tenant_id, $request->id, $event, $channel]));
 
             // Idempotent per (request,event,channel) — a unique index backs this; ignore duplicates.
-            DB::table('client_notifications')->insertOrIgnore([
+            $mailKey = $channel === 'email' && RequestMailer::enabled() ? 'client-request:'.$dedupKey : null;
+
+            $recorded = DB::table('client_notifications')->insertOrIgnore([
                 'id' => (string) Str::ulid(),
                 'tenant_id' => $request->tenant_id,
                 'request_id' => $request->id,
@@ -43,9 +52,22 @@ final class ClientNotifier
                 'attempts' => 0,
                 'dedup_key' => $dedupKey,
                 'deep_link' => $deepLink,
+                'mail_dedup_key' => $mailKey,
                 'created_at' => now(),
             ]);
-            // NOTE: with a provider wired, enqueue the actual email/WhatsApp send here (retry/failed states).
+
+            if ($recorded > 0 && $mailKey !== null) {
+                try {
+                    $state = $this->mailer->toClient($request, $event, (string) $destination, $deepLink, $dedupKey);
+
+                    // Waiting for a worker is what this row should say until the ledger writes the outcome back.
+                    if ($state === 'queued') {
+                        DB::table('client_notifications')->where('mail_dedup_key', $mailKey)->update(['status' => 'queued']);
+                    }
+                } catch (Throwable $e) {
+                    report($e);
+                }
+            }
         }
     }
 

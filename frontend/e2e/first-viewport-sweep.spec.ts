@@ -29,15 +29,19 @@ const WIDTHS = [
 
 /** Route → the testids of blocks that must be at least partly inside the first viewport (desktop). */
 const SURFACES: Array<{ path: string; project?: boolean; projectPath?: boolean; firstScreen: string[] }> = [
-  { path: '/agency/dashboard', firstScreen: ['agency-intro', 'agency-headline', 'agency-attention'] },
+  // ANALYTICS-ONE-BOARD-001 — the retired agency board (counts, tabs, all-clients cards) has no page any more; `/agency/dashboard` below is its replacement and keeps the same first-screen rule.
+  { path: '/agency/dashboard', firstScreen: ['role-dashboard'] },
   { path: '/agency/portfolio', firstScreen: ['portfolio-intro-kpis', 'portfolio-trend'] },
   /* Named from the live review (LIVE_ROUTE_CHECKLIST.md, 2026-10-09): the KPI row or summary that
      answers each page's question, and the filter block that scopes it. */
-  { path: '/agency/campaigns', project: true, firstScreen: ['campaigns-intro-kpis', 'campaigns-secondary-strip'] },
-  { path: '/agency/analytics', project: true, firstScreen: ['analytics-filters', 'analytics-overview'] },
+  // CAMPAIGNS-TABLE-FIRST-001 — the section lands on the management table, so its controls are the first-screen block.
+  { path: '/agency/campaigns', project: true, firstScreen: ['campaigns-intro-kpis', 'campaigns-table-controls'] },
+  // ANALYTICS-DAILY-MEASURE-001 — the analysis page opens on the daily chart; the overview follows it.
+  { path: '/agency/analytics', project: true, firstScreen: ['analytics-filters', 'analytics-daily'] },
   { path: '/agency/content', project: true, firstScreen: ['content-summary', 'content-filters'] },
   { path: '/agency/reports', project: true, firstScreen: ['reports-hero-kpis', 'reports-filters'] },
-  { path: '/agency/integrations', firstScreen: ['integrations-intro', 'connection-hub'] },
+  // INTEG-PROJECT-SPACE-001 — the centre is the selected project's space; without one it is the chooser.
+  { path: '/agency/integrations', project: true, firstScreen: ['integrations-intro', 'connection-hub'] },
   { path: '/agency/alerts', firstScreen: [] },
   { path: '/agency/clients', firstScreen: ['clients-intro-kpis', 'clients-filters'] },
   { path: '/agency/requests', firstScreen: ['requests-intro-kpis'] },
@@ -118,10 +122,8 @@ test.describe('the first viewport, on every operator surface', () => {
             let path = surface.path
             if (surface.project || surface.projectPath) {
               const projectId = await seededProject(request, PROJECT)
-              if (surface.project) {
-                await page.goto('/agency/dashboard')
-                await selectProject(page, projectId)
-              }
+              // NAV-ABORT-001 (see first-viewport-detail.spec.ts) — chosen by init script, no throwaway dashboard first.
+              if (surface.project) await selectProject(page, projectId)
               path = path.replace(':projectId', projectId)
             }
             await page.goto(path)

@@ -45,7 +45,8 @@ describe('widgets on the Dashboard and Analytics', () => {
     vi.mocked(useWidgetLayout).mockReturnValue(layout([null, 'module_off']) as never)
     renderWithProviders(<AnalyticsPage surface="analytics" />, { locale: 'en' })
 
-    const tab = await screen.findByRole('tab', { name: 'Insights' })
+    // ANALYTICS-REPORT-LAYOUT-001 — the sections are a pill bar of buttons (aria-pressed), not ARIA tabs.
+    const tab = await screen.findByRole('button', { name: 'Insights' })
     fireEvent.click(tab)
     expect(await screen.findByTestId('stub-surface-analytics')).toBeTruthy()
   })
@@ -54,8 +55,8 @@ describe('widgets on the Dashboard and Analytics', () => {
     vi.mocked(useWidgetLayout).mockReturnValue(layout(['module_off', 'module_off']) as never)
     renderWithProviders(<AnalyticsPage surface="analytics" />, { locale: 'en' })
 
-    await screen.findAllByRole('tab')
-    expect(screen.queryByRole('tab', { name: 'Insights' })).toBeNull()
+    await screen.findAllByRole('button', { name: /Performance|Summary|Overview/i })
+    expect(screen.queryByRole('button', { name: 'Insights' })).toBeNull()
     expect(screen.queryByTestId('stub-surface-analytics')).toBeNull()
   })
 

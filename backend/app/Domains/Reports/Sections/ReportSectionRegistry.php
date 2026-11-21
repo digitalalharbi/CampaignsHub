@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Sections;
 
+use App\Domains\Reports\Measurement\AudienceReportSections;
 use Closure;
 use InvalidArgumentException;
 
@@ -110,6 +111,20 @@ final class ReportSectionRegistry
                 view: 'content',
             ),
             /*
+             * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: image, video, carousel, collection … per
+             * objective, with results, the cost of a result (internal readers only), shares and the winner.
+             *
+             * A SHOW/HIDE of its own and ON unless the operator hides it (the Owner's rule: nothing is hidden by
+             * default). No stored snapshot gains it: a saved report carries it only when it was generated with it.
+             */
+            new ReportSection(
+                key: 'content_format_comparison',
+                titleAr: 'مقارنة أنواع المحتوى',
+                titleEn: 'Content type comparison',
+                payloadKeys: ['content_format_comparison'],
+                view: 'content',
+            ),
+            /*
              * GA4-INTEGRATION-001 — the client's OWN SITE, measured by their own Analytics.
              *
              * After the paid-media story and before the insights, because that is what it is:
@@ -128,7 +143,192 @@ final class ReportSectionRegistry
                 titleEn: 'Client site measurement',
                 payloadKeys: ['site_measurement'],
                 clientDefault: false,
-                view: 'dashboard',
+                view: 'website',
+            ),
+            /*
+             * STORE-ANALYTICS-DEPTH-001 §3.1 — the store and its traffic as one category to show or hide, live and snapshot.
+             *
+             * OFF on a client-facing report until an operator switches it on: no link in existence gains a
+             * section because this shipped, and turning it on keeps the link's address and scope.
+             */
+            new ReportSection(
+                key: 'store_analytics',
+                titleAr: 'تحليلات المتجر والزيارات',
+                titleEn: 'Store & traffic analytics',
+                payloadKeys: ['store_analytics'],
+                clientDefault: false,
+                view: 'website',
+            ),
+            /*
+             * GA4-REPORT-SECTIONS-001 — the store as its own GA4 property measured it, in four parts.
+             *
+             * Each part is a SHOW/HIDE of its own, and each is ON unless the operator hides it (the
+             * Owner's rule: nothing is hidden by default). That does not put a section on any link
+             * that exists today: a part is available only where the project has a selected property
+             * with figures for the window, and its data is absent from the payload otherwise.
+             *
+             * GA4's figures are GA4's, under GA4's attribution. The gap part sets them BESIDE what the
+             * platforms reported; nothing here adds the two (`GA4-NOT-BLENDED-001`).
+             */
+            new ReportSection(
+                key: 'ga4_overview',
+                titleAr: 'الموقع: زيارات ومبيعات',
+                titleEn: 'Website: visits & sales',
+                payloadKeys: ['ga4_overview'],
+                view: 'website',
+            ),
+            new ReportSection(
+                key: 'ga4_acquisition',
+                titleAr: 'القنوات والأجهزة والقمع',
+                titleEn: 'Channels, devices & funnel',
+                payloadKeys: ['ga4_acquisition'],
+                view: 'website',
+            ),
+            new ReportSection(
+                key: 'ga4_platform_gap',
+                titleAr: 'الموقع مقابل المنصات',
+                titleEn: 'Website vs platforms',
+                payloadKeys: ['ga4_platform_gap'],
+                view: 'website',
+            ),
+            new ReportSection(
+                key: 'ga4_tables',
+                titleAr: 'جداول الموقع',
+                titleEn: 'Website tables',
+                payloadKeys: ['ga4_tables'],
+                view: 'website',
+            ),
+            // GA4-ATTRIBUTION-MATCH-001 — four more parts, each its own SHOW/HIDE, on by default like the first four.
+            new ReportSection(
+                key: 'ga4_attribution',
+                titleAr: 'مطابقة الإسناد',
+                titleEn: 'Attribution match',
+                payloadKeys: ['ga4_attribution'],
+                view: 'website',
+            ),
+            new ReportSection(
+                key: 'ga4_pulse',
+                titleAr: 'ملخص الموقع',
+                titleEn: 'Website summary',
+                payloadKeys: ['ga4_pulse'],
+                view: 'summary',
+            ),
+            new ReportSection(
+                key: 'ga4_classification',
+                titleAr: 'تصنيف الزيارات',
+                titleEn: 'Traffic classification',
+                payloadKeys: ['ga4_classification'],
+                view: 'website',
+            ),
+            new ReportSection(
+                key: 'ga4_products',
+                titleAr: 'منتجات الموقع',
+                titleEn: 'Website products',
+                payloadKeys: ['ga4_products'],
+                view: 'website',
+            ),
+            new ReportSection(
+                key: 'ga4_gap_reasons',
+                titleAr: 'قراءة الفرق',
+                titleEn: 'Reading the gap',
+                payloadKeys: ['ga4_gap_reasons'],
+                view: 'website',
+            ),
+            /*
+             * AUDIENCE-001 — the audience, one SHOW/HIDE per data type, drawn in the platforms view.
+             *
+             * OFF on a client-facing report until an operator switches it on (the spec: enabled by permission and by the
+             * data available), ON for an internal one; and available only where its data exists (absent otherwise). Targeting, paid delivery and site visitors are
+             * separate parts and never one field. `audience_spend` owns no payload: hidden (and always on a client
+             * report) it takes every money figure out of the audience parts — see AudienceReportSections.
+             */
+            new ReportSection(
+                key: 'audience_targeting',
+                titleAr: 'الجمهور المستهدف',
+                titleEn: 'Targeted audience',
+                payloadKeys: ['audience_targeting'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_regions',
+                titleAr: 'الجمهور الفعلي: المناطق',
+                titleEn: 'Delivered audience: regions',
+                payloadKeys: ['audience_regions'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_cities',
+                titleAr: 'الجمهور الفعلي: المدن',
+                titleEn: 'Delivered audience: cities',
+                payloadKeys: ['audience_cities'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_gender',
+                titleAr: 'الجمهور الفعلي: الجنس',
+                titleEn: 'Delivered audience: gender',
+                payloadKeys: ['audience_gender'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_age',
+                titleAr: 'الجمهور الفعلي: العمر',
+                titleEn: 'Delivered audience: age',
+                payloadKeys: ['audience_age'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_devices',
+                titleAr: 'الجمهور الفعلي: الأجهزة',
+                titleEn: 'Delivered audience: devices',
+                payloadKeys: ['audience_devices'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_placements',
+                titleAr: 'الجمهور الفعلي: مواضع الظهور',
+                titleEn: 'Delivered audience: placements',
+                payloadKeys: ['audience_placements'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_interests',
+                titleAr: 'الجمهور الفعلي: الاهتمامات',
+                titleEn: 'Delivered audience: interests',
+                payloadKeys: ['audience_interests'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_professional',
+                titleAr: 'المؤشرات المهنية (LinkedIn)',
+                titleEn: 'Professional facets (LinkedIn)',
+                payloadKeys: ['audience_professional'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_site',
+                titleAr: 'زوار الموقع حسب الدولة والجهاز',
+                titleEn: 'Site visitors by country & device',
+                payloadKeys: ['audience_site'],
+                clientDefault: false,
+                view: 'platforms',
+            ),
+            new ReportSection(
+                key: 'audience_spend',
+                titleAr: 'الإنفاق حسب تقسيم الجمهور',
+                titleEn: 'Spend by audience breakdown',
+                payloadKeys: [],
+                clientDefault: false,
+                view: 'platforms',
             ),
             new ReportSection(
                 key: 'recommendations',
@@ -163,7 +363,7 @@ final class ReportSectionRegistry
                 key: 'daily_records',
                 titleAr: 'السجل اليومي',
                 titleEn: 'Daily records',
-                payloadKeys: ['timeseries'],
+                payloadKeys: ['timeseries', 'daily_rows'],
                 view: 'tables',
             ),
             /*
@@ -253,6 +453,10 @@ final class ReportSectionRegistry
             // A summary withholds the list and states the count; the count alone is still the section.
             || (int) ($c->value('creatives_in_scope') ?? 0) > 0);
 
+        // CONTENT-FORMAT-COMPARISON-001 — a comparison with no objective in it (no creative in scope) is not a section.
+        $this->availableWhen('content_format_comparison', 'has_creatives', static fn (SectionContext $c): bool => is_array($c->value('content_format_comparison'))
+            && ((array) ($c->value('content_format_comparison')['objectives'] ?? [])) !== []);
+
         /*
          * A property somebody selected, with days actually read in this window.
          *
@@ -260,6 +464,23 @@ final class ReportSectionRegistry
          * facts that are both «no section», and neither of which is a zero.
          */
         $this->availableWhen('site_measurement', 'has_measured_days', static fn (SectionContext $c): bool => is_array($c->value('site_measurement')));
+
+        $this->availableWhen('store_analytics', 'has_store_or_site_figures', static fn (SectionContext $c): bool => is_array($c->value('store_analytics')));
+
+        // GA4-REPORT-SECTIONS-001 — a part with nothing measured for the window is not a section, and never a zero.
+        foreach (['ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons'] as $ga4) {
+            $this->availableWhen($ga4, 'has_ga4_figures', static fn (SectionContext $c): bool => is_array($c->value($ga4)));
+        }
+
+        // AUDIENCE-001 — a part with no data behind it is not a section, and never a zero.
+        foreach (AudienceReportSections::KEYS as $audience) {
+            $this->availableWhen($audience, 'has_audience_data', static fn (SectionContext $c): bool => is_array($c->value($audience)));
+        }
+        // The spend switch is a modifier: it means something only where a paid-delivery part is present.
+        $this->availableWhen('audience_spend', 'has_paid_delivery', static fn (SectionContext $c): bool => array_filter(
+            array_keys(AudienceReportSections::DELIVERY),
+            static fn (string $k): bool => is_array($c->value($k)),
+        ) !== []);
 
         $this->availableWhen('recommendations', 'has_an_insight', static fn (SectionContext $c): bool => $c->rows('recommendations') !== [] || $c->rows('findings') !== [] || $c->rows('observations') !== [] || $c->rows('next_steps') !== [] || $c->rows('attention') !== []);
 

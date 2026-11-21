@@ -77,7 +77,8 @@ enum ObjectiveFamily: string
     {
         return match ($this) {
             self::Awareness => ['spend', 'impressions', 'reach', 'frequency', 'cpm'],
-            self::Traffic => ['spend', 'clicks', 'ctr', 'cpc', 'landing_page_views', 'cost_per_lpv'],
+            // OBJECTIVE-RESULT-001 — the visit is the result; clicks are what it falls back to.
+            self::Traffic => ['spend', 'landing_page_views', 'cost_per_lpv', 'clicks', 'ctr', 'cpc'],
             // Engagements and their cost — NOT clicks, which is a different thing a person did.
             self::Engagement => ['spend', 'engagements', 'engagement_rate', 'cpe', 'impressions'],
             // A video is judged on whether it was WATCHED, not on whether it was clicked.

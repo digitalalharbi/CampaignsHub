@@ -13,6 +13,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Drive\Models\DriveFile;
 use App\Domains\Drive\Models\DriveLink;
+use App\Domains\Integrations\Support\DemoAccountSelection;
 use App\Domains\Messaging\Models\MessageThread;
 use App\Domains\Messaging\Services\MessagingService;
 use App\Domains\Metrics\Actions\UpsertDailyMetrics;
@@ -115,7 +116,7 @@ final class DemoAccountsSeeder extends Seeder
             ['tenant_id' => $tenant->id, 'slug' => 'analyst'],
             ['name' => 'Analyst', 'is_system' => true],
         );
-        $analystRole->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'integrations.view', 'reports.view');
+        $analystRole->givePermissionTo('campaigns.view', 'projects.view', 'projects.view.all', 'clients.view_all', 'integrations.view', 'reports.view');
 
         $this->ensureUser('agency@campaignshub.io', 'Demo Owner', $tenant, $ownerRole);
 
@@ -435,6 +436,8 @@ final class DemoAccountsSeeder extends Seeder
     {
         $externalAccountId = $this->demoUuid("acct:{$tag}:{$provider}");
         $externalCampaignId = $this->demoUuid("camp:{$tag}:{$campaignId}");
+        // A sync only runs for a selected account, so a world with figures has selected the account that earned them.
+        DemoAccountSelection::select($projectId, $externalAccountId, $provider, ucfirst($provider).' Ads — بيانات تجريبية');
         $start = Carbon::today()->subDays(13);
 
         $metrics = [];

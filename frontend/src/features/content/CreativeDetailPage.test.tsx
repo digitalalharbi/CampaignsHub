@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { CreativeDetailPage } from './CreativeDetailPage'
 import type { CreativeDetail, CreativeMetrics } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -196,7 +196,7 @@ describe('CreativeDetailPage', () => {
    *
    * So on the owner's own account — a USD account with no USD→SAR rate, where FX-001 withholds by
    * design — the headline grid rendered «Not provided» over real, measured money, while the card the
-   * reader clicked to get here printed «412.50 USD» and the table further down the same page printed
+   * reader clicked to get here printed «412.50 $» and the table further down the same page printed
    * it too. One creative, three readings, two of them right.
    *
    * `reported.spend` is FALSE for a withheld row by construction — the backend sets it from the
@@ -217,8 +217,8 @@ describe('CreativeDetailPage', () => {
     const figures = await screen.findByText('Spend')
     const block = figures.closest('div') as HTMLElement
 
-    expect(within(block).queryByText(/USD/)).not.toBeInTheDocument()
-    expect(within(block).queryByText(/SAR/)).not.toBeInTheDocument()
+    expect(within(block).queryByText(/(?:USD|\$)/)).not.toBeInTheDocument()
+    expect(within(block).queryByText(/(?:SAR|ر\.س)/)).not.toBeInTheDocument()
     expect(within(block).getByText(/1,000|1\.0K|1K/)).toBeInTheDocument()
   })
 
@@ -240,7 +240,7 @@ describe('CreativeDetailPage', () => {
     const figures = await screen.findByText('Spend')
     const block = figures.closest('div') as HTMLElement
 
-    expect(within(block).getByText(/412\.50 USD/)).toBeInTheDocument()
+    expect(within(block).getByText(/412\.50 \$/)).toBeInTheDocument()
     expect(within(block).queryByText(/Not provided/i)).not.toBeInTheDocument()
   })
 
@@ -263,7 +263,7 @@ describe('CreativeDetailPage', () => {
     const label = await screen.findByText('Revenue')
     const block = label.closest('div') as HTMLElement
 
-    expect(within(block).getByText(/1,980\.25 USD/)).toBeInTheDocument()
+    expect(within(block).getByText(/1,980\.25 \$/)).toBeInTheDocument()
   })
 
   /**
@@ -551,15 +551,13 @@ describe('CreativeDetailPage', () => {
   })
 
   /** Changing the period rewrites the address and refetches — a control that changes the answer. */
-  it('refetches when the period changes and puts it in the address', async () => {
-    render()
+  it('reads its window from the one period control (DATE-RANGE-001), not two bare date fields', async () => {
+    render('/app/content/cr-1?from=2026-07-01&to=2026-08-06')
     await screen.findByText('Hero image')
 
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-07-01' } })
-
-    await waitFor(() =>
-      expect(mocked).toHaveBeenCalledWith('cr-1', { from: '2026-07-01', to: '2026-08-06' }),
-    )
+    expect(screen.getByTestId('creative-date-range')).toBeInTheDocument()
+    expect(screen.queryByLabelText('From')).toBeNull()
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('cr-1', { from: '2026-07-01', to: '2026-08-06' }))
   })
 
   /** The lineage a reader needs to trust the numbers, on the page rather than in a tooltip. */

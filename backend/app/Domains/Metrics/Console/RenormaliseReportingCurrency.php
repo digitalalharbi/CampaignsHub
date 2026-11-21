@@ -113,6 +113,8 @@ final class RenormaliseReportingCurrency extends Command
                                 'value' => null,
                                 'converted_amount' => null,
                                 'exchange_rate' => null,
+                                'rate_date' => null,
+                                'rate_source' => null,
                                 'project_currency' => $target,
                             ]);
                         }
@@ -128,6 +130,10 @@ final class RenormaliseReportingCurrency extends Command
                             'value' => $amount,
                             'converted_amount' => $amount,
                             'exchange_rate' => $resolved['rate'],
+                            // MONEY-CURRENCY-NEVER-ASSUMED-001 — the same provenance ingest writes: which
+                            // publication, on which day, so a re-stated figure traces back like a fresh one.
+                            'rate_date' => $resolved['rate_date'],
+                            'rate_source' => $resolved['source'],
                             'project_currency' => $target,
                         ]);
                     }

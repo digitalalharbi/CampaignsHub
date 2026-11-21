@@ -6,13 +6,20 @@ use App\Console\Commands\MailDiagnoseCommand;
 use App\Console\Commands\ProvisionAgencyCommand;
 use App\Console\Commands\ProvisionPlatformCommand;
 use App\Console\Commands\SallaReviewCommand;
+use App\Domains\Access\Middleware\EnforceSectionAccess;
 use App\Domains\Accounts\Middleware\EnsureCapability;
 use App\Domains\Accounts\Middleware\EnsureEntitlement;
 use App\Domains\Agents\Console\PurgeAgentChat;
 use App\Domains\Agents\Console\RunAgentRoutines;
+use App\Domains\Agents\Http\Middleware\ConfineMcpTokens;
 use App\Domains\Alerts\Console\EvaluateAlerts;
+use App\Domains\Alerts\Console\ReevaluateDataArrivalAlerts;
+use App\Domains\Analytics\Console\BuildAnalyticsSnapshotsCommand;
 use App\Domains\Automation\Console\EvaluateAutomationRules;
+use App\Domains\Billing\Console\RedactWebhookSecretsCommand;
+use App\Domains\Campaigns\Console\BackfillCreativeCoversCommand;
 use App\Domains\Campaigns\Console\ContentDefectCensusCommand;
+use App\Domains\Campaigns\Console\ReclassifyObjectivesCommand;
 use App\Domains\Campaigns\Console\ReconcileContentMetricsCommand;
 use App\Domains\Campaigns\Console\RefreshCreativeCoversCommand;
 use App\Domains\Campaigns\Console\SnapchatLpvProvenanceCommand;
@@ -20,7 +27,10 @@ use App\Domains\Commerce\Console\PurgeUninstalledStoresCommand;
 use App\Domains\Commerce\Console\SyncStoresCommand;
 use App\Domains\Delivery\Console\PrepareWeeklyPacks;
 use App\Domains\Delivery\Console\RemindDeliveryReviewers;
+use App\Domains\Funding\Console\ConvertSpendLimitsCommand;
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Middleware\EnsureAccountActive;
+use App\Domains\Identity\Middleware\EnsureTwoFactorPassed;
 use App\Domains\Identity\Middleware\RejectRevokedSessions;
 use App\Domains\Integrations\Console\AcceptStructureSyncCommand;
 use App\Domains\Integrations\Console\AccountOwnershipAuditCommand;
@@ -28,28 +38,58 @@ use App\Domains\Integrations\Console\CloseAbandonedSyncRunsCommand;
 use App\Domains\Integrations\Console\DiagnoseSyncCommand;
 use App\Domains\Integrations\Console\DiscoveryRefreshCommand;
 use App\Domains\Integrations\Console\GoogleAdsAccessCommand;
+use App\Domains\Integrations\Console\IdentityRefreshCommand;
 use App\Domains\Integrations\Console\MetaAppAuditCommand;
 use App\Domains\Integrations\Console\MetaCandidateStatusCommand;
+use App\Domains\Integrations\Console\MetaDiagnoseCommand;
 use App\Domains\Integrations\Console\MetaSyncProbeCommand;
 use App\Domains\Integrations\Console\ProbeInsightsCommand;
 use App\Domains\Integrations\Console\PruneRawPayloadsCommand;
 use App\Domains\Integrations\Console\QuarantineSandboxRowsCommand;
+use App\Domains\Integrations\Console\ReconcileWebhooksCommand;
 use App\Domains\Integrations\Console\RefreshAdPlatformTokensCommand;
 use App\Domains\Integrations\Console\ResyncWindowCommand;
 use App\Domains\Integrations\Console\ScopeAuditCommand;
 use App\Domains\Integrations\Console\ScopeCleanupCommand;
+use App\Domains\Integrations\Console\SpendReconcileCommand;
+use App\Domains\Integrations\Console\SweepAbandonedConnectionsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use App\Domains\Integrations\Console\SyncAdPlatformStructureCommand;
+use App\Domains\Integrations\Console\SyncCensusCommand;
+use App\Domains\Integrations\Console\UnboundEstateReportCommand;
 use App\Domains\Integrations\Measurement\Console\SyncMeasurementCommand;
+use App\Domains\Metrics\Console\AudienceBreakdownProbeCommand;
+use App\Domains\Metrics\Console\FxConversionReportCommand;
+use App\Domains\Metrics\Console\FxMonitorCommand;
 use App\Domains\Metrics\Console\ImportCurrencyRatesCommand;
+use App\Domains\Metrics\Console\MoneyCurrencyAuditCommand;
 use App\Domains\Metrics\Console\RenormaliseReportingCurrency;
+use App\Domains\Notifications\Console\BackfillBellKind;
+use App\Domains\Notifications\Console\ConfirmMailDelivery;
+use App\Domains\Notifications\Console\EnrolMembers;
+use App\Domains\Notifications\Console\FlushDeferredPush;
+use App\Domains\Notifications\Console\GenerateVapidKeys;
+use App\Domains\Notifications\Console\MailPreviewCommand;
 use App\Domains\Notifications\Console\RenderMailPreviews;
+use App\Domains\Notifications\Console\RetryFailedDigests;
 use App\Domains\Notifications\Console\SendAlerts;
 use App\Domains\Notifications\Console\SendDailyDigests;
+use App\Domains\Notifications\Console\SendMailGallery;
+use App\Domains\Notifications\Console\SendSpendSummaries;
+use App\Domains\Notifications\Engine\Http\Middleware\EnsurePlanFeature;
+use App\Domains\Ops\Console\PerfCheckCommand;
+use App\Domains\Ops\Console\PerfSnapshotCommand;
+use App\Domains\Ops\Console\ProfileLiveReportCommand;
+use App\Domains\Ops\Performance\RecordRequestTiming;
 use App\Domains\Platform\Console\BackupCommand;
+use App\Domains\Platform\Console\SweepPlatformPaymentAlerts;
+use App\Domains\Projects\Lifecycle\Console\ApplyArchiveEffectsCommand;
+use App\Domains\Projects\Lifecycle\Console\ProjectSnapshotCommand;
+use App\Domains\Projects\Lifecycle\Console\PurgeExpiredProjectsCommand;
 use App\Domains\Projects\Middleware\RequireProjectCapability;
 use App\Domains\Projects\Middleware\ResolveProject;
 use App\Domains\Projects\Middleware\WithholdMoneyForMember;
+use App\Domains\Reports\Console\DedupeReportSchedulesCommand;
 use App\Domains\Reports\Console\DispatchScheduledReports;
 use App\Domains\Reports\Console\DownloadCheckCommand;
 use App\Domains\Reports\Console\InvalidateLegacyExportsCommand;
@@ -57,6 +97,7 @@ use App\Domains\Reports\Console\PdfFactsCommand;
 use App\Domains\Reports\Console\RegenerateDemoExportsCommand;
 use App\Domains\Reports\Console\RenderAcceptanceExportCommand;
 use App\Domains\Reports\Console\ReportsHealthCommand;
+use App\Domains\Reports\Console\ReportSourceIsolationAuditCommand;
 use App\Domains\Reports\Console\ShareCardCheckCommand;
 use App\Domains\Requests\Console\EvaluateSla;
 use App\Domains\Requests\Console\PruneUploadSessions;
@@ -67,10 +108,12 @@ use App\Domains\Tenancy\Middleware\EnsurePlatformAdmin;
 use App\Domains\Tenancy\Middleware\EnsurePortal;
 use App\Domains\Tenancy\Middleware\ResolveMembership;
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\CacheReadResponse;
 use App\Http\Middleware\CompressJsonResponses;
 use App\Http\Middleware\ConditionalThrottle;
 use App\Http\Middleware\NoStoreApiResponses;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\TrustProxies;
 use App\Support\ApiResponse;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -82,6 +125,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\TrustProxies as FrameworkTrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\AuthenticateSession;
@@ -100,6 +144,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withCommands([
+        // PROJECT-LIFECYCLE-001 — ops: id-scoped, dry-run by default, never delete.
+        ApplyArchiveEffectsCommand::class,
+        ProjectSnapshotCommand::class,
+        // N2 — the trash's retention job (dry run by default; the scheduler passes --apply).
+        PurgeExpiredProjectsCommand::class,
         InvalidateLegacyExportsCommand::class,
         RegenerateDemoExportsCommand::class,
         DownloadCheckCommand::class,
@@ -107,23 +156,41 @@ return Application::configure(basePath: dirname(__DIR__))
         PdfFactsCommand::class,
         RenderAcceptanceExportCommand::class,
         ReportsHealthCommand::class,
+        ReportSourceIsolationAuditCommand::class,
         DispatchScheduledReports::class,
+        DedupeReportSchedulesCommand::class,
         PruneUploadSessions::class,
         EvaluateSla::class,
         EvaluateAlerts::class,
+        ReevaluateDataArrivalAlerts::class,
         EvaluateAutomationRules::class,
         RunAgentRoutines::class,
         // MAIL-003 — the hourly sweep that sends each recipient their digest at their own local hour.
         SendDailyDigests::class,
+        RetryFailedDigests::class,
+        // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق», to workspace readers and to recipients outside the platform.
+        SendSpendSummaries::class,
+        // NOTIF-BELL-001 — names the old bell rows; manual, run once after the migration.
+        BackfillBellKind::class,
+        // NOTIF-PUSH-001 — a VAPID pair printed to the console (nothing written), and the quiet-hours summary sweep.
+        GenerateVapidKeys::class,
+        FlushDeferredPush::class,
+        // NOTIFICATION-ENROLMENT-001 — manual only, dry-run by default: enrolling a person starts mailing them.
+        EnrolMembers::class,
+        ConfirmMailDelivery::class,
         // MAIL-006 — the alert sweep, for the findings that should not wait until tomorrow morning.
         SendAlerts::class,
         PrepareWeeklyPacks::class,
         RemindDeliveryReviewers::class,
         PurgeAgentChat::class,
         RefreshCreativeCoversCommand::class,
+        BackfillCreativeCoversCommand::class,
         // MAIL-008 — every email type rendered to a file, which is the only way to review them
         // until SMTP credentials exist.
         RenderMailPreviews::class,
+        SendMailGallery::class,
+        // EMAIL-RTL-001 — one mailable, one language, one file.
+        MailPreviewCommand::class,
         // INTEG-SYNC-001 — the sweep that drives synced data, the token refresh that runs ahead of
         // need, and the retention that keeps raw payloads from becoming the largest table here.
         SyncAdPlatformsCommand::class,
@@ -143,6 +210,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // ACCOUNT-SCOPE-ISOLATION-001 — read-only: per project and grain, which ad accounts the stored
         // rows belong to, classified against the project's bindings. Writes nothing.
         ScopeAuditCommand::class,
+        SpendReconcileCommand::class,
+        // PERF-RECOVERY-001 — read-only: Production's load in one place, and the check that logs a degradation.
+        PerfSnapshotCommand::class,
+        PerfCheckCommand::class,
+        ProfileLiveReportCommand::class,
+        SyncCensusCommand::class,
         AccountOwnershipAuditCommand::class,
         // ACCOUNT-SCOPE-ISOLATION-001 — the two WRITE paths of the cleanup, dry-run unless --apply. Neither
         // is reachable from the read-only diagnostics workflow.
@@ -153,8 +226,11 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileContentMetricsCommand::class,
         ContentDefectCensusCommand::class,
         SnapchatLpvProvenanceCommand::class,
+        // OBJECTIVE-RECLASSIFY-RUN-001 — the Owner-approved reclassification, dry run first.
+        ReclassifyObjectivesCommand::class,
         GoogleAdsAccessCommand::class,
         MetaAppAuditCommand::class,
+        MetaDiagnoseCommand::class,
         MetaSyncProbeCommand::class,
         RenormaliseReportingCurrency::class,
         // INTEG-RUNTIME §7 — asks the provider over a chosen window and stores nothing, which is what
@@ -165,8 +241,15 @@ return Application::configure(basePath: dirname(__DIR__))
         // A run whose worker vanished is closed here: `failed()` only fires when the QUEUE knows the
         // job died, so a SIGKILL or an OOM leaves the row «running» with no upper bound at all.
         CloseAbandonedSyncRunsCommand::class,
+        // INTEG-SOURCE-REMOVAL-001 / INTEG-PROVIDER-IDENTITY-001.
+        SweepAbandonedConnectionsCommand::class,
+        UnboundEstateReportCommand::class,
+        IdentityRefreshCommand::class,
         // COMMERCE-001 — the store sweep: products, customers, orders and abandoned carts.
         SyncStoresCommand::class,
+        // ANALYTICS-DATA-001 — queues the per-project pre-aggregation of the analytics sections (bounded, one job per project).
+        BuildAnalyticsSnapshotsCommand::class,
+        ReconcileWebhooksCommand::class,
         PurgeUninstalledStoresCommand::class,
         // GA4-INTEGRATION-001 — the measurement sweep: a selected Analytics property's days, in the
         // property's own calendar. Only properties somebody bound to a project are read.
@@ -174,6 +257,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // FX-FEED-001 — the exchange rates the conversions need. Registered even though no source
         // ships configured: the day an operator sets one, the schedule already exists.
         ImportCurrencyRatesCommand::class,
+        FxMonitorCommand::class,
+        // FX-APPLY-001 — read-only, count-only post-deploy check: raw vs converted spend per non-USD account (anonymous indexes).
+        FxConversionReportCommand::class,
+        // MONEY-CURRENCY-NEVER-ASSUMED-001 — read-only: accounts with no currency, money whose currency differs
+        // from its account, money with no currency, pairs with no rate. Masked ids, no names, no amounts.
+        MoneyCurrencyAuditCommand::class,
+        AudienceBreakdownProbeCommand::class,
         // PROD-001 — a backup that either happens or says it did not, plus its verification half.
         BackupCommand::class,
         // PROD-PROVISION-001 — the reference data a production install cannot work without, and
@@ -187,10 +277,22 @@ return Application::configure(basePath: dirname(__DIR__))
         ReconcileAdAccountSeats::class,
         // PAY-RECONCILE-001 — settles a payment the gateway took when its webhook was dropped after the gateway's retries.
         ReconcileSubscriptionPayments::class,
+        // PAY-WEBHOOK-SECRET-REDACT-001 — dry run by default; `--apply` on Production only with the Owner's approval.
+        RedactWebhookSecretsCommand::class,
+        // ONE-BUDGET-001 — spend limits become thresholds of the approved budget; dry run unless --apply.
+        ConvertSpendLimitsCommand::class,
+        // PLATFORM-PAYMENT-ALERTS-001 — abandoned checkouts, unverified payments, mismatches and blocking errors, for the owner.
+        SweepPlatformPaymentAlerts::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie authentication for the decoupled React frontend.
         $middleware->statefulApi();
+
+        /*
+         * EDGE-CLIENT-IP-001 — the real client address behind Caddy and the frontend nginx. Only the proxies in
+         * `security.trusted_proxies`, only `X-Forwarded-For`. See App\Http\Middleware\TrustProxies.
+         */
+        $middleware->replace(FrameworkTrustProxies::class, TrustProxies::class);
 
         /*
          * The sandbox gateway's confirm form (PAY-SANDBOX-001).
@@ -214,6 +316,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'api/v1/payments/sandbox/*',
             'api/v1/webhooks/*',
+            // EMAIL-GAPS — RFC 8058: a mail provider's POST has no session and no CSRF token. The token in the path is the authority.
+            'mail/unsubscribe/*',
+            'n/confirm/*',
+            'n/u/*', // NOTIF-V2-EXTERNAL-001: one-click unsubscribe (RFC 8058 POST from the mail client)
         ]);
 
         /*
@@ -249,6 +355,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prepend(NoStoreApiResponses::class);
 
         $middleware->api(prepend: [
+            RecordRequestTiming::class,
             AssignRequestId::class,
             SetLocale::class,
         ]);
@@ -263,9 +370,15 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->api(append: [
             RejectRevokedSessions::class,
+            // TWO-STEP-001 — a session for a person with a second step on must have passed it.
+            EnsureTwoFactorPassed::class,
             EnsureAccountActive::class,
+            // MCP-SCOPE-001 — a connector token (Claude, ChatGPT…) opens /api/v1/mcp and nothing else.
+            ConfineMcpTokens::class,
             // MEMBER-VISIBILITY-001 — strips money from a project-scoped answer when the membership withholds it.
             WithholdMoneyForMember::class,
+            // ACCESS-SECTIONS-001 — a section switched off for this member answers 403 on every one of its routes.
+            EnforceSectionAccess::class,
         ]);
 
         /*
@@ -306,7 +419,11 @@ return Application::configure(basePath: dirname(__DIR__))
              */
             'project.can' => RequireProjectCapability::class,
             'entitlement' => EnsureEntitlement::class,
+            // NOTIF-V2-ENGINE-001 — a notifications plan key (spec §1): reads pass unless off, writes need a usable key.
+            'plan.feature' => EnsurePlanFeature::class,
             'throttle' => ConditionalThrottle::class,
+            // ANALYTICS-READ-CACHE-001 — a short per-person cache of a heavy GET read.
+            'read.cache' => CacheReadResponse::class,
         ]);
 
         // Ensure tenant (then project) is resolved BEFORE route-model binding, so the global scopes
@@ -323,6 +440,8 @@ return Application::configure(basePath: dirname(__DIR__))
             ResolveProject::class,
             // The capability check needs the project context `ResolveProject` sets, so it follows it.
             RequireProjectCapability::class,
+            // After the tenant is bound, before any model is bound: a closed section reveals nothing about a record.
+            EnforceSectionAccess::class,
             SubstituteBindings::class,
             Authorize::class,
         ]);
@@ -353,6 +472,15 @@ return Application::configure(basePath: dirname(__DIR__))
                     $e->errors(),
                     status: 422,
                 ),
+                // TWO-STEP-001 — a guest holding a pending second step is told what is missing, so the page can ask for it.
+                $e instanceof AuthenticationException && EstablishSession::pending($request) !== null => ApiResponse::error(
+                    __('auth.two_factor_required'), null, ['two_factor_required' => true], 401,
+                ),
+                // MCP-OAUTH-001 — a refused MCP call names where to sign in: that header is how Claude and ChatGPT start «سماح».
+                // Here and not in a route middleware, because `auth:sanctum` is sorted ahead of any middleware and throws.
+                $e instanceof AuthenticationException && $request->is('api/v1/mcp') => ApiResponse::error(
+                    __('api.unauthenticated'), status: 401,
+                )->header('WWW-Authenticate', 'Bearer resource_metadata="'.rtrim((string) config('services.mcp.url', 'https://mcp.campaignshub.io'), '/').'/.well-known/oauth-protected-resource"'),
                 $e instanceof AuthenticationException => ApiResponse::error(
                     __('api.unauthenticated'), status: 401,
                 ),

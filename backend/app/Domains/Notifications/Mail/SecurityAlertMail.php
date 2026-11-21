@@ -7,6 +7,7 @@ namespace App\Domains\Notifications\Mail;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -54,7 +55,7 @@ final class SecurityAlertMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'CampaignsHub — '.$this->words()['subject']);
+        return new Envelope(subject: MailSubject::of($this->words()['subject'], $this->lang === 'ar'));
     }
 
     public function content(): Content
@@ -143,25 +144,25 @@ final class SecurityAlertMail extends Mailable
             self::PASSWORD_CHANGED => $ar ? [
                 'subject' => 'تغيّرت كلمة المرور',
                 'title' => 'تغيّرت كلمة المرور لحسابك',
-                'detail' => 'أصبحت كلمة المرور الجديدة سارية، والجلسات المفتوحة على الأجهزة الأخرى انتهت.',
-                'reassurance' => 'إذا كنت أنت من غيّرها، فلا حاجة لأي إجراء. وإذا لم تكن أنت، أعد تعيين كلمة المرور فورًا وراجع الأجهزة المرتبطة بحسابك.',
+                'detail' => 'تم تغيير كلمة مرورك، وانتهت الجلسات المفتوحة على الأجهزة الأخرى.',
+                'reassurance' => 'إذا كنت أنت من غيّرها، فلا حاجة لأي إجراء. وإن لم تكن أنت، أعد تعيين كلمة المرور فورًا وراجع الأجهزة المرتبطة بحسابك.',
             ] : [
                 'subject' => 'Your password was changed',
                 'title' => 'Your account password was changed',
-                'detail' => 'The new password is now in use, and sessions on other devices have been ended.',
-                'reassurance' => 'If this was you, there is nothing to do. If it was not, reset your password immediately and review the devices connected to your account.',
+                'detail' => 'Your password was changed, and sessions on other devices were ended.',
+                'reassurance' => 'If this was you, there is nothing to do. If not, reset your password immediately and review the devices connected to your account.',
             ],
 
             default => $ar ? [
                 'subject' => 'تسجيل دخول جديد إلى حسابك',
                 'title' => 'تسجيل دخول جديد إلى حسابك',
-                'detail' => 'سُجّل دخول إلى حسابك من جهاز لم نره من قبل.',
-                'reassurance' => 'إذا كنت أنت، فلا حاجة لأي إجراء. وإذا لم تكن أنت، غيّر كلمة المرور الآن وأنهِ الجلسات المفتوحة من صفحة الأمان.',
+                'detail' => 'سُجّل دخول إلى حسابك من جهاز جديد.',
+                'reassurance' => 'إذا كنت أنت، فلا حاجة لأي إجراء. وإن لم تكن أنت، غيّر كلمة المرور الآن وأنهِ الجلسات المفتوحة من صفحة الأمان.',
             ] : [
                 'subject' => 'A new sign-in to your account',
                 'title' => 'A new sign-in to your account',
-                'detail' => 'Somebody signed in to your account from a device we have not seen before.',
-                'reassurance' => 'If this was you, there is nothing to do. If it was not, change your password now and end the open sessions from your security page.',
+                'detail' => 'Somebody signed in to your account from a new device.',
+                'reassurance' => 'If this was you, there is nothing to do. If not, change your password now and end the open sessions from your security page.',
             ],
         };
     }

@@ -38,12 +38,12 @@ final class ProviderDisplayName
         'salla' => ['ar' => 'سلة', 'en' => 'Salla'],
         'zid' => ['ar' => 'زد', 'en' => 'Zid'],
         /*
-         * GA4-INTEGRATION-001 — last in this list because the list is ordered by SPEND, and GA4
+         * GA4-INTEGRATION-001 — last in this list because the list is ordered by SPEND, and the website
          * carries none: it is a measurement source, not a place anybody buys advertising.
          * `ProviderKind::Measurement` is what keeps it out of the paid-media grouping; this map
          * only gives it a name.
          */
-        'ga4' => ['ar' => 'جوجل أناليتكس 4', 'en' => 'Google Analytics 4'],
+        'ga4' => ['ar' => 'الموقع', 'en' => 'Website'],
     ];
 
     /**

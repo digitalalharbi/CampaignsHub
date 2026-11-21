@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, seededProject, switchToEnglish, selectProject } from './helpers'
+import { AUTH, openCampaignBuilder, seededProject, switchToEnglish, selectProject } from './helpers'
 
 /**
  * Core campaigns paths (authenticated as the demo owner via reused storage state).
@@ -11,7 +11,23 @@ import { AUTH, seededProject, switchToEnglish, selectProject } from './helpers'
  * is one click away. Every spec that works with cards goes through here.
  */
 async function openCardsView(page: import('@playwright/test').Page) {
+  /*
+   * LOST-CLICK-001 — the switcher is clicked once the page above it has stopped changing shape.
+   *
+   * The view switcher sits under the KPI cards and the budget strip, and both change height as their requests answer:
+   * values replace dashes, and the strip's notes wrap onto a second line. A click sent in that window can put its
+   * `mousedown` on «Cards» and its `mouseup` on whatever moved under the pointer, and then the browser fires no
+   * `click`. Playwright checks only the first event of a click against its target, so the click «succeeded». The
+   * firefox gate on #1025 showed it: the screenshot was still on Overview, and the page made no further request for
+   * 20 s.
+   *
+   * `networkidle` is the state that matters here. Every block above the switcher is drawn from an answer, and once
+   * nothing is in flight nothing above it will move. The assertion after the click turns a lost click into a failure
+   * at the click, not a missing card twenty seconds later.
+   */
+  await page.waitForLoadState('networkidle')
   await page.getByTestId('view-cards').click()
+  await expect(page.getByTestId('view-cards'), 'the Cards view switch did not take').toHaveAttribute('aria-pressed', 'true')
 
   /*
    * Wait for the view to BE the cards view before anybody clicks a card in it.
@@ -92,8 +108,7 @@ test('create a unified campaign and see it in the list', async ({ page }) => {
   // A demo project is auto-selected by the switcher. The page opens on the overview, which renders four
   // charts — wait for the view switcher to be interactive before clicking anything, otherwise a slow
   // parallel run can time out on a button that is still behind chart layout work.
-  await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
-  await page.getByRole('button', { name: /New campaign|حملة جديدة/ }).click()
+  await openCampaignBuilder(page)
 
   const name = `E2E Campaign ${Date.now()}`
   await page.getByLabel(/Campaign name|اسم الحملة/).fill(name)
@@ -137,7 +152,8 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
    * resolved. So the wait is now on the settled COMPONENT — Playwright polls until the chart is
    * there — rather than on one packet arriving.
    */
-  await page.getByRole('tab', { name: /Performance|الأداء/ }).click()
+  // CAMPAIGN-PAGE-LEAN-001 — the performance charts are read on the overview now; an old `?tab=performance` lands there.
+  await page.goto(`${page.url().split('?')[0]}?tab=performance`)
 
   /*
    * The tab lives in the URL (`?tab=`), so this is asserted BEFORE the chart.
@@ -152,6 +168,7 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
    * rather than guessed at here.
    */
   await expect(page).toHaveURL(/[?&]tab=performance/)
+  await expect(page.getByRole('tab', { name: /Overview|نظرة عامة/ })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByText(/الإنفاق مقابل الإيرادات|Spend vs revenue/)).toBeVisible()
 
   // Platforms tab lists linked external campaigns (or an empty state).
@@ -219,6 +236,17 @@ test('the campaigns overview paces the portfolio budget', async ({ page }) => {
      */
     // Three refusals now, each naming its fact: no comparable budget, different currencies, or a
     // window nobody measured (Owner directive 2026-10-09 §19) — never a blank row.
-    await expect(refusal).toContainText(/comparable budget|currencies|measured|الميزانية|عملات|مقاسة/)
+    /*
+     * ONE-BUDGET-001 (builder H) — the line now reads the project's ONE approved budget (`ApprovedBudgetPacing`, same
+     * test ids). A project with none says so in its own words, «No budget / بدون ميزانية», and offers «Add budget»; it
+     * never falls back to a platform's campaign budget. That is a fourth named fact, asserted as one: the words AND the
+     * offer, not a blank row.
+     */
+    await expect(refusal).toContainText(/No budget|بدون ميزانية|comparable budget|currencies|measured|الميزانية|عملات|مقاسة/)
+    if (/No budget|بدون ميزانية/.test(await refusal.innerText())) {
+      await expect(refusal.getByTestId('no-budget')).toBeVisible()
+      // The owner may add one, so the offer is there — a refusal that names the fact and the way out.
+      await expect(refusal.getByTestId('no-budget-add')).toBeVisible()
+    }
   }
 })

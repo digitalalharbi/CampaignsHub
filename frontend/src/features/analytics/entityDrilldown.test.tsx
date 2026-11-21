@@ -59,7 +59,8 @@ describe('drilling from an ad set into its ads', () => {
 
   async function openAdSets() {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
-    fireEvent.click(await screen.findByRole('tab', { name: 'Ad sets' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
+    fireEvent.click(await screen.findByRole('tab', { name: 'Ad groups' }))
   }
 
   /** Unnarrowed, the request carries no parent at all — not an empty one. */
@@ -96,7 +97,7 @@ describe('drilling from an ad set into its ads', () => {
     fireEvent.click(await screen.findByTestId('drill-into-s1'))
 
     const crumb = await screen.findByTestId('drill-crumb-ad_set')
-    expect(crumb).toHaveTextContent('Ad set:')
+    expect(crumb).toHaveTextContent('Ad group:')
     expect(crumb).toHaveTextContent('Riyadh · 18-34')
   })
 
@@ -156,7 +157,8 @@ describe('drilling from an ad set into its ads', () => {
     await screen.findByTestId('drill-crumb-ad_set')
 
     urls.length = 0
-    fireEvent.click(screen.getByRole('tab', { name: 'Ad sets' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Ad groups' }))
 
     await waitFor(() => {
       expect(entityCalls().some((u) => u.includes('/entities/ad_set'))).toBe(true)

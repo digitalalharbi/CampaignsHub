@@ -262,6 +262,7 @@ final class CreativeLibraryApiTest extends TestCase
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->getKey(),
             'project_id' => $this->project->getKey(),
+            'external_account_id' => $externalCampaign->external_account_id,
             'entity_type' => 'ad',
             'entity_id' => $ad->getKey(),
             'external_entity_id' => 'ad-1',

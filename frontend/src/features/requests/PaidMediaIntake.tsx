@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { briefCompletion } from './briefProgress'
+import { clearBriefDraft, isBlankDraft, loadBriefDraft, saveBriefDraft, type BriefDraft } from './briefDraft'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Copy, FileText, Paperclip, RotateCcw, X } from 'lucide-react'
@@ -25,6 +27,8 @@ import { toApiError } from '@/lib/api/client'
 import { DEFAULT_DIAL_CODE, PhoneField, phoneFieldValue } from '@/components/ui/PhoneField'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { withMark } from '@/lib/money/mark'
+import { uuid } from '@/lib/uuid'
 
 interface UploadFile {
   localId: string
@@ -79,15 +83,20 @@ export function PaidMediaIntake() {
   const paidType = metaQuery.data?.types.find((t) => t.module === 'paid_media')?.key ?? 'paid_media'
 
   // URL selections are the INITIAL state; the user edits from here (never re-picks from scratch).
-  const [selectedKeys, setSelectedKeys] = useState<string[]>(() => parseServices(searchParams.get('services')))
-  const [answers, setAnswers] = useState<Record<string, unknown>>({})
-  const [customRequest, setCustomRequest] = useState('')
-  const [serviceNotes, setServiceNotes] = useState<Record<string, string>>({})
+  // OPS-1 — a draft kept on this device restores the brief; a `?services=` link still wins for the services.
+  const [draft0] = useState<BriefDraft | null>(() => loadBriefDraft())
+  const [selectedKeys, setSelectedKeys] = useState<string[]>(() => {
+    const fromUrl = parseServices(searchParams.get('services'))
+    return fromUrl.length ? fromUrl : (draft0?.selectedKeys ?? [])
+  })
+  const [answers, setAnswers] = useState<Record<string, unknown>>(() => draft0?.answers ?? {})
+  const [customRequest, setCustomRequest] = useState(() => draft0?.customRequest ?? '')
+  const [serviceNotes, setServiceNotes] = useState<Record<string, string>>(() => draft0?.serviceNotes ?? {})
   // Goal-first: the full catalogue stays hidden until asked for (see the bundle section below).
   const [showCatalog, setShowCatalog] = useState(false)
-  const [applicant, setApplicant] = useState<Applicant>(EMPTY_APPLICANT)
-  const [currency, setCurrency] = useState('SAR')
-  const [notes, setNotes] = useState('')
+  const [applicant, setApplicant] = useState<Applicant>(() => ({ ...EMPTY_APPLICANT, ...(draft0?.applicant ?? {}) }))
+  const [currency, setCurrency] = useState(() => draft0?.currency ?? 'SAR')
+  const [notes, setNotes] = useState(() => draft0?.notes ?? '')
   const [step, setStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -112,6 +121,21 @@ export function PaidMediaIntake() {
   const trackingFields = groupFields(needs, 'tracking')
   const contentFields = groupFields(needs, 'content').filter((f) => f.control !== 'files')
   const hasFileField = fieldsForNeeds(needs).some((f) => f.control === 'files')
+
+  // OPS-1 — completion from the visible form, and a debounced save of the draft on this device.
+  const completion = briefCompletion({
+    selectedCount: resolvedKeys.length,
+    applicant,
+    fields: [...briefFields, ...trackingFields, ...contentFields],
+    answers,
+  })
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  useEffect(() => {
+    const draft: BriefDraft = { selectedKeys, answers, customRequest, serviceNotes, applicant, currency, notes }
+    if (isBlankDraft(draft)) return
+    const t = window.setTimeout(() => { if (saveBriefDraft(draft)) setSavedAt(Date.now()) }, 600)
+    return () => window.clearTimeout(t)
+  }, [selectedKeys, answers, customRequest, serviceNotes, applicant, currency, notes])
 
   // Dynamic step list — group steps appear only when they carry at least one required field.
   const stepKeys: StepKey[] = [
@@ -161,7 +185,7 @@ export function PaidMediaIntake() {
     const token = await ensureSession()
     if (!token) return
     for (const file of selected) {
-      const localId = crypto.randomUUID()
+      const localId = uuid()
       setFiles((prev) => [...prev, { localId, name: file.name, size: file.size, status: 'uploading', pct: 0, file }])
       await uploadOne(token, localId, file)
     }
@@ -273,6 +297,7 @@ export function PaidMediaIntake() {
   }
 
   if (mutation.isSuccess && mutation.data) {
+    clearBriefDraft()
     const r = mutation.data
     const trackUrl = `${window.location.origin}/requests/track?token=${r.tracking_token}`
     return <PaidSuccessView reference={r.reference} type={r.type} trackUrl={trackUrl} ar={ar} dir={dir} />
@@ -378,6 +403,22 @@ export function PaidMediaIntake() {
           ))}
         </ol>
 
+        {/* OPS-1 — one bar: how much of the brief is done, and that it is kept if the tab closes. */}
+        <div className="mt-4 flex items-center gap-3" data-testid="brief-progress">
+          <div
+            role="progressbar"
+            aria-label={copy.progress}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={completion.percent}
+            className="h-2 flex-1 overflow-hidden rounded-full bg-surface-secondary"
+          >
+            <div className="h-full rounded-full bg-brand-600 transition-[width]" style={{ width: `${completion.percent}%` }} />
+          </div>
+          <span className="tnum text-xs font-semibold text-text-secondary" dir="ltr">{completion.percent}%</span>
+          {savedAt !== null && <span className="text-[11px] text-text-muted" data-testid="brief-autosaved">{copy.autosaved}</span>}
+        </div>
+
         <div className="mt-6 rounded-2xl border border-border bg-surface p-5 sm:p-6">
           {/* ---- Services ---- */}
           {currentKey === 'services' && (
@@ -431,7 +472,7 @@ export function PaidMediaIntake() {
                               <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 ${active ? 'border-brand-600 bg-brand-600 text-white' : 'border-border-strong'}`}>
                                 {active && <Check size={9} strokeWidth={3.5} />}
                               </span>
-                              <span className="text-[13px] font-bold text-text-primary">{ar ? b.titleAr : b.titleEn}</span>
+                              <span className="text-xs font-bold text-text-primary">{ar ? b.titleAr : b.titleEn}</span>
                             </span>
                             <span className="mt-1 text-[11px] leading-snug text-text-secondary">{ar ? b.forAr : b.forEn}</span>
                             <span className="mt-1.5 text-[11px] text-text-muted">
@@ -447,7 +488,7 @@ export function PaidMediaIntake() {
                       type="button"
                       data-testid="toggle-full-catalog"
                       onClick={() => setShowCatalog((v) => !v)}
-                      className="mt-3 text-[12px] font-semibold text-brand-600 hover:underline"
+                      className="mt-3 text-xs font-semibold text-brand-600 hover:underline"
                     >
                       {showCatalog
                         ? (ar ? 'إخفاء القائمة الكاملة' : 'Hide the full list')
@@ -618,7 +659,7 @@ export function PaidMediaIntake() {
                   if (!val) return null
                   return <Row key={f.token} k={ar ? f.labelAr : f.labelEn} v={String(val)} />
                 })}
-                {answers.budget ? <Row k={ar ? 'الميزانية' : 'Budget'} v={`${answers.budget as string} ${currency}`} /> : null}
+                {answers.budget ? <Row k={ar ? 'الميزانية' : 'Budget'} v={withMark(String(answers.budget), currency)} /> : null}
                 <Row k={copy.attachments} v={files.filter((f) => f.status === 'done').length ? files.filter((f) => f.status === 'done').map((f) => f.name).join(ar ? '، ' : ', ') : copy.none} />
               </dl>
 

@@ -102,7 +102,7 @@ describe('a finding card carries its figures, its action and its evidence', () =
     renderWithProviders(<RecommendationsPage />, { locale: 'en' })
 
     const impact = await screen.findByTestId('finding-impact')
-    expect(impact).toHaveTextContent('200 SAR')
+    expect(impact).toHaveTextContent('200 ر.س')
     expect(impact).toHaveTextContent(/in the limit’s currency/i)
   })
 
@@ -132,7 +132,7 @@ describe('a finding card carries its figures, its action and its evidence', () =
     renderWithProviders(<RecommendationsPage />, { locale: 'ar' })
 
     const card = await screen.findByTestId('finding-alert:a1')
-    expect(card).toHaveTextContent('تراجع العائد على الإنفاق')
+    expect(card).toHaveTextContent('تراجع معدل العائد')
     expect(within(card).getByTestId('finding-nature')).toHaveTextContent('مشكلة')
   })
 })

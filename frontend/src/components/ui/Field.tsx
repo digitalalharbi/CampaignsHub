@@ -19,18 +19,18 @@ export function Field({
   return (
     <div className="block">
       {label && (
-        <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-semibold text-text-secondary">
+        <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-bold text-text-primary">
           {label}
           {required && <span className="text-danger"> *</span>}
         </label>
       )}
       {children}
       {error ? (
-        <span className="mt-1.5 block text-[13px] text-danger" role="alert">
+        <span className="mt-1.5 block text-xs text-danger" role="alert">
           {error}
         </span>
       ) : hint ? (
-        <span className="mt-1.5 block text-[13px] text-text-muted">{hint}</span>
+        <span className="mt-1.5 block text-xs text-text-muted">{hint}</span>
       ) : null}
     </div>
   )

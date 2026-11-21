@@ -118,7 +118,7 @@ final class PortalDistinctnessTest extends TestCase
         $user = $this->member($tenant, 'agy@a.test', Portal::Agency);
 
         $this->actingAs($user, 'sanctum')->getJson('/api/v1/auth/memberships')
-            ->assertOk()->assertJsonPath('data.destination', '/agency');
+            ->assertOk()->assertJsonPath('data.destination', '/agency/dashboard');
 
         foreach (self::OWNED['agency'] as $endpoint) {
             $this->actingAs($user, 'sanctum')->getJson($endpoint)->assertOk();

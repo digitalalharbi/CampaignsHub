@@ -1,129 +1,151 @@
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-dom'
 import { NotFoundPage } from './NotFoundPage'
-import { LoginPage } from '@/features/auth/LoginPage'
-import { RegisterPage } from '@/features/auth/RegisterPage'
-import { AccountStatusPage } from '@/features/signup/AccountStatusPage'
-import { ForgotPasswordPage } from '@/features/auth/ForgotPasswordPage'
-import { ResetPasswordPage } from '@/features/auth/ResetPasswordPage'
-import { RequireAuth } from '@/features/auth/RequireAuth'
-import { CampaignDetailPage } from '@/features/campaigns/CampaignDetailPage'
-import { CampaignsPage } from '@/features/campaigns/CampaignsPage'
-import { AnalyticsPage } from '@/features/analytics/AnalyticsPage'
-import { RecommendationsPage } from '@/features/recommendations/RecommendationsPage'
-import { AgentCenterPage } from '@/features/agents/AgentCenterPage'
-import { AutomationPage } from '@/features/automation/AutomationPage'
-import { EntityWorkspacePage } from '@/features/campaigns/EntityWorkspacePage'
-import { LaunchPage } from '@/features/launch/LaunchPage'
-import { ApprovalsPage } from '@/features/agents/ApprovalsPage'
-import { FollowUpWorkspacePage } from '@/features/crm/FollowUpWorkspacePage'
-import { ExecutiveOpsPage } from '@/features/crm/ExecutiveOpsPage'
-import { LeadsPage } from '@/features/crm/LeadsPage'
-import { ReportsPage } from '@/features/reports/ReportsPage'
-import { SettingsPage } from '@/features/settings/SettingsPage'
-import { PublicReport } from '@/features/reports/PublicReport'
-import { PrintReport } from '@/features/reports/PrintReport'
-import { DesignSystemPage } from '@/features/design/DesignSystemPage'
-import { SettingsLayout } from '@/features/account/SettingsLayout'
-import { AccountSettingsLayout } from '@/features/account/AccountSettingsLayout'
-import { PreferencesPage } from '@/features/account/PreferencesPage'
-import { PersonalNotificationsPage } from '@/features/account/PersonalNotificationsPage'
-import { ProfilePage } from '@/features/account/ProfilePage'
-import { PasswordPage } from '@/features/account/PasswordPage'
-import { SecurityPage } from '@/features/account/SecurityPage'
-import { ProjectIntegrationsPage } from '@/features/projects/ProjectIntegrationsPage'
-import { ProjectsPage } from '@/features/projects/ProjectsPage'
-import { ProjectTeamPage } from '@/features/projects/ProjectTeamPage'
-import { SystemStatusPage } from '@/features/system/SystemStatusPage'
-import { PublicHomePage } from '@/features/marketing/PublicHomePage'
-import { PublicInfoPage } from '@/features/marketing/PublicInfoPage'
-import { DataDeletionPage } from '@/features/marketing/DataDeletionPage'
-import { PublicServicesPage } from '@/features/marketing/PublicServicesPage'
-import { RequestIntakePage } from '@/features/requests/RequestIntakePage'
-import { RequestTrackPage } from '@/features/requests/RequestTrackPage'
-import { ClientRequestsPage } from '@/features/requests/portal/ClientRequestsPage'
-import { ClientNewRequestPage } from '@/features/requests/portal/ClientNewRequestPage'
-import { ClientRequestDetailPage } from '@/features/requests/portal/ClientRequestDetailPage'
-import { ClientDashboardPage } from '@/features/requests/portal/ClientDashboardPage'
-import { ClientQuotesPage } from '@/features/requests/portal/ClientQuotesPage'
-import { ClientQuoteDetailPage } from '@/features/requests/portal/ClientQuoteDetailPage'
-import { ClientInvoicesPage } from '@/features/requests/portal/ClientInvoicesPage'
-import { ClientInvoiceDetailPage } from '@/features/requests/portal/ClientInvoiceDetailPage'
-import { ClientMessagesPage } from '@/features/requests/portal/ClientMessagesPage'
-import { ClientThreadPage } from '@/features/requests/portal/ClientThreadPage'
-import { ClientProfilePage } from '@/features/requests/portal/ClientProfilePage'
-import { ClientFilesPage } from '@/features/requests/portal/ClientFilesPage'
-import { ClientCampaignsPage } from '@/features/requests/portal/ClientCampaignsPage'
-import { ClientReportsPage } from '@/features/requests/portal/ClientReportsPage'
-import { ClientSpacePickerPage } from '@/features/requests/portal/ClientSpacePickerPage'
-import { ClientPortalHomePage } from '@/features/requests/portal/ClientPortalHomePage'
-import { VerifyEmailPage } from '@/features/onboarding/VerifyEmailPage'
-import { OnboardingWizard } from '@/features/onboarding/OnboardingWizard'
-import { OnboardingGate } from '@/features/onboarding/OnboardingGate'
-import { InviteAcceptPage } from '@/features/onboarding/InviteAcceptPage'
-import { RequestsDashboardPage } from '@/features/requests/RequestsDashboardPage'
-import { RequestDetailPage } from '@/features/requests/RequestDetailPage'
-import { ClientsPortfolioPage } from '@/features/clients/ClientsPortfolioPage'
-import { PortfolioPage } from '@/features/projects/PortfolioPage'
-import { ClientCommandCenterPage } from '@/features/clients/ClientCommandCenterPage'
-import { AlertsPage } from '@/features/alerts/AlertsPage'
-import { SpendLimitsPage } from '@/features/budget/SpendLimitsPage'
-import { DeliveryOverviewPage } from '@/features/clients/delivery/DeliveryOverviewPage'
-import { DevStatusPage } from '@/features/dev/DevStatusPage'
 import { billingRoutes } from '@/features/billing/billingRoutes'
 import { messagingRoutes } from '@/features/messaging/messagingRoutes'
 import { requestJourneyRoutes } from '@/features/requestJourney/requestJourneyRoutes'
 import { subscriptionsRoutes } from '@/features/subscriptions/subscriptionsRoutes'
 // Canonical pages (Integrations absorbs Connection Center + Drive connector; Branding lives under Settings).
-import { IntegrationsPage } from '@/features/integrations/IntegrationsPage'
-import { StoreInstallPage } from '@/features/integrations/StoreInstallPage'
-import { DrivePage } from '@/features/drive/DrivePage'
-import { ShortLinksPage } from '@/features/shortLinks/ShortLinksPage'
-import { FormsPage } from '@/features/forms/FormsPage'
-import { FormBuilderPage } from '@/features/forms/FormBuilderPage'
-import { PublicFormPage } from '@/features/forms/PublicFormPage'
-import { TasksPage } from '@/features/tasks/TasksPage'
-import { CreativesPage } from '@/features/content/CreativesPage'
-import { CreativeDetailPage } from '@/features/content/CreativeDetailPage'
-import { CreativeGroupsPage } from '@/features/content/CreativeGroupsPage'
-import { FilesLibraryPage } from '@/features/files/FilesLibraryPage'
-import { BrandingCenterPage } from '@/features/branding/BrandingCenterPage'
-import { AppShell } from '@/layouts/AppShell'
-import { AgencyShell } from '@/layouts/AgencyShell'
-import { AdminShell } from '@/layouts/AdminShell'
-import { RequirePlatformAdmin } from '@/features/admin/RequirePlatformAdmin'
-import { RequirePortal } from '@/features/auth/RequirePortal'
-import { PlatformOverviewPage } from '@/features/admin/PlatformOverviewPage'
-import { TenantsPage } from '@/features/admin/TenantsPage'
-import { RegistrationsPage } from '@/features/admin/RegistrationsPage'
-import { PaymentSettingsPage } from '@/features/admin/PaymentSettingsPage'
-import { PlatformFeaturesPage } from '@/features/admin/PlatformFeaturesPage'
-import { CurrencyRatesPage } from '@/features/admin/CurrencyRatesPage'
-import { ProviderSettingsPage } from '@/features/admin/ProviderSettingsPage'
-import { MetaCandidatePage, MetaSaasPage } from '@/features/admin/MetaCandidatePage'
-import { SystemSettingsPage } from '@/features/admin/SystemSettingsPage'
-import { PlatformLegalPage } from '@/features/admin/PlatformLegalPage'
-import { ProviderReviewPage } from '@/features/admin/ProviderReviewPage'
-import { BillingPage as AdminBillingPage } from '@/features/admin/BillingPage'
-import { AuditPage } from '@/features/admin/AuditPage'
-import { EmailOperationsPage } from '@/features/admin/EmailOperationsPage'
-import { CutoverPage } from '@/features/admin/CutoverPage'
-import { AgencyDashboardPage } from '@/features/agency/AgencyDashboardPage'
-import { RequireAgencyPortal } from '@/features/agency/RequireAgencyPortal'
-import { AgencyTeamPage } from '@/features/agency/AgencyTeamPage'
-import { InfluencerShell } from '@/layouts/InfluencerShell'
-import { RequireInfluencerPortal } from '@/features/influencers/RequireInfluencerPortal'
-import { RequireInfluencersEnabled } from '@/features/influencers/RequireInfluencersEnabled'
 import { features } from '@/lib/features'
-import { CollaborationsPage } from '@/features/influencers/CollaborationsPage'
-import { LegacyLoginRedirect } from '@/features/auth/LegacyLoginRedirect'
-import { NominationsPage } from '@/features/influencers/NominationsPage'
-import { RosterPage } from '@/features/influencers/RosterPage'
-import { DeliverablesPage } from '@/features/influencers/DeliverablesPage'
-import { CreatorShell } from '@/layouts/CreatorShell'
-import { CreatorWorkPage } from '@/features/influencers/creator/CreatorWorkPage'
-import { CreatorCollaborationPage } from '@/features/influencers/creator/CreatorCollaborationPage'
-import { WorkspaceSwitcherPage } from '@/features/auth/WorkspaceSwitcherPage'
-import { LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects } from './legacyRedirects'
+import { HomeToDashboard, LegacyClientSpaceRedirect, legacyAgencyRedirects, legacyAppRedirects, legacyClientPortalRedirects, AgencyProjectsIndexRedirect } from './legacyRedirects'
+import { lazyPage } from './lazyPage'
+
+// PERF-RECOVERY-001 — every page and shell loads when its route is opened; `routerSplit.test.ts` holds it.
+const LoginPage = lazyPage(() => import('@/features/auth/LoginPage'), 'LoginPage')
+const McpConsentPage = lazyPage(() => import('@/features/auth/McpConsentPage'), 'McpConsentPage')
+const RegisterPage = lazyPage(() => import('@/features/auth/RegisterPage'), 'RegisterPage')
+const AccountStatusPage = lazyPage(() => import('@/features/signup/AccountStatusPage'), 'AccountStatusPage')
+const ForgotPasswordPage = lazyPage(() => import('@/features/auth/ForgotPasswordPage'), 'ForgotPasswordPage')
+const ResetPasswordPage = lazyPage(() => import('@/features/auth/ResetPasswordPage'), 'ResetPasswordPage')
+const RequireAuth = lazyPage(() => import('@/features/auth/RequireAuth'), 'RequireAuth')
+const CampaignDetailPage = lazyPage(() => import('@/features/campaigns/CampaignDetailPage'), 'CampaignDetailPage')
+const RoleDashboardPage = lazyPage(() => import('@/features/roleDashboard/RoleDashboardPage'), 'RoleDashboardPage')
+const CampaignsPage = lazyPage(() => import('@/features/campaigns/CampaignsPage'), 'CampaignsPage')
+const AnalyticsPage = lazyPage(() => import('@/features/analytics/AnalyticsPage'), 'AnalyticsPage')
+const RecommendationsPage = lazyPage(() => import('@/features/recommendations/RecommendationsPage'), 'RecommendationsPage')
+const AgentCenterPage = lazyPage(() => import('@/features/agents/AgentCenterPage'), 'AgentCenterPage')
+const AutomationPage = lazyPage(() => import('@/features/automation/AutomationPage'), 'AutomationPage')
+const AccountsWorkspacePage = lazyPage(() => import('@/features/campaigns/AccountsWorkspacePage'), 'AccountsWorkspacePage')
+const EntityWorkspacePage = lazyPage(() => import('@/features/campaigns/EntityWorkspacePage'), 'EntityWorkspacePage')
+const LaunchPage = lazyPage(() => import('@/features/launch/LaunchPage'), 'LaunchPage')
+const ApprovalsPage = lazyPage(() => import('@/features/agents/ApprovalsPage'), 'ApprovalsPage')
+const FollowUpWorkspacePage = lazyPage(() => import('@/features/crm/FollowUpWorkspacePage'), 'FollowUpWorkspacePage')
+const ExecutiveOpsPage = lazyPage(() => import('@/features/crm/ExecutiveOpsPage'), 'ExecutiveOpsPage')
+const LeadsPage = lazyPage(() => import('@/features/crm/LeadsPage'), 'LeadsPage')
+const ReportsPage = lazyPage(() => import('@/features/reports/ReportsPage'), 'ReportsPage')
+const SettingsPage = lazyPage(() => import('@/features/settings/SettingsPage'), 'SettingsPage')
+const PublicReport = lazyPage(() => import('@/features/reports/PublicReport'), 'PublicReport')
+const PrintReport = lazyPage(() => import('@/features/reports/PrintReport'), 'PrintReport')
+const DesignSystemPage = lazyPage(() => import('@/features/design/DesignSystemPage'), 'DesignSystemPage')
+const SettingsLayout = lazyPage(() => import('@/features/account/SettingsLayout'), 'SettingsLayout')
+const AccountSettingsLayout = lazyPage(() => import('@/features/account/AccountSettingsLayout'), 'AccountSettingsLayout')
+const PreferencesPage = lazyPage(() => import('@/features/account/PreferencesPage'), 'PreferencesPage')
+const PersonalNotificationsPage = lazyPage(() => import('@/features/account/PersonalNotificationsPage'), 'PersonalNotificationsPage')
+const ProfilePage = lazyPage(() => import('@/features/account/ProfilePage'), 'ProfilePage')
+const PasswordPage = lazyPage(() => import('@/features/account/PasswordPage'), 'PasswordPage')
+const SecurityPage = lazyPage(() => import('@/features/account/SecurityPage'), 'SecurityPage')
+const AiConnectPage = lazyPage(() => import('@/features/account/AiConnectPage'), 'AiConnectPage')
+const ProjectIntegrationsPage = lazyPage(() => import('@/features/projects/ProjectIntegrationsPage'), 'ProjectIntegrationsPage')
+const ProjectsPage = lazyPage(() => import('@/features/projects/ProjectsPage'), 'ProjectsPage')
+// PROJECT-LIFECYCLE-001 §8 — «فتح»: an archived project opens view-only; a live one keeps its usual destination.
+const ProjectOpenPage = lazyPage(() => import('@/features/projects/lifecycle/ProjectOpenPage'), 'ProjectOpenPage')
+const ProjectTeamPage = lazyPage(() => import('@/features/projects/ProjectTeamPage'), 'ProjectTeamPage')
+const SystemStatusPage = lazyPage(() => import('@/features/system/SystemStatusPage'), 'SystemStatusPage')
+const PublicHomePage = lazyPage(() => import('@/features/marketing/PublicHomePage'), 'PublicHomePage')
+const PublicInfoPage = lazyPage(() => import('@/features/marketing/PublicInfoPage'), 'PublicInfoPage')
+const DataDeletionPage = lazyPage(() => import('@/features/marketing/DataDeletionPage'), 'DataDeletionPage')
+const PublicServicesPage = lazyPage(() => import('@/features/marketing/PublicServicesPage'), 'PublicServicesPage')
+const RequestIntakePage = lazyPage(() => import('@/features/requests/RequestIntakePage'), 'RequestIntakePage')
+const RequestTrackPage = lazyPage(() => import('@/features/requests/RequestTrackPage'), 'RequestTrackPage')
+const ClientRequestsPage = lazyPage(() => import('@/features/requests/portal/ClientRequestsPage'), 'ClientRequestsPage')
+const ClientNewRequestPage = lazyPage(() => import('@/features/requests/portal/ClientNewRequestPage'), 'ClientNewRequestPage')
+const ClientRequestDetailPage = lazyPage(() => import('@/features/requests/portal/ClientRequestDetailPage'), 'ClientRequestDetailPage')
+const ClientDashboardPage = lazyPage(() => import('@/features/requests/portal/ClientDashboardPage'), 'ClientDashboardPage')
+const ClientQuotesPage = lazyPage(() => import('@/features/requests/portal/ClientQuotesPage'), 'ClientQuotesPage')
+const ClientApprovalsPage = lazyPage(() => import('@/features/requests/portal/ClientApprovalsPage'), 'ClientApprovalsPage')
+const ClientQuoteDetailPage = lazyPage(() => import('@/features/requests/portal/ClientQuoteDetailPage'), 'ClientQuoteDetailPage')
+const ClientInvoicesPage = lazyPage(() => import('@/features/requests/portal/ClientInvoicesPage'), 'ClientInvoicesPage')
+const ClientInvoiceDetailPage = lazyPage(() => import('@/features/requests/portal/ClientInvoiceDetailPage'), 'ClientInvoiceDetailPage')
+const ClientMessagesPage = lazyPage(() => import('@/features/requests/portal/ClientMessagesPage'), 'ClientMessagesPage')
+const ClientThreadPage = lazyPage(() => import('@/features/requests/portal/ClientThreadPage'), 'ClientThreadPage')
+const ClientProfilePage = lazyPage(() => import('@/features/requests/portal/ClientProfilePage'), 'ClientProfilePage')
+const ClientFilesPage = lazyPage(() => import('@/features/requests/portal/ClientFilesPage'), 'ClientFilesPage')
+const ClientCampaignsPage = lazyPage(() => import('@/features/requests/portal/ClientCampaignsPage'), 'ClientCampaignsPage')
+const ClientReportsPage = lazyPage(() => import('@/features/requests/portal/ClientReportsPage'), 'ClientReportsPage')
+const ClientReportViewPage = lazyPage(() => import('@/features/requests/portal/ClientReportViewPage'), 'ClientReportViewPage')
+const ClientSpacePickerPage = lazyPage(() => import('@/features/requests/portal/ClientSpacePickerPage'), 'ClientSpacePickerPage')
+const ClientPortalHomePage = lazyPage(() => import('@/features/requests/portal/ClientPortalHomePage'), 'ClientPortalHomePage')
+const VerifyEmailPage = lazyPage(() => import('@/features/onboarding/VerifyEmailPage'), 'VerifyEmailPage')
+const OnboardingWizard = lazyPage(() => import('@/features/onboarding/OnboardingWizard'), 'OnboardingWizard')
+const OnboardingGate = lazyPage(() => import('@/features/onboarding/OnboardingGate'), 'OnboardingGate')
+const InviteAcceptPage = lazyPage(() => import('@/features/onboarding/InviteAcceptPage'), 'InviteAcceptPage')
+const RequestsDashboardPage = lazyPage(() => import('@/features/requests/RequestsDashboardPage'), 'RequestsDashboardPage')
+const RequestDetailPage = lazyPage(() => import('@/features/requests/RequestDetailPage'), 'RequestDetailPage')
+const ClientsPortfolioPage = lazyPage(() => import('@/features/clients/ClientsPortfolioPage'), 'ClientsPortfolioPage')
+const PortfolioPage = lazyPage(() => import('@/features/projects/PortfolioPage'), 'PortfolioPage')
+const ClientCommandCenterPage = lazyPage(() => import('@/features/clients/ClientCommandCenterPage'), 'ClientCommandCenterPage')
+const AlertsPage = lazyPage(() => import('@/features/alerts/AlertsPage'), 'AlertsPage')
+const FollowUpPage = lazyPage(() => import('@/features/notifications/FollowUpPage'), 'FollowUpPage')
+const SpendLimitsPage = lazyPage(() => import('@/features/budget/SpendLimitsPage'), 'SpendLimitsPage')
+const BudgetsPage = lazyPage(() => import('@/features/funding/BudgetsPage'), 'BudgetsPage')
+const DeliveryOverviewPage = lazyPage(() => import('@/features/clients/delivery/DeliveryOverviewPage'), 'DeliveryOverviewPage')
+const DevStatusPage = lazyPage(() => import('@/features/dev/DevStatusPage'), 'DevStatusPage')
+const IntegrationsPage = lazyPage(() => import('@/features/integrations/IntegrationsPage'), 'IntegrationsPage')
+const StoreInstallPage = lazyPage(() => import('@/features/integrations/StoreInstallPage'), 'StoreInstallPage')
+const DrivePage = lazyPage(() => import('@/features/drive/DrivePage'), 'DrivePage')
+const ShortLinksPage = lazyPage(() => import('@/features/shortLinks/ShortLinksPage'), 'ShortLinksPage')
+const FormsPage = lazyPage(() => import('@/features/forms/FormsPage'), 'FormsPage')
+const FormBuilderPage = lazyPage(() => import('@/features/forms/FormBuilderPage'), 'FormBuilderPage')
+const PublicFormPage = lazyPage(() => import('@/features/forms/PublicFormPage'), 'PublicFormPage')
+const TasksPage = lazyPage(() => import('@/features/tasks/TasksPage'), 'TasksPage')
+const ContentHub = lazyPage(() => import('@/features/content/ContentHub'), 'ContentHub')
+const CreativeDetailPage = lazyPage(() => import('@/features/content/CreativeDetailPage'), 'CreativeDetailPage')
+const CreativeGroupsPage = lazyPage(() => import('@/features/content/CreativeGroupsPage'), 'CreativeGroupsPage')
+const FilesLibraryPage = lazyPage(() => import('@/features/files/FilesLibraryPage'), 'FilesLibraryPage')
+const BrandingCenterPage = lazyPage(() => import('@/features/branding/BrandingCenterPage'), 'BrandingCenterPage')
+const AppShell = lazyPage(() => import('@/layouts/AppShell'), 'AppShell')
+const AgencyShell = lazyPage(() => import('@/layouts/AgencyShell'), 'AgencyShell')
+const AdminShell = lazyPage(() => import('@/layouts/AdminShell'), 'AdminShell')
+const RequirePlatformAdmin = lazyPage(() => import('@/features/admin/RequirePlatformAdmin'), 'RequirePlatformAdmin')
+const RequirePortal = lazyPage(() => import('@/features/auth/RequirePortal'), 'RequirePortal')
+const PlatformOverviewPage = lazyPage(() => import('@/features/admin/PlatformOverviewPage'), 'PlatformOverviewPage')
+const TenantsPage = lazyPage(() => import('@/features/admin/TenantsPage'), 'TenantsPage')
+const RegistrationsPage = lazyPage(() => import('@/features/admin/RegistrationsPage'), 'RegistrationsPage')
+const ServiceRequestsPage = lazyPage(() => import('@/features/admin/ServiceRequestsPage'), 'ServiceRequestsPage')
+const PlatformInboxPage = lazyPage(() => import('@/features/admin/PlatformInboxPage'), 'PlatformInboxPage')
+const PaymentSettingsPage = lazyPage(() => import('@/features/admin/PaymentSettingsPage'), 'PaymentSettingsPage')
+const PlatformFeaturesPage = lazyPage(() => import('@/features/admin/PlatformFeaturesPage'), 'PlatformFeaturesPage')
+const CurrencyRatesPage = lazyPage(() => import('@/features/admin/CurrencyRatesPage'), 'CurrencyRatesPage')
+const AiKeyPage = lazyPage(() => import('@/features/admin/AiKeyPage'), 'AiKeyPage')
+const ProviderSettingsPage = lazyPage(() => import('@/features/admin/ProviderSettingsPage'), 'ProviderSettingsPage')
+const MetaCandidatePage = lazyPage(() => import('@/features/admin/MetaCandidatePage'), 'MetaCandidatePage')
+const MetaSaasPage = lazyPage(() => import('@/features/admin/MetaCandidatePage'), 'MetaSaasPage')
+const SystemSettingsPage = lazyPage(() => import('@/features/admin/SystemSettingsPage'), 'SystemSettingsPage')
+const PlatformLegalPage = lazyPage(() => import('@/features/admin/PlatformLegalPage'), 'PlatformLegalPage')
+const ProviderReviewPage = lazyPage(() => import('@/features/admin/ProviderReviewPage'), 'ProviderReviewPage')
+const AdminBillingPage = lazyPage(() => import('@/features/admin/BillingPage'), 'BillingPage')
+const AuditPage = lazyPage(() => import('@/features/admin/AuditPage'), 'AuditPage')
+const AdminNotificationsPage = lazyPage(() => import('@/features/admin/AdminNotificationsPage'), 'AdminNotificationsPage')
+const EmailOperationsPage = lazyPage(() => import('@/features/admin/EmailOperationsPage'), 'EmailOperationsPage')
+const CutoverPage = lazyPage(() => import('@/features/admin/CutoverPage'), 'CutoverPage')
+const AddonsPage = lazyPage(() => import('@/features/admin/AddonsPage'), 'AddonsPage')
+const PlanMigrationPage = lazyPage(() => import('@/features/admin/PlanMigrationPage'), 'PlanMigrationPage')
+const UsageMetersPage = lazyPage(() => import('@/features/admin/UsageMetersPage'), 'UsageMetersPage')
+const TaxPage = lazyPage(() => import('@/features/admin/TaxPage'), 'TaxPage')
+const RequireAgencyPortal = lazyPage(() => import('@/features/agency/RequireAgencyPortal'), 'RequireAgencyPortal')
+const AgencyTeamPage = lazyPage(() => import('@/features/agency/AgencyTeamPage'), 'AgencyTeamPage')
+const InfluencerShell = lazyPage(() => import('@/layouts/InfluencerShell'), 'InfluencerShell')
+const RequireInfluencerPortal = lazyPage(() => import('@/features/influencers/RequireInfluencerPortal'), 'RequireInfluencerPortal')
+const RequireInfluencersEnabled = lazyPage(() => import('@/features/influencers/RequireInfluencersEnabled'), 'RequireInfluencersEnabled')
+const CollaborationsPage = lazyPage(() => import('@/features/influencers/CollaborationsPage'), 'CollaborationsPage')
+const LegacyLoginRedirect = lazyPage(() => import('@/features/auth/LegacyLoginRedirect'), 'LegacyLoginRedirect')
+const NominationsPage = lazyPage(() => import('@/features/influencers/NominationsPage'), 'NominationsPage')
+const RosterPage = lazyPage(() => import('@/features/influencers/RosterPage'), 'RosterPage')
+const DeliverablesPage = lazyPage(() => import('@/features/influencers/DeliverablesPage'), 'DeliverablesPage')
+const ImpactPage = lazyPage(() => import('@/features/influencers/ImpactPage'), 'ImpactPage')
+const CreatorShell = lazyPage(() => import('@/layouts/CreatorShell'), 'CreatorShell')
+const CreatorWorkPage = lazyPage(() => import('@/features/influencers/creator/CreatorWorkPage'), 'CreatorWorkPage')
+const CreatorCollaborationPage = lazyPage(() => import('@/features/influencers/creator/CreatorCollaborationPage'), 'CreatorCollaborationPage')
+const WorkspaceSwitcherPage = lazyPage(() => import('@/features/auth/WorkspaceSwitcherPage'), 'WorkspaceSwitcherPage')
 
 /**
  * ROUTE-BOUNDARY-001 — every branch of the tree has somewhere to land when it throws.
@@ -193,10 +215,10 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/f/:slug', element: <PublicFormPage /> },
   { path: '/services', element: <PublicServicesPage /> },
   { path: '/services/:category', element: <PublicServicesPage /> },
-  // ADR 0002: the request-tracking portal lives at /portal/*. It still runs its own OTP cookie
+  // ADR 0002: the request-tracking portal lives at /portal/*. It can still hold the older code cookie
   // session (see PORTAL-AUTH-001 — the auth engines are not merged yet); what moved is the URL
   // space, so all four portals are addressed the same way. Each page guards itself: a 401 from the
-  // portal endpoints returns to the portal login. The section nav lives in PortalShell.
+  // portal endpoints returns to `/login` with the page kept. The section nav lives in PortalShell.
   /*
    * LOGIN-UNIFIED-001 — every sign-in door is `/login`, and only `/login`.
    *
@@ -216,6 +238,7 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/admin/login', element: <LegacyLoginRedirect /> },
   { path: '/app/login', element: <LegacyLoginRedirect /> },
   { path: '/agency/login', element: <LegacyLoginRedirect /> },
+  // LOGIN-SINGLE-DOOR-001 — reverses #943's separate contact page: the Owner's order is one door for everybody.
   { path: '/portal/login', element: <LegacyLoginRedirect /> },
   { path: '/influencers/login', element: <LegacyLoginRedirect /> },
 
@@ -236,6 +259,7 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/portal/requests', element: <ClientRequestsPage /> },
   { path: '/portal/requests/new', element: <ClientNewRequestPage /> },
   { path: '/portal/requests/:reference', element: <ClientRequestDetailPage /> },
+  { path: '/portal/approvals', element: <ClientApprovalsPage /> },
   { path: '/portal/quotes', element: <ClientQuotesPage /> },
   { path: '/portal/quotes/:id', element: <ClientQuoteDetailPage /> },
   { path: '/portal/invoices', element: <ClientInvoicesPage /> },
@@ -246,6 +270,7 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/portal/files', element: <ClientFilesPage /> },
   { path: '/portal/campaigns', element: <ClientCampaignsPage /> },
   { path: '/portal/reports', element: <ClientReportsPage /> },
+  { path: '/portal/reports/:reportId', element: <ClientReportViewPage /> },
   // Pre-ADR-0002 paths. Kept alive rather than deleted: these are in clients' bookmarks and in
   // emails already sent, and a dead link there costs a support conversation.
   ...legacyClientPortalRedirects,
@@ -266,6 +291,8 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/portal/:clientSlug/requests', element: <ClientRequestsPage /> },
   { path: '/portal/:clientSlug/requests/new', element: <ClientNewRequestPage /> },
   { path: '/portal/:clientSlug/requests/:reference', element: <ClientRequestDetailPage /> },
+  // CLIENT-PORTAL-THREE-SECTIONS-001 — «بانتظار اعتمادك». Every page above keeps its path.
+  { path: '/portal/:clientSlug/approvals', element: <ClientApprovalsPage /> },
   { path: '/portal/:clientSlug/quotes', element: <ClientQuotesPage /> },
   { path: '/portal/:clientSlug/quotes/:id', element: <ClientQuoteDetailPage /> },
   { path: '/portal/:clientSlug/invoices', element: <ClientInvoicesPage /> },
@@ -275,6 +302,7 @@ export const router = createBrowserRouter(withErrorBoundary([
   { path: '/portal/:clientSlug/campaigns', element: <ClientCampaignsPage /> },
   { path: '/portal/:clientSlug/files', element: <ClientFilesPage /> },
   { path: '/portal/:clientSlug/reports', element: <ClientReportsPage /> },
+  { path: '/portal/:clientSlug/reports/:reportId', element: <ClientReportViewPage /> },
   { path: '/portal/:clientSlug/profile', element: <ClientProfilePage /> },
 
   /*
@@ -308,6 +336,7 @@ export const router = createBrowserRouter(withErrorBoundary([
       // ADR 0002: the portal/workspace switcher, for users who belong to more than one. Outside the
       // AppShell because it is the screen that decides WHICH shell the user is about to enter.
       { path: 'switch', element: <WorkspaceSwitcherPage /> },
+      { path: 'oauth/mcp', element: <McpConsentPage /> },
       {
         element: <OnboardingGate />,
         children: [{
@@ -339,8 +368,17 @@ export const router = createBrowserRouter(withErrorBoundary([
            * except an index. The agency tree has carried the equivalent redirect since ADR 0002;
            * the advertiser portal simply never got one.
            */
+          /*
+           * AF1 — the landing IS the role dashboard (Owner: «يظهر أول ما يدخل المستخدم»). `/app` and `/agency` are where
+           * the server sends a person after sign-in, onboarding and an accepted invitation, and `Portal::landingPath`
+           * now names `/…/home` itself; this redirect only keeps the bare address and old bookmarks working. The detailed
+           * board stays at `/…/dashboard`, one tap away in the rail («لوحة التحليلات»).
+           */
           { index: true, element: <Navigate to="/app/dashboard" replace /> },
-          { path: 'dashboard', element: <AnalyticsPage surface="dashboard" /> },
+          // ROLE-DASHBOARD-001 — the page per role, at its own address. `dashboard` below stays the detailed board it always was.
+          // DASHBOARD-PATH-001 — Owner 2026-11-20: the landing is «Dashboard». `home` stays only for old bookmarks.
+          { path: 'dashboard', element: <RoleDashboardPage portal="app" /> },
+          { path: 'home', element: <HomeToDashboard portal="app" /> },
           { path: 'analytics', element: <AnalyticsPage /> },
           /*
            * RECOMMENDATIONS-001 — this address answered 404 while the records existed.
@@ -362,6 +400,7 @@ export const router = createBrowserRouter(withErrorBoundary([
            */
           { path: 'portfolio', element: <PortfolioPage /> },
           { path: 'projects', element: <ProjectsPage /> },
+          { path: 'projects/:projectId', element: <ProjectOpenPage /> },
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
                     { path: 'design', element: <DesignSystemPage /> },
@@ -369,6 +408,7 @@ export const router = createBrowserRouter(withErrorBoundary([
           /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
           /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
           { path: 'launch', element: <LaunchPage /> },
+          { path: 'accounts', element: <AccountsWorkspacePage /> },
           { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
           { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
           { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
@@ -390,6 +430,10 @@ export const router = createBrowserRouter(withErrorBoundary([
           // advertiser portal, and inside this tree the guard above would turn them away first.
           // Alerts management (the alerts engine's operator surface).
           { path: 'alerts', element: <AlertsPage /> },
+          // NOTIF-V2-FOLLOWUP-001 — ONE page for every workspace type; the portal prefix only decides the path.
+          { path: 'followup', element: <FollowUpPage /> },
+          // FIN-LOOP-001 — the approved budget of each project (money the client put in), apart from the limits below.
+          { path: 'budgets', element: <BudgetsPage /> },
           /*
            * BUDGET-GOVERNANCE-001 — the workspace's own limits, which are not the platforms'.
            *
@@ -418,7 +462,7 @@ export const router = createBrowserRouter(withErrorBoundary([
           { path: 'connections', element: <Navigate to="/app/integrations" replace /> },
           { path: 'drive', element: <Navigate to="/app/files/drive" replace /> },
           { path: 'branding', element: <Navigate to="/app/settings/branding" replace /> },
-          { path: 'content', element: <CreativesPage /> },
+          { path: 'content', element: <ContentHub /> },
           /*
            * §15.6 — one creative's own address, so it can be linked, refreshed and returned to.
            *
@@ -470,7 +514,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             children: [
               { index: true, element: <Navigate to="/app/settings/workspace" replace /> },
               { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} navigation={false} /> },
-              { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء مساحة العمل وأدوارهم وصلاحياتهم" /> },
+              { path: 'permissions', element: <SettingsPage only={['team']} title="الفريق والنطاقات" subtitle="الدعوات والفئات وما يراه كل عضو" /> },
               // PLATFORM-level, moved to /admin/settings (ADMIN-001): the public marketing site is
               // the platform's, not one tenant's, and a tenant administrator could edit it here.
               { path: 'public-pages', element: <Navigate to="/admin/settings" replace /> },
@@ -497,6 +541,8 @@ export const router = createBrowserRouter(withErrorBoundary([
               { path: 'security', element: <SecurityPage /> },
               { path: 'preferences', element: <PreferencesPage /> },
               { path: 'notifications', element: <PersonalNotificationsPage /> },
+              // MCP-SERVER-001
+              { path: 'ai', element: <AiConnectPage /> },
             ],
           },
           // Sales CRM (behind sales_crm_enabled; routes always exist, nav is gated).
@@ -535,7 +581,18 @@ export const router = createBrowserRouter(withErrorBoundary([
             // SIGNUP-003 — applications that have NOT become tenants yet, which is why this is its
             // own entry rather than a tab inside Tenants.
             { path: 'registrations', element: <RegistrationsPage /> },
+            // PLATFORM-SERVICE-INBOX-001 — services ordered from the official site. Platform-owned, never a
+            // subscriber's requests: those stay in that subscriber's own `/agency/requests`.
+            { path: 'requests', element: <ServiceRequestsPage /> },
+            { path: 'inbox', element: <PlatformInboxPage /> },
             { path: 'billing', element: <AdminBillingPage /> },
+            { path: 'addons', element: <AddonsPage /> },
+            { path: 'plan-migration', element: <PlanMigrationPage /> },
+            { path: 'usage', element: <UsageMetersPage /> },
+            { path: 'tax', element: <TaxPage /> },
+            { path: 'plan-migration', element: <PlanMigrationPage /> },
+            { path: 'usage', element: <UsageMetersPage /> },
+            { path: 'tax', element: <TaxPage /> },
             { path: 'settings', element: <SystemSettingsPage /> },
             // PAYSET-001 — the gateways. Its own page rather than a tab, because it is the surface an
             // operator opens when money is not moving.
@@ -558,6 +615,8 @@ export const router = createBrowserRouter(withErrorBoundary([
              * same day: a tenant able to set it could move their own reported ROAS by editing a number.
              */
             { path: 'settings/currency-rates', element: <CurrencyRatesPage /> },
+            // AI-PLATFORM-KEY-001
+            { path: 'settings/ai', element: <AiKeyPage /> },
             // REVIEW-001 — per-provider platform-review readiness, eight distinct checklists.
             { path: 'integrations/review', element: <ProviderReviewPage /> },
             { path: 'cutover', element: <CutoverPage /> },
@@ -565,6 +624,8 @@ export const router = createBrowserRouter(withErrorBoundary([
             // inside Audit: it is the surface an operator opens when a customer says an email never
             // arrived, and the audit trail is about people's actions rather than the mailer's.
             { path: 'email', element: <EmailOperationsPage /> },
+            // NOTIF-V2-SETTINGS-UI-001 — the platform's notification layer: catalog, texts, plan features, footprint, statistics.
+            { path: 'notifications', element: <AdminNotificationsPage /> },
             { path: 'audit', element: <AuditPage /> },
           ],
         }],
@@ -575,14 +636,19 @@ export const router = createBrowserRouter(withErrorBoundary([
         children: [{
           element: <AgencyShell />,
           children: [
+            // The landing is the role dashboard (see the `/app` index above).
             { index: true, element: <Navigate to="/agency/dashboard" replace /> },
-            { path: 'dashboard', element: <AgencyDashboardPage /> },
+            { path: 'dashboard', element: <RoleDashboardPage portal="agency" /> },
+            { path: 'home', element: <HomeToDashboard portal="agency" /> },
             { path: 'clients', element: <ClientsPortfolioPage /> },
             { path: 'clients/:clientId', element: <ClientCommandCenterPage /> },
             { path: 'requests', element: <RequestsDashboardPage /> },
             { path: 'requests/:requestId', element: <RequestDetailPage /> },
             { path: 'portfolio', element: <PortfolioPage /> },
-            { path: 'projects', element: <ProjectsPage /> },
+            // CLIENT-UNIT-001 — the project directory is merged into the clients; old links land on the client.
+            { path: 'projects', element: <AgencyProjectsIndexRedirect /> },
+            // PROJECT-LIFECYCLE-001 §8 — still lands on the client for a live project; an archived one opens view-only.
+            { path: 'projects/:projectId', element: <ProjectOpenPage /> },
             { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
             { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
             /*
@@ -613,15 +679,17 @@ export const router = createBrowserRouter(withErrorBoundary([
             /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
             /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
             { path: 'launch', element: <LaunchPage /> },
+            { path: 'accounts', element: <AccountsWorkspacePage /> },
             { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
             { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
-            { path: 'content', element: <CreativesPage /> },
+            { path: 'content', element: <ContentHub /> },
             // MOUNTED, not copied — the same page, told which portal to return to (ADR 0002).
             { path: 'content/groups', element: <CreativeGroupsPage portal="agency" /> },
             { path: 'content/:creativeId', element: <CreativeDetailPage portal="agency" /> },
             { path: 'reports', element: <ReportsPage /> },
             { path: 'alerts', element: <AlertsPage /> },
+            { path: 'followup', element: <FollowUpPage /> },
             /*
              * AGENCY-DECISION-SURFACES-001 — the two decision pages existed only under `/app`.
              *
@@ -634,6 +702,7 @@ export const router = createBrowserRouter(withErrorBoundary([
             { path: 'automation', element: <AutomationPage /> },
             { path: 'agents', element: <AgentCenterPage /> },
             { path: 'agents/approvals', element: <ApprovalsPage /> },
+            { path: 'budgets', element: <BudgetsPage /> },
             { path: 'spend-limits', element: <SpendLimitsPage /> },
             { path: 'delivery', element: <DeliveryOverviewPage /> },
             { path: 'tasks', element: <TasksPage /> },
@@ -673,7 +742,7 @@ export const router = createBrowserRouter(withErrorBoundary([
               children: [
                 { index: true, element: <Navigate to="/agency/settings/workspace" replace /> },
                 { path: 'workspace', element: <SettingsPage only={['general', 'clients', 'projects', 'notifications', 'security']} navigation={false} /> },
-                { path: 'permissions', element: <SettingsPage only={['team']} title="الصلاحيات والفريق" subtitle="أعضاء الوكالة وأدوارهم وصلاحياتهم" /> },
+                { path: 'permissions', element: <SettingsPage only={['team']} title="الفريق والنطاقات" subtitle="الدعوات والفئات وما يراه كل عضو" /> },
                 { path: 'branding', element: <BrandingCenterPage /> },
               ],
             },
@@ -688,6 +757,8 @@ export const router = createBrowserRouter(withErrorBoundary([
                 { path: 'security', element: <SecurityPage /> },
                 { path: 'preferences', element: <PreferencesPage /> },
                 { path: 'notifications', element: <PersonalNotificationsPage /> },
+                // MCP-SERVER-001
+                { path: 'ai', element: <AiConnectPage /> },
               ],
             },
           ],
@@ -738,6 +809,8 @@ export const router = createBrowserRouter(withErrorBoundary([
               { path: 'security', element: <SecurityPage /> },
               { path: 'preferences', element: <PreferencesPage /> },
               { path: 'notifications', element: <PersonalNotificationsPage /> },
+              // MCP-SERVER-001
+              { path: 'ai', element: <AiConnectPage /> },
             ],
           },
           /*
@@ -765,6 +838,8 @@ export const router = createBrowserRouter(withErrorBoundary([
               // what was ASKED, including the answers that were no.
               { path: 'nominations', element: <NominationsPage /> },
               { path: 'deliverables', element: <DeliverablesPage /> },
+              // INFLUENCER-IMPACT-001 — inside the tree that is unmounted while the service is withdrawn.
+              { path: 'impact', element: <ImpactPage /> },
             ],
           },
           ],

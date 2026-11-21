@@ -4,12 +4,21 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Notifications\Internal\LegacyBridge;
+use App\Domains\Notifications\Mail\OperationalMail;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Notifications\Models\NotificationDelivery;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Push\PushDispatcher;
+use App\Domains\Notifications\Push\SendPushNotification;
+use App\Domains\Notifications\Support\BellKind;
 use App\Domains\Notifications\Support\MessageCatalogue;
+use App\Domains\Notifications\Support\NotificationChannelPolicy;
+use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * The single entry point for raising a notification. Handles, in order:
@@ -26,6 +35,9 @@ final class NotificationDispatcher
     public function __construct(
         private readonly ProviderRegistry $providers,
         private readonly NotificationChoices $choices,
+        private readonly SpendAudience $audience,
+        private readonly WhatsAppChannel $whatsapp,
+        private readonly PushDispatcher $push,
     ) {}
 
     /**
@@ -57,18 +69,49 @@ final class NotificationDispatcher
         $userId = $p['user_id'] ?? null;
         $type = (string) $p['type'];
         $category = self::CATEGORY[$type] ?? 'performance';
+        // The catalogue type a person's per-type switch is filed under: `request.assigned` → `request`.
+        $switchKey = NotificationChannelPolicy::switchKey($type);
         $dedupKey = $this->dedupKey($tenantId, $userId, $type, $p);
+        // NOTIF-BELL-001 — the finding itself, named once: from the producer, else from the type when the type says it all.
+        $kind = isset($p['kind']) && is_string($p['kind']) && $p['kind'] !== '' ? $p['kind'] : BellKind::forType($type);
+
+        /*
+         * NOTIF-BELL-001 — a finding is ONE notification per day, and a repeat UPDATES it.
+         *
+         * Keyed by kind + object + the day on the Riyadh calendar (+ recipient). Until now a repeat inside the
+         * 60-minute window was dropped and one after it was a brand-new row, so a campaign stuck at 90% for a week
+         * filled the bell with the same line. Now the second sweep of the day refreshes the row's wording and figures,
+         * counts the repeat, and — only when the finding got worse — brings it back as unread. No second email,
+         * no second push: a repeat is not a new event.
+         */
+        $checked = false;
+        if (($p['upsert_daily'] ?? false) === true && $kind !== null) {
+            $dayKey = $this->dayKey($tenantId, $userId, $kind, $p);
+            // ONE read answers both questions: is there a notification for this finding today, or a ledger tombstone for it.
+            $existing = AppNotification::query()->where('tenant_id', $tenantId)
+                ->when($userId !== null, fn ($q) => $q->where('user_id', $userId), fn ($q) => $q->whereNull('user_id'))
+                ->where('dedup_key', $dayKey)->latest('created_at')->first();
+            if ($existing !== null && $existing->type !== 'suppressed') {
+                return $this->refresh($existing, $p);
+            }
+            // A tombstone (the person switched this off) inside the window is a repeat of a refusal, as it always was.
+            if ($existing !== null && $existing->created_at >= Carbon::now()->subMinutes(self::DEDUP_WINDOW_MINUTES)) {
+                return null;
+            }
+            $dedupKey = $dayKey;
+            $checked = true;
+        }
 
         // 1) Dedup — an identical notification within the window is collapsed.
-        if ($this->isDuplicate($tenantId, $userId, $dedupKey)) {
+        if (! $checked && $this->isDuplicate($tenantId, $userId, $dedupKey)) {
             return null;
         }
 
         $clientWorkspaceId = $p['client_workspace_id'] ?? null;
         $prefs = $this->preferences($tenantId, $userId, $clientWorkspaceId);
         $perClient = $this->hasClientOverride($tenantId, $userId, $clientWorkspaceId);
-        $inAppEnabled = $this->wants($prefs, $tenantId, $userId, $type, $category, 'in_app', $perClient);
-        $emailEnabled = $this->wants($prefs, $tenantId, $userId, $type, $category, 'email', $perClient);
+        $inAppEnabled = $this->wants($prefs, $tenantId, $userId, $switchKey, $category, 'in_app', $perClient);
+        $emailEnabled = $this->wants($prefs, $tenantId, $userId, $switchKey, $category, 'email', $perClient);
         /*
          * The recipient's own night — MAIL-013.
          *
@@ -103,30 +146,204 @@ final class NotificationDispatcher
             'action_url' => $p['action_url'] ?? null,
             'status' => 'unread',
             'dedup_key' => $dedupKey,
+            'kind' => $kind,
+            'repeat_count' => 1,
+            'last_seen_at' => Carbon::now(),
+            // DIGESTS-VISUAL-V2-001 — the Arabic wording, when the producer wrote it, so the bell is not English under an Arabic title.
+            'title_ar' => ! empty($p['title_ar']) ? (string) $p['title_ar'] : null,
+            'message_ar' => ! empty($p['message_ar']) ? (string) $p['message_ar'] : null,
         ]);
 
         // In-app is delivered immediately (a passive inbox is not silenced by quiet hours).
         $this->logDelivery($tenantId, (string) $notification->id, 'in_app', 'sent', $dedupKey);
 
-        // 3) Email delivery state. The status comes from the provider adapter, NOT a hard-coded assumption:
-        //    with no provider wired (the Null adapter) it is awaiting_credentials; the moment a real provider
-        //    is bound it becomes a genuine send attempt whose documented result is recorded. Never "sent"
-        //    without a provider acknowledgement.
+        /*
+         * 3) Email — EMAIL-DELIVERY-LEDGER-001.
+         *
+         * This row said `sent` whenever a provider was configured, and nothing here sent anything. So on
+         * a live install the log claimed an email for every bell notification. The row now states what
+         * actually happens to it: mailed here, mailed by its own sender with its own ledger, or not
+         * mailed at all. A preference or quiet hours still come first.
+         */
         $emailStatus = ! $emailEnabled ? 'suppressed_by_preference'
-            : ($inQuietHours ? 'suppressed_by_quiet_hours' : $this->channelStatus('email'));
+            : ($inQuietHours ? 'suppressed_by_quiet_hours' : $this->email($notification, $tenantId, $userId, $type, $switchKey, $p));
         $this->logDelivery($tenantId, (string) $notification->id, 'email', $emailStatus, $dedupKey);
+
+        /*
+         * 4) WhatsApp — a channel a person adds on top, never one they receive by default.
+         *
+         * A row is written only when this person has switched THIS type on for WhatsApp, so the
+         * ledger holds attempts and refusals that mean something. Nothing here reaches a vendor
+         * unless a provider reports configured AND the number has an opt-in; see `WhatsAppChannel`.
+         */
+        if ($userId !== null && $switchKey !== null && $this->choices->whatsapp($userId, $tenantId, $switchKey)) {
+            $this->logDelivery($tenantId, (string) $notification->id, 'whatsapp', $this->whatsappState($notification, $userId, $switchKey, $inQuietHours, $p), $dedupKey);
+        }
+
+        // NOTIF-PUSH-001 — a phone is rung only for the few things that warrant it, off this call, and never at the bell's expense.
+        $this->ring($notification);
+        // NOTIF-V2-FOLLOWUP-001 — the finding may open a follow-up task; the bell itself is unchanged.
+        LegacyBridge::seen($notification);
 
         return $notification;
     }
 
-    /**
-     * Honest delivery status for a channel. When the channel has no configured provider (the default Null
-     * adapter) we record awaiting_credentials and send nothing. A configured provider maps to its documented
-     * result — 'sent' only ever comes back from a real provider acknowledgement.
-     */
-    private function channelStatus(string $channel): string
+    /** Queue the pushes for this notification when it is one that may ring a phone. */
+    private function ring(AppNotification $notification): void
     {
-        return $this->providers->isConfigured($channel) ? 'sent' : 'awaiting_credentials';
+        try {
+            if ($this->push->wants($notification)) {
+                SendPushNotification::dispatch((string) $notification->id);
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * What happens to the email half of one notification.
+     *
+     * `NotificationChannelPolicy::routeFor()` says who sends it. `dispatcher` is sent from here, through
+     * `TransactionalMailer` — the one mailer, its ledger row, the unsubscribe and the daily allowance.
+     * `elsewhere` has a sender of its own whose ledger is the truth. Anything else is not mailed: a
+     * type nobody classified is a decision to make in the policy, not a side effect of being honest here.
+     *
+     * Before a message is composed, in this order: a spend-bearing message is withheld from a member
+     * whose membership withholds money; a type held for a digest is held; a floor on importance is
+     * honoured; and one person is mailed at most `EMAIL_CEILING_PER_HOUR` times for one type, so a rule
+     * matching two hundred campaigns is a bell with two hundred items and an inbox with five.
+     *
+     * @param  array<string,mixed>  $p
+     */
+    private function email(AppNotification $notification, string $tenantId, ?int $userId, string $type, ?string $switchKey, array $p): string
+    {
+        if (! $this->providers->isConfigured('email')) {
+            return 'awaiting_credentials';
+        }
+
+        $route = NotificationChannelPolicy::routeFor($type, isset($p['source']) ? (string) $p['source'] : null);
+
+        if ($route === 'elsewhere') {
+            return 'handled_elsewhere';
+        }
+
+        $user = $userId === null ? null : User::query()->find($userId);
+
+        if ($route !== 'dispatcher' || $switchKey === null || $user === null || $user->email === null) {
+            return 'in_app_only';
+        }
+
+        $policy = (array) NotificationChannelPolicy::for($type);
+
+        if (($policy['spend_bearing'] ?? false) && ! $this->audience->mayReceive($user, isset($p['project_id']) ? (string) $p['project_id'] : null)) {
+            return 'suppressed_client_audience';
+        }
+
+        if (($policy['digestible'] ?? false) && $this->choices->rhythm($userId, $tenantId, $switchKey) !== 'immediate') {
+            return 'held_for_digest';
+        }
+
+        $severity = (string) ($notification->severity ?? 'info');
+        $severity = $severity === 'error' ? 'critical' : $severity;
+
+        if (! $this->choices->meetsImportance($userId, $tenantId, $switchKey, $severity)) {
+            return 'suppressed_by_importance';
+        }
+
+        $recent = DB::table('mail_deliveries')
+            ->where('user_id', $userId)->where('kind', $switchKey)
+            ->where('created_at', '>=', Carbon::now()->subHour())
+            ->count();
+
+        if ($recent >= NotificationChannelPolicy::EMAIL_CEILING_PER_HOUR) {
+            return 'suppressed_by_ceiling';
+        }
+
+        $locale = in_array($user->locale, ['ar', 'en'], true) ? (string) $user->locale : 'ar';
+        $title = $locale === 'ar' && ! empty($p['title_ar']) ? (string) $p['title_ar'] : (string) $notification->title;
+        $detail = $locale === 'ar' && ! empty($p['message_ar']) ? (string) $p['message_ar'] : (string) ($notification->message ?? $title);
+        $url = (string) ($notification->action_url ?? '');
+        $path = parse_url($url, PHP_URL_PATH);
+        $query = parse_url($url, PHP_URL_QUERY);
+
+        return app(TransactionalMailer::class)->queue(
+            recipient: (string) $user->email,
+            mail: new OperationalMail(
+                kind: $switchKey,
+                severity: $severity,
+                title: $title,
+                detail: $detail,
+                context: 'CampaignsHub',
+                lang: $locale,
+                recipientName: (string) $user->name,
+                path: is_string($path) && $path !== '' ? $path.(is_string($query) ? '?'.$query : '') : '/app/notifications',
+                // FIN-LOOP-001 — a producer that can draw its problem passes the shape; the shell draws it.
+                viz: isset($p['viz']) && is_array($p['viz']) ? $p['viz'] : null,
+            ),
+            kind: $switchKey,
+            template: 'mail.operational',
+            locale: $locale,
+            tenantId: $tenantId,
+            userId: $userId,
+            dedupKey: 'bell:'.$notification->id,
+        );
+    }
+
+    /** @param  array<string,mixed>  $p */
+    private function whatsappState(AppNotification $notification, int $userId, string $switchKey, bool $inQuietHours, array $p): string
+    {
+        try {
+            return $this->whatsapp->deliver($notification, $userId, $switchKey, $inQuietHours, isset($p['project_id']) ? (string) $p['project_id'] : null);
+        } catch (Throwable $e) {
+            // A vendor or a bug must not take the bell down with it; the ledger says it failed and the log says why.
+            Log::warning('WhatsApp delivery failed before the vendor answered.', ['type' => $switchKey, 'error' => $e::class]);
+
+            return 'failed';
+        }
+    }
+
+    /**
+     * Update the day's row for a finding that came round again.
+     *
+     * @param  array<string,mixed>  $p
+     */
+    private function refresh(AppNotification $n, array $p): AppNotification
+    {
+        $rank = ['info' => 0, 'success' => 0, 'warning' => 1, 'error' => 2, 'critical' => 2];
+        $new = (string) ($p['severity'] ?? $n->severity);
+        $worse = ($rank[$new] ?? 0) > ($rank[(string) $n->severity] ?? 0);
+
+        $fields = [
+            'severity' => $worse ? $new : $n->severity,
+            'title' => $p['title'] ?? $n->title,
+            'message' => $p['message'] ?? $n->message,
+            'title_ar' => ! empty($p['title_ar']) ? (string) $p['title_ar'] : $n->title_ar,
+            'message_ar' => ! empty($p['message_ar']) ? (string) $p['message_ar'] : $n->message_ar,
+            'repeat_count' => ((int) $n->repeat_count) + 1,
+            'last_seen_at' => Carbon::now(),
+        ];
+        if ($worse) {
+            $fields += ['status' => 'unread', 'read_at' => null];
+            DB::table('notification_reads')->where('notification_id', $n->id)->delete();
+        }
+        $n->forceFill($fields)->save();
+        // A finding that got worse (a warning that became critical) is news; a plain repeat is not.
+        if ($worse) {
+            $this->ring($n);
+        }
+        LegacyBridge::seen($n);
+
+        return $n;
+    }
+
+    /** @param  array<string,mixed>  $p */
+    private function dayKey(string $tenantId, ?int $userId, string $kind, array $p): string
+    {
+        return hash('sha256', implode('|', [
+            'day', $tenantId, $userId ?? 'tenant', $kind,
+            $p['entity_type'] ?? '', $p['entity_id'] ?? '', $p['dedup_extra'] ?? '',
+            Carbon::now('Asia/Riyadh')->toDateString(),
+        ]));
     }
 
     /** @param  array<string,mixed>  $p */
@@ -225,13 +442,13 @@ final class NotificationDispatcher
      *
      * @param  array<string,mixed>|null  $prefs
      */
-    private function wants(?array $prefs, string $tenantId, ?int $userId, string $type, string $category, string $channel, bool $perClient): bool
+    private function wants(?array $prefs, string $tenantId, ?int $userId, ?string $type, string $category, string $channel, bool $perClient): bool
     {
         if ($userId === null) {
             return true;
         }
 
-        if (! $perClient && MessageCatalogue::has($type)) {
+        if (! $perClient && $type !== null && MessageCatalogue::has($type)) {
             return $this->choices->wants($userId, $tenantId, $type, $channel);
         }
 

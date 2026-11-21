@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Notifications\Services\EnrolMemberNotifications;
+
 /**
  * Every message this product can send, named once — MAIL-011.
  *
@@ -44,6 +46,27 @@ namespace App\Domains\Notifications\Support;
  * attacker a mute button. They appear in the catalogue, and the screen shows them as always-sent
  * with that reason written out, rather than hiding them and letting people wonder.
  *
+ * ## What a new colleague starts with — decision NOTIFICATION-ENROLMENT-001 (2026-11-06)
+ *
+ * Owner: «كل مستخدم يحتاج إشعارات وملخصات على الإيميل». Every sender is driven from `notification_preferences`, and
+ * nothing created a row until somebody pressed save on the settings screen: Production had ten verified users and one
+ * row, so nine people could receive no alert and no digest. {@see EnrolMemberNotifications}
+ * now opens the row when a staff member is let in, with these defaults, decided and not discovered:
+ *
+ * - **In-app and email on**, realtime. The catalogue's own per-type defaults and importance thresholds apply (the row stores
+ *   no per-type choice, so nothing is frozen into it); a mandatory message is unaffected by any of this.
+ * - **Daily and weekly digests on, monthly off.** Monthly is the third mail of a rhythm most people only need once; the
+ *   daily and the weekly are the two a person misses when they are absent. Three would start every colleague on the
+ *   most mail they could receive, which is how a product teaches people to filter it. Monthly stays one tick away.
+ * - **Alerts and recommendations on.** An alert is the reason the channel exists.
+ * - **Eight o'clock, the person's own timezone** (their profile, else `Asia/Riyadh`), their own language (else Arabic).
+ * - **Quiet hours off.** A night the person has not asked for is a night nobody decided.
+ *
+ * What does NOT change: a digest still carries only what `DigestScope` lets that person read, a membership without
+ * `money.view` still receives it without spend, and a row that exists is never touched — somebody who switched everything
+ * off has a row that says so, and is never enrolled again. Client-portal users, platform admins and influencer-portal
+ * accounts are not enrolled.
+ *
  * ## Legacy categories
  *
  * The six older categories (`budget`, `performance`, `sync`, `token`, `reports`, `security`) are
@@ -68,7 +91,7 @@ final class MessageCatalogue
      */
     private const LEGACY_ALIAS = ['sync' => 'integrations', 'token' => 'integrations'];
 
-    public const RHYTHMS = ['immediate', 'daily', 'weekly'];
+    public const RHYTHMS = ['immediate', 'daily', 'weekly', 'monthly'];
 
     /**
      * The two types whose on/off lives in the older `digests` map rather than in `types`.
@@ -79,7 +102,13 @@ final class MessageCatalogue
     public const DIGEST_SWITCH = ['daily_digest' => 'daily', 'weekly_digest' => 'weekly', 'monthly_digest' => 'monthly'];
 
     /** Types that can be held for a digest, because the digest prints them. */
-    private const DIGESTIBLE = ['immediate', 'daily', 'weekly'];
+    private const DIGESTIBLE = ['immediate', 'daily', 'weekly', 'monthly'];
+
+    /**
+     * How far a person may narrow a type by importance (§17.4.1): every level, or warnings and above, or
+     * critical alone. Ordered low to high; a severity not listed here is below all of them.
+     */
+    public const IMPORTANCE = ['info', 'warning', 'critical'];
 
     /** Types that are an event and nothing batches them. */
     private const EVENT_ONLY = ['immediate'];
@@ -119,6 +148,8 @@ final class MessageCatalogue
             'rising_cost' => self::note('budget', 'budget', defaultEmail: true),
             'reallocation' => self::note('budget', 'budget', defaultEmail: true),
             'budget_risk' => self::event('budget', 'budget', 'AlertEvaluator', defaultEmail: true),
+            // FIN-LOOP-001 — the money the client put in: added, running low, over. On by default: it is the reason to renew.
+            'project_budget' => self::event('budget', 'budget', 'FundingNotifier', defaultEmail: true),
 
             // ── المحتوى ───────────────────────────────────────────────────────────────────────
             /*
@@ -145,6 +176,8 @@ final class MessageCatalogue
             'monthly_digest' => self::rhythmItself('DigestDispatcher::sendMonthly'),
             'report_ready' => self::event('reports', 'reports', 'AlertEvaluator', defaultEmail: true),
             'report_failed' => self::event('reports', 'reports', 'AlertEvaluator', defaultEmail: true),
+            // EMAIL-GAPS — off behind `reports.schedule_mail.enabled`; the default is what a person gets once it is on.
+            'scheduled_report' => self::event('reports', 'reports', 'ScheduledReportMailer', defaultEmail: true),
 
             // ── التشغيل ───────────────────────────────────────────────────────────────────────
             /*
@@ -157,6 +190,17 @@ final class MessageCatalogue
             'journey_transition' => self::event('operations', null, 'RequestJourneyService'),
             'client_needs_attention' => self::event('operations', null, 'ClientManagementService'),
             /*
+             * NOTIFICATION-CHANNELS-001 — a rule the person built, matched something.
+             *
+             * It reached the bell only: the type was in no list, so the dispatcher wrote `in_app_only`.
+             * Email is ON by default because this goes to the rule's author alone, about a rule they
+             * wrote to be told. `legacy` is `performance` — the category it was ACTUALLY resolved under
+             * until now — so a person who switched «الأداء» email off keeps it off rather than being
+             * surprised by a new mail; the category here is `operations` so that a manager's
+             * «performance» recipient arrangement does not start including it.
+             */
+            'automation_rule' => self::event('operations', 'performance', 'RuleEvaluator', defaultEmail: true),
+            /*
              * LEAD-SLA-NOTIFICATION-001 — a promise to a buyer that has not been kept.
              *
              * Email is ON by default, which is deliberate and rare here. The other operations types
@@ -165,6 +209,9 @@ final class MessageCatalogue
              * cost of it arriving late is the client's money, and «eventually» is the failure.
              */
             'lead_sla' => self::event('operations', null, 'AlertEvaluator', defaultEmail: true),
+            'delivery_reminder' => self::event('operations', null, 'MemberNotices::deliveryReminder', defaultEmail: true),
+            // EMAIL-GAPS — off behind `requests.client_mail_enabled`; to the client contact and to the team who can reach the request.
+            'client_request' => self::event('operations', null, 'RequestMailer', defaultEmail: true),
 
             // ── المالية ───────────────────────────────────────────────────────────────────────
             'subscription' => self::event('billing', null, 'SubscriptionNotifier', defaultEmail: true),
@@ -174,9 +221,47 @@ final class MessageCatalogue
             'email_verification' => self::mandatory('RegistrationVerificationService'),
             'sign_in_code' => self::mandatory('CredentialMail::SIGN_IN_CODE'),
             'member_setup' => self::mandatory('PasswordResetService::inviteExistingMember'),
+            // LOGIN-004 — proof that a Google account belongs with this account; without it a person could not finish signing in.
+            'oauth_link' => self::mandatory('OAuthPendingLinkController::email'),
             'invitation' => self::mandatory('InvitationService'),
             'security_alert' => self::mandatory('SecurityAlertMail'),
+            // A person's standing in a workspace changed: they must be able to notice somebody else did it.
+            'role_changed' => self::mandatory('MemberNotices::roleChanged'),
+            'member_welcome' => self::mandatory('MemberNotices::welcome'),
         ];
+    }
+
+    /**
+     * The catalogue type a ledger `kind` belongs to. Null for a kind that is no message type at all — `test`
+     * is an operator asking about the transport, and no switch applies to it.
+     */
+    public static function typeOfKind(string $kind): ?string
+    {
+        if (str_starts_with($kind, 'delivery_')) {
+            return 'delivery_reminder';
+        }
+
+        return self::has($kind) ? $kind : null;
+    }
+
+    /**
+     * Kinds whose body holds something that opens an account or proves who somebody is. These are never
+     * serialised into a queue payload — see `TransactionalMailer`.
+     */
+    public static function carriesSecret(string $kind): bool
+    {
+        return in_array($kind, ['password_reset', 'email_verification', 'sign_in_code', 'member_setup', 'oauth_link', 'invitation'], true);
+    }
+
+    /**
+     * May this type be left with one click (§17.4.5)?
+     *
+     * Not a mandatory type, and not `subscription`: its sender never asks a preference, and a renewal that
+     * failed is about the account whatever somebody thought of the marketing. Unknown types: no.
+     */
+    public static function isUnsubscribable(string $type): bool
+    {
+        return self::has($type) && ! self::isMandatory($type) && $type !== 'subscription';
     }
 
     /** @return list<string> */

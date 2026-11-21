@@ -7,6 +7,8 @@ namespace App\Domains\Projects\Access;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Tenancy\Context\MembershipContext;
+use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 
 /**
@@ -31,6 +33,9 @@ final class ProjectReach
 {
     /** @var array<string, list<string>|null> one answer per reader for the life of this instance */
     private array $memo = [];
+
+    /** @var array<string, bool> per membership: an agency member with no named client and no `clients.view_all` */
+    private array $unscoped = [];
 
     /** @var array<string, list<string>> */
     private array $keys = [];
@@ -113,11 +118,42 @@ final class ProjectReach
      *
      * @return list<string>|null
      */
+    /**
+     * TEAM-ROLE-PRESETS-001 — an agency member whose membership names no client, and who does not hold
+     * `clients.view_all`, gets no TENANT-WIDE project reach from `projects.view.all`; the projects they
+     * are explicitly a member of (`project_memberships`) still open, exactly as before.
+     *
+     * The agency's own rule (ADR 0002, `ClientScopeResolver::reachableClientIds`, the team page's
+     * «لا يصل إلى أي عميل») is that no named client is not «every client». This class treated an
+     * unscoped membership as having no ceiling at all, so a freshly invited project manager — whose
+     * role holds `projects.view.all` and whose clients have not been chosen yet — read every project
+     * in the agency. Only the agency portal: a solo workspace has no clients to name, and its members
+     * keep the tenant-wide reach they always had.
+     */
+    public function agencyMemberWithoutClients(): bool
+    {
+        $membership = $this->context->membership();
+        if ($membership === null || $membership->portal !== Portal::Agency
+            || $this->context->clientScopeIds() !== [] || $this->context->projectScopeIds() !== []) {
+            return false;
+        }
+
+        $key = (string) $membership->getKey();
+        if (! array_key_exists($key, $this->unscoped)) {
+            $user = $membership->user;
+            $this->unscoped[$key] = $user instanceof User
+                && ! $user->is_platform_admin
+                && ! $user->hasPermission(ClientScopeResolver::ALL_CLIENTS);
+        }
+
+        return $this->unscoped[$key];
+    }
+
     public function idsFor(User $user): ?array
     {
         $ceiling = $this->ceilingProjectIds();
 
-        if ($this->holds($user, 'projects.view.all')) {
+        if ($this->holds($user, 'projects.view.all') && ! $this->agencyMemberWithoutClients()) {
             return $ceiling;
         }
 
@@ -165,6 +201,76 @@ final class ProjectReach
         $this->keys[$key] ??= $user->permissionKeys()->all();
 
         return in_array($permission, $this->keys[$key], true);
+    }
+
+    /**
+     * The project reach that narrows the CLIENT-LEVEL surfaces (tasks, conversations, delivery packs, the client command
+     * centre) for a reader whose membership is CONFINED — it names clients or projects — or NULL for «no narrowing».
+     *
+     * Those surfaces carry no project in the URL and answer to the client ceiling, so a member confined to one project of a
+     * client read the client's other projects through them (PROJECTS-RBAC-CLOSURE-001). A reader with no ceiling is not
+     * confined: the agency-wide holder of `clients.view_all`, and a client-roster member whose project allow-list is the
+     * authority (`ClientAccess::projectRestriction()`), keep the answer the client layer already gave them.
+     *
+     * Inside a confinement the answer is fail-closed: a removed or expired membership leaves an EMPTY list, not «all».
+     *
+     * @return list<string>|null
+     */
+    public function confinedIdsFor(User $user): ?array
+    {
+        return $this->ceilingProjectIds() === null ? null : $this->dataIdsFor($user);
+    }
+
+    /**
+     * Narrow a list of project ids (a client's projects, say) to the ones a confined reader reaches.
+     *
+     * @param  list<string>  $projectIds
+     * @return list<string>
+     */
+    public function narrow(User $user, array $projectIds): array
+    {
+        $reach = $this->confinedIdsFor($user);
+
+        return $reach === null ? $projectIds : array_values(array_intersect($projectIds, $reach));
+    }
+
+    /**
+     * Whether a row that MAY belong to a project is inside a confined reader's reach.
+     *
+     * A row with no project says nothing about projects, so this answers true for it: the caller's own rule
+     * (client ceiling, authorship) is what decides such a row, exactly as before.
+     */
+    public function canReachRow(User $user, ?string $projectId): bool
+    {
+        if ($projectId === null) {
+            return true;
+        }
+
+        $reach = $this->confinedIdsFor($user);
+
+        return $reach === null || in_array($projectId, $reach, true);
+    }
+
+    /**
+     * The list twin of {@see self::canReachRow()}: project-bound rows only inside a confined reader's reach, project-less
+     * rows untouched.
+     *
+     * @template TQuery of \Illuminate\Database\Eloquent\Builder
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    public function constrainRows($query, User $user, string $column = 'project_id')
+    {
+        $reach = $this->confinedIdsFor($user);
+
+        if ($reach === null) {
+            return $query;
+        }
+
+        return $query->where(static function ($q) use ($column, $reach): void {
+            $q->whereNull($column)->orWhereIn($column, $reach);
+        });
     }
 
     public function canReach(User $user, string $projectId): bool

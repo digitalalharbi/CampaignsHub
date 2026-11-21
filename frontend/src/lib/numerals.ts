@@ -75,7 +75,34 @@ export function formatNumber(
   options: Intl.NumberFormatOptions = {},
   system: NumeralSystem = numeralSystem(),
 ): string {
-  return new Intl.NumberFormat(numeralLocale(system), options).format(value)
+  return numberFormatter(numeralLocale(system), options).format(value)
+}
+
+/**
+ * One `Intl.NumberFormat` per (locale, options) — PERF-RENDER-001.
+ *
+ * Constructing a formatter is the expensive half of formatting a number: it resolves the locale,
+ * loads the numbering system and builds the pattern, and it did so on EVERY call. A roster of three
+ * hundred creatives with six figures each built eighteen hundred formatters to draw one table, and
+ * built them again on every re-render — opening a content dialog re-rendered the roster beneath it.
+ *
+ * Keyed by the options' JSON because two calls with equal options are the same formatter; the set
+ * of shapes the product uses is a dozen, so the map stays that size for the life of the page.
+ * `rosterFormatters.test.tsx` holds it: three hundred rows, formatter constructions bounded by the
+ * shapes, not the rows.
+ */
+const FORMATTERS = new Map<string, Intl.NumberFormat>()
+
+export function numberFormatter(locale: string, options: Intl.NumberFormatOptions = {}): Intl.NumberFormat {
+  const key = `${locale}|${JSON.stringify(options)}`
+  let formatter = FORMATTERS.get(key)
+
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, options)
+    FORMATTERS.set(key, formatter)
+  }
+
+  return formatter
 }
 
 /**

@@ -54,7 +54,11 @@ export interface CreativePreview {
    * `unavailable` — «the platform exposed no asset» — is a false accusation of exactly the kind
    * `never_fetched` was added to stop. Five states, five sentences.
    */
-  state: 'available' | 'withheld' | 'expired' | 'unavailable' | 'never_fetched' | 'shape_not_fetched'
+  /*
+   * CREATIVE-PREVIEWS-001 — `cover_pending` and `cover_failed`: the platform gave a still and our copy of it
+   * is not there yet, or could not be taken. Neither may draw the platform's short-lived link.
+   */
+  state: 'available' | 'withheld' | 'expired' | 'unavailable' | 'never_fetched' | 'shape_not_fetched' | 'cover_pending' | 'cover_failed'
   /**
    * CONTENT-PREVIEW-SHAPES-001 — the shapes a real ad takes, including the two that have no single
    * asset to show.
@@ -100,6 +104,8 @@ export interface CreativePreview {
    * stays `unavailable`.
    */
   text?: { headline: string | null; body: string | null } | null
+  /** CREATIVE-PREVIEWS-001 — the state of OUR copy of the cover; optional for an older server's payload. */
+  cover?: { state: 'cached' | 'pending' | 'none' | 'failed'; reason: string | null } | null
   /** Set only on a client link: whether the reader may zoom, and whether the asset may be downloaded. */
   can_zoom?: boolean
   can_download?: boolean
@@ -362,6 +368,8 @@ export interface LibraryQuery {
   kinds?: string[]
   statuses?: string[]
   health?: string
+  /** CONTENT-FORMAT-COMPARISON-001 — one page of a format's creatives, for the comparison's drill-down. */
+  creative_ids?: string[]
 }
 
 /**
@@ -514,6 +522,108 @@ export const formatIntelligence = (
     `/projects/${projectId}/creatives/format-intelligence${qs === '' ? '' : `?${qs}`}`,
   )
 }
+
+/**
+ * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», one comparison per objective family.
+ *
+ * Every figure is the canonical creative reader's: `null` is «not reported» or «withheld», never zero; ratios are pooled
+ * on the server; the winner is the one ranker's on a cost per result (never ROAS) and absent with a reason when the
+ * formats cannot be compared. A client's copy arrives with every money field nulled and `spend_hidden: true`.
+ */
+export interface FormatComparisonCreative {
+  id: string
+  name: string
+  token: string | null
+  spend: number | null
+  results: number | null
+  cost_per_result: number | null
+  ctr: number | null
+  impressions: number | null
+  clicks: number | null
+  results_not_attributable: boolean
+}
+
+export interface FormatComparisonFigures {
+  spend: number | null
+  results: number | null
+  cost_per_result: number | null
+  ctr: number | null
+  cpm: number | null
+  cpc: number | null
+  conversion_rate: number | null
+  roas: number | null
+  impressions: number | null
+  clicks: number | null
+}
+
+export interface FormatComparisonRow extends FormatComparisonFigures {
+  /** A `CreativeKind` or `unclassified` — named through `creativeKindLabel`, never printed raw. */
+  format: string
+  /** The platform tokens behind the unclassified slice, labelled as the platform's own. */
+  tokens: Array<{ token: string; creatives: number }>
+  creatives: number
+  creatives_with_metrics: number
+  spend_withheld: boolean
+  spend_original: number | null
+  original_currency: string | null
+  results_partial: boolean
+  revenue: number | null
+  share_of_spend: number | null
+  share_of_results: number | null
+  small_sample: boolean
+  small_sample_reason: string | null
+  creative_list: FormatComparisonCreative[]
+  creative_list_total: number
+  previous: Partial<FormatComparisonFigures> | null
+}
+
+export interface FormatComparisonObjective {
+  family: string
+  label: { ar: string; en: string }
+  result_metric: string | null
+  cost_metric: string | null
+  lower_is_better: boolean | null
+  totals: { creatives: number; spend: number | null; results: number | null; cost_per_result: number | null }
+  coverage: { spend_known_share: number | null; results_known_share: number | null }
+  reconciles: boolean | null
+  formats: FormatComparisonRow[]
+  winner: { format: string; metric: string; value: number | null } | null
+  winner_refusal: string | null
+  trend: {
+    metric: string | null
+    result: string | null
+    points: Array<{ from: string; to: string; formats: Record<string, { results: number | null; cost_per_result: number | null }> }>
+  } | null
+}
+
+export interface FormatComparisonPayload {
+  period: { from: string; to: string }
+  previous_period: { from: string; to: string }
+  currency: string | null
+  spend_hidden?: boolean
+  totals: { creatives: number; creatives_with_metrics: number; spend: number | null; reconciles: boolean | null }
+  coverage: { creatives_total: number; creatives_known: number; spend_known_share: number | null }
+  objectives: FormatComparisonObjective[]
+  sample_rule: { minimum_creatives: number; material_share: number }
+  /** REPORT-FORMAT-COMPARE-TABLE-001 — a report's ONE table (server-built): a column per type, a row per KPI of the report. */
+  table?: FormatComparisonTable | null
+}
+
+export interface FormatComparisonTable {
+  rows: string[]
+  formats: Array<{ format: string; creatives: number; small_sample: boolean }>
+  /** KPI → type → figure. A row a later redaction removed arrives as null. */
+  cells: Record<string, Record<string, number | null> | null>
+  better: Record<string, 'higher' | 'lower'>
+  labels: Record<string, { ar: string; en: string }>
+  kinds: Record<string, 'money' | 'rate' | 'multiplier' | 'ratio' | 'count'>
+  verdict_order: string[]
+}
+
+export const formatComparison = (
+  projectId: string,
+  query: { from?: string; to?: string; providers?: string[]; campaign_ids?: string[] } = {},
+) => getData<FormatComparisonPayload>(`/projects/${projectId}/creatives/format-comparison${libraryQueryString(query)}`)
 
 /**
  * `objective` chooses which metric the comparison is DECIDED on — it does not narrow the set.

@@ -14,6 +14,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -27,6 +28,7 @@ use Tests\TestCase;
  */
 class LiveReportCurrencyBasisTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -60,7 +62,7 @@ class LiveReportCurrencyBasisTest extends TestCase
                 'id' => (string) Str::uuid(),
                 'tenant_id' => $this->tenant->getKey(),
                 'project_id' => $this->project->getKey(),
-                'external_account_id' => (string) Str::uuid(),
+                'external_account_id' => $this->bindSeededAccount((string) $this->project->getKey()),
                 'external_campaign_id' => (string) Str::uuid(),
                 'unified_campaign_id' => $this->campaign->getKey(),
                 'provider' => 'meta',

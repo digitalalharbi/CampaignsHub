@@ -254,6 +254,46 @@ final class CampaignProviderWriteTest extends TestCase
 
     // ── The hierarchy: ad sets, ads, targeting, placements, creatives, destinations ───────────
 
+    /**
+     * META-WRITE-PARAMS-001 — Meta's Ad Set Budget Sharing guide: from v24.0 a campaign whose budget sits on its ad
+     * sets must state `is_adset_budget_sharing_enabled` (error 4834011), and one with a campaign budget need not.
+     * This install calls v25.0, so every budget-less create was refused.
+     */
+    public function test_meta_create_states_budget_sharing_only_when_the_budget_sits_on_the_ad_sets(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta', 'act_77');
+        Http::fake(['graph.facebook.com/*' => Http::sequence()->push(['id' => '120200'])->push(['id' => '120201'])]);
+
+        $this->actingAs($this->owner, 'sanctum')->postJson($this->url('provider-campaigns'), [
+            'external_account_id' => $account->id, 'objective' => 'OUTCOME_SALES',
+        ])->assertCreated();
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/act_77/campaigns') && ($r->data()['is_adset_budget_sharing_enabled'] ?? null) === 'False');
+
+        $this->actingAs($this->owner, 'sanctum')->postJson($this->url('provider-campaigns'), [
+            'external_account_id' => $account->id, 'objective' => 'OUTCOME_SALES', 'daily_budget' => 200,
+        ])->assertCreated();
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/act_77/campaigns') && ($r->data()['daily_budget'] ?? null) === 20000
+            && ! array_key_exists('is_adset_budget_sharing_enabled', $r->data()));
+    }
+
+    /** Meta's ad set reference: «When `optimization_goal` is `LEAD_GENERATION`, `page_id` needs to be passed as promoted_object». */
+    public function test_a_lead_generation_ad_set_with_no_page_is_refused_here_with_the_reason_and_nothing_is_sent(): void
+    {
+        $this->configure('meta');
+        [, $campaign] = $this->tree('meta', 'act_5');
+        Http::preventStrayRequests();
+        Http::fake();
+
+        $response = $this->write('campaign', $campaign->id, 'create_ad_set', [
+            'name' => 'Leads', 'optimization_goal' => 'LEAD_GENERATION', 'daily_budget' => 120, 'countries' => ['SA'],
+        ]);
+
+        $response->assertStatus(422);
+        $this->assertStringContainsString('page_id', (string) $response->getContent());
+        Http::assertNothingSent();
+    }
+
     public function test_meta_creates_a_paused_ad_set_under_the_campaign_and_mirrors_it_at_once(): void
     {
         $this->configure('meta');
@@ -312,9 +352,10 @@ final class CampaignProviderWriteTest extends TestCase
     public function test_meta_creates_an_ad_bound_to_one_of_the_project_s_creatives(): void
     {
         $this->configure('meta');
-        [, , $adSet] = $this->tree('meta', 'act_5');
+        [$account, , $adSet] = $this->tree('meta', 'act_5');
         $creative = ExternalCreative::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'provider' => 'meta',
+            'external_account_id' => $account->id,
             'external_creative_id' => '2384001', 'name' => 'Hero video', 'format' => 'video', 'status' => 'active',
         ]);
         Http::fake(['graph.facebook.com/*' => Http::response(['id' => '7700'])]);
@@ -343,7 +384,7 @@ final class CampaignProviderWriteTest extends TestCase
     public function test_a_creative_on_an_account_deselected_for_the_project_cannot_be_bound(): void
     {
         $this->configure('meta');
-        [, , $adSet] = $this->tree('meta', 'act_5');
+        [$account, , $adSet] = $this->tree('meta', 'act_5');
         $other = $this->account('meta', 'act_9');
         ProjectIntegrationBinding::query()->where('external_account_id', $other->id)->update(['is_active' => false]);
         $hidden = ExternalCreative::create([
@@ -356,7 +397,7 @@ final class CampaignProviderWriteTest extends TestCase
         Http::assertNothingSent();
 
         $visible = ExternalCreative::create([
-            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $adSet->external_account_id, 'provider' => 'meta',
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id, 'provider' => 'meta',
             'external_creative_id' => 'cr-visible', 'name' => 'Visible', 'format' => 'image', 'status' => 'active',
         ]);
         $offered = collect($this->actingAs($this->owner, 'sanctum')->getJson($this->url('provider-writes'))->assertOk()->json('data.creatives.meta'))->pluck('id')->all();

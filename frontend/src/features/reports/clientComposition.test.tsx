@@ -35,7 +35,7 @@ const payload = {
   platforms: [{ provider: 'meta', spend: 600, conversions: 24, impressions: 90000, clicks: 700 }],
   campaigns: [{ campaign_name: 'Eid', spend: 600, conversions: 24, objective: 'sales' }],
   ad_sets: [],
-  funnel: [{ key: 'impressions', label: 'Impressions', value: 90000, reported: true }],
+  funnel: [{ stage: 'impressions', label: 'Impressions', count: 90000, step_rate: null, cost_per: null, reported: true }, { stage: 'clicks', label: 'Clicks', count: 900, step_rate: 0.01, cost_per: null, reported: true }],
   funnel_spend: 1000,
   ads: [],
   ads_groups: [],
@@ -182,13 +182,14 @@ describe('a funnel step that grew is not called a conversion', () => {
     { stage: 'checkout', label: 'Checkout', count: 7_420, step_rate: 1.65, cost_per: 1.33, exceeds_previous: true },
   ]
 
-  it('marks the ratio and explains why the stages do not nest', () => {
+  it('shows a neutral «definitions differ» chip instead of a percentage above 100', () => {
     renderWithProviders(<ConversionFunnelChart stages={stages} currency="USD" />)
 
-    const marked = screen.getByText(/165%/)
+    const chip = screen.getByTestId('funnel-definitions-differ')
 
-    expect(marked.getAttribute('title') ?? '', 'the client was given a bare 165% with no explanation')
-      .toMatch(/do not nest|لا تتداخلان/)
+    expect(chip).toHaveTextContent(/definitions differ|تعريفات المنصات تختلف/i)
+    expect(screen.queryByText(/165%/), 'a funnel must never print a step above 100%').toBeNull()
+    expect(chip.getAttribute('title') ?? '').toMatch(/do not nest|لا تتداخلان/)
   })
 
   /** An ordinary step keeps its plain reading — the marker means something only if it is rare. */

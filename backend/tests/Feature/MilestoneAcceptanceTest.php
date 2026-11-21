@@ -10,6 +10,10 @@ use App\Domains\Alerts\Models\AlertEvent;
 use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertEvaluator;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\OAuth\OAuthTokens;
+use App\Domains\Integrations\OAuth\TokenVault;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Jobs\GenerateReportJob;
@@ -134,13 +138,24 @@ final class MilestoneAcceptanceTest extends TestCase
         $this->assertDatabaseMissing('report_deliveries', ['status' => 'sent']);
 
         // 9) ALERT TRIGGERED — a failed sync raises exactly one alert (cooldown/dedup prevent storms).
-        DB::table('metric_sync_runs')->insert([
-            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $project->id,
-            'connection_id' => (string) Str::uuid(), 'provider' => 'meta', 'status' => 'failed',
-            'window_start' => Carbon::now()->subDay()->toDateString(), 'window_end' => Carbon::now()->toDateString(),
-            'error' => 'token expired', 'started_at' => Carbon::now()->subMinutes(5),
-            'created_at' => Carbon::now(), 'updated_at' => Carbon::now(),
+        // PROJECT-LIFECYCLE-001 §6 (N3) — data arrival is judged per actively bound ad account of a live project: the project links
+        // one account, whose last success is three days old and whose latest sync failed.
+        $connection = app(TokenVault::class)->open(tenantId: (string) $this->tenant->id, provider: 'meta',
+            tokens: new OAuthTokens('AT', 'RT', Carbon::now()->addHour()), connectionName: 'meta-milestone');
+        $account = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $connection->getKey(), 'provider' => 'meta', 'account_type' => 'ad_account',
+            'external_id' => 'act-milestone', 'name' => 'Milestone account', 'currency' => 'USD', 'timezone' => 'Asia/Riyadh', 'status' => 'active',
         ]);
+        ProjectIntegrationBinding::create(['tenant_id' => $this->tenant->id, 'project_id' => $project->id, 'external_account_id' => $account->id,
+            'provider' => 'meta', 'purpose' => 'ads', 'is_active' => true]);
+        $run = fn (string $status, Carbon $at, string $from, string $to) => DB::table('metric_sync_runs')->insert([
+            'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $project->id,
+            'connection_id' => $connection->getKey(), 'external_account_id' => $account->id, 'provider' => 'meta', 'status' => $status,
+            'window_start' => $from, 'window_end' => $to, 'error' => $status === 'failed' ? 'token expired' : null,
+            'started_at' => $at->copy()->subMinute(), 'finished_at' => $at, 'created_at' => $at, 'updated_at' => $at,
+        ]);
+        $run('success', Carbon::now()->subDays(3), Carbon::now()->subDays(5)->toDateString(), Carbon::now()->subDays(4)->toDateString());
+        $run('failed', Carbon::now()->subMinutes(5), Carbon::now()->subDay()->toDateString(), Carbon::now()->toDateString());
         $rule = AlertRule::create(['tenant_id' => $this->tenant->id, 'type' => 'sync_failure', 'name' => 'Sync', 'cooldown_minutes' => 720, 'severity' => 'critical', 'active' => true]);
         $this->assertSame(1, app(AlertEvaluator::class)->evaluateRule($rule));
         $this->assertSame(1, AlertEvent::where('rule_id', $rule->id)->where('status', 'open')->count());

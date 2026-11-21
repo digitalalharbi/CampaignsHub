@@ -191,7 +191,7 @@ final class OpenAiAdsStructureSyncTest extends TestCase
                 ], 'has_more' => false]);
             }
 
-            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'SAR']);
+            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency_code' => 'SAR']);
         });
     }
 }

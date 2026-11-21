@@ -61,6 +61,8 @@ export interface PhoneCredential {
   phone: string | null
   confirmed: boolean
   confirmed_at: string | null
+  /** AUTH-CODE-SWITCHES-001 — false when the platform turned this code off, which is not the same as no provider. */
+  code_available?: boolean
   channels: { sms: boolean; whatsapp: boolean }
 }
 

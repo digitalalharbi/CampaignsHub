@@ -13,6 +13,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 final class AIBYOKTest extends TestCase
@@ -38,6 +39,29 @@ final class AIBYOKTest extends TestCase
         $this->user = User::create(['name' => 'O', 'email' => 'o@agency.test', 'password' => 'secret123']);
         $this->grantMembership($this->user, $this->tenant);
         $this->user->assignRole($role);
+    }
+
+    /** TENANCY-UNIFY-001 — a key's scope and its ids agree, so the factory never mistakes a client key for a workspace key. */
+    public function test_a_key_s_scope_and_its_ids_must_agree(): void
+    {
+        app(TenantContext::class)->forget();
+        $clientA = (string) Str::uuid();
+        $clientB = (string) Str::uuid();
+        foreach ([$clientA, $clientB] as $c) {
+            DB::table('client_workspaces')->insert(['id' => $c, 'tenant_id' => (string) $this->tenant->id, 'name' => $c, 'slug' => $c, 'status' => 'active', 'created_at' => now(), 'updated_at' => now()]);
+        }
+        $project = (string) Str::uuid();
+        DB::table('projects')->insert(['id' => $project, 'tenant_id' => (string) $this->tenant->id, 'client_workspace_id' => $clientA, 'name' => 'P', 'status' => 'active', 'created_at' => now(), 'updated_at' => now()]);
+        $post = fn (array $body) => $this->actingAs($this->user, 'sanctum')->postJson('/api/v1/ai/credentials', $body + ['provider' => 'openai', 'secret' => 'sk-scope-1234']);
+
+        $post(['credential_scope' => 'platform'])->assertStatus(422);
+        $post(['credential_scope' => 'client'])->assertStatus(422);
+        $post(['credential_scope' => 'tenant', 'client_workspace_id' => $clientA])->assertStatus(422);
+        $post(['credential_scope' => 'project', 'project_id' => $project, 'client_workspace_id' => $clientB])->assertStatus(422);
+
+        $post(['credential_scope' => 'project', 'project_id' => $project])->assertCreated();
+        $this->assertSame($clientA, (string) AIProviderCredential::withoutGlobalScopes()->where('project_id', $project)->value('client_workspace_id'),
+            'a project key is bound to the project\'s own client');
     }
 
     public function test_storing_a_key_encrypts_it_and_never_returns_the_secret(): void

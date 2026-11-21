@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Campaigns\Services;
 
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Reports\Support\ReportReadMemo;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -72,6 +73,21 @@ final class CreativeResultAttribution
             return [];
         }
 
+        // PERF-RECOVERY-001 — the roster and the format comparison ask this for the same campaigns in one build.
+        sort($campaignIds);
+
+        return ReportReadMemo::remember(
+            'unattributed-campaigns|'.$from->toDateString().'|'.$to->toDateString().'|'.md5(implode(',', $campaignIds)),
+            fn (): array => $this->readUnattributed($campaignIds, $from, $to),
+        );
+    }
+
+    /**
+     * @param  list<string>  $campaignIds
+     * @return array<string, true>
+     */
+    private function readUnattributed(array $campaignIds, Carbon $from, Carbon $to): array
+    {
         $campaign = $this->campaignTotals($campaignIds, $from, $to);
         $creative = $this->creativeTotals($campaignIds, $from, $to);
 

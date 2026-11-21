@@ -13,6 +13,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 final class CrmLeadTest extends TestCase
@@ -59,6 +60,23 @@ final class CrmLeadTest extends TestCase
             ->assertOk()
             ->assertJsonPath('meta.pagination.total', 1)
             ->assertJsonPath('data.0.name', 'Big Client');
+    }
+
+    /** UX-COMPACT-CHARTS-001 — leads that arrived per day, real zeros included; another workspace's never counted. */
+    public function test_the_list_reports_leads_received_per_day_over_its_own_rows(): void
+    {
+        $at = fn (int $daysAgo) => ['created_at' => Carbon::now()->utc()->subDays($daysAgo)];
+        foreach ([0, 0, 2, 20] as $i => $ago) {
+            Lead::create(['name' => "L{$i}", 'source' => 'manual'])->forceFill($at($ago))->save();
+        }
+
+        $inflow = collect($this->actingAs($this->user, 'sanctum')->getJson('/api/v1/leads')->assertOk()->json('meta.inflow'));
+
+        $this->assertCount(14, $inflow, 'every day of the window is present');
+        $this->assertSame(2, $inflow->last()['count'], 'today');
+        $this->assertSame(1, $inflow[11]['count'], 'two days ago');
+        $this->assertSame(0, $inflow[12]['count'], 'a day nobody arrived is a real zero');
+        $this->assertSame(3, $inflow->sum('count'), 'the lead 20 days ago is outside the window');
     }
 
     public function test_lead_creation_is_validated(): void

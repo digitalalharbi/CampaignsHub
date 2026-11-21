@@ -15,6 +15,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -26,6 +27,7 @@ use Tests\TestCase;
  */
 final class LiveReportLeadEvidenceTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Report $report;
@@ -55,7 +57,7 @@ final class LiveReportLeadEvidenceTest extends TestCase
                 'id' => (string) Str::uuid(),
                 'tenant_id' => $tenant->getKey(),
                 'project_id' => $this->project->getKey(),
-                'external_account_id' => (string) Str::uuid(),
+                'external_account_id' => $this->bindSeededAccount((string) $this->project->getKey(), provider: 'tiktok'),
                 'external_campaign_id' => (string) Str::uuid(),
                 'unified_campaign_id' => $this->campaign->getKey(),
                 'provider' => 'tiktok',

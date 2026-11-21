@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Status\LinkHealth;
 use App\Domains\Notifications\Models\AppNotification;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -62,7 +63,7 @@ final class AlertRecoveryAndOutageTest extends TestCase
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
             'connection_id' => $connId, 'external_account_id' => $accountId, 'provider' => 'meta', 'status' => $status,
-            'window_start' => $at->copy()->subDay()->toDateString(), 'window_end' => $at->toDateString(),
+            'window_start' => $at->copy()->subDays(3)->toDateString(), 'window_end' => $at->toDateString(),
             'error' => $status === 'failed' ? 'token expired' : null, 'started_at' => $at, 'finished_at' => $at->copy()->addMinute(),
             'created_at' => $at, 'updated_at' => $at,
         ]);
@@ -104,11 +105,14 @@ final class AlertRecoveryAndOutageTest extends TestCase
         ]);
     }
 
-    public function test_a_cleared_sync_failure_is_resolved_by_the_next_sweep_and_the_reader_is_told(): void
+    public function test_a_cleared_sync_failure_is_resolved_by_the_next_sweep_without_a_word(): void
     {
         $rule = $this->rule('sync_failure');
-        $connId = (string) Str::uuid();
-        $this->syncRun($connId, 'failed', now()->subMinutes(30));
+        // LIFECYCLE-6 — the data-arrival rule judges a live project's bound ad account, by that account's runs.
+        $connection = $this->connection('meta');
+        $connId = (string) $connection->id;
+        $accountId = (string) $this->boundAccount('meta', $connection)->id;
+        $this->syncRun($connId, 'failed', now()->subMinutes(30), $accountId);
 
         $evaluator = app(AlertEvaluator::class);
         $this->assertSame(1, $evaluator->evaluateRule($rule));
@@ -116,31 +120,30 @@ final class AlertRecoveryAndOutageTest extends TestCase
         $this->assertSame('open', $event->status);
 
         // The next run succeeds — the condition is gone.
-        $this->syncRun($connId, 'success', now()->subMinutes(5));
+        $this->syncRun($connId, 'success', now()->subMinutes(5), $accountId);
         $this->assertSame(0, $evaluator->evaluateRule($rule));
 
         $event->refresh();
         $this->assertSame('resolved', $event->status);
         $this->assertNotNull($event->resolved_at);
-        $this->assertArrayHasKey('recovered_at', (array) $event->context);
-
-        $recovered = AppNotification::query()->where('title', 'like', 'Recovered:%')->first();
-        $this->assertNotNull($recovered, 'the reader is told the alert is over');
-        $this->assertSame('info', $recovered->severity);
-        $this->assertStringContainsString('Data sync failed', (string) $recovered->title);
+        // LINK-HEALTH-YESTERDAY-001 (§7أ) — the day arrived: the link card closes silently, no «Recovered» notice.
+        $this->assertSame('day_covered', $event->context['closed_reason']);
+        $this->assertNull(AppNotification::query()->where('title', 'like', 'Recovered:%')->first());
     }
 
     public function test_a_snoozed_alert_whose_condition_cleared_is_resolved_too(): void
     {
         $rule = $this->rule('sync_failure');
-        $connId = (string) Str::uuid();
-        $this->syncRun($connId, 'failed', now()->subHours(2));
+        $connection = $this->connection('meta');
+        $connId = (string) $connection->id;
+        $accountId = (string) $this->boundAccount('meta', $connection)->id;
+        $this->syncRun($connId, 'failed', now()->subHours(2), $accountId);
         $evaluator = app(AlertEvaluator::class);
         $evaluator->evaluateRule($rule);
         $event = AlertEvent::query()->where('rule_id', $rule->id)->firstOrFail();
         $evaluator->snooze($event, now()->addDay());
 
-        $this->syncRun($connId, 'success', now()->subMinutes(10));
+        $this->syncRun($connId, 'success', now()->subMinutes(10), $accountId);
         $evaluator->evaluateRule($rule);
 
         $this->assertSame('resolved', $event->refresh()->status);
@@ -177,7 +180,7 @@ final class AlertRecoveryAndOutageTest extends TestCase
         // The roll-up ranks the window's missing days above staleness; the source itself is stale, and that is what fires.
         $this->assertSame('partial', $event->context['state']);
         $this->assertSame('stale', $event->context['sources'][0]['state']);
-        $this->assertSame('Data is stale', $event->context['title']);
+        $this->assertSame(LinkHealth::text('not_synced', false), $event->context['title'], 'LINK-HEALTH-YESTERDAY-001: the one link text');
         $this->assertSame('meta', $event->context['sources'][0]['provider']);
 
         // Fresh figures arrive with a successful run — the engine says fresh, and the alert recovers.
@@ -199,7 +202,7 @@ final class AlertRecoveryAndOutageTest extends TestCase
 
         $this->assertSame(1, $evaluator->evaluateRule($rule));
         $event = AlertEvent::query()->where('rule_id', $rule->id)->firstOrFail();
-        $this->assertSame('Measurement sync failed', $event->context['title']);
+        $this->assertSame(LinkHealth::text('not_synced', false), $event->context['title'], 'LINK-HEALTH-YESTERDAY-001: the one link text');
         $this->assertSame('ga4', $event->context['provider']);
 
         // A success older than the threshold, with nothing newer, is still an outage; a fresh success recovers it.
@@ -216,7 +219,7 @@ final class AlertRecoveryAndOutageTest extends TestCase
             'type' => 'measurement', 'status' => 'success', 'started_at' => now()->subHours(30), 'finished_at' => now()->subHours(30),
         ]);
         $this->assertSame(1, $evaluator->evaluateRule($rule), 'a property whose last success is 30 h old, with the default 12 h threshold, is an outage');
-        $this->assertSame('Measurement data is stale', AlertEvent::query()->where('entity_id', (string) $old->id)->firstOrFail()->context['title']);
+        $this->assertSame(LinkHealth::text('not_synced', false), AlertEvent::query()->where('entity_id', (string) $old->id)->firstOrFail()->context['title']);
     }
 
     public function test_the_api_accepts_the_outage_types_and_an_hours_threshold(): void

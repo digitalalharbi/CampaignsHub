@@ -29,12 +29,20 @@ services:
 
   backend:
     container_name: campaignshub-backend
+    # PERF-BUILD-OFF-VPS-001 — the image is built in GitHub Actions and pulled here; the VPS no longer
+    # compiles anything on its single CPU. `build:` stays so a manual `up --build` still works.
+    image: ${CH_BACKEND_IMAGE:-campaignshub-backend:local}
     build:
       context: ..
       dockerfile: deploy/backend.production.Dockerfile
     restart: unless-stopped
     env_file:
       - ./backend.production.env
+    environment:
+      # PERF-RECOVERY-001 — no JIT on the web tier's connections. The visibility predicate's per-row subplans inflate the planner's cost past
+      # jit_above_cost, so 60 ms statements spent 41 ms compiling (Production EXPLAIN, run 41776460809). libpq reads this variable; it is not an
+      # application setting, so it does not belong in backend.production.env.
+      PGOPTIONS: "-c jit=off"
     volumes:
       - campaignshub_storage:/var/www/html/storage/app
     depends_on:
@@ -47,11 +55,15 @@ services:
       - web_proxy
 
   queue:
+    image: ${CH_BACKEND_IMAGE:-campaignshub-backend:local}
     build:
       context: ..
       dockerfile: deploy/backend.production.Dockerfile
     restart: unless-stopped
     command: php artisan horizon
+    # PERF-SYNC-ISOLATION-001 — one CPU shared with the web tier and other products: under contention the
+    # queue gets a quarter of the backend's share (default 1024), so provider syncs yield to requests.
+    cpu_shares: 256
     env_file:
       - ./backend.production.env
     volumes:
@@ -63,6 +75,7 @@ services:
       - internal
 
   scheduler:
+    image: ${CH_BACKEND_IMAGE:-campaignshub-backend:local}
     build:
       context: ..
       dockerfile: deploy/backend.production.Dockerfile
@@ -80,6 +93,7 @@ services:
 
   frontend:
     container_name: campaignshub-frontend
+    image: ${CH_FRONTEND_IMAGE:-campaignshub-frontend:local}
     build:
       context: ..
       dockerfile: deploy/frontend.production.Dockerfile

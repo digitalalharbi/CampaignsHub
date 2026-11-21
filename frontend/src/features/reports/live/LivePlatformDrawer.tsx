@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
 import { ProviderName } from '@/components/ProviderMark'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
@@ -71,7 +71,7 @@ export function LivePlatformDrawer({
     fetchLivePlatform(token, provider, { from, to, password: secret })
       .then(({ status, envelope }) => {
         if (!live) return
-        setState(status === 200 && envelope.data ? { kind: 'ready', data: envelope.data } : { kind: 'failed' })
+        setState(status === 200 && envelope.data ? { kind: 'ready', data: completePlatform(envelope.data) } : { kind: 'failed' })
       })
       .catch(() => live && setState({ kind: 'failed' }))
 
@@ -138,12 +138,67 @@ export function LivePlatformDrawer({
           </p>
         )}
         {state.kind === 'ready' && (
-          <PlatformBody data={state.data} whole={whole} reader={reader} currency={currency} locale={locale} onOpenContent={onOpenContent} />
+          <DrawerBoundary fallback={(
+            <p data-testid="live-platform-drawer-failed" className="rounded-2xl border border-border bg-surface p-6 text-center text-sm text-text-secondary">
+              {ar ? 'تعذّر تحميل تفاصيل هذه المنصة.' : 'This platform’s details could not be loaded.'}
+            </p>
+          )}
+          >
+            <PlatformBody data={state.data} whole={whole} reader={reader} currency={currency} locale={locale} onOpenContent={onOpenContent} />
+          </DrawerBoundary>
         )}
       </aside>
     </div>,
     document.body,
   )
+}
+
+/**
+ * REPORT-DRAWER-SAFE-001 — Owner 2026-11-20 (رواق): pressing Snapchat in the platforms comparison replaced the whole shared
+ * report with «حدث خطأ في عرض هذه الصفحة». The drawer read `data.ads.slice`, `data.shares.spend`, `data.breakdowns.…` as if every
+ * block always arrived, while the server cuts blocks a link does not carry (its hidden creatives, its unchosen figures). An
+ * absent block now reads as an empty one, and anything else that throws inside the drawer stays inside it: the drawer says it
+ * could not load and keeps its close button, and the report underneath is never lost.
+ */
+export function completePlatform(raw: Partial<LivePlatformPayload> & { provider?: string }): LivePlatformPayload {
+  const outcome = raw.shares?.outcome
+
+  return {
+    ...raw,
+    provider: raw.provider ?? '',
+    period: raw.period ?? { from: '', to: '', days: 0 },
+    objective: raw.objective ?? { key: '', ranking: '' },
+    objectives: Array.isArray(raw.objectives) ? raw.objectives.filter((b) => b && typeof b === 'object' && b.metrics && typeof b.metrics === 'object') : [],
+    totals: raw.totals && typeof raw.totals === 'object' ? raw.totals : {},
+    timeseries: Array.isArray(raw.timeseries) ? raw.timeseries : [],
+    shares: {
+      spend: raw.shares?.spend ?? null,
+      outcome: outcome && typeof outcome === 'object' ? outcome : { metric: 'conversions', value: 0, total: 0, share: null },
+    },
+    ads: Array.isArray(raw.ads) ? raw.ads : [],
+    ads_weakest: Array.isArray(raw.ads_weakest) ? raw.ads_weakest : [],
+    breakdowns: {
+      platform_drilldown: raw.breakdowns?.platform_drilldown ?? true,
+      content_drilldown: raw.breakdowns?.content_drilldown ?? false,
+    },
+  }
+}
+
+class DrawerBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    // eslint-disable-next-line no-console
+    console.error('[report] the platform drawer failed to render', error, info.componentStack)
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
 }
 
 function PlatformBody({

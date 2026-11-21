@@ -20,7 +20,7 @@ export function VerifyEmailPage() {
 
   const token = params.get('token')
 
-  const verify = useMutation({
+  const verify = useMutation({ meta: { feedback: 'none' },
     mutationFn: (t: string) => verifyEmail(t),
     /*
      * Move on FIRST, refresh the profile after.
@@ -41,7 +41,7 @@ export function VerifyEmailPage() {
     onError: () => setError(ar ? 'رابط التحقق غير صالح أو منتهٍ. أعد الإرسال.' : 'Invalid or expired link. Please resend.'),
   })
 
-  const resend = useMutation({
+  const resend = useMutation({ meta: { feedback: 'none' },
     mutationFn: resendVerification,
     onSuccess: (r) => { setDevLink(r.email_verification?.dev_link ?? null); setError(null) },
   })

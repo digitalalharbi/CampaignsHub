@@ -406,6 +406,17 @@ describe('CreativePulseSection', () => {
     expect(within(nav).queryByRole('link', { name: /^Ad( \(\d+\))?$/ })).not.toBeInTheDocument()
   })
 
+  /*
+   * The pulse now mounts inside the analytics board's Content section, and meets whatever answers that address — a stub, an older
+   * server — so a response without its `filters` (or its `totals`) offers no choices and draws the empty state; it must not throw.
+   */
+  it('survives a response that carries no filter options at all', async () => {
+    mocked.mockResolvedValue({ ...pulse(), filters: undefined, totals: undefined } as never)
+    render()
+
+    expect(await screen.findByTestId('creative-pulse')).toBeInTheDocument()
+  })
+
   /** A dashboard is the worst page to mount players on — it is the one most often left open. */
   it('mounts no video element, whatever the ad is', async () => {
     const { container } = render()
@@ -680,7 +691,7 @@ describe('CreativePulseSection', () => {
       'Suggested action',
     )
     expect(screen.getByText('Confidence: High confidence')).toBeInTheDocument()
-    expect(screen.getByText(/Previous period: 2026-06-08/)).toBeInTheDocument()
+    expect(screen.getByText(/Previous period:/).textContent).toContain('Jun 8 – Jul 7, 2026')
     // A truncated list says so, rather than reading as «this is everything».
     expect(screen.getByText('1/3')).toBeInTheDocument()
     // And the finding links into the ad it names, carrying the dashboard's own window.
@@ -749,7 +760,7 @@ describe('CreativePulseSection', () => {
    *
    * This section's formatter appended a hard-coded «SAR» / «ر.س» to whatever number it was handed.
    * `creative_daily_metrics` carried no currency at all, so on production it was labelling USD
-   * figures as Saudi riyals — 4,128.93 USD rendered «4,129 SAR», understating spend by roughly
+   * figures as Saudi riyals — 4,128.93 $ rendered «4,129 ر.س», understating spend by roughly
    * 3.75× and reading as a measured fact. A wrong number is worse than a withheld one: nothing
    * about it looks wrong.
    */
@@ -780,8 +791,8 @@ describe('CreativePulseSection', () => {
     await screen.findByText('Spend by ad type')
 
     // Exact, in the currency it was actually spent in — not rounded into a figure it never was.
-    expect(screen.getByText(/4,128\.93 USD/)).toBeInTheDocument()
-    expect(screen.queryByText(/4,129 SAR/)).not.toBeInTheDocument()
+    expect(screen.getByText(/4,128\.93 \$/)).toBeInTheDocument()
+    expect(screen.queryByText(/4,129 ر.س/)).not.toBeInTheDocument()
   })
 
   /** Two unconvertible currencies cannot be added, so no single figure may be printed. */
@@ -805,8 +816,8 @@ describe('CreativePulseSection', () => {
     const strip = (await screen.findByText('Spend by ad type')).parentElement!
 
     expect(strip).not.toHaveTextContent('900')
-    expect(strip).not.toHaveTextContent('USD')
-    expect(strip).not.toHaveTextContent('SAR')
+    expect(strip).not.toHaveTextContent(/USD|\$/)
+    expect(strip).not.toHaveTextContent(/SAR|ر\.س/)
   })
 
   /** A converted figure still renders in the reporting currency the SERVER named. */
@@ -825,7 +836,7 @@ describe('CreativePulseSection', () => {
     await screen.findByText('Spend by ad type')
 
     expect(screen.getByText(/1,800 AED/)).toBeInTheDocument()
-    expect(screen.queryByText(/SAR/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/(?:SAR|ر\.س)/)).not.toBeInTheDocument()
   })
 
 })

@@ -31,6 +31,8 @@ test.describe('the analytics page explains its own figures', () => {
      * question they answer, and each carries `aria-selected`. Querying by role is what this should
      * always have done — it survives a label being shortened, which is exactly what happened here.
      */
+    // ANALYTICS-REPORT-PARITY-001 — the tab lives in the «الجودة والمصادر» section of the one board; open the section, then the tab.
+    await page.getByRole('button', { name: /الجودة والمصادر|Quality & sources/ }).click()
     const tab = page.getByRole('tab', { name: /جودة البيانات والإسناد|Data quality & attribution/ })
     await tab.click()
     /*
@@ -172,6 +174,8 @@ test.describe('the analytics page explains its own figures', () => {
     /* The demo session opens in Arabic; assert the direction rather than assuming it. */
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl')
 
+    // The tab lives in the «الجودة والمصادر» section of the one board (ANALYTICS-REPORT-PARITY-001).
+    await page.getByRole('button', { name: 'الجودة والمصادر' }).click()
     const tab = page.getByRole('tab', { name: /جودة البيانات والإسناد/ })
     await tab.click()
     await expect(tab).toHaveAttribute('aria-selected', 'true')
@@ -186,7 +190,7 @@ test.describe('the analytics page explains its own figures', () => {
  * CONTENT-FORMAT-ROAS-REMOVED-001 — «the content reading can actually be seen» is gone with it.
  *
  * This block asserted that `content-reading` rendered, or that its refusal did. The component made
- * the claim the owner rejected — «الصور يحقق العائد على الإنفاق أفضل من الفيديو في هذه الفترة» —
+ * the claim the owner rejected — «الصور يحقق معدل العائد أفضل من الفيديو في هذه الفترة» —
  * ranked on creative-grain revenue over creative-grain spend, where only the spend half is
  * attributed in full.
  *

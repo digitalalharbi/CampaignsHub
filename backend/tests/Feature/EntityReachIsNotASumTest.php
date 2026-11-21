@@ -166,6 +166,8 @@ final class EntityReachIsNotASumTest extends TestCase
             'id' => (string) Str::uuid(),
             'tenant_id' => $this->tenant->getKey(),
             'project_id' => $this->project->getKey(),
+            // An entity row is read only while the account behind it is selected.
+            'external_account_id' => $this->campaign->external_account_id,
             'provider' => 'snapchat',
             'entity_type' => $type,
             'entity_id' => $entityId,

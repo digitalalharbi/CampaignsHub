@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { logout } from './api'
 import { beginSignOut } from '@/lib/api/client'
+import { forgetThisDevice } from '@/features/notifications/push'
 import { useAuth } from '@/stores/auth'
 
 /**
@@ -45,9 +46,9 @@ const OWNED_PREFIXES = ['chub:draft:', 'ch-requests-', 'chub:']
 /**
  * Sign out and clear everything this browser holds about the person.
  *
- * `destination` defaults to `/login`, which since LOGIN-UNIFIED-001 is the only sign-in page there
- * is: a client contact typing their address there reaches the one-time-code step, so there is no
- * longer a second door for callers on the portal side to send them to.
+ * `destination` defaults to `/login`, which since LOGIN-SINGLE-DOOR-001 is the only sign-in page there
+ * is, for a client contact as for anybody, so there is no second door for callers on the portal side
+ * to send them to.
  */
 export async function signOutCompletely(
   queryClient?: QueryClient,
@@ -81,6 +82,10 @@ export async function signOutCompletely(
    * signed-out session id and refuses it whatever writes it back (`ACCESS-EXIT-003`). Neither half
    * makes the other redundant: this one keeps the traffic down, that one makes the outcome certain.
    */
+  // NOTIF-PUSH-001 — this browser stops receiving the signed-out person's alerts. Before the barrier, because it needs the session,
+  // and short (2.5 s), because signing out must never wait on a slow network.
+  await forgetThisDevice()
+
   beginSignOut()
 
   try {
@@ -111,6 +116,11 @@ export async function signOutCompletely(
   } catch { /* no cache to clear */ }
 
   clearOwnedStorage()
+
+  // NOTIF-PWA-001 — the worker never holds data, but sign-out empties its caches anyway: belt and braces on a shared device.
+  try {
+    navigator.serviceWorker?.controller?.postMessage('CLEAR_CACHES')
+  } catch { /* no worker, or not allowed — nothing to clear */ }
 
   window.location.assign(destination)
 }

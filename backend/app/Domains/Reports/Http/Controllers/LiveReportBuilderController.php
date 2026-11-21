@@ -21,8 +21,10 @@ use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
 use App\Domains\Reports\Support\DetailLevel;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
 use App\Domains\Reports\Support\ReportComposition;
+use App\Domains\Reports\Support\ReportObjectives;
 use App\Domains\Reports\Support\ReportPeriod;
 use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Domains\Reports\Support\ResultEvents;
@@ -370,7 +372,7 @@ final class LiveReportBuilderController extends Controller
         ['key' => 'spend', 'ar' => 'الإنفاق', 'en' => 'Spend'],
         ['key' => 'impressions', 'ar' => 'الظهور', 'en' => 'Impressions'],
         ['key' => 'clicks', 'ar' => 'النقرات', 'en' => 'Clicks'],
-        ['key' => 'ctr', 'ar' => 'نسبة النقر', 'en' => 'CTR'],
+        ['key' => 'ctr', 'ar' => 'معدل النقر', 'en' => 'CTR'],
         ['key' => 'cpc', 'ar' => 'تكلفة النقرة', 'en' => 'CPC'],
         ['key' => 'cpm', 'ar' => 'تكلفة الألف ظهور', 'en' => 'CPM'],
         ['key' => 'reach', 'ar' => 'الوصول', 'en' => 'Reach'],
@@ -388,9 +390,9 @@ final class LiveReportBuilderController extends Controller
         ['key' => 'results', 'ar' => 'النتائج', 'en' => 'Results'],
         ['key' => 'cost_per_result', 'ar' => 'تكلفة النتيجة', 'en' => 'Cost per result'],
         ['key' => 'add_to_cart', 'ar' => 'الإضافات للسلة', 'en' => 'Add to cart'],
-        ['key' => 'purchases', 'ar' => 'المشتريات', 'en' => 'Purchases'],
+        ['key' => 'purchases', 'ar' => 'الطلبات', 'en' => 'Purchases'],
         ['key' => 'revenue', 'ar' => 'الإيرادات', 'en' => 'Revenue'],
-        ['key' => 'roas', 'ar' => 'العائد على الإنفاق', 'en' => 'ROAS'],
+        ['key' => 'roas', 'ar' => 'معدل العائد', 'en' => 'ROAS'],
     ];
 
     /** Build the report row + its live share, and return the link once. */
@@ -426,6 +428,9 @@ final class LiveReportBuilderController extends Controller
             'providers.*' => ['string', 'max:40'],
             'metrics' => ['array'],
             'metrics.*' => ['string', 'max:40'],
+            // REPORT-MULTI-OBJECTIVE-001 — the link's measurement objective(s): one, or several («زيارات + مبيعات»).
+            'objectives' => ['sometimes', 'array', 'max:7'],
+            'objectives.*' => [Rule::in(ReportObjectives::allowed())],
             'from' => ['required', 'date'],
             'to' => ['required', 'date', 'after_or_equal:from'],
             // REPORT-PERIOD-001 — daily | weekly | monthly | custom. The first three anchor on `to`.
@@ -467,7 +472,7 @@ final class LiveReportBuilderController extends Controller
             'section_overrides.*' => [Rule::in(app(ReportSectionRegistry::class)->keys())],
             // REPORT-COMPOSITION-CONTROL-001 — the main sections (tabs) a detailed link offers; absent is all.
             'views' => ['sometimes', 'array', 'min:1'],
-            'views.*' => [Rule::in(ReportViews::VIEWS)],
+            'views.*' => [Rule::in([...ReportViews::VIEWS, ReportViews::WEBSITE_OFF])],
             /*
              * CREATIVE-DISPLAY-001 — the ad section, end to end.
              *
@@ -496,6 +501,9 @@ final class LiveReportBuilderController extends Controller
             // The operator's own words for a KPI card — shown to the client in place of the catalogue name.
             // NASEL-CAMPAIGN-BREAKDOWN-001 — a client-safe row per campaign; off unless the operator switches it on.
             'campaign_breakdown' => ['sometimes', 'boolean'],
+            // REPORT-GENERIC-LABELS-001 — names shown under generic labels from the link's first open.
+            'generic_names' => ['sometimes', 'array'],
+            'generic_names.*' => [Rule::in(GenericNames::KINDS)],
             // NASEL 2026-10-29 — the report's own word for «Results» («الاهتمام»), and an explicit «no Results» that the project default cannot override.
             'results_label' => ['sometimes', 'nullable', 'string', 'max:40'],
             'results_off' => ['sometimes', 'boolean'],
@@ -588,9 +596,14 @@ final class LiveReportBuilderController extends Controller
             array_column(self::METRICS, 'key'),
         ));
 
+        // REPORT-MULTI-OBJECTIVE-001 — the objective the builder offered used to stay in the browser: every link ranked its content under
+        // «custom» and showed every KPI. It is the report's now, read by the page, its PDF and its files through `ReportObjectives`.
+        $objectives = ReportObjectives::toStore(array_values(array_filter((array) ($data['objectives'] ?? []), 'is_string')));
+
         $report = Report::create([
             'project_id' => $project,
             'name' => $data['name'],
+            'campaign_objective' => $objectives['campaign_objective'],
             'description' => isset($data['description']) && trim((string) $data['description']) !== '' ? trim((string) $data['description']) : null,
             'type' => 'live',
             /*
@@ -623,6 +636,7 @@ final class LiveReportBuilderController extends Controller
              * beside it would be a second answer nobody asked for.
              */
             'config' => ['live' => true, 'metrics' => $metrics, 'period_kind' => $periodKind, 'period_mode' => $periodMode]
+                + ($objectives['objectives'] === [] ? [] : [ReportObjectives::CONFIG_KEY => $objectives['objectives']])
                 + ($level === null ? [] : ['detail_level' => $level->value])
                 + (($names = array_filter(['prepared_for_name' => trim((string) ($data['prepared_for_name'] ?? '')), 'prepared_by_name' => trim((string) ($data['prepared_by_name'] ?? ''))], static fn (string $v): bool => $v !== '')) === [] ? [] : ['branding' => $names]),
             /*
@@ -634,7 +648,7 @@ final class LiveReportBuilderController extends Controller
              * the level's full ON/OFF map, exactly as a saved report does (`ReportController`), and the
              * link narrows it from there.
              */
-            'section_settings' => $this->sectionSettingsFor($effective, ReportViews::normalise($data['views'] ?? null)),
+            'section_settings' => $this->sectionSettingsFor($effective, ReportViews::normalise(ReportViews::explicit($data['views'] ?? null))),
         ]);
 
         [$share, $raw] = $this->shares->create($report, [
@@ -653,6 +667,7 @@ final class LiveReportBuilderController extends Controller
             ] + (isset($data['creatives']) ? ['creatives' => CreativeVisibility::fromArray((array) $data['creatives'])->toArray()] : [])
               + (($events = ResultEvents::fromArray((array) ($data['result_events'] ?? []))->onlyFor($providers))->configured() ? ['result_events' => $events->toArray()] : [])
               + ((bool) ($data['campaign_breakdown'] ?? false) ? ['campaign_breakdown' => true] : [])
+              + (($generic = GenericNames::normalise($data['generic_names'] ?? null)) !== [] ? ['generic_names' => $generic] : [])
               + ((bool) ($data['results_off'] ?? false) ? ['results_off' => true] : [])
               + (trim((string) ($data['results_label'] ?? '')) !== '' ? ['results_label' => trim((string) $data['results_label'])] : [])
               + (($labels = array_filter(array_map(static fn ($v): string => trim((string) $v), array_intersect_key((array) ($data['kpi_labels'] ?? []), array_flip(array_column(self::METRICS, 'key')))), static fn (string $v): bool => $v !== '')) === [] ? [] : ['kpi_labels' => $labels])

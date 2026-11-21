@@ -163,7 +163,23 @@ final class Ga4PropertySync
             throw $e;
         }
 
-        $written = $this->store($account, $projectId, $settings, $rows);
+        /*
+         * INTEG-UNIFIED-BOUNDARIES-001 — the selection is re-proved AT the write, not only when the run started.
+         *
+         * The Data API call above can outlast the decision to deselect the property. `whileBound()` holds the binding row for
+         * the length of the write, so a measured day is never filed under a project the property has left; the run is then
+         * recorded as «not selected», exactly as an unselected property is, and the caller is told the same way.
+         */
+        $written = 0;
+        $held = $this->assignment->whileBound($account, $projectId, function () use (&$written, $account, $projectId, $settings, $rows): void {
+            $written = $this->store($account, $projectId, $settings, $rows);
+        });
+
+        if (! $held) {
+            $this->finish($run, SyncRunStatus::AwaitingAssignment, 0, 'This property was deselected (or syncing was switched off) while this run was reading, so nothing was stored.');
+
+            throw new Ga4NotSelected('This property is no longer connected to a project, so what was read was not stored.');
+        }
 
         /*
          * GA4-ANALYTICS-PRODUCT-001 — the breakdowns ride on the same run. One failing breakdown is
@@ -174,8 +190,16 @@ final class Ga4PropertySync
         $breakdownRows = 0;
         foreach (array_keys(Ga4Breakdowns::DIMENSIONS) as $breakdown) {
             try {
-                $breakdownRows += $this->storeBreakdown($account, $projectId, $settings, $breakdown,
-                    $this->reporting->breakdownRows($connection, (string) $account->external_id, $from, $to, $breakdown));
+                $fetched = $this->reporting->breakdownRows($connection, (string) $account->external_id, $from, $to, $breakdown);
+                $heldBreakdown = $this->assignment->whileBound($account, $projectId, function () use (&$breakdownRows, $account, $projectId, $settings, $breakdown, $fetched): void {
+                    $breakdownRows += $this->storeBreakdown($account, $projectId, $settings, $breakdown, $fetched);
+                });
+
+                if (! $heldBreakdown) {
+                    $this->finish($run, SyncRunStatus::AwaitingAssignment, $written, 'This property was deselected (or syncing was switched off) while this run was reading, so the rest was not stored.');
+
+                    throw new Ga4NotSelected('This property is no longer connected to a project, so what was read was not stored.');
+                }
             } catch (Ga4ReportFailed $e) {
                 $breakdownsFailed[$breakdown] = ProviderErrorText::forStorage($e->getMessage());
             }
@@ -323,7 +347,7 @@ final class Ga4PropertySync
             'dimension_1' => $row['d1'],
             'dimension_2' => $row['d2'],
             'metrics' => json_encode($row['values'], JSON_THROW_ON_ERROR),
-            'currency' => array_key_exists('revenue', $row['values']) ? $settings['currency'] : null,
+            'currency' => array_intersect(Ga4Breakdowns::MONEY, array_keys($row['values'])) !== [] ? $settings['currency'] : null,
             'timezone' => $settings['timezone'],
             'created_at' => $now,
             'updated_at' => $now,

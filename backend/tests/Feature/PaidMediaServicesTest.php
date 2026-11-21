@@ -79,10 +79,10 @@ final class PaidMediaServicesTest extends TestCase
         $categories = $options->whereNull('parent_option_id');
         $services = $options->whereNotNull('parent_option_id');
 
-        // 10 categories, exact keys, in catalogue order.
+        // 11 categories, exact keys, in catalogue order.
         $this->assertSame([
             'launch_manage', 'optimization', 'audit_analysis', 'measurement_tracking', 'integrations',
-            'strategy_planning', 'reporting_dashboards', 'creatives', 'objective_services', 'consulting_training',
+            'strategy_planning', 'reporting_dashboards', 'creatives', 'objective_services', 'consulting_training', 'software_services',
         ], $categories->pluck('key')->values()->all());
 
         // ~90 services (94 seeded); each parented to a real category.
@@ -96,7 +96,7 @@ final class PaidMediaServicesTest extends TestCase
         $expected = [
             'launch_manage' => 9, 'optimization' => 9, 'audit_analysis' => 9, 'measurement_tracking' => 14,
             'integrations' => 12, 'strategy_planning' => 10, 'reporting_dashboards' => 8, 'creatives' => 8,
-            'objective_services' => 9, 'consulting_training' => 7,
+            'objective_services' => 9, 'consulting_training' => 7, 'software_services' => 8,
         ];
         foreach ($expected as $categoryKey => $count) {
             $parentId = $categories->firstWhere('key', $categoryKey)->id;
@@ -130,8 +130,8 @@ final class PaidMediaServicesTest extends TestCase
         $res = $this->getJson(self::CATALOG_URL)->assertOk();
 
         $res->assertJsonPath('success', true)
-            ->assertJsonCount(10, 'data.categories')
-            ->assertJsonCount(95, 'data.services')
+            ->assertJsonCount(11, 'data.categories')
+            ->assertJsonCount(103, 'data.services')
             ->assertJsonStructure(['data' => [
                 'version',
                 'categories' => [['key', 'label_ar', 'label_en', 'icon', 'sort_order']],
@@ -140,9 +140,9 @@ final class PaidMediaServicesTest extends TestCase
 
         // Deterministic ordering: sort_order is 1..N in payload order for both lists.
         $catOrders = array_column($res->json('data.categories'), 'sort_order');
-        $this->assertSame(range(1, 10), $catOrders);
+        $this->assertSame(range(1, 11), $catOrders);
         $svcOrders = array_column($res->json('data.services'), 'sort_order');
-        $this->assertSame(range(1, 95), $svcOrders);
+        $this->assertSame(range(1, 103), $svcOrders);
 
         // A known service carries its category_key + required_field_rules.
         $new = collect($res->json('data.services'))->firstWhere('key', 'new_campaign');

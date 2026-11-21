@@ -68,6 +68,9 @@ function route(scope: { applied: string[]; unapplied: string[] } | undefined) {
 
 async function open(tab: RegExp) {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+  if (/Platforms/i.test(String(tab))) fireEvent.click(await screen.findByRole('button', { name: 'Platforms' }))
+  // ANALYTICS-REPORT-PARITY-001 — the objective tab lives in the report's «لوحة الأداء» (Performance) section.
+  if (/Objectives/i.test(String(tab))) fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
   fireEvent.click(await screen.findByRole('tab', { name: tab }))
 }
 

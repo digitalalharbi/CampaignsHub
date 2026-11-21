@@ -15,6 +15,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -211,6 +212,36 @@ final class SharedLinkDownloadTest extends TestCase
     public function test_an_unknown_format_is_refused(): void
     {
         $this->get("/api/v1/reports/shared/{$this->link()}/download/docx")->assertNotFound();
+    }
+
+    /**
+     * SHARED-DOWNLOAD-PASSWORD-001 — a link with a password hands over no file without it.
+     *
+     * The page asked for the password and the download address did not: the file route resolved the
+     * token and rendered, so anyone holding the link took the whole report as a spreadsheet while
+     * the page was still showing a prompt. Every format, a missing password and a wrong one.
+     */
+    public function test_a_password_protected_link_refuses_every_file_without_the_password(): void
+    {
+        [, $token] = app(ShareService::class)->create($this->report, ['allow_download' => true, 'password' => 'open-sesame-1'], null);
+
+        foreach (['csv', 'xlsx', 'pdf'] as $format) {
+            $this->get("/api/v1/reports/shared/{$token}/download/{$format}")->assertStatus(401);
+            $this->withHeaders(['X-Report-Password' => 'wrong'])->get("/api/v1/reports/shared/{$token}/download/{$format}")->assertStatus(401);
+        }
+        $this->flushHeaders();
+
+        $this->assertSame(0, DB::table('report_share_access_logs')->where('action', 'download')->count(), 'a refused download was logged as a download');
+    }
+
+    /** And the same link, with it, delivers the same file as before. */
+    public function test_a_password_protected_link_delivers_the_file_with_the_password(): void
+    {
+        [, $token] = app(ShareService::class)->create($this->report, ['allow_download' => true, 'password' => 'open-sesame-1'], null);
+
+        $response = $this->withHeaders(['X-Report-Password' => 'open-sesame-1'])->get("/api/v1/reports/shared/{$token}/download/csv");
+        $response->assertOk();
+        $this->assertStringContainsString('meta', $response->streamedContent());
     }
 
     private function link(): string

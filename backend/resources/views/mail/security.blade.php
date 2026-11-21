@@ -19,7 +19,7 @@
   to recognise yourself; anything finer is data that has to be protected in an unencrypted mailbox
   without helping the reader decide anything.
 --}}
-<div style="font-family:{!! $font !!}; color:#0b1a16;">
+<div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
 
     <div style="font-size:15px; color:#5b6b68; margin:0 0 16px;">{{ $greeting }}</div>
 
@@ -73,11 +73,7 @@
       teaches exactly the habit that phishing depends on. The only button worth having is the one for
       the reader who does NOT recognise it.
     --}}
-    <div>
-        <a href="{{ $actionUrl }}"
-           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
-                  text-decoration:none; padding:11px 20px; border-radius:8px;">{{ $actionLabel }}</a>
-    </div>
+    @include('mail.partials.button', ['href' => $actionUrl, 'label' => $actionLabel])
 
     <div style="font-size:13px; color:#5b6b68; line-height:1.8; margin-top:16px;">{{ $reassurance }}</div>
 </div>

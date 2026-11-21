@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Identity\Http\Controllers;
 
+use App\Domains\Identity\Actions\EstablishSession;
 use App\Domains\Identity\Resources\UserResource;
 use App\Domains\Identity\Support\AccountSuspension;
 use App\Domains\Requests\Services\ContactVerificationService;
@@ -49,7 +50,7 @@ final class PhoneSignInController extends Controller
     /** The verification purpose, kept distinct so a portal code cannot be replayed here. */
     private const PURPOSE = 'phone_sign_in';
 
-    private const RESEND_COOLDOWN = 60;
+    public const RESEND_COOLDOWN = 60;
 
     public function __construct(private readonly ContactVerificationService $verification) {}
 
@@ -158,8 +159,11 @@ final class PhoneSignInController extends Controller
 
         $this->assertMaySignIn($user);
 
-        Auth::guard('web')->login($user, (bool) ($data['remember'] ?? false));
-        $request->session()->regenerate();
+        // TWO-STEP-001 — a phone code is the first step, not both: a person with a second step on is held at it.
+        $challenge = app(EstablishSession::class)->open($request, $user, (bool) ($data['remember'] ?? false));
+        if ($challenge !== null) {
+            return EstablishSession::challengeResponse($challenge);
+        }
 
         /*
          * No portal is claimed here, exactly as with the password path.

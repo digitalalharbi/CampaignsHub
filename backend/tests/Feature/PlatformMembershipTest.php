@@ -92,7 +92,7 @@ final class PlatformMembershipTest extends TestCase
         $this->person('owner@x.test', [[$this->acme, 'tenant-owner']]);
         $sam = $this->person('sam@x.test', [[$this->acme, 'media-buyer'], [$this->beta, 'media-buyer']]);
 
-        $this->act($this->acme, $sam, ['action' => 'change_role', 'role' => 'tenant-owner'])->assertOk()
+        $this->act($this->acme, $sam, ['action' => 'change_role', 'role' => 'tenant-owner', 'confirm_owner' => true])->assertOk()
             ->assertJsonPath('data.member.roles', ['tenant-owner']);
 
         $this->assertSame(['tenant-owner'], $this->rolesIn($sam, $this->acme));

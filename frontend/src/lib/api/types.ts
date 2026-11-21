@@ -30,6 +30,8 @@ export interface AuthUser {
   role_slug?: string | null
   status?: 'active' | 'unverified' | 'suspended'
   email_verified?: boolean
+  /** Unproved because signup policy did not ask (SIGNUP-VERIFY-POLICY-001). Recovery stays closed until it is proved. */
+  email_verification_not_required?: boolean
   two_factor_enabled?: boolean
   locale?: 'ar' | 'en'
   timezone?: string

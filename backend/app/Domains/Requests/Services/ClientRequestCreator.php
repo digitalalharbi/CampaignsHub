@@ -13,6 +13,7 @@ use App\Domains\Requests\Models\ClientPortalToken;
 use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Models\RequestType;
+use App\Domains\Requests\Support\PortalIdShape;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -38,7 +39,7 @@ final class ClientRequestCreator
     {
         $projectId = $data['project_id'] ?? null;
         if ($projectId !== null) {
-            $inSpace = Project::query()->where('client_workspace_id', $space->id)->whereKey($projectId)->exists();
+            $inSpace = PortalIdShape::uuid((string) $projectId) && Project::query()->where('client_workspace_id', $space->id)->whereKey($projectId)->exists();
             if (! $inSpace || ($projectReach !== null && ! in_array((string) $projectId, $projectReach, true))) {
                 throw new \InvalidArgumentException('project');
             }
@@ -111,10 +112,10 @@ final class ClientRequestCreator
             ->pluck('id')->map(fn ($p): string => (string) $p)->all();
 
         $found = match ($kind) {
-            'campaign' => UnifiedCampaign::query()->whereIn('project_id', $spaceProjects)->whereKey($id)->exists(),
-            'report' => Report::query()->whereIn('project_id', $spaceProjects)->whereKey($id)->exists(),
+            'campaign' => PortalIdShape::uuid($id) && UnifiedCampaign::query()->whereIn('project_id', $spaceProjects)->whereKey($id)->exists(),
+            'report' => PortalIdShape::uuid($id) && Report::query()->whereIn('project_id', $spaceProjects)->whereKey($id)->exists(),
             // Invoices are client-wide paperwork: a project-confined user has none of their own.
-            'invoice' => $projectReach === null && Invoice::query()->where('client_workspace_id', $space->id)->whereKey($id)->exists(),
+            'invoice' => $projectReach === null && PortalIdShape::number($id) && Invoice::query()->where('client_workspace_id', $space->id)->whereKey($id)->exists(),
             default => false,
         };
 

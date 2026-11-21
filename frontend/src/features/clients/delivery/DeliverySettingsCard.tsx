@@ -3,10 +3,11 @@ import { Loader2 } from 'lucide-react'
 import { toApiError } from '@/lib/api/client'
 import { Num } from '@/components/ui/Num'
 import { getDeliverySettings, saveDeliverySettings, type DeliverySettingsData } from './deliveryApi'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 const COPY = {
   ar: {
-    title: 'إعداد التسليم الدوري', auto: 'تجهيز مسودة التقرير تلقائيًا', autoHint: 'تُجهَّز مسودة فقط؛ لا يُرسل شيء للعميل قبل مراجعتك واعتمادك.',
+    title: 'إعداد الجدولة الدورية', auto: 'تجهيز مسودة التقرير تلقائيًا', autoHint: 'تُجهَّز مسودة فقط؛ لا يُرسل شيء للعميل قبل مراجعتك واعتمادك.',
     cadence: 'الدورة', weekly: 'أسبوعي', monthly: 'شهري', weekStart: 'بداية الأسبوع', monday: 'الاثنين', sunday: 'الأحد',
     mode: 'نوع التقرير', snapshot: 'ثابت للفترة', live: 'مباشر (يتحدّث مع البيانات)', next: 'الفترة القادمة', saving: 'جارٍ الحفظ…',
     reviewer: 'مسؤول المراجعة', nobody: 'بدون تعيين', remind: 'تذكير المراجع بعد', hours: 'ساعة',
@@ -89,7 +90,7 @@ export function DeliverySettingsCard({ clientId, ar, canEdit }: { clientId: stri
         </label>
       </div>
       {s.mode === 'live' && <p className="text-xs text-text-muted">{t.liveNote}</p>}
-      <p className="text-xs text-text-secondary">{t.next}: <span dir="ltr"><Num>{s.next_period.from} → {s.next_period.to}</Num></span></p>
+      <p className="text-xs text-text-secondary">{t.next}: <span dir="ltr"><Num><PeriodText from={s.next_period.from} to={s.next_period.to} /></Num></span></p>
       {save.isError && <p role="alert" className="text-xs text-danger">{toApiError(save.error).message}</p>}
     </section>
   )

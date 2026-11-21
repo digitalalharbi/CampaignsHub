@@ -7,8 +7,11 @@ namespace App\Domains\Integrations\Services;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Projects\Models\Project;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * PROJECT-INTEGRATION-ASSIGNMENT-001 — the one place that answers «which project owns this account».
@@ -35,14 +38,11 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class AccountAssignment
 {
-    /**
-     * SYNC-GATE-001 — a project in one of these states fetches nothing.
-     *
-     * `draft`, `onboarding`, `active` and `completed` sync: a project being set up needs its first
-     * numbers and a finished one still reconciles its last days. A paused or archived project is one
-     * its owner stopped, and a sweep that carried on spent the provider's rate limit on it.
+    /*
+     * SYNC-GATE-001 + PROJECT-LIFECYCLE-001 — only a RUNNING project fetches (LiveProjects::RUNNING = active). A paused
+     * or archived project is one its owner stopped, a deleted one is gone, and a draft has no linked account (the first
+     * link makes it active). The set lives in LiveProjects, never here.
      */
-    public const PROJECT_STATUSES_THAT_DO_NOT_SYNC = ['paused', 'archived'];
 
     /**
      * The project an account is assigned to, or null when nobody has assigned it.
@@ -52,14 +52,63 @@ final class AccountAssignment
      */
     public function projectIdFor(ExternalAccount $account): ?string
     {
-        $projectId = ProjectIntegrationBinding::withoutGlobalScopes()
+        $candidates = ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())
             ->where('is_active', true)
             ->orderByDesc('is_primary')
             ->orderBy('created_at')
-            ->value('project_id');
+            ->pluck('project_id')
+            ->map(static fn ($id): string => (string) $id)
+            ->filter(static fn (string $id): bool => $id !== '')
+            ->values()
+            ->all();
 
-        return is_string($projectId) && $projectId !== '' ? $projectId : null;
+        /*
+         * PROJECT-LIFECYCLE-001 rule 6 — an account linked to several projects («مشترك»): when the first-ranked project is
+         * stopped (archived, paused, deleted), the account keeps feeding a RUNNING project it is linked to. Stopping one
+         * project never stops the others. The ranking among running projects is unchanged.
+         */
+        $runningIds = $candidates === [] ? [] : LiveProjects::runningIdsQuery()->whereIn('id', $candidates)->pluck('id')->map(static fn ($id): string => (string) $id)->all();
+        $running = array_values(array_filter($candidates, static fn (string $id): bool => in_array($id, $runningIds, true)));
+
+        return $running[0] ?? ($candidates[0] ?? null);
+    }
+
+    /**
+     * INTEG-UNIFIED-BOUNDARIES-001 — run a WRITE only while the binding that authorised the run still stands.
+     *
+     * A job proves the binding when it STARTS; a provider call then takes seconds to minutes, during which the customer may
+     * unlink the account, switch syncing off or move it to another project. A write guarded only by the start check lands
+     * a client's figures in a project they asked us to stop feeding, so every write set re-proves the binding at the moment
+     * it is made.
+     *
+     * The binding row is read with a shared row lock inside the transaction that holds the write: a detach (an UPDATE of
+     * that row) cannot commit between this check and the write, it waits for the write to finish. So the answer is not
+     * «was it bound a moment ago» but «it cannot stop being bound until this write is done».
+     *
+     * Returns false, and runs nothing, when the binding no longer stands. The caller records WHY nothing was stored.
+     *
+     * @param  Closure(): mixed  $write
+     */
+    public function whileBound(ExternalAccount $account, string $projectId, Closure $write): bool
+    {
+        return DB::transaction(function () use ($account, $projectId, $write): bool {
+            $held = ProjectIntegrationBinding::withoutGlobalScopes()
+                ->where('external_account_id', $account->getKey())
+                ->where('project_id', $projectId)
+                ->where('is_active', true)
+                ->where('sync_enabled', true)
+                ->sharedLock()
+                ->first(['id']);
+
+            if ($held === null) {
+                return false;
+            }
+
+            $write();
+
+            return true;
+        });
     }
 
     /**
@@ -98,6 +147,16 @@ final class AccountAssignment
             ->first();
     }
 
+    /** The one project the account's connection was opened for, or null for a workspace-wide connection. */
+    public function connectionProjectId(ExternalAccount $account): ?string
+    {
+        $projectId = ProviderConnection::withoutGlobalScopes()
+            ->whereKey($account->provider_connection_id)
+            ->value('project_id');
+
+        return is_string($projectId) && $projectId !== '' ? $projectId : null;
+    }
+
     /**
      * Whether this account may be assigned to this project.
      *
@@ -116,6 +175,19 @@ final class AccountAssignment
     public function mayAssign(ExternalAccount $account, Project $project): bool
     {
         if ((string) $account->tenant_id !== (string) $project->tenant_id) {
+            return false;
+        }
+
+        /*
+         * INTEG-PROJECT-LINK-001 (Owner 2026-11-06) — the project fence.
+         *
+         * A connection opened from a project's link journey belongs to that project alone. One of its
+         * accounts is never assignable to another project, whatever the client workspace says — the
+         * authorisation was given for ONE project and is not a pool the rest of the workspace draws on.
+         * A workspace-wide connection (no project) is unaffected.
+         */
+        $owner = $this->connectionProjectId($account);
+        if ($owner !== null && $owner !== (string) $project->getKey()) {
             return false;
         }
 
@@ -148,11 +220,9 @@ final class AccountAssignment
                 // SYNC-GATE-001 — a binding the Owner switched off does not sync, and neither does a
                 // binding into a project that is paused, archived or deleted.
                 ->where('project_integration_bindings.sync_enabled', true)
-                ->whereExists(fn ($project) => $project->selectRaw('1')
+                ->whereExists(fn ($project) => LiveProjects::constrainRunning($project->selectRaw('1')
                     ->from('projects')
-                    ->whereColumn('projects.id', 'project_integration_bindings.project_id')
-                    ->whereNull('projects.deleted_at')
-                    ->whereNotIn('projects.status', self::PROJECT_STATUSES_THAT_DO_NOT_SYNC)),
+                    ->whereColumn('projects.id', 'project_integration_bindings.project_id'))),
         );
     }
 
@@ -224,7 +294,7 @@ final class AccountAssignment
 
         // SYNC-GATE-001 — `withoutGlobalScopes()` above also strips the soft-delete scope, so a deleted
         // project was still «found». The comment on this method promised «deleted, archived»; this keeps it.
-        if ($project->deleted_at !== null || in_array($project->status, self::PROJECT_STATUSES_THAT_DO_NOT_SYNC, true)) {
+        if ($project->deleted_at !== null || ! in_array($project->lifecycleStatus()->value, LiveProjects::RUNNING, true)) {
             return false;
         }
 

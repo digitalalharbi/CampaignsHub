@@ -17,7 +17,7 @@ describe('PortalTrend', () => {
     expect(screen.getByTestId('trend-conversions')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByTestId('trend-clicks')).toBeInTheDocument()
     // Two real days for results (the unreported one is not a zero), three for clicks.
-    expect(screen.getByRole('img', { name: 'Results — 2 days' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Platform conversions — 2 days' })).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('trend-clicks'))
     expect(screen.getByRole('img', { name: 'Clicks — 3 days' })).toBeInTheDocument()
     expect(screen.getByTestId('trend-text')).toHaveTextContent('2026-10-12: 90')
@@ -31,6 +31,6 @@ describe('PortalTrend', () => {
   it('speaks Arabic', () => {
     renderWithProviders(<PortalTrend trend={trend} days={30} />, { locale: 'ar' })
     expect(screen.getByTestId('portal-trend')).toHaveTextContent('الأداء عبر الوقت')
-    expect(screen.getByTestId('trend-conversions')).toHaveTextContent('النتائج')
+    expect(screen.getByTestId('trend-conversions')).toHaveTextContent('تحويلات المنصة')
   })
 })

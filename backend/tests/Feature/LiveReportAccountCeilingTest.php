@@ -17,6 +17,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -48,6 +49,7 @@ use Tests\TestCase;
  */
 final class LiveReportAccountCeilingTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Report $report;
@@ -121,6 +123,7 @@ final class LiveReportAccountCeilingTest extends TestCase
 
     private function metric(string $campaignId, string $accountId, string $key, float $value, string $provider = 'meta'): void
     {
+        $this->bindSeededAccount($this->project->id, $accountId, $provider);
         DailyMetric::create([
             'id' => (string) Str::uuid(),
             'project_id' => $this->project->id,

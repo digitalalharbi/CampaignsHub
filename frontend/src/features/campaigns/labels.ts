@@ -1,4 +1,4 @@
-import { canonicalPlatform, PLATFORM_LABELS } from '@/lib/platforms'
+import { canonicalPlatform, PLATFORM_LABELS, SOURCE_LABELS } from '@/lib/platforms'
 import type { Locale } from '@/stores/ui'
 
 type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
@@ -10,7 +10,7 @@ const status: Record<string, { ar: string; en: string; tone: Tone }> = {
   completed: { ar: 'مكتملة', en: 'Completed', tone: 'info' },
   archived: { ar: 'مؤرشفة', en: 'Archived', tone: 'neutral' },
   pending: { ar: 'قيد المراجعة', en: 'Pending', tone: 'warning' },
-  unknown: { ar: 'غير معروفة', en: 'Unknown', tone: 'neutral' },
+  unknown: { ar: 'بدون بيانات', en: 'Unknown', tone: 'neutral' },
 }
 
 /*
@@ -64,6 +64,7 @@ const marketingPath: Record<string, { ar: string; en: string }> = {
  */
 const provider: Record<string, { ar: string; en: string }> = {
   ...PLATFORM_LABELS,
+  ...SOURCE_LABELS,
   microsoft: { ar: 'مايكروسوفت', en: 'Microsoft' },
   pinterest: { ar: 'بنترست', en: 'Pinterest' },
   sandbox: { ar: 'Sandbox', en: 'Sandbox' },

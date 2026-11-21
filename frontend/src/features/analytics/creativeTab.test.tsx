@@ -42,6 +42,8 @@ function route(creatives: unknown[]) {
   requested.length = 0
   vi.mocked(getData).mockImplementation(async (url: string) => {
     requested.push(url)
+    // The creative pulse (its own section below the table) is not under test here: it answers with a refusal, as it does offline.
+    if (url.includes('/creatives/pulse')) throw new Error('pulse is not under test')
     if (url.includes('/creatives')) return { creatives, currency: 'SAR', page: 1, per_page: 24, total: creatives.length, period: { from: '', to: '' }, filters: {} } as never
     if (url.includes('/summary')) return { current: {}, previous: {}, delta: {}, currency: 'SAR', provenance: { source: 'live', live_rows: 1, demo_rows: 0 } } as never
     if (url.includes('disclaimer')) return null as never
@@ -58,6 +60,7 @@ async function openCreative() {
    * calling it «Ad» put it beside «Ads» as an apparent duplicate. The surface and everything it
    * asserts are unchanged; only the word a reader clicks is.
    */
+  fireEvent.click(await screen.findByRole('button', { name: 'Content' }))
   fireEvent.click(await screen.findByRole('tab', { name: /Content/ }))
 }
 
@@ -98,7 +101,7 @@ describe('the content performance tab', () => {
 
     await openCreative()
 
-    expect(await screen.findByTestId('creative-analysis-table')).toHaveTextContent('412.50 USD')
+    expect(await screen.findByTestId('creative-analysis-table')).toHaveTextContent('412.50 $')
   })
 
   /** A creative the platform does not break out shows «—», never a share of the campaign. */
@@ -125,6 +128,7 @@ describe('the ad tab and the filter bar', () => {
    * calling it «Ad» put it beside «Ads» as an apparent duplicate. The surface and everything it
    * asserts are unchanged; only the word a reader clicks is.
    */
+  fireEvent.click(await screen.findByRole('button', { name: 'Content' }))
   fireEvent.click(await screen.findByRole('tab', { name: /Content/ }))
 
     await waitFor(() => expect(requested.some((u) => u.includes('/creatives'))).toBe(true))

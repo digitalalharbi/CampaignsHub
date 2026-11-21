@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Services;
 
+use App\Domains\Identity\Services\AuthCodeSwitches;
 use App\Domains\Identity\Services\TwilioVerifyException;
 use App\Domains\Identity\Services\TwilioVerifyService;
 use App\Domains\Requests\Models\ContactVerification;
+use App\Domains\Subscriptions\Usage\UsageLedger;
 use App\Support\PhoneNumber;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
@@ -19,7 +21,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class ContactVerificationService
 {
-    public function __construct(private readonly TwilioVerifyService $twilio) {}
+    public function __construct(
+        private readonly TwilioVerifyService $twilio,
+        private readonly AuthCodeSwitches $switches,
+    ) {}
 
     /**
      * Start a challenge. Returns the verification id and, in non-prod only, the dev code.
@@ -58,6 +63,9 @@ final class ContactVerificationService
         ?\Closure $deliver = null,
         ?string $ownerKey = null,
     ): array {
+        // AUTH-CODE-SWITCHES-001 — before any row or send: a channel the platform turned off costs nothing and mints nothing.
+        $this->switches->assertOpen($purpose, $channel);
+
         $ownerKeyHash = $ownerKey === null ? null : hash('sha256', $ownerKey);
 
         if ($cooldownSeconds > 0) {
@@ -122,6 +130,11 @@ final class ContactVerificationService
             try {
                 $state = $this->twilio->send($destination);
                 $v->forceFill(['delivery_status' => $state === 'pending' ? 'sent' : $state])->save();
+                // PRICING-USAGE-CREDITS-001 — a code the platform paid Twilio to send for a workspace is that workspace's usage.
+                if ($state === 'pending' && $tenantId !== null) {
+                    app(UsageLedger::class)->record($tenantId, 'sms_verifications', 1, 'contact_verification:'.$v->id,
+                        referenceType: 'contact_verification', referenceId: (string) $v->id);
+                }
             } catch (TwilioVerifyException) {
                 $v->forceFill(['delivery_status' => 'failed'])->save();
             }
@@ -210,6 +223,10 @@ final class ContactVerificationService
         if ($v === null || $v->isExpired()) {
             throw ValidationException::withMessages(['code' => __('auth.code_expired')]);
         }
+
+        // A code issued before the switch went off stops working with it, before the provider is asked.
+        $this->switches->assertOpen((string) $v->purpose, (string) $v->channel);
+
         if ($v->attempts >= (int) config('requests.verification.max_attempts', 5)) {
             throw ValidationException::withMessages(['code' => __('auth.code_attempts')]);
         }

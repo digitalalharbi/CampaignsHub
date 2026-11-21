@@ -123,6 +123,8 @@ test.describe('the portals are different products', () => {
     await expect(page.getByTestId('agency-shell')).toBeVisible({ timeout: 20000 })
 
     const rail = page.locator('aside').first()
+    // NOV-SIDEBAR-001 — the rail starts as an icon strip, so its names are read from the open rail.
+    await page.getByTestId('rail-toggle').click()
     await expect(rail.getByText(/^العملاء$|^Clients$/).first()).toBeVisible()
     /*
      * «الفريق والصلاحيات / Team & permissions» — renamed from «…والنطاقات / …& scopes» by SIMPLIFY-002.
@@ -132,7 +134,9 @@ test.describe('the portals are different products', () => {
      * this assertion makes is unchanged with them: the advertiser rail has no such entry at all.
      */
     /* NAV-TAXONOMY-001 — the approved short label is «الفريق / Team»; the advertiser rail still has none. */
-    await expect(rail.getByText(/^الفريق$|^Team$/).first()).toBeVisible()
+    // NAV-HOME-PLANS-001 — «الفريق» moved from the rail to the account menu's «الإعدادات» group, still one click away.
+    await rail.locator('button[aria-haspopup="menu"]').first().click()
+    await expect(page.getByTestId('account-menu-workspace').getByText(/^الفريق$|^Team$/)).toBeVisible()
   })
 
   /**

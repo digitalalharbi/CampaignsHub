@@ -30,12 +30,26 @@ use Illuminate\Support\Facades\DB;
  * sweep, the digest). Two readings of it:
  *
  *   - visible: an ACTIVE binding exists for (this row's account, this row's project)
- *   - visible: the account holds NO binding row anywhere — nothing was ever selected or deselected
- *     about it, which is the shape of seeded demo data and of a fixture; it is also the shape of rows
- *     synced before assignment existed, and THOSE are the cleanup's business, not this predicate's,
- *     because hiding them would hide the evidence the cleanup is deciding on
- *   - hidden: everything else — a binding to this project that is now inactive (deselected), an
- *     active binding to a DIFFERENT project (re-bound, and the rows belong to that project's totals)
+ *   - hidden: everything else — a binding to this project that is now inactive (deselected), an active binding to a DIFFERENT project
+ *     (re-bound, and the rows belong to that project's totals), and an account that holds no binding at all. Those last rows are stored
+ *     and inventoried by `integrations:scope-audit`, and selecting the account makes them readable; see UNBOUND_ROWS_VISIBLE
+ *
+ * Seeded and demo worlds get no exception. They select their accounts, as an operator does: `DemoAccountSelection`.
+ *
+ * ## A row with no account
+ *
+ * «No account» is not «a deselected account», and it is not one answer either. It is decided by what the row IS, not here:
+ *
+ *   - `daily_metrics`, `external_campaigns` and the commerce tables declare the column NOT NULL, so the case does not exist for them.
+ *   - A lead typed in by a person was never read from a platform: `LeadVisibility::boundToItsProject` keeps it, in its own words.
+ *   - A row hanging off no campaign keeps its visibility in `applyThroughCampaign` below: it never named an account to deselect.
+ *   - An `entity_daily_metrics` row resolves through its campaign in `applyToEntityMetrics`.
+ *   - `metric_sync_runs` and `external_creatives` go through `apply` and a NULL there stays hidden. Every product writer names the account
+ *     (`AccountMetricsSyncer::sync`, `ImportExternalStructure`); what is left is a demo creative or history. A sync run with no account
+ *     vouches for no account's freshness, and `apply` guards the creatives a launch may send to a platform: one with no account cannot
+ *     be shown to belong to the account it would be sent to. The library still lists such a creative, through `applyThroughCampaign`.
+ *
+ * So `apply` has no NULL branch: adding one would make the one thing this predicate cannot authorise the one thing it always shows.
  *
  * ## Where the account is
  *
@@ -57,8 +71,13 @@ final class BoundAccountVisibility
      * — or a leak with no binding to catch it. `integrations:scope-audit` counts them as `unbound`
      * per project, provider and month; this is the one line to flip once that count has been read,
      * and `BoundAccountVisibilityTest` pins whichever reading is in force.
+     *
+     * READ on 2026-11-02 from the Production inventory (run 41493369348): exactly one such account exists — a Snapchat account of the
+     * same tenant, 2026-08/09 history under one project, last synced 2026-09-23, never bound. The Owner's rule is deny by default along
+     * Tenant -> Workspace -> Project -> Authorised Account, so a row with no binding is stored and inventoried, not read. Selecting the
+     * account makes it readable again. Nothing is moved or removed.
      */
-    public const UNBOUND_ROWS_VISIBLE = true;
+    public const UNBOUND_ROWS_VISIBLE = false;
 
     /**
      * Narrow a query on a table that carries `external_account_id` and `project_id` itself.
@@ -103,6 +122,30 @@ final class BoundAccountVisibility
                  * account. It stays visible; the inventory reports it as `none`.
                  */
                 ->orWhereRaw("{$campaignColumn} is null");
+        });
+    }
+
+    /**
+     * {@see applyThroughCampaign()} for a query that has already INNER-joined `external_campaigns`.
+     *
+     * The same rule over the same row: the join means the account is the joined campaign's own, and a row hanging off no campaign
+     * cannot reach this predicate. Reading the column directly lets Postgres plan a semi-join. The correlated lookup it replaces
+     * ran once per row of the whole metrics table (Production: 19,384 loops, 97 k buffers, to answer for 327 rows).
+     *
+     * @template T of BuilderContract
+     *
+     * @param  T  $query
+     * @param  string  $campaignTable  the alias `external_campaigns` was inner-joined under
+     * @param  string  $projectColumn  the row's own project column, e.g. `t.project_id`
+     * @return T
+     */
+    public static function applyThroughJoinedCampaign(BuilderContract $query, string $campaignTable, string $projectColumn): BuilderContract
+    {
+        return $query->where(function ($q) use ($campaignTable, $projectColumn): void {
+            $account = "{$campaignTable}.external_account_id";
+
+            $q->whereExists(fn (Builder $b) => self::activeBinding($b, $account, $projectColumn))
+                ->when(self::UNBOUND_ROWS_VISIBLE, fn ($w) => $w->orWhere(fn ($u) => $u->whereNotExists(fn (Builder $b) => self::anyBinding($b, $account))->whereNotExists(fn (Builder $b) => self::superseded($b, $account))));
         });
     }
 

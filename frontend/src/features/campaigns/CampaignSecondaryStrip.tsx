@@ -1,6 +1,9 @@
 import { campaigns as countedCampaigns } from '@/lib/counted'
 import { money } from '@/features/analytics/format'
 import { formatMoneyReading, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
+import { NoBudget } from '@/features/funding/ApprovedBudget'
+import type { ApprovedBudget } from '@/features/funding/fundingApi'
+import { formatMoney } from '@/features/funding/money'
 
 
 /**
@@ -29,6 +32,8 @@ export function CampaignSecondaryStrip({
   currency,
   paused,
   ar,
+  approved,
+  canAddBudget = false,
 }: {
   totals: MoneyTotals
   /*
@@ -55,6 +60,13 @@ export function CampaignSecondaryStrip({
   currency: string | null
   paused: number
   ar: boolean
+  /**
+   * ONE-BUDGET-001 — the project's APPROVED budget (/agency/budgets, SAR, its own period). It is the only «الميزانية»,
+   * «المتبقي», «المتوقع» and «الإنفاق من الميزانية» this strip states. Undefined while unknown (loading, no permission):
+   * then none of the four is shown, rather than a platform figure in their place.
+   */
+  approved?: ApprovedBudget
+  canAddBudget?: boolean
 }) {
   const costPer = readCostPer(totals, 'cpa', 'conversions', currency, ar)
   const roas = readRoas(totals, ar)
@@ -80,25 +92,34 @@ export function CampaignSecondaryStrip({
       data-testid="campaigns-secondary-strip"
       className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs"
     >
-      <Cell testid="campaigns-budget-total" label={ar ? 'الميزانية' : 'Budget'} value={budgetValue} note={budgetNote} />
-      <Cell
-        label={ar ? 'المتبقي' : 'Remaining'}
-        value={budget.remaining === null ? '—' : money(budget.remaining, budget.currency ?? undefined)}
-      />
-      <Cell
-        label={ar ? 'المتوقع' : 'Forecast'}
-        value={budget.projected === null ? '—' : money(budget.projected, budget.currency ?? undefined)}
-      />
+      {approved?.has_budget === true && (
+        <>
+          <Cell testid="campaigns-project-budget" label={ar ? 'ميزانية المشروع' : 'Project budget'} value={formatMoney(approved.approved)} />
+          <Cell testid="campaigns-project-remaining" label={ar ? 'المتبقي' : 'Remaining'} value={formatMoney(approved.remaining)} />
+          <Cell testid="campaigns-project-forecast" label={ar ? 'المتوقع' : 'Forecast'} value={formatMoney(approved.projected)} />
+          {/* The approved budget's own spend, over its own period — NOT the metrics window's spend. */}
+          <Cell testid="campaigns-spent-against-budget" label={ar ? 'الإنفاق من الميزانية' : 'Spent against budget'} value={formatMoney(approved.spent)} />
+        </>
+      )}
+      {approved?.has_budget === false && !approved.withheld && (
+        <span className="inline-flex items-baseline gap-1.5" data-testid="campaigns-project-budget">
+          <span className="text-text-muted">{ar ? 'ميزانية المشروع' : 'Project budget'}</span>
+          <NoBudget ar={ar} canAdd={canAddBudget} />
+        </span>
+      )}
       {/*
-        * The spent figure the budget rows report, which is NOT the metrics window's spend.
-        * Two measurements over two sets of rows; naming both «spend» is how they come to be
-        * confused, so this one says what it is against.
+        * «ميزانيات الحملات في المنصات» — the campaign budgets set inside the platforms, summed with the page's own refusals.
+        * Informational only: never «the budget», never a remaining.
         */}
-      <Cell
-        testid="campaigns-spent-against-budget"
-        label={ar ? 'المصروف من الميزانية' : 'Spent against budget'}
-        value={budget.spent === null ? '—' : money(budget.spent, budget.spentCurrency ?? budget.currency ?? undefined)}
-      />
+      <Cell testid="campaigns-budget-total" label={ar ? 'ميزانيات الحملات في المنصات' : 'Campaign budgets in the platforms'} value={budgetValue} note={budgetNote} />
+      {/* What those campaigns spent, in the currency it was spent in — part of the same informational reading. */}
+      {budget.known && (
+        <Cell
+          testid="campaigns-platform-spent"
+          label={ar ? 'أُنفق منها' : 'Spent of them'}
+          value={budget.spent === null ? '—' : money(budget.spent, budget.spentCurrency ?? budget.currency ?? undefined)}
+        />
+      )}
       <Cell testid="campaigns-cost-per-result" label={ar ? 'تكلفة النتيجة' : 'Cost / result'} value={formatMoneyReading(costPer, money)} note={costPer.note} />
       <Cell testid="campaigns-roas" label="ROAS" value={roas.value === null ? '—' : `${roas.value.toFixed(2)}×`} note={roas.note} />
       {/*
@@ -131,16 +152,16 @@ function spendRefusal(unmeasured: number, unreadable: number, ar: boolean): stri
   const locale = ar ? 'ar' : 'en'
   if (unmeasured > 0 && unreadable === 0) {
     return ar
-      ? `المصروف غير مجموع — ${countedCampaigns(unmeasured, locale)} بلا أرقام مقاسة في هذه الفترة`
+      ? `الإنفاق غير مجموع — ${countedCampaigns(unmeasured, locale)} بلا أرقام مقاسة في هذه الفترة`
       : `Spend not summed — ${countedCampaigns(unmeasured, locale)} with nothing measured in this period`
   }
   if (unmeasured > 0) {
     return ar
-      ? `المصروف غير متاح — ${countedCampaigns(unreadable, locale)} بمبالغ جزئية أو بعملات متعددة، و${countedCampaigns(unmeasured, locale)} بلا أرقام مقاسة`
+      ? `الإنفاق غير متاح — ${countedCampaigns(unreadable, locale)} بمبالغ جزئية أو بعملات متعددة، و${countedCampaigns(unmeasured, locale)} بلا أرقام مقاسة`
       : `Spend unavailable — ${countedCampaigns(unreadable, locale)} partial or multi-currency, ${countedCampaigns(unmeasured, locale)} with nothing measured`
   }
 
-  return ar ? 'المصروف غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend unavailable — partial or multi-currency'
+  return ar ? 'الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend unavailable — partial or multi-currency'
 }
 
 function Cell({ label, value, note, testid }: { label: string; value: string; note?: string | null; testid?: string }) {

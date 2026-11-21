@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Models;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Integrations\Services\ProviderAccountIdentity;
 use App\Domains\Reports\Sections\ReportViews;
 use App\Domains\Reports\Support\CreativeDisplay;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Reports\Support\ShareSections;
 use App\Domains\Tenancy\Models\Concerns\BelongsToTenant;
 use App\Domains\Tenancy\Models\Concerns\HasUuidKey;
@@ -15,6 +18,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @property bool $hide_spend the EFFECTIVE flag — see {@see hideSpend()}
@@ -27,10 +31,10 @@ final class ReportShare extends Model
     protected $fillable = [
         'tenant_id', 'report_id', 'mode', 'form', 'token_hash', 'password_hash', 'allow_download',
         'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'settings', 'scope',
-        'view_count', 'last_viewed_at', 'expires_at', 'revoked_at', 'paused_at', 'created_by', 'is_demo', 'trace_mark',
+        'view_count', 'last_viewed_at', 'expires_at', 'revoked_at', 'paused_at', 'created_by', 'is_demo', 'trace_mark', 'token_encrypted',
     ];
 
-    protected $hidden = ['token_hash', 'password_hash'];
+    protected $hidden = ['token_hash', 'password_hash', 'token_encrypted'];
 
     protected $casts = [
         'scope' => 'array',
@@ -47,6 +51,66 @@ final class ReportShare extends Model
         'paused_at' => 'datetime',
         'is_demo' => 'boolean',
     ];
+
+    /** Memo for {@see scope()} — the followed accounts are resolved once per stored value. */
+    private ?string $followedFrom = null;
+
+    /** @var array<string, mixed>|null */
+    private ?array $followedScope = null;
+
+    /**
+     * LIVE-LINK-ACCOUNT-IDENTITY-001 — the link's ceiling, with its ad accounts followed to the rows that now hold them.
+     *
+     * The stored scope is exactly what the operator granted and is never rewritten by a read. What a reader gets back adds, to
+     * each named account, the other rows of the same provider account that this link's project actively binds — see
+     * {@see ProviderAccountIdentity}. Without it a key entered again made the link's accounts «a row nobody shows», and its
+     * content left the report with nothing deleted (Owner defect 156).
+     *
+     * @return Attribute<array<string, mixed>|null, array<string, mixed>|null>
+     */
+    protected function scope(): Attribute
+    {
+        return Attribute::make(
+            get: function (mixed $value): ?array {
+                if ($value === null) {
+                    return null;
+                }
+                if (is_array($value)) {
+                    return $this->followAccounts($value);
+                }
+                $raw = (string) $value;
+                if ($this->followedFrom === $raw && $this->followedScope !== null) {
+                    return $this->followedScope;
+                }
+                $decoded = json_decode($raw, true);
+                if (! is_array($decoded)) {
+                    return null;
+                }
+                $this->followedFrom = $raw;
+
+                return $this->followedScope = $this->followAccounts($decoded);
+            },
+            set: fn (mixed $value): array => ['scope' => $value === null ? null : (is_string($value) ? $value : json_encode($value))],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $scope
+     * @return array<string, mixed>
+     */
+    private function followAccounts(array $scope): array
+    {
+        $accounts = array_values(array_filter((array) ($scope['account_ids'] ?? []), 'is_string'));
+        $project = (string) ($scope['project_id'] ?? '');
+
+        if ($accounts === [] || $project === '') {
+            return $scope;
+        }
+
+        $scope['account_ids'] = ProviderAccountIdentity::followed($accounts, $project);
+
+        return $scope;
+    }
 
     /**
      * REPORT-SPEND-VISIBILITY-001 — the report's own KPI selection decides whether spend shows.
@@ -146,9 +210,35 @@ final class ReportShare extends Model
         return CreativeDisplay::fromArray((array) (($this->settings ?? [])['creative_display'] ?? []) ?: null);
     }
 
+    /**
+     * REPORT-FILTERS-FUNCTIONAL-001 — the link's own money switches outrank the content section's.
+     *
+     * `hide_spend` withholds spend and everything that returns it, on the whole link. The content section has a spend permission
+     * of its own, and with both set the library, the summary, the comparison and the content rows of the files stated each
+     * creative's spend, CPA and ROAS on a link whose every other figure hid them — and the creatives' spend adds up to the total.
+     * The stricter switch wins; `CreativeVisibility` then closes CPA and ROAS behind it, as it does for its own flags.
+     */
     public function creativeVisibility(): CreativeVisibility
     {
-        return CreativeVisibility::fromArray((array) (($this->settings ?? [])['creatives'] ?? []));
+        return CreativeVisibility::fromArray(array_merge(
+            (array) (($this->settings ?? [])['creatives'] ?? []),
+            $this->hide_spend ? ['spend' => false] : [],
+            $this->hide_revenue ? ['revenue' => false] : [],
+        ));
+    }
+
+    /**
+     * REPORT-SETTINGS-AUDIT-001 — whether an operator ever saved this link's content panel (`settings.creatives`), master on OR off.
+     *
+     * A saved report's link applied the panel's copy switches only with the master on, so a panel saved with the master off kept
+     * publishing the headline and body its own switches (closed with the master) withheld — while the live link of the same share,
+     * and the panel itself, said they were hidden. A link made before the panel existed has no such key and keeps what it showed.
+     */
+    public function creativePanelConfigured(): bool
+    {
+        $panel = ((array) ($this->settings ?? []))['creatives'] ?? null;
+
+        return is_array($panel) && $panel !== [];
     }
 
     /**
@@ -196,7 +286,66 @@ final class ReportShare extends Model
     {
         $scope = (array) ($this->scope ?? []);
 
-        return (array) ($scope['account_ids'] ?? []) !== [] || (array) ($scope['campaign_ids'] ?? []) !== [];
+        if ((array) ($scope['account_ids'] ?? []) !== [] || (array) ($scope['campaign_ids'] ?? []) !== []) {
+            return true;
+        }
+
+        // REPORT-FILTERS-FUNCTIONAL-001 — one platform of two is part of the project as surely as one account of two.
+        $providers = array_values(array_filter((array) ($scope['providers'] ?? []), 'is_string'));
+        if ($providers !== [] && array_diff($this->adPlatformsOfTheProject(), $providers) !== []) {
+            return true;
+        }
+
+        return $this->reportIsNarrower ??= $this->reportNarrowerThanItsProject();
+    }
+
+    /**
+     * The ad platforms the project's own rows come from — never a store or a measurement property, which no link names as a platform.
+     *
+     * @return list<string>
+     */
+    private function adPlatformsOfTheProject(): array
+    {
+        $report = Report::withoutGlobalScopes()->whereKey($this->report_id)->first(['id', 'project_id']);
+        if ($report === null) {
+            return [];
+        }
+
+        return DB::table('daily_metrics')
+            ->where('project_id', (string) $report->project_id)
+            ->whereIn('external_account_id', BoundAccountVisibility::activeAccountIds((string) $report->project_id))
+            ->distinct()
+            ->pluck('provider')
+            ->map(static fn (mixed $p): string => (string) $p)
+            ->all();
+    }
+
+    /** Memo for {@see narrowerThanItsProject()} — the report's own sources are read once per link. */
+    private ?bool $reportIsNarrower = null;
+
+    /**
+     * REPORT-SOURCE-ISOLATION-001 — a link is as narrow as the REPORT it serves, whatever the link itself names.
+     *
+     * A stored copy's link may carry no scope of its own (a duplicate's default link, a link made before links had one). The
+     * rule above then read «not narrower» for a report made for one ad account, and the sections that answer for a whole
+     * project — attribution against the store's orders, the widgets — were served beside figures that cover part of it. The
+     * report is narrower when it names campaigns, ad sets, ads or platforms, or when its accounts leave out an account the
+     * project actively selects.
+     */
+    private function reportNarrowerThanItsProject(): bool
+    {
+        $report = Report::withoutGlobalScopes()->whereKey($this->report_id)->first(['id', 'project_id', 'scope']);
+        if ($report === null || ! is_array($report->scope) || $report->scope === []) {
+            return false;
+        }
+
+        $sources = ReportScope::fromReport($report->scope, (string) $report->project_id);
+        if ($sources->campaignIds !== [] || $sources->adSetIds !== [] || $sources->adIds !== [] || $sources->providers !== []) {
+            return true;
+        }
+
+        return $sources->accountIds !== []
+            && array_diff(BoundAccountVisibility::activeAccountIds((string) $report->project_id), $sources->accountIds) !== [];
     }
 
     /**

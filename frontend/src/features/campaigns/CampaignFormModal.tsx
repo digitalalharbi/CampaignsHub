@@ -37,7 +37,7 @@ const ATTRIBUTION_WINDOWS = ['1d_click', '7d_click', '7d_click_1d_view', '28d_cl
 const CF_COPY = {
   ar: {
     platforms: 'المنصات', regions: 'المناطق', audiences: 'الجماهير', conversionEvents: 'أحداث التحويل',
-    creativeTypes: 'أنواع المحتوى الإبداعي', tags: 'الوسوم',
+    creativeTypes: 'أنواع المحتوى', tags: 'الوسوم',
     attributionModel: 'نموذج الإسناد', attributionWindow: 'نافذة الإسناد',
     derivedTitle: 'مؤشرات مشتقة من الهدف', primaryKpi: 'المؤشر الأساسي', secondaryKpi: 'مؤشرات ثانوية',
     funnel: 'مرحلة المسار', template: 'قالب التقرير', alerts: 'تنبيهات مقترحة',
@@ -261,9 +261,9 @@ export function CampaignFormModal({ open, onClose, projectId, campaign }: Props)
     e?.message ? [{ field: FIELD_IDS[field] ?? field, message: String(e.message) }] : [],
   )
 
-  /* LAUNCH-001 — this form is an INTERNAL draft; publishing on the platforms is «إطلاق الحملات». Said on the form so nobody reads «حفظ» as a launch. */
+  /* LAUNCH-001 — this form is an INTERNAL draft; publishing on the platforms is «حملة جديدة». Said on the form so nobody reads «حفظ» as a launch. */
   const draftHint = locale === 'ar'
-    ? 'هذه مسودة داخلية في كامبينز هب ولا تُنشر على أي منصة. للنشر على المنصات استخدم «إطلاق الحملات».'
+    ? 'هذه مسودة داخلية في كامبينز هب ولا تُنشر على أي منصة. للنشر على المنصات استخدم «حملة جديدة».'
     : 'This is an internal draft in CampaignsHub and is not published anywhere. To publish on the platforms use «Launch».'
   return (
     <Modal

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Ga4VisibilityControl } from '@/features/analytics/ga4/Ga4VisibilityBar'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Eye, EyeOff } from 'lucide-react'
 import { Switch } from '@/components/ui/Switch'
@@ -7,6 +8,7 @@ import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { providerLabel } from '@/features/campaigns/labels'
 import { fmtDate } from '@/lib/datetime'
+import { KeptCopyNote } from './ReportVersionHistory'
 import {
   getReportSections,
   getShareSections,
@@ -14,6 +16,7 @@ import {
   scopeOptions,
   updateShareSections,
   type BusinessStreamDefinition,
+  type GenericNameKind,
   type ShareSectionsState,
   listScopeTemplates,
   updateReportSections,
@@ -23,6 +26,7 @@ import {
   type SectionReason,
 } from './api'
 import { CompositionTree, VIEW_KEYS, type ViewKey, type ViewState } from './CompositionTree'
+import { AutoComposePanel, GenericNameSwitches } from './ReportComposeControls'
 
 /**
  * REPORT-SECTION-MODEL-001 — the operator's section switches for one report, with a preview.
@@ -60,8 +64,12 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
   const linkKey = ['share-sections', projectId, reportId, level]
   const link = useQuery({ queryKey: linkKey, queryFn: () => getShareSections(projectId, reportId, level), enabled: level !== '' })
   const toggleLink = useMutation({
-    mutationFn: ({ section, on, money, views }: { section?: string; on?: boolean; money?: { hide_spend?: boolean; hide_revenue?: boolean }; views?: string[] | null }) =>
-      views === undefined
+    mutationFn: ({ section, on, money, views, names, ga4 }: { section?: string; on?: boolean; money?: { hide_spend?: boolean; hide_revenue?: boolean }; views?: string[] | null; names?: GenericNameKind[]; ga4?: string[] }) =>
+      ga4 !== undefined
+        ? updateShareSections(projectId, reportId, level, {}, {}, undefined, undefined, ga4)
+        : names !== undefined
+        ? updateShareSections(projectId, reportId, level, {}, {}, undefined, names)
+        : views === undefined
         ? updateShareSections(projectId, reportId, level, section === undefined ? {} : { [section]: on ?? false }, money ?? {})
         : updateShareSections(projectId, reportId, level, {}, {}, views),
     onSuccess: (next: ShareSectionsState) => {
@@ -85,6 +93,18 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
   // REPORT-COMPOSITION-CONTROL-001 — the report's main sections, saved like a switch.
   const setViews = useMutation({
     mutationFn: (views: string[] | null) => updateReportSections(projectId, reportId, { views }),
+    onSuccess: onSaved,
+    onError: onFailed,
+  })
+  // REPORT-GENERIC-LABELS-001 — saved like any other switch.
+  // GA4-VISIBILITY-001 — the store / GA4 elements, one list per report and one per link.
+  const setGa4 = useMutation({
+    mutationFn: (ga4_hidden: string[]) => updateReportSections(projectId, reportId, { ga4_hidden }),
+    onSuccess: onSaved,
+    onError: onFailed,
+  })
+  const setNames = useMutation({
+    mutationFn: (generic_names: GenericNameKind[]) => updateReportSections(projectId, reportId, { generic_names }),
     onSuccess: onSaved,
     onError: onFailed,
   })
@@ -112,7 +132,7 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
   const linkState = Object.fromEntries((linkData?.sections ?? []).map((r) => [r.key, r.state]))
   // The rows are always the registry list; only the preview follows the chosen level.
   const rows = state.data.resolved
-  const busy = toggle.isPending || fromTemplate.isPending || setViews.isPending
+  const busy = toggle.isPending || fromTemplate.isPending || setViews.isPending || setNames.isPending
   const title = (r: ResolvedSectionRow) => (ar ? r.title_ar : r.title_en)
   const byKey = Object.fromEntries(rows.map((r) => [r.key, r]))
 
@@ -188,6 +208,19 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
             {ar ? 'يمكن للرابط إخفاء أقسام يعرضها التقرير فقط، لا إظهار ما يخفيه.' : 'A link can only hide sections the report shows — never show what it hides.'}
           </p>
         )}
+        {/* REPORT-AUTO-COMPOSE-001 — closed until opened, saved only on Apply, and it writes the switches below. */}
+        <AutoComposePanel
+          key={level}
+          projectId={projectId}
+          reportId={reportId}
+          shareId={onLink ? level : undefined}
+          ar={ar}
+          onChanged={() => {
+            void qc.invalidateQueries({ queryKey: key })
+            void qc.invalidateQueries({ queryKey: linkKey })
+            void qc.invalidateQueries({ queryKey: ['report-auto-compose', projectId, reportId, level] })
+          }}
+        />
         <CompositionTree
           testid="section"
           rows={rows}
@@ -208,7 +241,7 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
             <p className="mt-4 mb-1 text-xs font-bold text-text-muted">{ar ? 'الأرقام المالية في الرابط' : 'Financial figures on this link'}</p>
             <ul className="divide-y divide-border" data-testid="section-link-money">
               {([
-                ['hide_spend', ar ? 'الإنفاق والتكاليف والعائد على الإنفاق' : 'Spend, costs and return on spend'],
+                ['hide_spend', ar ? 'الإنفاق والتكاليف ومعدل العائد' : 'Spend, costs and return on spend'],
                 ['hide_revenue', ar ? 'الإيراد' : 'Revenue'],
               ] as const).map(([flag, label]) => (
                 <li key={flag} className="flex items-center justify-between gap-3 py-1.5">
@@ -224,6 +257,24 @@ export function ReportSectionControls({ projectId, reportId }: { projectId: stri
               ))}
             </ul>
           </>
+        )}
+        <GenericNameSwitches
+          ar={ar}
+          chosen={(onLink ? linkData?.generic_names : state.data.generic_names) ?? []}
+          lockedByReport={onLink ? linkData?.generic_names_of_report : undefined}
+          disabled={onLink ? toggleLink.isPending || !linkData : busy}
+          onChange={(next) => (onLink ? toggleLink.mutate({ names: next }) : setNames.mutate(next))}
+        />
+        {(effective.ga4_overview || effective.ga4_attribution || effective.ga4_gap_reasons || effective.ga4_pulse) && (
+          <div data-testid="ga4-visibility-section" className="mt-3 rounded-xl border border-border p-3">
+            <p className="mb-2 text-xs font-bold text-text-primary">{ar ? 'الموقع' : 'Website'}</p>
+            <Ga4VisibilityControl
+              ar={ar}
+              hidden={(onLink ? linkData?.ga4_hidden : state.data.ga4_hidden) ?? []}
+              onChange={(next) => (onLink ? toggleLink.mutate({ ga4: next }) : setGa4.mutate(next))}
+              testId="report-ga4-visibility"
+            />
+          </div>
         )}
         {!onLink && effective.advanced_segmentation && (
           <StreamsEditor projectId={projectId} reportId={reportId} saved={state.data.streams ?? []} ar={ar} onSaved={onSaved} onFailed={onFailed} />
@@ -402,6 +453,8 @@ function StreamsEditor({
           {ar ? 'حفظ المسارات' : 'Save streams'}
         </button>
       </div>
+      {/* A changed stream rebuilds a stored report; the other switches on this panel do not. */}
+      <KeptCopyNote className="mt-2" />
     </div>
   )
 }

@@ -43,7 +43,11 @@ for (const section of SECTIONS) {
  * to a colleague and the colleague opened the general tab — so it is the one asserted end to end.
  */
 test('a settings tab can be linked to, and survives a reload', async ({ page }) => {
-  await page.goto('/agency/settings/workspace?tab=notifications')
+  /*
+   * NOTIF-V2-SETTINGS-UI-001 — the delivery log now sits in the notification page's internal «الفريق» tab, so the
+   * address names the tab AND the inner tab; the claim (a link opens where it says, a reload keeps the place) is the same.
+   */
+  await page.goto('/agency/settings/workspace?tab=notifications&section=internal&tab2=team')
 
   await expect(page.getByTestId('delivery-log')).toBeVisible({ timeout: 30000 })
 

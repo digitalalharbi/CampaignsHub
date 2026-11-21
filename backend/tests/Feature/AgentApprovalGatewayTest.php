@@ -97,6 +97,40 @@ final class AgentApprovalGatewayTest extends TestCase
         return $this->actingAs($as ?? $this->asker)->postJson($this->url(), $this->body($over));
     }
 
+    /** CONS-I-APPROVAL — «ميزانية يومية 36 €» was shown raw: the request carries the figures in the display currency too. */
+    public function test_a_budget_request_is_shown_in_the_display_currency_after_conversion(): void
+    {
+        $this->account->forceFill(['currency' => 'SAR'])->save();
+        $this->campaign->forceFill(['daily_budget' => 375, 'currency' => 'SAR'])->save();
+
+        // 375 SAR is 100 USD at the 3.75 peg; 400 SAR (+6.7%) is 106.67 USD.
+        $d = $this->propose(['payload' => ['daily_budget' => 400]])->assertCreated()->json('data');
+
+        $this->assertSame(400, $d['payload']['daily_budget'], 'the platform figure is untouched');
+        $this->assertSame('SAR', $d['currency']);
+        $this->assertSame('USD', $d['display']['currency']);
+        $this->assertEqualsWithDelta(106.67, $d['display']['daily_budget'], 0.01);
+        $this->assertTrue($d['display']['converted']);
+        $this->assertSame('SAR', $d['display']['source_currency']);
+    }
+
+    public function test_a_budget_in_a_currency_with_no_rate_is_not_converted_and_says_why(): void
+    {
+        $this->account->forceFill(['currency' => 'EUR'])->save();
+
+        $d = $this->propose(['payload' => ['daily_budget' => 110]])->assertCreated()->json('data');
+
+        $this->assertNull($d['display']['daily_budget']);
+        $this->assertFalse($d['display']['converted']);
+        $this->assertSame('no_rate', $d['display']['reason']);
+        $this->assertSame(110, $d['payload']['daily_budget']);
+    }
+
+    public function test_a_pause_request_carries_no_money_display(): void
+    {
+        $this->propose(['action' => 'pause', 'payload' => []])->assertCreated()->assertJsonPath('data.display', null);
+    }
+
     // ── What may be asked ──────────────────────────────────────────────────────────────────────
 
     public function test_a_raise_inside_the_cap_waits_for_approval(): void

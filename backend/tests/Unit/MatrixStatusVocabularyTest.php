@@ -615,7 +615,10 @@ final class MatrixStatusVocabularyTest extends TestCase
     /** A merge resolved by committing both sides, which happened, and cost two rows. */
     public function test_the_ledger_carries_no_unresolved_conflict(): void
     {
-        foreach ([$this->matrixPath(), $this->docPath('RESUME_STATE.md'), $this->docPath('ACTIVE_EXECUTION_STATE.md')] as $path) {
+        // RESUME_STATE_HISTORY.md carries the checkpoints that used to live in RESUME_STATE.md and was
+        // added here with them (2026-11-06). Scanning it is the point: it is the file nobody reads, so a
+        // conflict committed into it would survive longest.
+        foreach ([$this->matrixPath(), $this->docPath('RESUME_STATE.md'), $this->docPath('RESUME_STATE_HISTORY.md'), $this->docPath('ACTIVE_EXECUTION_STATE.md')] as $path) {
             foreach (file($path) as $n => $line) {
                 $this->assertDoesNotMatchRegularExpression(
                     '/^(<{7}|={7}$|>{7})/',

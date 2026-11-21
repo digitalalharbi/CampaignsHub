@@ -17,7 +17,7 @@ test.describe('support access', () => {
     await signIn(page, 'admin@campaignshub.io', 'password')
     // signIn() returns on the click; navigating before the sign-in lands aborts it and leaves the page on /login — what
     // every earlier run of this spec showed, on all three browsers. Wait until the app has moved us on.
-    await page.waitForURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
+    await expect(page).toHaveURL((url) => !/\/login/.test(url.pathname), { timeout: 30_000 })
     await page.goto('/admin/tenants')
     await switchToEnglish(page)
     await expect(page.getByTestId('tenant-list')).toBeVisible({ timeout: 30_000 })
@@ -30,7 +30,7 @@ test.describe('support access', () => {
     await page.getByTestId('support-password').fill('password')
     await page.getByTestId('support-start').click()
 
-    await page.waitForURL(/\/agency/)
+    await expect(page).toHaveURL(/\/agency/)
     const banner = page.getByTestId('support-banner')
     await expect(banner).toBeVisible()
     await expect(banner).toContainText(/Demo Agency/)
@@ -44,7 +44,7 @@ test.describe('support access', () => {
     expect(refused).toEqual({ status: 403, code: 'support_read_only' })
 
     await page.getByTestId('support-exit').click()
-    await page.waitForURL(/\/admin\/tenants/)
+    await expect(page).toHaveURL(/\/admin\/tenants/)
     await expect(page.getByTestId('support-banner')).toHaveCount(0)
   })
 })

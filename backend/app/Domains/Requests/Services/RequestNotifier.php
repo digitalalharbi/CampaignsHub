@@ -19,6 +19,12 @@ final class RequestNotifier
 
     public function notify(ExternalRequest $request, string $type, string $title, ?string $message = null, ?int $userId = null): ?AppNotification
     {
+        // PLATFORM-SERVICE-INBOX-001 — the workspace engine is keyed by tenant, and a platform request has none.
+        // Its administrators are told through `PlatformRequestNotifier`; no subscriber is ever addressed about it.
+        if ($request->isPlatformOwned() || $request->tenant_id === null) {
+            return null;
+        }
+
         return $this->dispatcher->dispatch([
             'tenant_id' => $request->tenant_id,
             'user_id' => $userId ?? $request->assigned_to,

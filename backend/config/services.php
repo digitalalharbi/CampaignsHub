@@ -56,6 +56,14 @@ return [
         'verify_channel' => env('TWILIO_VERIFY_CHANNEL', 'sms'),
         'connect_timeout' => (int) env('TWILIO_CONNECT_TIMEOUT', 3),
         'timeout' => (int) env('TWILIO_TIMEOUT', 8),
+        // NOTIFICATION-CHANNELS-001 — WhatsApp notifications over the same account. All optional: with no sender
+        // configured the Null adapter stays registered and nothing is attempted (see config/providers.php).
+        'whatsapp' => [
+            'from' => env('TWILIO_WHATSAPP_FROM'),
+            'messaging_service_sid' => env('TWILIO_WHATSAPP_MESSAGING_SERVICE_SID'),
+            // JSON map of "<template name>.<ar|en>" => approved Content SID (HX…); see WhatsAppTemplates.
+            'content_sids' => json_decode((string) env('TWILIO_WHATSAPP_CONTENT_SIDS', '{}'), true) ?: [],
+        ],
     ],
 
     'apple' => [

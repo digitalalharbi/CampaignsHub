@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Integrations\Console;
 
+use App\Domains\Integrations\Services\BoundAccountVisibility;
 use Illuminate\Console\Command;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -185,7 +186,7 @@ final class ScopeAuditCommand extends Command
         }
         $this->line(sprintf('    inactive bindings : %d', count($inactive)));
         foreach ($inactive as $account) {
-            $this->line(sprintf('      · %s  [%s]  (deselected — its rows are still readable)', $account, $this->providerOf[$account] ?? '?'));
+            $this->line(sprintf('      · %s  [%s]  (deselected — its rows are stored and inventoried, not read)', $account, $this->providerOf[$account] ?? '?'));
         }
 
         // Structure — attributed directly, or through the campaign the row hangs off.
@@ -387,6 +388,7 @@ final class ScopeAuditCommand extends Command
             ->whereColumn('c.project_id', '!=', 'cr.project_id')
             ->count();
         $this->line(sprintf('      creatives linked to a campaign of another project    : %d', $crossed));
+        $this->crossLinkedCreatives($projectId);
 
         // Ad sets / ads whose campaign sits in another project.
         foreach (['external_ad_sets', 'external_ads'] as $table) {
@@ -414,6 +416,45 @@ final class ScopeAuditCommand extends Command
             ->whereColumn('m.external_account_id', '!=', 'c.external_account_id')
             ->count();
         $this->line(sprintf('      daily metric rows stamped with a different account   : %d', $disagreeDaily));
+    }
+
+    /**
+     * Per cross-linked creative (max 100): where it is filed, where its campaign is filed, its account, and whether
+     * `BoundAccountVisibility::applyThroughCampaign` admits it in each of those two projects. Ids only; pure reads.
+     */
+    private function crossLinkedCreatives(string $projectId): void
+    {
+        $rows = DB::table('external_creatives as cr')
+            ->join('external_campaigns as c', 'c.id', '=', 'cr.external_campaign_id')
+            ->where('cr.project_id', $projectId)
+            ->whereColumn('c.project_id', '!=', 'cr.project_id')
+            ->orderBy('cr.id')
+            ->limit(100)
+            ->get(['cr.id', 'cr.project_id', 'c.project_id as campaign_project_id', 'c.external_account_id']);
+
+        foreach ($rows as $row) {
+            $this->line(sprintf(
+                '        creative %s · filed in project %s · campaign\'s project %s · account %s · readable-here: %s · readable-in-campaign-project: %s',
+                substr((string) $row->id, 0, 8),
+                substr((string) $row->project_id, 0, 8),
+                substr((string) $row->campaign_project_id, 0, 8),
+                substr((string) ($row->external_account_id ?? '--------'), 0, 8),
+                $this->readableIn((string) $row->id, (string) $row->project_id) ? 'yes' : 'no',
+                $this->readableIn((string) $row->id, (string) $row->campaign_project_id) ? 'yes' : 'no',
+            ));
+        }
+    }
+
+    private function readableIn(string $creativeId, string $projectId): bool
+    {
+        if (preg_match('/^[0-9a-f-]{36}$/i', $projectId) !== 1) {
+            return false;
+        }
+
+        $q = DB::table('external_creatives as rc')->where('rc.id', $creativeId);
+        BoundAccountVisibility::applyThroughCampaign($q, 'rc.external_campaign_id', "'{$projectId}'");
+
+        return $q->exists();
     }
 
     // ── the estate, across projects ────────────────────────────────────────────────────────────────

@@ -7,11 +7,14 @@ namespace App\Domains\Reports\Jobs;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ReportGenerator;
+use App\Domains\Reports\Services\ReportVersions;
+use App\Support\PeriodLabel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /** Generates a report's data snapshot on the reports queue. Idempotent: re-running re-snapshots. */
@@ -40,14 +43,24 @@ final class GenerateReportJob implements ShouldQueue
         if (! $report) {
             return;
         }
+        // REPORT-DUPLICATE-001 — a draft is not built until it is published; publishing is what moves it to `processing`.
+        if ($report->isDraft()) {
+            return;
+        }
         $report->update(['status' => 'processing', 'error' => null]);
         try {
             $data = $generator->generate($report);
-            $report->update(['data' => $data, 'status' => 'completed', 'generated_at' => now(), 'error' => null]);
-            $this->tell($report, 'report_ready');
+            // REPORT-SNAPSHOT-PROTECT-001 — every path that rebuilds a report ends here, so the copy it replaces is kept here.
+            DB::transaction(function () use ($report, $data): void {
+                app(ReportVersions::class)->keep($report);
+                $report->update(['data' => $data, 'status' => 'completed', 'generated_at' => now(), 'error' => null]);
+            });
+            if ($this->claimReadyNotice($report)) {
+                $this->tell($report, 'report_ready');
+            }
         } catch (Throwable $e) {
             // Retries stay quiet; the terminal failure speaks once, from failed().
-            $report->update(['status' => 'failed', 'error' => $e->getMessage()]);
+            $report->update(['status' => $report->hasStoredCopy() ? 'completed' : 'failed', 'error' => $e->getMessage()]);
             throw $e;
         }
     }
@@ -71,27 +84,45 @@ final class GenerateReportJob implements ShouldQueue
             'severity' => $ready ? 'info' : 'error',
             'title' => $ready ? 'Report ready: '.$name : 'Report failed: '.$name,
             'message' => $ready
-                ? 'The report «'.$name.'» for '.$report->period_start?->toDateString().' → '.$report->period_end?->toDateString().' has been generated.'
+                ? 'The report «'.$name.'» for '.($report->period_start !== null && $report->period_end !== null ? PeriodLabel::range($report->period_start, $report->period_end, 'en') : '—').' has been generated.'
                 : 'The report «'.$name.'» could not be generated'.($error ? ': '.$error : '.'),
             'title_ar' => $ready ? 'التقرير جاهز: '.$name : 'تعذّر توليد التقرير: '.$name,
             'message_ar' => $ready
-                ? 'اكتمل توليد تقرير «'.$name.'» للفترة '.$report->period_start?->toDateString().' → '.$report->period_end?->toDateString().'.'
+                ? 'اكتمل توليد تقرير «'.$name.'» للفترة '.($report->period_start !== null && $report->period_end !== null ? PeriodLabel::range($report->period_start, $report->period_end, 'ar') : '—').'.'
                 : 'تعذّر توليد تقرير «'.$name.'»'.($error ? ': '.$error : '.'),
             'source' => 'reports',
             'entity_type' => Report::class,
             'entity_id' => (string) $report->id,
             // NOTIF-LINK-001 — portal-relative: the reader's own portal mounts the reports page.
             'action_url' => '/reports',
-            'dedup_extra' => $ready ? (string) $report->generated_at?->toIso8601String() : 'failed',
+            'dedup_extra' => $ready ? 'v'.(int) ($report->version ?? 1) : 'failed',
         ]);
+    }
+
+    /**
+     * CONS-REPORT-READY-ONCE — «Report ready» is said once per report and version, whatever rebuilds it.
+     *
+     * Every rebuild (a note, a section switch, a pack refresh, a retry) moved `generated_at`, which was the dedup extra, and
+     * the dispatcher only collapses repeats inside one hour, so the same report and version was announced 24 times. The key
+     * is claimed in one conditional UPDATE: of two jobs finishing together exactly one wins, and a later rebuild of the same
+     * version finds it taken. A new version is news again.
+     */
+    private function claimReadyNotice(Report $report): bool
+    {
+        $version = (int) ($report->version ?? 1);
+
+        return Report::withoutGlobalScopes()
+            ->whereKey($report->getKey())
+            ->where(fn ($q) => $q->whereNull('ready_notified_version')->orWhere('ready_notified_version', '<>', $version))
+            ->update(['ready_notified_version' => $version]) === 1;
     }
 
     public function failed(Throwable $e): void
     {
-        Report::withoutGlobalScopes()->where('id', $this->reportId)->update(['status' => 'failed', 'error' => $e->getMessage()]);
-
         $report = Report::withoutGlobalScopes()->find($this->reportId);
         if ($report !== null) {
+            // A failed rebuild does not take the copy it failed to replace offline.
+            $report->update(['status' => $report->hasStoredCopy() ? 'completed' : 'failed', 'error' => $e->getMessage()]);
             $this->tell($report, 'report_failed', $e->getMessage());
         }
     }

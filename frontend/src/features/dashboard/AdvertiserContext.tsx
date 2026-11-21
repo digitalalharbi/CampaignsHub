@@ -85,8 +85,8 @@ export function AdvertiserSourcesStrip({ projectId }: { projectId: string }) {
   const portal = usePortalPath()
   const canSee = useAuth((s) => s.hasPermission('integrations.view'))
   const overview = useQuery({ queryKey: ['portfolio-overview'], queryFn: () => fetchPortfolioOverview(), retry: false })
-  const stores = useQuery({ queryKey: ['commerce-stores'], queryFn: listStoreProviders, enabled: canSee, retry: false })
-  const ga4 = useQuery({ queryKey: ['measurement-properties'], queryFn: listMeasurementProviders, enabled: canSee, retry: false })
+  const stores = useQuery({ queryKey: ['commerce-stores'], queryFn: () => listStoreProviders(), enabled: canSee, retry: false })
+  const ga4 = useQuery({ queryKey: ['measurement-properties'], queryFn: () => listMeasurementProviders(), enabled: canSee, retry: false })
   if (!canSee) return null
 
   const sources: Source[] = []
@@ -114,7 +114,7 @@ export function AdvertiserSourcesStrip({ projectId }: { projectId: string }) {
     const all = ga4.data.flatMap((p) => p.properties)
     const mine = all.find((pr) => pr.project_id === projectId)
     sources.push({
-      key: 'ga4', icon: BarChart3, label: 'GA4',
+      key: 'ga4', icon: BarChart3, label: ar ? 'الموقع' : 'Website',
       state: mine ? 'connected' : ga4.data.some((p) => p.state === 'error') ? 'error' : all.some((pr) => pr.is_selected && pr.project_id === null) ? 'unassigned' : all.length > 0 ? 'other_project' : 'none',
       detail: mine ? mine.name : null,
       to: '/integrations',

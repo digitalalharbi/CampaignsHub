@@ -37,10 +37,13 @@ return [
      */
     'colour' => [
         'brand' => '#0d8a6f',
+        'brand_dark' => '#0b1a16',  // the header band
+        'brand_action' => '#0b7a62', // a button's fill: white on it is 5.3:1; brand itself is 4.3:1 and fails AA
         'brand_ink' => '#c9d2cc',   // on the brand background, in the header
         'ink' => '#0b1a16',         // body text
         'ink_soft' => '#3d4742',    // secondary body text
         'muted' => '#5b6b68',       // labels
+        'header_tag' => '#b7c9c2',  // the tagline on the dark band
         'muted_soft' => '#8b9a97',  // footnotes and timestamps
         'canvas' => '#f7f5f0',      // outside the card
         'surface' => '#ffffff',     // the card itself
@@ -57,6 +60,17 @@ return [
         'header_bg' => '#0b1a16',
         'header_ink' => '#f7f5f0',
         'accent' => '#e8a33d',
+        // The series colours of a stacked bar (the same set `MailChart::COLOURS` draws), so a platform mix reads the way the charts do.
+        // DIGESTS-VISUAL-V2-001 — the bars and tracks of the drawn digests: a soft bar, the problem bar, an empty track, a warning bar, a faint dot.
+        'good_ink' => '#0a6b57',   // ink on a good chip or an objective chip
+        'bar_soft' => '#9ccfc0',
+        'bar_bad' => '#c0392b',
+        'bar_warn' => '#e0a23a',
+        'track' => '#e6e2d6',
+        'dot_faint' => '#c9c4b6',
+        'series_blue' => '#3d6bd8',
+        'series_violet' => '#8b5cf6',
+        'series_teal' => '#0b7285',
     ],
 
     /*

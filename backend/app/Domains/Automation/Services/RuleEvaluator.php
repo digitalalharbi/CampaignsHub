@@ -9,7 +9,12 @@ use App\Domains\Agents\Services\ProposalService;
 use App\Domains\Automation\Models\AutomationRule;
 use App\Domains\Automation\Models\AutomationRuleAction;
 use App\Domains\Automation\Models\AutomationRuleRun;
+use App\Domains\Automation\Support\RuleCatalog;
+use App\Domains\Automation\Support\RuleReadings;
 use App\Domains\Campaigns\Management\WriteCapabilityRegistry;
+use App\Domains\Funding\Support\FundingMoney;
+use App\Domains\Metrics\Services\DisplayCurrencyAdapter;
+use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
@@ -41,6 +46,7 @@ final class RuleEvaluator
         private readonly RuleMetrics $metrics,
         private readonly ProposalService $proposals,
         private readonly NotificationDispatcher $notifications,
+        private readonly DisplayCurrencyAdapter $display,
     ) {}
 
     /** @return array{run: AutomationRuleRun, results: list<array<string, mixed>>} */
@@ -60,8 +66,9 @@ final class RuleEvaluator
             $acted = 0;
 
             foreach ($targets as $t) {
-                [$matched, $read, $why] = $this->judge($rule, $t, $figures, $today);
-                $row = ['target' => $t, 'matched' => $matched, 'metrics' => $read, 'note' => $why];
+                [$matched, $read, $why, $readings] = $this->judge($rule, $t, $figures, $today);
+                // CONS-I-DRYRUN — what a person reads: the indicator's Arabic name, the value in display currency, the exact reason.
+                $row = ['target' => $t, 'matched' => $matched, 'metrics' => $read, 'note' => $why, 'readings' => $readings, 'reason' => $this->reason($rule, $why, $readings, $figures, $t)];
 
                 if (! $matched) {
                     $results[] = $row + ['status' => match ($why) {
@@ -143,11 +150,12 @@ final class RuleEvaluator
 
     /**
      * @param  array<string, mixed>  $t
-     * @return array{0: bool, 1: array<string, mixed>, 2: ?string} matched, figures read, why not judged
+     * @return array{0: bool, 1: array<string, mixed>, 2: ?string, 3: list<array<string, mixed>>} matched, figures read, why not judged, readings
      */
     private function judge(AutomationRule $rule, array $t, array $figures, Carbon $today): array
     {
         $read = [];
+        $readings = [];
         $results = [];
         $maxWindow = 1;
 
@@ -155,15 +163,16 @@ final class RuleEvaluator
             $metric = (string) $c['metric'];
             $w = (int) ($c['window_days'] ?? 7);
             $maxWindow = max($maxWindow, $w);
-            $value = $this->value($metric, $w, $t, $figures, $today);
+            $value = $this->inRuleCurrency($rule, $metric, $this->value($rule, $metric, $w, $t, $figures, $today), $today);
             $read["{$metric}@{$w}d"] = $value;
+            $readings[] = $this->reading($rule, $metric, $w, $value, $t, $figures);
             $results[] = $value === null ? null : $this->compare($value, (string) $c['operator'], $c['value']);
         }
 
-        // Data sufficiency: below the rule's minimum spend nothing is judged — too little to act on.
-        $spend = $figures["cur:{$maxWindow}"][$t['id']]['spend'] ?? null;
+        // Data sufficiency: below the rule's minimum spend nothing is judged — too little to act on (both in the rule's currency).
+        $spend = $this->inRuleCurrency($rule, 'spend', $figures["cur:{$maxWindow}"][$t['id']]['spend'] ?? null, $today);
         if ($rule->min_spend !== null && ($spend === null || $spend < (float) $rule->min_spend)) {
-            return [false, $read, 'below_min_spend'];
+            return [false, $read, 'below_min_spend', $readings];
         }
 
         $matched = $rule->logic === 'any'
@@ -176,25 +185,158 @@ final class RuleEvaluator
          * data, never a claim that the platform cannot supply the metric) — the object was not judged, and the history says so instead of «not matched».
          */
         if (! $matched && in_array(null, $results, true) && ! in_array(false, $results, true)) {
-            return [false, $read, 'no_figure'];
+            return [false, $read, 'no_figure', $readings];
         }
 
-        return [$matched, $read, null];
+        return [$matched, $read, null, $readings];
+    }
+
+    /**
+     * FX-APPLY-001 — the currency the rule's money limits are stated in: its own, else the workspace's display currency.
+     */
+    public function ruleCurrency(AutomationRule $rule): string
+    {
+        $own = is_string($rule->currency ?? null) && preg_match('/^[A-Z]{3}$/', strtoupper((string) $rule->currency)) === 1 ? strtoupper((string) $rule->currency) : null;
+
+        return $own ?? $this->display->displayCurrency((string) $rule->project_id);
+    }
+
+    /**
+     * FX-APPLY-001 — every object's money figure is converted INTO the rule's currency BEFORE it is compared with the limit.
+     *
+     * The figures are the reporting basis (`ReportingCurrency::DEFAULT`, USD): each platform row was converted from its own
+     * currency (a EUR account's 12 EUR at 1.12 is 13.44 USD) at ingest by the same engine. A rule in another currency (SAR)
+     * converts that figure through FxEngine; no rate → null («no_rate»), never the raw number compared with the limit.
+     */
+    private function inRuleCurrency(AutomationRule $rule, string $metric, float|string|null $value, Carbon $today): float|string|null
+    {
+        if (! is_float($value) || (RuleCatalog::METRICS[$metric][2] ?? null) !== 'money') {
+            return $value;
+        }
+        $to = $this->ruleCurrency($rule);
+        if ($to === ReportingCurrency::DEFAULT) {
+            return $value;
+        }
+
+        return $this->display->to($to, $value, ReportingCurrency::DEFAULT, $today)['amount'];
     }
 
     /** @param array<string, mixed> $t */
-    private function value(string $metric, int $w, array $t, array $figures, Carbon $today): float|string|null
+    private function value(AutomationRule $rule, string $metric, int $w, array $t, array $figures, Carbon $today): float|string|null
     {
         $cur = $figures["cur:{$w}"][$t['id']] ?? [];
 
         return match ($metric) {
             'delivery_status' => strtolower((string) ($t['status'] ?? '')) ?: null,
-            'age_days' => $t['started_at'] !== null ? (float) Carbon::parse($t['started_at'])->diffInDays($today) : null,
-            'budget_utilization' => ($t['daily_budget'] ?? 0) > 0 && ($figures['cur:1'][$t['id']]['spend'] ?? null) !== null
-                ? $figures['cur:1'][$t['id']]['spend'] / $t['daily_budget'] * 100 : null,
+            'age_days' => $t['started_at'] !== null ? (float) Carbon::parse($t['started_at'])->startOfDay()->diffInDays($today->copy()->startOfDay()) : null,
+            'budget_utilization' => $this->budgetUtilization($rule, $t, $figures),
             'spend_change_pct', 'cpa_change_pct', 'roas_change_pct' => $this->change(substr($metric, 0, -11), $cur, $figures["prev:{$w}"][$t['id']] ?? []),
             default => $cur[$metric] ?? null,
         };
+    }
+
+    /**
+     * CONS-I-BUDGET — today's spend over the object's daily budget, both in the DISPLAY currency.
+     *
+     * Spend is the converted column (the reporting currency); the budget is in the account's own currency, so it is
+     * converted through the one adapter before the division — a SAR budget against a USD spend is the 3.75 trap.
+     * No budget from the platform, no spend today, or no rate: null, and {@see unavailable()} says which.
+     *
+     * @param  array<string, mixed>  $t
+     */
+    private function budgetUtilization(AutomationRule $rule, array $t, array $figures): ?float
+    {
+        $budget = (float) ($t['daily_budget'] ?? 0);
+        $spend = $figures['cur:1'][$t['id']]['spend'] ?? null;
+        if ($budget <= 0 || $spend === null) {
+            return null;
+        }
+        // Both figures in the reporting basis before the division: the budget is in the account's own currency.
+        $converted = $this->display->to(ReportingCurrency::DEFAULT, $budget, $t['currency'] ?? null);
+
+        return $converted['amount'] !== null && $converted['amount'] > 0 ? $spend / $converted['amount'] * 100 : null;
+    }
+
+    /**
+     * Why a metric has no value for this object — one code per cause, so the history can say it in words.
+     *
+     * @param  array<string, mixed>  $t
+     */
+    private function unavailable(AutomationRule $rule, string $metric, array $t, array $figures, int $w): string
+    {
+        return match ($metric) {
+            'age_days' => 'no_creation_date',
+            'delivery_status' => 'no_status',
+            'budget_utilization' => match (true) {
+                (float) ($t['daily_budget'] ?? 0) <= 0 => 'no_daily_budget',
+                ($figures['cur:1'][$t['id']]['spend'] ?? null) === null => 'no_spend_today',
+                default => 'no_rate',
+            },
+            'spend_change_pct', 'cpa_change_pct', 'roas_change_pct' => 'no_comparison',
+            // FX-APPLY-001 — money with a withheld (unconverted) part, or no rate into the rule's currency: never compared raw.
+            default => (RuleCatalog::METRICS[$metric][2] ?? null) === 'money'
+                && (($figures["cur:{$w}"][$t['id']]['money_withheld'] ?? null) !== null || ($figures["cur:{$w}"][$t['id']][$metric] ?? null) !== null)
+                ? 'no_rate_money' : 'not_reported',
+        };
+    }
+
+    /**
+     * One reading, as a person meets it: the Arabic name of the indicator and the window, the value (money already in the
+     * display currency), and — when there is none — the exact reason in words instead of «cpa@7d».
+     *
+     * @param  array<string, mixed>  $t
+     * @return array<string, mixed>
+     */
+    private function reading(AutomationRule $rule, string $metric, int $w, float|string|null $value, array $t, array $figures): array
+    {
+        $def = RuleCatalog::METRICS[$metric] ?? [$metric, $metric, 'count'];
+        $kind = $def[2];
+        $code = $value === null ? $this->unavailable($rule, $metric, $t, $figures, $w) : null;
+        $currency = $kind === 'money' ? $this->ruleCurrency($rule) : null;
+
+        return [
+            'metric' => $metric, 'window_days' => $w,
+            'name_ar' => $def[0].($this->windowless($metric) ? '' : ' (آخر '.RuleReadings::days($w).')'),
+            'name_en' => $def[1].($this->windowless($metric) ? '' : " (last {$w} d)"),
+            'kind' => $kind, 'value' => is_float($value) ? round($value, 2) : $value, 'currency' => $currency,
+            'text_ar' => RuleReadings::valueText($value, $kind, $currency, $code),
+            'reason_code' => $code, 'reason_ar' => $code === null ? null : RuleReadings::reasonAr($code, $this->ruleCurrency($rule)),
+        ];
+    }
+
+    private function windowless(string $metric): bool
+    {
+        return in_array($metric, ['age_days', 'delivery_status', 'budget_utilization'], true);
+    }
+
+    /**
+     * The one sentence for an object nobody judged: «بيانات غير كافية» and WHY — age, status, spend or missing data.
+     *
+     * @param  list<array<string, mixed>>  $readings
+     * @return array{code: string, ar: string}|null
+     */
+    private function reason(AutomationRule $rule, ?string $why, array $readings, array $figures, array $t): ?array
+    {
+        if ($why === 'below_min_spend') {
+            $w = 1;
+            foreach ((array) $rule->conditions as $c) {
+                $w = max($w, (int) ($c['window_days'] ?? 7));
+            }
+            $spend = $this->inRuleCurrency($rule, 'spend', $figures["cur:{$w}"][$t['id']]['spend'] ?? null, Carbon::today());
+            $cur = $this->ruleCurrency($rule);
+            $has = $spend === null ? 'ما فيه إنفاق مسجّل' : 'الإنفاق '.FundingMoney::withMark(number_format((float) $spend, 2), $cur);
+
+            return ['code' => 'below_min_spend', 'ar' => 'بيانات غير كافية: '.$has.' والحد الأدنى '.FundingMoney::withMark(number_format((float) $rule->min_spend, 2), $cur)];
+        }
+        if ($why === 'no_figure') {
+            foreach ($readings as $r) {
+                if ($r['reason_code'] !== null) {
+                    return ['code' => (string) $r['reason_code'], 'ar' => 'بيانات غير كافية: '.$r['name_ar'].' — '.$r['reason_ar']];
+                }
+            }
+        }
+
+        return null;
     }
 
     private function change(string $base, array $cur, array $prev): ?float
@@ -235,7 +377,7 @@ final class RuleEvaluator
             'budget_increase', 'budget_decrease' => [
                 'gateway' => 'set_daily_budget',
                 'before' => ['daily_budget' => $t['daily_budget'], 'currency' => $t['currency']],
-                'after' => $t['daily_budget'] === null ? null : ['daily_budget' => round($t['daily_budget'] * (1 + ($type === 'budget_increase' ? $pct : -$pct) / 100), 2), 'currency' => $t['currency']],
+                'after' => $t['daily_budget'] === null || ($t['budget_source'] ?? 'self') !== 'self' ? null : ['daily_budget' => round($t['daily_budget'] * (1 + ($type === 'budget_increase' ? $pct : -$pct) / 100), 2), 'currency' => $t['currency']],
             ],
             default => ['gateway' => null, 'before' => null, 'after' => null],
         };
@@ -335,6 +477,9 @@ final class RuleEvaluator
             'type' => 'automation_rule', 'severity' => 'warning',
             'title' => "Rule «{$rule->name}» matched: ".($t['name'] ?? $t['external_id']),
             'message' => $this->describe($read).($type !== 'notify' ? ' — action: '.$type.' (monitor only).' : ''),
+            // NOTIFICATION-CHANNELS-001 — the email is in the reader's language; the figures are the same.
+            'title_ar' => "طابقت القاعدة «{$rule->name}»: ".($t['name'] ?? $t['external_id']),
+            'message_ar' => $this->describe($read).($type !== 'notify' ? ' — الإجراء: '.$type.' (مراقبة فقط).' : ''),
             'source' => 'automation', 'entity_type' => 'automation_rule', 'entity_id' => (string) $rule->getKey(),
             'action_url' => '/automation', 'dedup_extra' => $t['external_id'],
         ]);

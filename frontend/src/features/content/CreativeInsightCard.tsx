@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { CreativeInsight } from './api'
 import type { Locale } from '@/stores/ui'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * §15.10 — one finding, rendered the same way wherever it is read.
@@ -148,10 +149,10 @@ export function CreativeInsightCard({
           {t.confidence}: {CONFIDENCE_LABEL[item.confidence]?.[ar ? 'ar' : 'en'] ?? item.confidence}
         </span>
         <span dir="ltr">
-          {item.period.from} → {item.period.to}
+          <PeriodText from={item.period.from} to={item.period.to} />
         </span>
         <span dir="ltr">
-          {t.previousPeriod}: {item.previous_period.from} → {item.previous_period.to}
+          {t.previousPeriod}: <PeriodText from={item.previous_period.from} to={item.previous_period.to} />
         </span>
         {item.needs_human_review && (
           <span className="rounded bg-warning/15 px-1.5 py-0.5 text-warning">{t.aiReview}</span>

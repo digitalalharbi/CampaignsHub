@@ -106,7 +106,10 @@ final class SyncAccountStructureJob implements ShouldBeUnique, ShouldQueue
     public function __construct(
         public readonly string $accountId,
         private readonly array $meta = [],
-    ) {}
+    ) {
+        // PERF-SYNC-ISOLATION-001 — provider syncs run on their own, serialised queue, never beside a user's request.
+        $this->onQueue('sync');
+    }
 
     public function handle(
         AccountStructureSyncer $syncer,

@@ -9,7 +9,7 @@
  * notice immediately.
  */
 import { productName } from '@/lib/brand'
-import { isClientAudience } from './InteractiveReport'
+import { isClientAudience } from './reportAudience'
 export interface SharedBranding {
   name: string
   logo_url: string | null

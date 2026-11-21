@@ -1,7 +1,8 @@
 import { formatMoneyReading, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
 import type { MetricItem, MetricReading } from '@/components/ui/MetricStrip'
 import type { MetricTotals, Summary, TimePoint } from '@/features/analytics/api'
-import { compact, money, moneyExact, num, percent, ratio } from '@/features/analytics/format'
+import { compact, money, moneyExact, num, ratio } from '@/features/analytics/format'
+import { frequencyText, rateText } from '@/features/analyticsShared/kpiFormat'
 
 /**
  * Which metrics lead, for the money this campaign is — UX-DASH-001, and §14.6's rule applied.
@@ -82,7 +83,7 @@ export function valueReading(spec: Spec, n: number, currency: string | null): { 
   return exact !== undefined && exact !== text ? { kind: 'value', text, exact } : { kind: 'value', text }
 }
 
-const pct2 = (n: number) => percent(n, 2)
+const pct2 = (n: number) => rateText(n)
 const times = (n: number) => ratio(n, '×')
 
 export type Spec = {
@@ -140,7 +141,7 @@ export const SPECS: Record<string, Spec> = {
   },
   frequency: {
     label: { ar: 'التكرار', en: 'Frequency' },
-    format: (n) => ratio(n, ''),
+    format: (n) => frequencyText(n),
     derived: true,
     neutral: true,
     hint: { ar: 'متوسط عدد مرات رؤية الشخص الواحد للإعلان = الظهور ÷ الوصول.', en: 'How many times the average person saw the ad — impressions ÷ reach.' },
@@ -161,7 +162,7 @@ export const SPECS: Record<string, Spec> = {
     label: { ar: 'معدل النقر', en: 'Click-through rate' },
     format: pct2,
     derived: true,
-    hint: { ar: 'نسبة النقر = النقرات ÷ الظهور. تقيس مدى جذب الإعلان.', en: 'Click-through rate — clicks ÷ impressions. How compelling the ad is.' },
+    hint: { ar: 'معدل النقر = النقرات ÷ الظهور. تقيس مدى جذب الإعلان.', en: 'Click-through rate — clicks ÷ impressions. How compelling the ad is.' },
   },
   cpc: {
     label: { ar: 'تكلفة النقرة', en: 'Cost per click' },
@@ -174,6 +175,14 @@ export const SPECS: Record<string, Spec> = {
     label: { ar: 'زيارات صفحة الهبوط', en: 'Landing page views' },
     format: compact,
     hint: { ar: 'من نقر ووصل فعلًا إلى الصفحة — أقل من النقرات دائمًا.', en: 'Clicks that actually arrived on the page — always fewer than clicks.' },
+  },
+  /* OBJECTIVE-RESULT-001 — what one landing page view cost; the traffic campaign's cost per result. */
+  cost_per_lpv: {
+    label: { ar: 'تكلفة الزيارة', en: 'Cost per visit' },
+    format: moneyExact,
+    derived: true,
+    invertGood: true,
+    hint: { ar: 'تكلفة زيارة الصفحة الواحدة = الإنفاق ÷ زيارات الصفحة (LPV).', en: 'What one landing page view cost — spend ÷ landing page views (LPV).' },
   },
   video_views: {
     label: { ar: 'مشاهدات الفيديو', en: 'Video views' },
@@ -236,8 +245,13 @@ export const SPECS: Record<string, Spec> = {
     invertGood: true,
     hint: { ar: 'تكلفة العميل المحتمل الواحد.', en: 'What one lead costs.' },
   },
+  /*
+   * OBJECTIVE-RESULT-001 — `conversions` summed over a scope is the platforms' conversion count, not
+   * «النتائج»: a traffic campaign's result is its visits. A sales scope still reads it as «الطلبات»
+   * (the objective override below); a campaign's own result comes from `campaignResult`.
+   */
   conversions: {
-    label: { ar: 'النتائج', en: 'Results' },
+    label: { ar: 'تحويلات المنصة', en: 'Platform conversions' },
     format: compact,
     hint: {
       ar: 'مجموع ما أبلغت به كل منصة عن الحدث الذي حُسّنت له الحملة — وليس عدد طلبات فريدة.',
@@ -294,16 +308,16 @@ export const SPECS: Record<string, Spec> = {
     hint: { ar: 'الإنفاق ÷ النتائج، لهذا الهدف وحده.', en: 'Spend ÷ results, for this objective alone.' },
   },
   roas: {
-    label: { ar: 'العائد على الإنفاق', en: 'Return on ad spend' },
+    label: { ar: 'معدل العائد', en: 'Return on ad spend' },
     format: times,
     derived: true,
-    hint: { ar: 'العائد على الإنفاق الإعلاني = الإيراد ÷ الإنفاق.', en: 'Return on ad spend — revenue ÷ spend.' },
+    hint: { ar: 'معدل العائد = الإيراد ÷ الإنفاق.', en: 'Return on ad spend — revenue ÷ spend.' },
   },
   aov: {
     label: { ar: 'متوسط قيمة الطلب', en: 'Average order value' },
     format: money,
     derived: true,
-    hint: { ar: 'الإيراد ÷ عدد المشتريات.', en: 'Revenue ÷ purchases.' },
+    hint: { ar: 'الإيراد ÷ عدد الطلبات.', en: 'Revenue ÷ purchases.' },
   },
   installs: {
     label: { ar: 'التحميلات', en: 'Installs' },
@@ -359,8 +373,13 @@ const OBJECTIVE_LAYOUTS: Record<string, Layout> = {
     primary: ['reach', 'impressions', 'frequency', 'cpm'],
     secondary: ['spend', 'video_views', 'video_completions', 'video_completion_rate', 'clicks', 'ctr', 'engagements'],
   },
+  /*
+   * OBJECTIVE-RESULT-001 — the visit leads, the click follows. A landing page view is what a traffic
+   * buy is for (Owner, MASTER_FINAL §هـ: «LPV عند توفره وإلا النقرات»); a click is the step before it
+   * and the fallback where a platform sends no page views.
+   */
   traffic: {
-    primary: ['clicks', 'ctr', 'cpc', 'landing_page_views'],
+    primary: ['landing_page_views', 'clicks', 'ctr', 'cpc'],
     secondary: ['spend', 'impressions', 'reach', 'cpm', 'conversion_rate'],
   },
   leads: {
@@ -613,6 +632,7 @@ const COST_PER_DENOMINATOR: Record<string, string | ((t: Record<string, number |
   cpl: 'leads',
   cpi: 'installs',
   cpe: 'engagements',
+  cost_per_lpv: 'landing_page_views',
   cpm: (t) => Number((t as Record<string, number | null> | undefined)?.impressions ?? 0) / 1000,
 }
 

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Num } from '@/components/ui/Num'
+import { PeriodText } from '@/components/ui/PeriodText'
+import type { PeriodKey } from '@/lib/period/periodMath'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -23,12 +24,12 @@ import { useUi } from '@/stores/ui'
  * the reader cannot tell which. It belongs in `PageIntro`'s `meta`, beside the freshness, because
  * those two together are the whole of «can I trust this figure».
  */
-export function PeriodLabel({ from, to, testId = 'period' }: { from: string; to: string; testId?: string }) {
+export function PeriodLabel({ from, to, presetKey = null, inferName = false, testId = 'period' }: { from: string; to: string; presetKey?: PeriodKey | null; inferName?: boolean; testId?: string }) {
   const ar = useUi((s) => s.locale) === 'ar'
 
   return (
     <span className="inline-flex items-center gap-1.5 tnum" data-testid={testId}>
-      {ar ? 'الفترة' : 'Period'} <Num>{from}</Num> → <Num>{to}</Num>
+      {ar ? 'الفترة' : 'Period'} <PeriodText from={from} to={to} presetKey={presetKey} inferName={inferName} />
     </span>
   )
 }

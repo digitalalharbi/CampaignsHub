@@ -63,15 +63,16 @@ describe('the KPI surfaces share one scale', () => {
    * one step above caption text, and a card's padding is not the same on a phone and a desktop.
    */
   it('states the steps it is there to hold', () => {
-    expect(METRIC_VALUE).toContain('text-[28px]')
-    expect(METRIC_VALUE).toContain('sm:text-[32px]')
-    expect(METRIC_VALUE_DENSE).toContain('text-2xl')
-    expect(METRIC_VALUE_DENSE).toContain('sm:text-[26px]')
-    expect(METRIC_LABEL).toContain('text-[13px]')
-    expect(PAGE_TITLE).toContain('sm:text-[28px]')
-    expect(CARD_PAD).toBe('p-4 sm:p-5')
-    expect(CARD_PAD_DENSE).toBe('p-3.5 sm:p-4')
-    expect(CARD_GAP).toBe('gap-3 sm:gap-4')
+    // MOBILE-DENSITY-001 — one step smaller on a phone, the old sizes from `lg` up.
+    expect(METRIC_VALUE).toContain('text-xl')
+    expect(METRIC_VALUE).toContain('lg:text-[32px]')
+    expect(METRIC_VALUE_DENSE).toContain('text-lg')
+    expect(METRIC_VALUE_DENSE).toContain('lg:text-[26px]')
+    expect(METRIC_LABEL).toContain('text-xs')
+    expect(PAGE_TITLE).toContain('lg:text-[28px]')
+    expect(CARD_PAD).toBe('p-3 sm:p-4 lg:p-5')
+    expect(CARD_PAD_DENSE).toBe('p-2.5 sm:p-3.5 lg:p-4')
+    expect(CARD_GAP).toBe('gap-2 sm:gap-3 lg:gap-4')
   })
 
   /** Every figure is tabular: a column of numbers that shifts as digits change is unreadable. */

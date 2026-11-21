@@ -1,3 +1,4 @@
+import { useInAdvertiserPortal } from '@/app/portalPath'
 import { useState } from 'react'
 import { Archive, Building2, Plus } from 'lucide-react'
 import { useClients, useClientActions, type ClientRow } from '../api'
@@ -10,6 +11,7 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { confirmDialog, promptDialog } from '@/stores/dialogs'
 
 const MODES = [
   { value: 'managed', ar: 'مُدار', en: 'Managed' },
@@ -17,7 +19,28 @@ const MODES = [
   { value: 'self_service', ar: 'خدمة ذاتية', en: 'Self-service' },
 ]
 
+/*
+ * ENSURE-PORTAL-SESSION-001 — `/client-workspaces` is agency-scoped and is served from the AGENCY's tenant. From the
+ * advertiser portal it answers 403 to somebody holding only that, and to somebody holding both it would list, and accept
+ * writes to, another workspace's clients on a page naming this one. So the page does not ask.
+ */
 export function ClientsTab() {
+  const ar = useUi((u) => u.locale) === 'ar'
+
+  if (useInAdvertiserPortal()) {
+    return (
+      <div data-testid="settings-clients-agency-only">
+        <Alert severity="info" title={ar ? 'العملاء من بوابة الوكالة' : 'Clients belong to the agency portal'}>
+          {ar ? 'تُدار قائمة العملاء من بوابة الوكالة، وليست جزءًا من مساحة العمل هذه.' : 'The client list is managed from the agency portal and is not part of this workspace.'}
+        </Alert>
+      </div>
+    )
+  }
+
+  return <AgencyClients />
+}
+
+function AgencyClients() {
   const ar = useUi((u) => u.locale) === 'ar'
   const { data, error, isLoading, isError } = useClients()
   const { create, update, archive } = useClientActions()
@@ -61,8 +84,8 @@ export function ClientsTab() {
                     <td className="p-3 text-text-secondary">{(() => { const m = MODES.find((x) => x.value === c.mode); return m ? (ar ? m.ar : m.en) : c.mode })()}</td>
                     <td className="p-3 text-text-secondary"><span className="tnum">{c.projects_count ?? 0}</span></td>
                     <td className="p-3 text-end">
-                      <button onClick={() => { const name = prompt(ar ? 'اسم العميل الجديد' : 'New client name', c.name); if (name && name !== c.name) guard(update.mutateAsync({ id: c.id, name })) }} className="me-3 text-xs font-semibold text-text-secondary hover:text-text-primary">{ar ? 'تعديل' : 'Edit'}</button>
-                      <button onClick={() => { if (confirm(ar ? 'أرشفة هذا العميل؟' : 'Archive this client?')) guard(archive.mutateAsync(c.id)) }} className="inline-flex items-center gap-1 text-xs font-semibold text-danger hover:underline"><Archive size={13} /> {ar ? 'أرشفة' : 'Archive'}</button>
+                      <button onClick={async () => { const name = await promptDialog({ title: ar ? 'عدّل العميل' : 'Edit the client', label: ar ? 'اسم العميل' : 'Client name', initial: c.name }); if (name && name !== c.name) guard(update.mutateAsync({ id: c.id, name })) }} className="me-3 text-xs font-semibold text-text-secondary hover:text-text-primary">{ar ? 'تعديل' : 'Edit'}</button>
+                      <button onClick={async () => { if (await confirmDialog({ title: ar ? 'أرشف العميل؟' : 'Archive this client?', confirmLabel: ar ? 'أرشف' : 'Archive', danger: true })) guard(archive.mutateAsync(c.id)) }} className="inline-flex items-center gap-1 text-xs font-semibold text-danger hover:underline"><Archive size={13} /> {ar ? 'أرشفة' : 'Archive'}</button>
                     </td>
                   </tr>
                 ))}

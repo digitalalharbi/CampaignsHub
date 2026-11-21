@@ -4,9 +4,19 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Sections;
 
+use App\Domains\Integrations\Measurement\Ga4Visibility;
+use App\Domains\Metrics\Services\ContentFormatComparison;
+use App\Domains\Reports\Measurement\Ga4ReportSections;
+use App\Domains\Reports\Measurement\StoreAnalyticsSection;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Services\ClientReportView;
+use App\Domains\Reports\Services\ReportTemplateEngine;
+use App\Domains\Reports\Support\ChosenFigures;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportColumns;
+use App\Domains\Reports\Support\ReportObjectives;
+use App\Domains\Reports\Support\ReportReadMemo;
 
 /**
  * The one call every surface makes to apply a report's sections — REPORT-SECTION-SURFACES-001.
@@ -27,7 +37,8 @@ final class ReportSectionSurfaces
     public const SHARE_FLAGS = [
         'platform_comparison' => ['platform_comparison'],
         'objective_breakdown' => ['objective_breakdown', 'advanced_segmentation'],
-        'creatives' => ['content_performance'],
+        // CONTENT-FORMAT-COMPARISON-001 — the comparison is a statement about those creatives, and goes with them.
+        'creatives' => ['content_performance', 'content_format_comparison'],
         'budget' => ['budget_pacing'],
         'funnel_store' => ['funnel'],
     ];
@@ -51,7 +62,18 @@ final class ReportSectionSurfaces
             $off[] = $key;
         }
 
-        return $off === [] ? $settings : $settings->narrowedBy(array_fill_keys($off, false), $this->registry);
+        $settings = $off === [] ? $settings : $settings->narrowedBy(array_fill_keys($off, false), $this->registry);
+
+        /*
+         * CONTENT-FORMAT-COMPARISON-001 — a report whose content the operator switched off does not describe that content
+         * by format either: the comparison names the creatives and their figures. The repo's own precedent
+         * (`content_formats` leaves with the creatives); the comparison stays its own switch whenever content is on.
+         */
+        if ($settings->chose('content_performance') && ! $settings->enabled($this->registry->get('content_performance'), 'client')) {
+            $settings = $settings->narrowedBy(['content_format_comparison' => false], $this->registry);
+        }
+
+        return $settings;
     }
 
     /**
@@ -135,6 +157,49 @@ final class ReportSectionSurfaces
     }
 
     /**
+     * REPORT-PARITY-FOUR-SURFACES-001 — the operator's PREVIEW of a report (no link), through this same resolver.
+     *
+     * The builder's section list and the page the operator reads each made their own decision: one over the unnarrowed settings
+     * and the raw internal snapshot, the other over nothing at all — so a section the client's link, PDF and file did not carry
+     * was listed (and drawn) on the preview. This asks what a link of the report as it stands would carry: the same settings
+     * (narrowed by the report's main sections), judged against the same client-facing document the link is built from.
+     */
+    public function resolveReport(Report $report): ResolvedSections
+    {
+        $data = is_array($report->data) && $report->data !== [] ? $report->data : null;
+
+        return $this->resolve($report, null, 'preview', $data === null ? null : $this->documentOf($report, $data));
+    }
+
+    /**
+     * The operator's PREVIEW body: the document the client's link is built from, with this resolver's sections applied.
+     *
+     * Hidden means absent here too — the renderer (`InteractiveReport`) decides most of what to draw from which keys are present,
+     * so listing the section set without removing the keys would still draw them. The operator's pickers (link builder) no longer
+     * read the roster out of this body; the controller serves them separately as `scope_options`.
+     *
+     * @param  array<string, mixed>  $data  the stored snapshot
+     * @return array<string, mixed>
+     */
+    public function previewPayload(Report $report, array $data): array
+    {
+        // REPORT-FILTERS-FUNCTIONAL-001 — the preview is the document a link of this report carries, so it carries the same cut; an internal report keeps everything.
+        return ChosenFigures::for($report, null)->cut($this->apply($this->documentOf($report, $data), $report, null, 'preview', (string) ($report->audience ?? 'client')));
+    }
+
+    /**
+     * The client-facing document of a stored snapshot — the one step the link, the PDF, the file and the preview share before
+     * sections are resolved.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function documentOf(Report $report, array $data): array
+    {
+        return app(ClientReportView::class)->document($data, (string) ($report->audience ?? 'client'), $report->form);
+    }
+
+    /**
      * Resolve against the payload and apply: hidden sections' keys leave, `report_sections` arrives.
      *
      * @param  array<string, mixed>  $payload
@@ -143,9 +208,49 @@ final class ReportSectionSurfaces
     public function apply(array $payload, Report $report, ?ReportShare $share, string $surface, ?string $audience = null, ?string $form = null): array
     {
         $context = $this->contextFor($report, $share, $surface, $audience, $form);
-        $payload = $this->resolve($report, $share, $surface, $payload, $audience, $form)->apply($payload);
+        // REPORT-FORMAT-COMPARE-TABLE-001 — the KPI list read BEFORE resolution: a hidden KPI section takes `metric_set` with it.
+        $tableKpis = $this->tableKpis($payload, $report);
+        // REPORT-FORMAT-COMPARE-COMPACT-001 — before resolving, so a comparison left with no family of the report's objective is no section.
+        if (is_array($payload[ContentFormatComparison::KEY] ?? null)) {
+            $payload[ContentFormatComparison::KEY] = ContentFormatComparison::forReportObjectives($payload[ContentFormatComparison::KEY], ReportObjectives::of($report));
+        }
+        $resolved = $this->resolve($report, $share, $surface, $payload, $audience, $form);
+        $payload = $resolved->apply($payload);
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — a document without its content section names no content anywhere else.
+         *
+         * An attention item carries up to three pieces of content as its evidence. The live payload attaches them from the lists
+         * that survived the switches; a stored copy has them written in, so a link (or a report) that switched the content off
+         * still named its creatives one section earlier, on the page, in the PDF document and in the files.
+         */
+        if (! $resolved->isVisible('content_performance') && is_array($payload['attention'] ?? null)) {
+            $payload['attention'] = array_map(static function ($item) {
+                if (is_array($item) && is_array($item['evidence']['content'] ?? null)) {
+                    $item['evidence']['content'] = [];
+                }
+
+                return $item;
+            }, $payload['attention']);
+        }
+        /*
+         * REPORT-SETTINGS-AUDIT-001 (Owner 2026-11-13: «تحقق من كل أيقونة في إعدادات التقارير أنها تعمل 100%») — content the
+         * operator switched off leaves EVERY key that names it, not only the section's own: the link's creative library rows
+         * (`creatives`, which a link's files carry), the live format mix (`content_formats`) and the objective analytics'
+         * best / weakest content. Only on the operator's choice: content absent for want of data takes nothing else with it.
+         */
+        if ($resolved->reasonFor('content_performance') === ReportSectionResolver::DISABLED_BY_OPERATOR) {
+            unset($payload['creatives'], $payload['creatives_hidden'], $payload['content_formats']);
+            if (is_array($payload['objective_analytics']['families'] ?? null)) {
+                foreach ($payload['objective_analytics']['families'] as $i => $family) {
+                    if (is_array($family) && array_key_exists('content_ranking', $family)) {
+                        $payload['objective_analytics']['families'][$i]['content_ranking'] = null;
+                    }
+                }
+            }
+        }
+        $payload = $this->withLinkWebsiteChoices($payload, $report, $share);
         // The tabs a reader is offered, named by the server like the sections are.
-        $payload['report_views'] = $this->viewsFor($report, $share) ?? ReportViews::VIEWS;
+        $payload['report_views'] = ReportViews::visible($this->viewsFor($report, $share)) ?? ReportViews::VIEWS;
         // REPORT-TABLES-OWNER-COLUMNS-001 — the columns the link's Owner chose per table, on every surface
         // built from a link (page, print, file). Absent means every column.
         // IP-TRACE-001 — the link's opaque reference travels with every file built from it (CSV, XLSX manifest, print).
@@ -161,7 +266,84 @@ final class ReportSectionSurfaces
             $payload['report_columns'] = $chosen;
         }
 
-        return $context->isClientFacing() ? self::withoutBuyingMethodology($payload) : $payload;
+        $payload = $context->isClientFacing() ? self::withoutBuyingMethodology($payload) : $payload;
+
+        // REPORT-AUTO-COMPOSE-001 — only where somebody picked automatic mode; a stored document's own record is not rewritten.
+        $picked = ReportAutoComposer::chosenMetrics($report, $share);
+        if ($picked !== null && array_key_exists('metric_set', $payload)) {
+            $payload['metric_set'] = $picked;
+        }
+
+        // REPORT-FORMAT-COMPARE-TABLE-001 — the comparison's ONE table, rows = this report's KPI list (after the composer chose it).
+        if (is_array($payload[ContentFormatComparison::KEY] ?? null)) {
+            $payload[ContentFormatComparison::KEY]['table'] = ContentFormatComparison::table($payload[ContentFormatComparison::KEY], $picked ?? $tableKpis);
+        }
+
+        // REPORT-GENERIC-LABELS-001 — last, on the one call every surface makes: a hidden name leaves every key and sentence.
+        return GenericNames::for($report, $share)->apply($payload);
+    }
+
+    /**
+     * REPORT-FORMAT-COMPARE-TABLE-001 — the KPI rows of the comparison table: the report's own KPI cards (the document's `metric_set`,
+     * the objective's preset or the operator's choice), else the presets of the report's objectives, else those of the families the
+     * comparison keeps. One list, `ReportTemplateEngine::METRIC_SETS` — never a second mapping.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return list<string>
+     */
+    private function tableKpis(array $payload, Report $report): array
+    {
+        foreach (['metric_set', 'metrics'] as $key) {
+            $list = $payload[$key] ?? null;
+            if (is_array($list) && $list !== [] && array_is_list($list) && array_filter($list, 'is_string') === $list) {
+                return $list;
+            }
+        }
+        $kpis = ReportObjectives::kpis($report);
+        if ($kpis !== []) {
+            return $kpis;
+        }
+        $templates = [];
+        foreach ((array) ($payload[ContentFormatComparison::KEY]['objectives'] ?? []) as $objective) {
+            $template = array_search($objective['family'] ?? null, ContentFormatComparison::TEMPLATE_FAMILY, true);
+            if (is_string($template)) {
+                $templates[] = $template;
+            }
+        }
+
+        return $templates === [] ? [] : app(ReportTemplateEngine::class)->metricSetForMany($templates);
+    }
+
+    /**
+     * REPORT-SETTINGS-AUDIT-001 — the website / store switches applied when the document is READ, not only when it was built.
+     *
+     * A saved report's GA4 parts were cut by its own «الموقع» list at generation, and its store block was built with revenue
+     * shown — so a link's own list (`settings.ga4_hidden`), a list changed after the report was saved, and a link hiding revenue
+     * published what they hid on the snapshot link, its PDF and its files. Both cuts are idempotent: the live payload, already
+     * built with them, passes through unchanged.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function withLinkWebsiteChoices(array $payload, Report $report, ?ReportShare $share): array
+    {
+        $hidden = Ga4Visibility::normalise([
+            ...$report->sectionSettings()->ga4Hidden(),
+            ...($share !== null ? Ga4Visibility::normalise(((array) ($share->settings ?? []))['ga4_hidden'] ?? null) : []),
+        ]);
+        $parts = array_intersect_key($payload, array_flip(Ga4ReportSections::KEYS));
+        if ($parts !== []) {
+            $parts = Ga4Visibility::applyToSections($parts, $hidden);
+            if ($share !== null && (bool) $share->hide_revenue) {
+                $parts = Ga4ReportSections::withoutMoney($parts);
+            }
+            $payload = array_replace($payload, $parts);
+        }
+        if ($share !== null && (bool) $share->hide_revenue && is_array($payload['store_analytics'] ?? null)) {
+            $payload['store_analytics'] = StoreAnalyticsSection::withoutMoney($payload['store_analytics']);
+        }
+
+        return $payload;
     }
 
     /**
@@ -221,7 +403,7 @@ final class ReportSectionSurfaces
         if ($section === null) {
             return true;
         }
-        $report = Report::withoutGlobalScopes()->find($share->report_id);
+        $report = ReportReadMemo::remember('report-find|'.$share->report_id, fn (): ?Report => Report::withoutGlobalScopes()->find($share->report_id));
 
         return $report !== null && $this->operatorAllows($section, $report, $share);
     }

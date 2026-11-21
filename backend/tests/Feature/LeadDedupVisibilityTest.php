@@ -182,12 +182,33 @@ final class LeadDedupVisibilityTest extends TestCase
          * whether they hold `projects.view.all` / `settings.manage`. It is memoised per request, so it is
          * a constant — the budget still does not grow with the page, which is what the guard defends.
          */
-        $this->assertLessThan(20, $queries, "listing 16 leads took {$queries} queries");
+        /*
+         * Raised from 20 to 21 by ACCESS-CENTER-001: the reader's per-member access overrides are read once per
+         * request (`MemberOverrideMemo`) inside `permissionKeys()`. One query, memoised — still a constant.
+         */
+        $this->assertLessThan(21, $queries, "listing 16 leads took {$queries} queries");
     }
 
     // ---- helpers ---------------------------------------------------------------------------------
 
     /** @param array<string, mixed> $query */
+    /** TABLE-SERVER-PAGING-001 — the page, its size and its sort are the server's; an unknown sort changes nothing. */
+    public function test_the_list_pages_past_a_hundred_rows_and_sorts_on_the_server(): void
+    {
+        foreach (range(1, 105) as $i) {
+            $this->lead(sprintf('Lead %03d', $i));
+        }
+
+        $last = $this->actingAs($this->user)->getJson('/api/v1/leads?per_page=10&page=11&sort=name&dir=asc')->assertOk();
+        $this->assertSame(105, $last->json('meta.pagination.total'));
+        $this->assertSame(['Lead 101', 'Lead 102', 'Lead 103', 'Lead 104', 'Lead 105'], array_column($last->json('data'), 'name'));
+
+        $desc = $this->actingAs($this->user)->getJson('/api/v1/leads?per_page=10&sort=name&dir=desc')->assertOk();
+        $this->assertSame('Lead 105', $desc->json('data.0.name'));
+
+        $this->actingAs($this->user)->getJson('/api/v1/leads?per_page=10&sort=password;drop')->assertOk();
+    }
+
     private function list(array $query = []): array
     {
         return $this->actingAs($this->user, 'sanctum')

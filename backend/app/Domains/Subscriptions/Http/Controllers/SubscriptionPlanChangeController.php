@@ -7,6 +7,7 @@ namespace App\Domains\Subscriptions\Http\Controllers;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Services\PlanCatalogue;
+use App\Domains\Subscriptions\Services\PlanLimitFit;
 use App\Domains\Subscriptions\Services\SubscriptionCheckout;
 use App\Domains\Subscriptions\Services\SubscriptionLifecycle;
 use App\Domains\Subscriptions\Services\SubscriptionProration;
@@ -40,6 +41,7 @@ final class SubscriptionPlanChangeController extends Controller
         private readonly PlanCatalogue $catalogue,
         private readonly SubscriptionCheckout $checkout,
         private readonly TenantContext $context,
+        private readonly PlanLimitFit $fit,
     ) {}
 
     /**
@@ -63,6 +65,8 @@ final class SubscriptionPlanChangeController extends Controller
             ],
             'to' => ['plan' => $plan->code, 'plan_name' => $plan->name, 'interval' => $interval],
             'quote' => $this->proration->quote($subscription, $plan, $interval),
+            // PLAN-LIMITS-METER-001 — said before anybody agrees to anything: what, if anything, would not fit.
+            'fit' => $this->fitOf($plan),
         ], 'Plan change quote.');
     }
 
@@ -78,6 +82,19 @@ final class SubscriptionPlanChangeController extends Controller
         abort_unless($request->user()?->hasPermission('subscriptions.manage'), 403);
 
         [$subscription, $plan, $interval] = $this->resolve($request);
+
+        /*
+         * PLAN-LIMITS-METER-001 — a plan the workspace's current usage does not fit inside is refused, and the refusal names
+         * what is over. Nothing is removed to make it fit; the customer does that, or stays where they are.
+         */
+        $fit = $this->fitOf($plan);
+        if (! $fit['fits']) {
+            return ApiResponse::error(
+                __('billing.plan_change_exceeds', ['plan' => $plan->name_ar ?: $plan->name]),
+                meta: ['plan_downgrade_blocked' => true, 'exceeds' => $fit['exceeds']],
+                status: 422,
+            );
+        }
 
         try {
             $result = $this->lifecycle->changePlan($subscription, $plan, $interval, $this->checkout);
@@ -122,6 +139,14 @@ final class SubscriptionPlanChangeController extends Controller
         return ApiResponse::success(['scheduled_plan' => null], 'The pending plan change was withdrawn.');
     }
 
+    /** @return array{fits: bool, exceeds: list<array{metric: string, label: string, used: int, limit: int, over: int}>} */
+    private function fitOf(SubscriptionPlan $plan): array
+    {
+        $exceeds = $this->fit->exceeding($this->tenant(), $plan);
+
+        return ['fits' => $exceeds === [], 'exceeds' => $exceeds];
+    }
+
     /** @return array{0: Subscription, 1: SubscriptionPlan, 2: string} */
     private function resolve(Request $request): array
     {
@@ -133,6 +158,9 @@ final class SubscriptionPlanChangeController extends Controller
         $subscription = $this->subscriptions->subscriptionFor($this->tenant());
         abort_if($subscription === null, 404, 'This workspace has no subscription to change.');
 
+        // Nothing is owed here, so there is no difference to quote: the platform owner moves this plan from the console.
+        abort_if($subscription->isComplimentary(), 422, 'This workspace has complimentary access. Its plan is managed by the platform.');
+
         /*
          * Only a plan the customer could have bought in the first place.
          *
@@ -141,6 +169,8 @@ final class SubscriptionPlanChangeController extends Controller
          */
         $plan = $this->catalogue->byCode($data['plan_code']);
         abort_if($plan === null || ! $this->catalogue->isOffered($data['plan_code']), 404, __('billing.plan_not_available'));
+        // PRICING-MIGRATION-001 — a quote across currencies would credit one currency against the other.
+        abort_if(SubscriptionLifecycle::crossesCurrency($subscription, $plan), 422, SubscriptionLifecycle::CROSS_CURRENCY);
 
         return [$subscription, $plan, $data['billing_interval']];
     }

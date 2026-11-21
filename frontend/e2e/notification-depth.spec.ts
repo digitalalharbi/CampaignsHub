@@ -23,8 +23,18 @@ import { AUTH, switchToEnglish } from './helpers'
  */
 test.use({ storageState: AUTH.owner })
 
+/*
+ * NOTIF-V2-SETTINGS-UI-001 moved these panels; nothing was dropped. `?tab=notifications` is now the shared workspace
+ * notification page, and the old stack lives in its internal section's «الفريق» tab (`&section=internal&tab2=team`):
+ * the recipients, the team board, the delivery log and the templates. The person's own preferences — where the
+ * recommendations choice sits — are at `/account/notifications` (the same `NotificationsTab` the old tab mounted).
+ * Every assertion below is unchanged; only the address each surface is read at moved with it.
+ */
+const TEAM_TAB = '/agency/settings/workspace?tab=notifications&section=internal&tab2=team'
+const PERSONAL = '/agency/account/notifications'
+
 test('the notification settings carry the log, the recipients and the recommendations choice', async ({ page }) => {
-  await page.goto('/agency/settings/workspace?tab=notifications')
+  await page.goto(TEAM_TAB)
   await switchToEnglish(page)
 
   await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
@@ -44,7 +54,9 @@ test('the notification settings carry the log, the recipients and the recommenda
     'the recipients surface does not reach the page',
   ).toBeVisible()
 
-  /* And the recommendations choice, with the sentence that says what it changes. */
+  /* And the recommendations choice, with the sentence that says what it changes — a personal preference, on its page. */
+  await page.goto(PERSONAL)
+  await switchToEnglish(page)
   const toggle = page.getByLabel(/Include approved recommendations/i)
   await expect(toggle).toBeVisible()
   await expect(page.getByTestId('recommendations-note')).toBeVisible()
@@ -68,7 +80,7 @@ test('a settings tab is an address a person can send', async ({ page }) => {
   await page.goto('/agency/settings/workspace?tab=security')
   await expect(page.getByTestId('delivery-log')).toHaveCount(0)
 
-  await page.goto('/agency/settings/workspace?tab=notifications')
+  await page.goto(TEAM_TAB)
   await expect(page.getByTestId('delivery-log')).toBeVisible({ timeout: 30000 })
 
   /* A reload keeps the reader where they were. */
@@ -85,7 +97,7 @@ test('an unknown tab falls back rather than rendering nothing', async ({ page })
 })
 
 test('the delivery log is able to show a failure and its reason', async ({ page }) => {
-  await page.goto('/agency/settings/workspace?tab=notifications')
+  await page.goto(TEAM_TAB)
   await switchToEnglish(page)
 
   const log = page.getByTestId('delivery-log')

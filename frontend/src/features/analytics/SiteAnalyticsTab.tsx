@@ -1,17 +1,19 @@
-import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
-import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
-import { EmptyState, Skeleton } from '@/components/ui/States'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { DataFreshness } from '@/components/ui/PageIntro'
 import { Badge } from '@/components/ui/Badge'
-import { ChartCard, ConversionFunnelChart, MetricLineChart, RankingBarChart } from './charts'
+import { RefreshNote } from '@/components/ui/RefreshNote'
+import { ChartBodySkeleton, KpiRowSkeleton } from '@/components/ui/Skeletons'
+import { useSwrQuery } from '@/lib/query/swr'
+import { ChartCard } from './charts'
 import { money, num, percent } from './format'
-import { providerLabel } from '@/features/campaigns/labels'
-import { usePortalBase } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
+import { SiteKpis, type SiteKpi } from './SiteKpis'
+import { ThreeSourcesPanel } from './ThreeSourcesPanel'
+import { TrafficExplorer } from './TrafficExplorer'
+import { Ga4Workbench } from './ga4/Ga4Workbench'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * GA4-ANALYTICS-PRODUCT-001 — what the SITE measured, from the project's own GA4 property.
@@ -33,18 +35,13 @@ interface SitePayload {
   last_synced_at?: string | null
   currency?: string | null
   totals?: Record<string, number | null>
+  kpis?: SiteKpi[]
+  previous_period?: { from: string; to: string }
   trend?: Array<{ date: string; sessions: number; engaged_sessions: number; purchases: number; revenue: number }>
   funnel?: Array<{ stage: string; count: number | null; step_rate: number | null; exceeds_previous: boolean }>
   paid?: { available: boolean; sessions?: number; purchases?: number; revenue?: number; session_share?: number | null; purchase_share?: number | null; revenue_share?: number | null; platforms?: Array<{ platform: string; sessions: number; purchases: number; revenue: number }> }
   breakdowns?: Partial<Record<'source_medium' | 'campaign' | 'landing_page' | 'campaign_landing' | 'device' | 'country' | 'user_type', Table | null>>
   events?: { rows: Array<{ event: string; event_count: number; key_events: number; is_key_event: boolean }>; more: number } | null
-}
-
-const FUNNEL: Record<string, { ar: string; en: string }> = {
-  sessions: { ar: 'الجلسات', en: 'Sessions' },
-  add_to_carts: { ar: 'إضافات للسلة', en: 'Add-to-carts' },
-  checkouts: { ar: 'بدء الدفع', en: 'Checkouts' },
-  purchases: { ar: 'المشتريات', en: 'Purchases' },
 }
 
 const USER_TYPE: Record<string, { ar: string; en: string }> = {
@@ -53,117 +50,70 @@ const USER_TYPE: Record<string, { ar: string; en: string }> = {
   '(not set)': { ar: 'غير محدد', en: 'Not set' },
 }
 
-const DEVICE: Record<string, { ar: string; en: string }> = {
-  desktop: { ar: 'حاسوب', en: 'Desktop' },
-  mobile: { ar: 'جوال', en: 'Mobile' },
-  tablet: { ar: 'جهاز لوحي', en: 'Tablet' },
-}
-
 export function SiteAnalyticsTab({ projectId, range }: { projectId: string | null; range: { from: string; to: string } }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const locale = ar ? 'ar' : 'en'
-  const portal = usePortalBase()
-  const q = useQuery({
-    queryKey: ['site-analytics', projectId, range.from, range.to],
+  // PERF-INSTANT-DATA-001 — scope = the project; the period is the only thing an old answer may bridge.
+  const q = useSwrQuery({
+    name: 'site-analytics',
+    scope: [projectId],
+    window: [range.from, range.to],
     queryFn: () => getData<SitePayload>(`/projects/${projectId}/measurement/analytics?from=${range.from}&to=${range.to}`),
     enabled: Boolean(projectId),
   })
 
-  if (q.isLoading) return <Skeleton className="h-96" />
+  if (q.isLoading) return <SiteSkeleton ar={ar} />
   if (q.isError || !q.data) {
     return <QueryFailure error={q.error} ar={ar} testId="site-failure" onRetry={() => void q.refetch()} fallbackTitle={ar ? 'تعذّرت قراءة تحليلات الموقع' : 'Site analytics could not be read'} />
   }
 
   const d = q.data
+  const note = (
+    <RefreshNote ar={ar} isRefreshing={q.isRefreshing} isShowingPrevious={q.isShowingPrevious} refreshFailed={q.refreshFailed}
+      updatedAt={q.updatedAt} shownPeriod={formatPeriodRange(d.period.from, d.period.to, ar ? 'ar' : 'en')} onRetry={() => void q.refetch()} />
+  )
   if (d.state !== 'ready') {
-    const text = {
-      not_connected: ar ? ['لم يُربط Google Analytics 4 بعد', 'اربط خاصية GA4 لترى الجلسات والقمع ومصادر الزيارات ومساهمة الإعلانات المدفوعة.'] : ['Google Analytics 4 is not connected', 'Connect a GA4 property to see sessions, the funnel, traffic sources and the paid-traffic contribution.'],
-      not_selected: ar ? ['لا خاصية GA4 محددة لهذا المشروع', 'اختر خاصية لهذا المشروع من التكاملات.'] : ['No GA4 property is selected for this project', 'Choose a property for this project in Integrations.'],
-      empty: ar ? ['لم تصل أرقام من الخاصية لهذه الفترة', 'الخاصية محددة، لكن لا قياسات للفترة — قد تكون المزامنة لم تُشغَّل بعد.'] : ['No figures from the property for this period', 'The property is selected but nothing is measured for the period — the sync may not have run yet.'],
+    // A short chip and one action — the Owner's rule: no paragraph where a chip says it.
+    const chip = {
+      not_connected: ar ? 'الموقع غير مربوط' : 'Website not connected',
+      not_selected: ar ? 'لا خاصية محددة' : 'No property selected',
+      empty: ar ? 'بانتظار المزامنة' : 'Awaiting sync',
     }[d.state]
 
     return (
-      <div data-testid={`site-state-${d.state}`}>
-        <EmptyState title={text[0]} description={text[1]} />
+      <div data-testid={`site-state-${d.state}`} className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-border bg-surface p-5">
+        <Badge tone={d.state === 'empty' ? 'info' : 'warning'}>{chip}</Badge>
         {d.state !== 'empty' && (
-          <p className="mt-3 text-center text-sm"><Link to={`${portal}/integrations`} className="font-bold text-brand-600 hover:underline">{ar ? 'افتح التكاملات' : 'Open Integrations'}</Link></p>
+          /* ANALYTICS-READ-ONLY-001 — the connection is set up from the integrations screen, not from an analysis page. */
+          <span data-testid="site-connect-note" className="text-xs text-text-muted">{ar ? 'يُربط من قسم الربط والتكاملات.' : 'Connected from the integrations section.'}</span>
         )}
+        {note}
       </div>
     )
   }
 
-  const t = d.totals ?? {}
   const cur = d.currency ?? ''
-  const paid = d.paid ?? { available: false }
   const label = (map: Record<string, { ar: string; en: string }>, v: string) => map[v]?.[locale] ?? v
 
   return (
-    <div data-testid="site-analytics" className="space-y-4">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
-        <Badge tone="info">{ar ? 'ما قاسه الموقع (GA4)' : 'Site-measured (GA4)'}</Badge>
-        <span>{d.property?.name} <span dir="ltr">· {d.property?.id}</span></span>
+    <div data-testid="site-analytics" aria-busy={q.isShowingPrevious} className={`space-y-4 transition-opacity duration-[var(--motion-panel)] ease-[var(--motion-ease)] ${q.isShowingPrevious ? 'opacity-60' : ''}`}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
+        <Badge tone="info">{ar ? 'الموقع' : 'Website'}</Badge>
+        {/* REPORT-WEBSITE-GAP-READING-001 — the source is «الموقع»: no property name, id or URL on an analytics view. */}
         <DataFreshness lastSyncAt={d.last_synced_at ?? null} ar={ar} staleAfterHours={36} testid="site-freshness" />
-        <span>{ar ? 'لا يُجمع مع أرقام المنصات الإعلانية.' : 'Never added to the ad platforms’ figures.'}</span>
+        <Badge tone="neutral" data-testid="site-not-summed">{ar ? 'مستقل عن المنصات' : 'Separate from platforms'}</Badge>
+        {note}
       </div>
 
-      <StatGrid columns="grid-cols-2 lg:grid-cols-4">
-        <StatCard testid="site-kpi-sessions" tone="brand" label={ar ? 'الجلسات' : 'Sessions'} value={<span dir="ltr">{num(t.sessions)}</span>} hint={t.users_daily_sum != null ? (ar ? `${num(t.users_daily_sum)} مستخدم (مجموع يومي)` : `${num(t.users_daily_sum)} users (sum of daily)`) : undefined} />
-        <StatCard testid="site-kpi-engagement" tone="info" label={ar ? 'معدل التفاعل' : 'Engagement rate'} value={<span dir="ltr">{t.engagement_rate != null ? percent(t.engagement_rate, 1) : '—'}</span>} hint={ar ? `${num(t.engaged_sessions)} جلسة متفاعلة` : `${num(t.engaged_sessions)} engaged sessions`} />
-        <StatCard testid="site-kpi-purchases" tone="success" label={ar ? 'المشتريات' : 'Purchases'} value={<span dir="ltr">{num(t.purchases)}</span>} hint={ar ? `${num(t.key_events)} حدث رئيسي` : `${num(t.key_events)} key events`} />
-        <StatCard testid="site-kpi-revenue" tone="neutral" label={ar ? 'الإيراد' : 'Revenue'} value={<span dir="ltr">{t.revenue != null ? money(t.revenue, cur) : '—'}</span>} hint={paid.available && paid.revenue_share != null ? (ar ? `${percent(paid.revenue_share, 0)} من زيارات مدفوعة` : `${percent(paid.revenue_share, 0)} from paid visits`) : undefined} />
-      </StatGrid>
+      {/* GA4-STORE-ANALYTICS-001 — the store reading: tiles, charts, GA4 vs platforms, fixed-size tables. */}
+      {projectId && <Ga4Workbench projectId={projectId} range={range} ar={ar} />}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <ChartCard className="lg:col-span-2" title={ar ? 'الجلسات والمشتريات يوميًا' : 'Sessions and purchases by day'} subtitle={ar ? 'يوم بلا قياس لا يُرسم صفرًا.' : 'A day with no measurement is not drawn as zero.'}>
-          <div data-testid="site-trend">
-            <MetricLineChart data={d.trend ?? []} height={240} series={[
-              { key: 'sessions', name: ar ? 'الجلسات' : 'Sessions', kind: 'num' },
-              { key: 'purchases', name: ar ? 'المشتريات' : 'Purchases', kind: 'num' },
-            ]} rightAxisFor="purchases" />
-          </div>
-        </ChartCard>
-        <ChartCard title={ar ? 'قمع التسوق' : 'Shopping funnel'} subtitle={ar ? 'الإضافات والدفع أحداث، فقد تتجاوز الخطوة السابقة.' : 'Add-to-carts and checkouts are events, so a step can exceed the one before.'}>
-          <div data-testid="site-funnel">
-            <ConversionFunnelChart ar={ar} stages={(d.funnel ?? []).map((s) => ({ stage: s.stage, label: label(FUNNEL, s.stage), count: s.count, step_rate: s.step_rate, cost_per: null, exceeds_previous: s.exceeds_previous }))} />
-          </div>
-        </ChartCard>
-      </div>
+      {d.kpis && d.previous_period && <SiteKpis kpis={d.kpis} previous={d.previous_period} ar={ar} />}
 
-      {paid.available && (
-        <ChartCard title={ar ? 'مساهمة الزيارات المدفوعة' : 'Paid-traffic contribution'} subtitle={ar
-          ? `الوسيط مدفوع (cpc، paid_social…). ${percent(paid.session_share ?? 0, 0)} من الجلسات و${percent(paid.purchase_share ?? 0, 0)} من المشتريات.`
-          : `Medium is paid (cpc, paid_social…). ${percent(paid.session_share ?? 0, 0)} of sessions and ${percent(paid.purchase_share ?? 0, 0)} of purchases.`}>
-          <div data-testid="site-paid" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {(paid.platforms ?? []).length > 0 && (
-              <RankingBarChart horizontal height={Math.max(160, (paid.platforms ?? []).length * 44)}
-                data={(paid.platforms ?? []).map((p) => ({ label: p.platform === 'other_paid' ? (ar ? 'مدفوع آخر' : 'Other paid') : providerLabel(p.platform, locale), sessions: p.sessions }))}
-                bars={[{ key: 'sessions', name: ar ? 'الجلسات' : 'Sessions', kind: 'num' }]} />
-            )}
-            <div className="min-w-0">
-              <MetricTable
-                head={ar ? ['المنصة', 'الجلسات', 'المشتريات', 'الإيراد'] : ['Platform', 'Sessions', 'Purchases', 'Revenue']}
-                rows={(paid.platforms ?? []).map((p) => [
-                  <span key="p" className="font-semibold">{p.platform === 'other_paid' ? (ar ? 'مدفوع آخر' : 'Other paid') : providerLabel(p.platform, locale)}</span>,
-                  <span key="s" dir="ltr">{num(p.sessions)}</span>,
-                  <span key="u" dir="ltr">{num(p.purchases)}</span>,
-                  <span key="r" dir="ltr">{money(p.revenue, cur)}</span>,
-                ])}
-                values={(paid.platforms ?? []).map((p): SortValues => [p.platform, p.sessions, p.purchases, p.revenue])}
-                initialSort={{ column: 1, dir: 'desc' }}
-              />
-              <p className="mt-2 text-[11px] text-text-muted">{ar ? 'هذه رؤية GA4 لزيارات كل منصة — قارنها بما أبلغت به المنصة في تبويب جودة البيانات والإسناد.' : 'GA4’s view of each platform’s visits — compare it with what the platform reported under Data quality & attribution.'}</p>
-            </div>
-          </div>
-        </ChartCard>
-      )}
+      {projectId && <TrafficExplorer projectId={projectId} range={range} ar={ar} />}
+      {projectId && <ThreeSourcesPanel projectId={projectId} range={range} ar={ar} />}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <BreakdownCard testId="site-source-medium" title={ar ? 'المصدر / الوسيط' : 'Source / medium'} table={d.breakdowns?.source_medium ?? null} ar={ar} cur={cur} name={(r) => `${r.dimension_1} / ${r.dimension_2 ?? ''}`} />
-        <BreakdownCard testId="site-campaign" title={ar ? 'الحملات (UTM)' : 'Campaigns (UTM)'} table={d.breakdowns?.campaign ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} sub={(r) => r.dimension_2} />
-        <BreakdownCard testId="site-landing-page" title={ar ? 'صفحات الهبوط' : 'Landing pages'} table={d.breakdowns?.landing_page ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} />
-        <BreakdownCard testId="site-campaign-landing" title={ar ? 'الحملة ← صفحة الهبوط ← الشراء' : 'Campaign → landing page → purchase'} table={d.breakdowns?.campaign_landing ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} sub={(r) => r.dimension_2} />
-        <BreakdownCard testId="site-country" title={ar ? 'الدول' : 'Countries'} table={d.breakdowns?.country ?? null} ar={ar} cur={cur} name={(r) => r.dimension_1} />
-        <BreakdownCard testId="site-device" title={ar ? 'الأجهزة' : 'Devices'} table={d.breakdowns?.device ?? null} ar={ar} cur={cur} name={(r) => label(DEVICE, r.dimension_1)} />
+      <div className="grid grid-cols-1 gap-4">
         <BreakdownCard testId="site-user-type" title={ar ? 'جديد مقابل عائد' : 'New vs returning'} table={d.breakdowns?.user_type ?? null} ar={ar} cur={cur} name={(r) => label(USER_TYPE, r.dimension_1)} />
       </div>
 
@@ -172,6 +122,18 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
           <p data-testid="site-events-absent" className="text-sm text-text-muted">{ar ? 'لم تُرجع الخاصية الأحداث لهذه الفترة.' : 'The property returned no events for this period.'}</p>
         ) : (
           <div data-testid="site-events" className="min-w-0">
+            {/* ANALYTICS-REPORT-LAYOUT-001 — the ten largest events as bars, key events in green; the full table folds away. */}
+            <RowBars
+              rows={[...d.events.rows].sort((a, b) => (b.event_count ?? 0) - (a.event_count ?? 0)).slice(0, 10).map((e) => ({
+                key: e.event,
+                name: e.event,
+                value: e.event_count ?? 0,
+                text: num(e.event_count),
+                tone: e.is_key_event ? 'bg-success' : 'bg-brand-500',
+                chips: e.is_key_event ? [ar ? 'رئيسي' : 'Key'] : [],
+              }))}
+            />
+            <details className="mt-2 text-xs"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
             <MetricTable
               head={ar ? ['الحدث', 'العدد', 'كحدث رئيسي'] : ['Event', 'Count', 'As key event']}
               rows={d.events.rows.map((e) => [
@@ -182,6 +144,7 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
               values={d.events.rows.map((e): SortValues => [e.event, e.event_count, e.key_events])}
               initialSort={{ column: 1, dir: 'desc' }}
             />
+            </details>
           </div>
         )}
       </ChartCard>
@@ -196,8 +159,23 @@ function BreakdownCard({ testId, title, table, ar, cur, name, sub }: { testId: s
         <p data-testid={`${testId}-absent`} className="text-sm text-text-muted">{ar ? 'لم تُرجع الخاصية هذا التقسيم لهذه الفترة.' : 'The property returned no breakdown of this kind for the period.'}</p>
       ) : (
         <div data-testid={testId} className="min-w-0">
+          <RowBars
+            rows={table.rows.slice(0, 8).map((r, i) => ({
+              key: `${name(r)}-${i}`,
+              name: name(r),
+              value: r.sessions ?? 0,
+              text: `${num(r.sessions)} ${ar ? 'جلسة' : 'sessions'}`,
+              tone: 'bg-brand-500',
+              chips: [
+                ...(r.purchases ? [`${num(r.purchases)} ${ar ? 'طلب' : 'orders'}`] : []),
+                ...(r.conversion_rate != null ? [percent(r.conversion_rate, 2)] : []),
+                ...(r.revenue != null ? [money(r.revenue, cur)] : []),
+              ],
+            }))}
+          />
+          <details className="mt-2 text-xs"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
           <MetricTable
-            head={ar ? ['', 'الجلسات', 'التفاعل', 'المشتريات', 'التحويل', 'الإيراد'] : ['', 'Sessions', 'Engagement', 'Purchases', 'Conversion', 'Revenue']}
+            head={ar ? ['', 'الجلسات', 'التفاعل', 'الطلبات', 'التحويل', 'الإيراد'] : ['', 'Sessions', 'Engagement', 'Purchases', 'Conversion', 'Revenue']}
             rows={table.rows.map((r) => [
               <span key="n" className="block max-w-[16rem] truncate font-semibold text-text-primary" dir="auto" title={name(r)}>
                 {name(r)}{sub && sub(r) ? <span className="block truncate text-[11px] font-normal text-text-muted" dir="ltr">{sub(r)}</span> : null}
@@ -211,9 +189,58 @@ function BreakdownCard({ testId, title, table, ar, cur, name, sub }: { testId: s
             values={table.rows.map((r): SortValues => [name(r), r.sessions ?? null, r.engagement_rate, r.purchases ?? null, r.conversion_rate, r.revenue ?? null])}
             initialSort={{ column: 1, dir: 'desc' }}
           />
+          </details>
           {table.more > 0 && <p className="mt-2 text-[11px] text-text-muted">{ar ? `و${num(table.more)} صفًا آخر أقل.` : `And ${num(table.more)} smaller rows.`}</p>}
         </div>
       )}
     </ChartCard>
+  )
+}
+
+/**
+ * The cold open — the page's own parts at their final size, no spinner and no single slab.
+ * The KPI row is the real card; the chart cards keep their titles and only the body waits.
+ */
+function SiteSkeleton({ ar }: { ar: boolean }) {
+  return (
+    <div data-testid="site-skeleton" aria-busy="true" aria-label={ar ? 'جارٍ تحميل تحليلات الموقع' : 'Loading site analytics'} className="space-y-4">
+      <KpiRowSkeleton idPrefix="site-kpi" columns="grid-cols-2 lg:grid-cols-4" labels={ar ? ['الجلسات', 'معدل التفاعل', 'الطلبات', 'الإيراد'] : ['Sessions', 'Engagement rate', 'Purchases', 'Revenue']} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <ChartCard className="lg:col-span-2" title={ar ? 'الجلسات والطلبات يوميًا' : 'Sessions and purchases by day'}>
+          <ChartBodySkeleton height={240} testid="site-trend-skeleton" />
+        </ChartCard>
+        <ChartCard title={ar ? 'قمع التسوق' : 'Shopping funnel'}>
+          <ChartBodySkeleton height={240} testid="site-funnel-skeleton" />
+        </ChartCard>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * ANALYTICS-REPORT-LAYOUT-001 — a ranked list drawn as bars: the name, a bar to the largest row, the figure, and
+ * a few chips. The report's way of showing a breakdown, in place of a six-column table.
+ */
+function RowBars({ rows }: { rows: Array<{ key: string; name: string; value: number; text: string; tone: string; chips: string[] }> }) {
+  const top = Math.max(1, ...rows.map((r) => r.value))
+  return (
+    <ul className="space-y-2.5">
+      {rows.map((r) => (
+        <li key={r.key}>
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="truncate font-semibold text-text-primary" dir="auto" title={r.name}>{r.name}</span>
+            <span className="tnum shrink-0 text-xs font-bold text-text-secondary" dir="ltr">{r.text}</span>
+          </div>
+          <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-surface-secondary">
+            <div className={`h-full rounded-full ${r.tone}`} style={{ width: `${(r.value / top) * 100}%` }} />
+          </div>
+          {r.chips.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {r.chips.map((c) => <span key={c} className="tnum rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-secondary" dir="ltr">{c}</span>)}
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }

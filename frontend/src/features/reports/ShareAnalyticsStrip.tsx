@@ -5,6 +5,7 @@ import { Num } from '@/components/ui/Num'
 import { ChartCard, RankingBarChart } from '@/features/analytics/charts'
 import { useUi } from '@/stores/ui'
 import { shareAnalytics, type ShareGranularity } from './api'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 const stamp = (iso: string | null, ar: boolean): string => {
   if (iso === null) return '—'
@@ -91,8 +92,8 @@ export function ShareAnalyticsStrip({ projectId, reportId, shareId }: { projectI
         <dl data-testid="share-comparison" className="grid grid-cols-3 gap-2 rounded-xl border border-border px-3 py-2 text-xs">
           <div className="col-span-3 text-[11px] text-text-muted">
             {ar
-              ? `مقارنة بالفترة السابقة: ${cmp.current.from} → ${cmp.current.to} مقابل ${cmp.previous.from} → ${cmp.previous.to}`
-              : `Against the period before: ${cmp.current.from} → ${cmp.current.to} vs ${cmp.previous.from} → ${cmp.previous.to}`}
+              ? `مقارنة بالفترة السابقة: ${formatPeriodRange(cmp.current.from, cmp.current.to, 'ar')} مقابل ${formatPeriodRange(cmp.previous.from, cmp.previous.to, 'ar')}`
+              : `Against the period before: ${formatPeriodRange(cmp.current.from, cmp.current.to, 'en')} vs ${formatPeriodRange(cmp.previous.from, cmp.previous.to, 'en')}`}
           </div>
           {([['views', ar ? 'مرات الفتح' : 'Views'], ['devices', ar ? 'أجهزة' : 'Devices'], ['downloads', ar ? 'التنزيلات' : 'Downloads']] as const).map(([key, label]) => (
             <div key={key} data-testid={`share-compare-${key}`}>

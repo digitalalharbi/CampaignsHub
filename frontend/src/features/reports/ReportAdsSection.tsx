@@ -1,4 +1,6 @@
 import { AdPoster } from '@/features/content/AdPoster'
+import { PendingConversionChip } from './PendingConversionChip'
+import { numberFormatter } from '@/lib/numerals'
 import { ProviderMark } from '@/components/ProviderMark'
 import { ProviderName } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
@@ -11,8 +13,9 @@ import { LayoutGrid, Rows3 } from 'lucide-react'
 import { ReportContentTable } from './ReportContentTable'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
-import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
+import { formatMoneyParts, formatMoneyReading, moneyParts, readMoney, type MoneyTotals } from '@/lib/money/contract'
 import { metricState } from '@/features/content/metrics'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * REPORT-AD-PREVIEW-001 — the ads that ran, in the document the client keeps.
@@ -195,6 +198,7 @@ export function ReportAdsSection({
   restWhere,
   windowEnd,
   browsable = true,
+  family,
 }: {
   ads: ReportAd[] | undefined
   /**
@@ -256,6 +260,8 @@ export function ReportAdsSection({
    * press, so offering one would draw a control that does nothing in the document a client keeps.
    */
   browsable?: boolean
+  /** HOME-CONTENT-PARITY-001 — the objective a flat list was ranked in, so its cards state that objective's figures. */
+  family?: string | null
 }) {
   const ar = locale === 'ar'
   const rows = (ads ?? []).slice(0, limit)
@@ -409,6 +415,7 @@ export function ReportAdsSection({
                 currency={currency ?? null}
                 testidPrefix={`report-ad-poster-${i}`}
                 onOpen={onOpen}
+                family={family ?? undefined}
               />
             ))}
           </div>
@@ -489,6 +496,7 @@ function AdGroupBlock({
             currency={currency}
             testidPrefix={`report-ad-poster-${group.family}-${i}`}
             onOpen={onOpen}
+            family={group.family}
           />
         ))}
       </div>
@@ -504,13 +512,15 @@ function AdGroupBlock({
  * ad got silence.
  */
 function AdCard({
-  ad, locale, currency, testidPrefix, onOpen,
+  ad, locale, currency, testidPrefix, onOpen, family,
 }: {
   ad: ReportAd
   locale: Locale
   currency: string | null
   testidPrefix: string
   onOpen?: (ad: ReportAd) => void
+  /** REPORT-CARD-OBJECTIVE-001 — the objective group this card sits in: its own count and, for sales, its return. */
+  family?: string
 }) {
   const ar = locale === 'ar'
   const body = (
@@ -532,9 +542,12 @@ function AdCard({
       <AdPoster preview={ad.preview ?? null} name={ad.name ?? ''} className="h-32 w-full" testid={testidPrefix} fit="cover" forClient />
 
       <div className="min-w-0">
-        <div className="truncate text-sm font-bold text-text-primary" title={ad.name ?? undefined}>
-          {ad.name ?? '—'}
-        </div>
+        {/* CLIENT-CONTENT-001 — the client portal sends no content name (the agency's naming); the card then leads with its platform. */}
+        {ad.name ? (
+          <div dir="auto" className="truncate text-start text-sm font-bold text-text-primary" title={ad.name}>
+            {ad.name}
+          </div>
+        ) : null}
         <div className="flex items-center gap-1 truncate text-[11px] text-text-muted">
           {/* REPORT-PLATFORM-LOGOS-001 — the platform's own logo ahead of its name. */}
           {ad.provider ? <ProviderMark provider={canonicalPlatform(ad.provider)} size={14} /> : null}
@@ -555,10 +568,11 @@ function AdCard({
       </div>
 
       <dl className="grid grid-cols-3 gap-1.5 text-center">
-        {figuresFor(ad, ar, currency).map((f) => (
+        {figuresFor(ad, ar, currency, { family }).map((f) => (
           <div key={f.label} className="rounded-lg bg-surface-secondary p-1.5">
             <dt className="text-[10px] font-semibold text-text-muted">{f.label}</dt>
             <dd className="tnum text-xs font-bold text-text-primary"><Num>{f.value}</Num></dd>
+            {f.pending !== undefined && f.pending !== null && <PendingConversionChip currency={f.pending || null} ar={ar} />}
           </div>
         ))}
       </dl>
@@ -592,10 +606,11 @@ function AdCard({
  * filling the ones the platform never measured with «—» is how a report teaches a client that half
  * its numbers are missing; these are the three that exist, in the order that answers «did it work».
  */
-export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, opts: { resultsOnly?: boolean } = {}): { label: string; value: string }[] {
-  const out: { label: string; value: string }[] = []
+export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, opts: { resultsOnly?: boolean; family?: string | null } = {}): { label: string; value: string; pending?: string | null }[] {
+  const out: { label: string; value: string; pending?: string | null }[] = []
+  // `numberFormatter`, not `toLocaleString`: the same text, through one formatter per shape rather than one per figure (PERF-RENDER-001).
   const n = (v: number | null | undefined, digits = 0) =>
-    v === null || v === undefined ? null : v.toLocaleString('en-US', { maximumFractionDigits: digits })
+    v === null || v === undefined ? null : numberFormatter('en-US', { maximumFractionDigits: digits }).format(v)
   /*
    * MONEY-USD-001 — money carries its currency here too.
    *
@@ -605,7 +620,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   const cash = (v: number | null | undefined, digits = 0) => {
     const text = n(v, digits)
 
-    return text === null ? null : (currency ? `${text} ${currency}` : text)
+    return text === null ? null : withMark(text, currency)
   }
 
   /*
@@ -615,15 +630,21 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
    * returned «0» for the coerced zero the builder used to send.
    */
   const spendReading = readMoney(ad as MoneyTotals, 'spend', currency ?? null, ar)
-  const spendText = formatMoneyReading(spendReading, (value, unit) => {
+  /*
+   * LIVE-LINK-PARTIAL-MONEY-001 — an ad with one converted day and one day still awaiting a rate printed «—» (Google, Karam
+   * Al-Nakheel, 2026-11-09). Both amounts are real: print each in its own unit, and name the currency that is pending.
+   */
+  const spendParts = moneyParts(ad as MoneyTotals, 'spend')
+  const fmtCash = (value: number | null | undefined, unit?: string) => {
     const text = n(value, 0)
 
-    return text === null ? '—' : (unit ? `${text} ${unit}` : text)
-  })
+    return text === null ? '—' : withMark(text, unit)
+  }
+  const spendText = spendParts === null ? formatMoneyReading(spendReading, fmtCash) : formatMoneyParts(spendParts, currency ?? null, fmtCash)
 
   // CLIENT-REPORT-FRAMING-001 — the client summary states what content achieved, never what it cost.
   if (spendReading.kind !== 'absent' && !opts.resultsOnly) {
-    out.push({ label: ar ? 'الإنفاق' : 'Spend', value: spendText })
+    out.push({ label: ar ? 'الإنفاق' : 'Spend', value: spendText, pending: spendParts === null ? null : spendParts.originalCurrency ?? '' })
   }
 
   /*
@@ -656,7 +677,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   const verified = ad.verified_result
   if (verified !== undefined) {
     out.push({ label: verified?.label ?? (ar ? 'النتائج' : 'Results'), value: verified?.value === null || verified?.value === undefined ? (ar ? 'غير متاح' : 'Not available') : (n(verified.value) ?? '—') })
-    if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
+    if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'معدل النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
     const impressions = n(ad.impressions)
     if (opts.resultsOnly && impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })
 
@@ -666,7 +687,13 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   const conversionState = ad.metrics ? metricState(ad.metrics as CreativeMetrics, 'conversions') : null
   // RESULT-EVENTS-001 — a link with no defined Results states no result for its content: not the generic count, not its cost or return.
   const undefinedResult = ad.result_defined === false
-  const countIsStated = !undefinedResult && ad.conversions !== null && ad.conversions !== undefined
+  /*
+   * SHOW-AVAILABLE-002 — Owner 2026-11-20: «النتائج 0» under a visits ad is not a result. The platform's generic count is printed
+   * only where the objective counts results (sales, leads, app…) and only above zero; a traffic, awareness, video or engagement
+   * card states its own figure instead (clicks, impressions, views…).
+   */
+  const resultFamily = !opts.family || !NON_RESULT_FAMILIES.has(opts.family)
+  const countIsStated = !undefinedResult && resultFamily && typeof ad.conversions === 'number' && ad.conversions > 0
 
   if (countIsStated) {
     /*
@@ -685,7 +712,7 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
    * all — the same rule as before, unchanged.
    */
   if (opts.resultsOnly) {
-    if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
+    if (ad.ctr !== null && ad.ctr !== undefined) out.push({ label: ar ? 'معدل النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
     const impressions = n(ad.impressions)
     if (impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })
     const clicks = n(ad.clicks)
@@ -694,8 +721,17 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
     return out.slice(0, 3)
   }
 
+  /*
+   * REPORT-CARD-OBJECTIVE-001 — Owner 2026-11-17: a content card states its spend, its result and its return BY ITS OBJECTIVE.
+   * A card inside an objective's group with no stated result printed «الإنفاق» alone while the ad had 81 purchases and a
+   * 35.08× return. The group's own count (purchases for sales, leads for leads, clicks for traffic …) is printed when the
+   * platform reported it, and a sales card carries its return. Never a generic `conversions`, never a zero for «not reported».
+   */
+  const familyCount = !countIsStated && verified === undefined && opts.family ? objectiveCount(ad, opts.family, ar) : null
+  if (familyCount !== null) out.push(familyCount)
+
   if (undefinedResult) {
-    // nothing named after a result
+    if (opts.family === 'sales' && ad.roas !== null && ad.roas !== undefined && ad.roas > 0) out.push({ label: ar ? 'العائد' : 'ROAS', value: `${ad.roas.toFixed(2)}×` })
   } else if (ad.roas !== null && ad.roas !== undefined && ad.roas > 0) {
     out.push({ label: ar ? 'العائد' : 'ROAS', value: `${ad.roas.toFixed(2)}×` })
   } else if (ad.cpa !== null && ad.cpa !== undefined && ad.cpa > 0) {
@@ -703,9 +739,9 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   }
 
   /* Delivery, for an ad with no result to show — never instead of one. Owner 2026-10-29: its clicks lead, as the result would have. */
-  if (!countIsStated) {
+  if (!countIsStated && (familyCount === null || opts.family === 'traffic')) {
     if (ad.ctr !== null && ad.ctr !== undefined) {
-      out.push({ label: ar ? 'نسبة النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
+      out.push({ label: ar ? 'معدل النقر' : 'CTR', value: `${(ad.ctr * 100).toFixed(2)}%` })
     } else {
       const impressions = n(ad.impressions)
       if (impressions !== null) out.push({ label: ar ? 'الظهور' : 'Impressions', value: impressions })
@@ -713,6 +749,30 @@ export function figuresFor(ad: ReportAd, ar: boolean, currency: string | null, o
   }
 
   return out.slice(0, 3)
+}
+
+const NON_RESULT_FAMILIES = new Set(['traffic', 'awareness', 'video', 'engagement', 'awareness_engagement', 'reach'])
+
+/** REPORT-CARD-OBJECTIVE-001 — the count each objective is judged on, read from the ad's own reported figure. */
+const OBJECTIVE_COUNT: Record<string, { key: string; ar: string; en: string }> = {
+  sales: { key: 'purchases', ar: 'الطلبات', en: 'Purchases' },
+  leads: { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads' },
+  traffic: { key: 'clicks', ar: 'النقرات', en: 'Clicks' },
+  app: { key: 'installs', ar: 'التثبيتات', en: 'Installs' },
+  video: { key: 'video_views', ar: 'المشاهدات', en: 'Video views' },
+  engagement: { key: 'engagements', ar: 'التفاعل', en: 'Engagements' },
+  awareness: { key: 'impressions', ar: 'الظهور', en: 'Impressions' },
+}
+
+function objectiveCount(ad: ReportAd, family: string, ar: boolean): { label: string; value: string } | null {
+  const spec = OBJECTIVE_COUNT[family]
+  if (!spec) return null
+  const raw = (ad as Record<string, unknown>)[spec.key]
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return null
+  const reported = (ad as Record<string, unknown>).reported as Record<string, boolean> | undefined
+  if (reported && reported[spec.key] === false) return null
+
+  return { label: ar ? spec.ar : spec.en, value: numberFormatter('en-US', { maximumFractionDigits: 0 }).format(raw) }
 }
 
 /**

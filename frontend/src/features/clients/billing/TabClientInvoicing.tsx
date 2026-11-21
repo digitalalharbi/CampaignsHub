@@ -7,9 +7,12 @@ import { Num } from '@/components/ui/Num'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import {
-  displayStatus, draftInvoice, getBillingProfile, invoiceAction, invoicePdfUrl, previousIsoWeek, saveBillingProfile,
+  displayStatus, draftInvoice, draftTopUpInvoice, getBillingProfile, invoiceAction, invoicePdfUrl, previousIsoWeek, saveBillingProfile,
   type BillingProfile, type InvoiceAction,
 } from './clientInvoiceApi'
+import { withMark } from '@/lib/money/mark'
+import { getClient } from '../api'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * INV-PROFILE-001, INV-LIFECYCLE-001, INV-IMMUTABLE-001, INV-PDF-001 — how this client is billed, and the
@@ -30,6 +33,7 @@ const COPY = {
     status: { draft: 'مسودة', reviewed: 'روجعت', issued: 'مُصدرة', sent: 'مُرسلة', due: 'مستحقة', overdue: 'متأخرة', partially_paid: 'مدفوعة جزئياً', paid: 'مدفوعة', void: 'ملغاة' } as Record<string, string>,
     act: { review: 'تمت المراجعة', issue: 'إصدار', send: 'تم الإرسال', payment: 'تسجيل دفعة', correct: 'تصحيح' } as Record<string, string>,
     payAmount: 'المبلغ المستلم', reason: 'سبب التصحيح', pdfAr: 'PDF عربي', pdfEn: 'PDF English', confirm: 'تأكيد', cancel: 'إلغاء',
+    topUps: 'شحن رصيد إعلاني', topUpHint: 'عند تأكيد دفعها تُضاف لميزانية المشروع تلقائيًا.', project: 'المشروع', topUpAmount: 'المبلغ', topUpDraft: 'تجهيز فاتورة شحن', noTopUps: 'لا فواتير شحن بعد.',
   },
   en: {
     profile: 'Billing profile', fee: 'Fee model', models: { fixed: 'Fixed amount', percentage: 'Percentage of spend', manual: 'Manual amount' } as Record<string, string>,
@@ -41,6 +45,7 @@ const COPY = {
     status: { draft: 'Draft', reviewed: 'Reviewed', issued: 'Issued', sent: 'Sent', due: 'Due', overdue: 'Overdue', partially_paid: 'Partially paid', paid: 'Paid', void: 'Void' } as Record<string, string>,
     act: { review: 'Mark reviewed', issue: 'Issue', send: 'Mark sent', payment: 'Record payment', correct: 'Correct' } as Record<string, string>,
     payAmount: 'Amount received', reason: 'Reason for the correction', pdfAr: 'PDF Arabic', pdfEn: 'PDF English', confirm: 'Confirm', cancel: 'Cancel',
+    topUps: 'Ad balance top-ups', topUpHint: 'Once its payment is confirmed it is added to the project budget automatically.', project: 'Project', topUpAmount: 'Amount', topUpDraft: 'Draft a top-up invoice', noTopUps: 'No top-up invoices yet.',
   },
 }
 
@@ -66,6 +71,7 @@ export function TabClientInvoicing({ clientId, canManage }: { clientId: string; 
     <div data-testid="client-invoicing" className="space-y-6 text-sm">
       <Profile clientId={clientId} t={t} canManage={canManage} />
       <FeeInvoices clientId={clientId} t={t} ar={ar} canManage={canManage} />
+      <TopUpInvoices clientId={clientId} t={t} canManage={canManage} />
     </div>
   )
 }
@@ -174,6 +180,53 @@ function FeeInvoices({ clientId, t, ar, canManage }: { clientId: string; t: type
   )
 }
 
+/**
+ * FIN-WALLET-001 — invoices of type «شحن رصيد إعلاني»: one per top-up, naming the project. Recording (or a gateway
+ * confirming) its payment appends a deposit to that project's budget ledger, with the invoice as its source.
+ */
+function TopUpInvoices({ clientId, t, canManage }: { clientId: string; t: typeof COPY.ar; canManage: boolean }) {
+  const qc = useQueryClient()
+  const client = useQuery({ queryKey: ['app', 'client', clientId], queryFn: () => getClient(clientId) })
+  const projects = client.data?.projects ?? []
+  const [project, setProject] = useState('')
+  const [amount, setAmount] = useState('')
+  const invoices = useQuery({ queryKey: ['billing', 'invoices', 'all'], queryFn: () => listInvoices() })
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['billing', 'invoices', 'all'] })
+    void qc.invalidateQueries({ queryKey: ['funding'] })
+    void qc.invalidateQueries({ queryKey: ['app', 'client', clientId] })
+  }
+  const chosen = project || projects[0]?.id || ''
+  const draft = useMutation({ mutationFn: () => draftTopUpInvoice(clientId, { project_id: chosen, amount: Number(amount) }), onSuccess: () => { setAmount(''); refresh() } })
+  const mine = ((invoices.data?.items ?? []) as FeeInvoice[]).filter((i) => i.client_workspace_id === clientId && i.source === 'wallet_top_up')
+
+  return (
+    <section data-testid="topup-invoices">
+      <h3 className="mb-1 font-bold text-text-primary">{t.topUps}</h3>
+      <p className="mb-2 text-xs text-text-muted">{t.topUpHint}</p>
+      {canManage && projects.length > 0 && (
+        <form data-testid="topup-draft" onSubmit={(e) => { e.preventDefault(); if (chosen && Number(amount) > 0) draft.mutate() }} className="mb-3 grid items-end gap-2 sm:grid-cols-[1fr_1fr_auto]">
+          <label className="text-xs font-semibold text-text-secondary">{t.project}
+            <select className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm" value={chosen} onChange={(e) => setProject(e.target.value)}>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-text-secondary">{t.topUpAmount}<input type="number" min="0" step="0.01" required className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm" value={amount} onChange={(e) => setAmount(e.target.value)} dir="ltr" /></label>
+          <button type="submit" disabled={draft.isPending} className="h-10 rounded-lg bg-brand-primary px-4 text-xs font-semibold text-white disabled:opacity-50">{t.topUpDraft}</button>
+        </form>
+      )}
+      {draft.isError && <p role="alert" className="mb-2 text-xs text-danger">{toApiError(draft.error).message}</p>}
+      {mine.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border p-4 text-center text-text-secondary">{t.noTopUps}</p>
+      ) : (
+        <ul className="space-y-2">
+          {mine.map((i) => <InvoiceRow key={i.id} invoice={i} t={t} canManage={canManage} onChange={refresh} />)}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 function InvoiceRow({ invoice, t, canManage, onChange }: { invoice: FeeInvoice; t: typeof COPY.ar; canManage: boolean; onChange: () => void }) {
   const [asking, setAsking] = useState<InvoiceAction | null>(null)
   const [value, setValue] = useState('')
@@ -190,11 +243,11 @@ function InvoiceRow({ invoice, t, canManage, onChange }: { invoice: FeeInvoice; 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span>
           <span className="block font-mono text-xs font-semibold text-brand-600" dir="ltr">{invoice.number}</span>
-          <span className="text-xs text-text-muted" dir="ltr"><Num>{invoice.period_start} → {invoice.period_end}</Num></span>
+          <span className="text-xs text-text-muted" dir="ltr"><Num><PeriodText from={invoice.period_start} to={invoice.period_end} /></Num></span>
         </span>
         <span className="flex items-center gap-2">
           <span data-testid={`fee-status-${invoice.id}`} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{t.status[shown] ?? shown}</span>
-          <span className="tnum font-bold" dir="ltr"><Num>{Number(invoice.total).toLocaleString('en-US')} {invoice.currency}</Num></span>
+          <span className="tnum font-bold" dir="ltr"><Num>{withMark(Number(invoice.total).toLocaleString('en-US'), invoice.currency)}</Num></span>
         </span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">

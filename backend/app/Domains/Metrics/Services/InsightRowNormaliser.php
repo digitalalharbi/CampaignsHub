@@ -33,14 +33,17 @@ final class InsightRowNormaliser
      * @param  list<string>  $carriedKeys  every metric key this pipeline stores
      * @param  string|null  $projectId  the project the account is ACTIVELY bound to, as the caller already resolved it
      *                                  for the run; null asks `AccountAssignment` now. Never taken from a campaign row.
-     * @return array{0: list<NormalizedMetric>, 1: int, 2: int} [metrics, records that stored nothing, of which: matched a
-     *                                                          campaign still filed under another project]
+     * @return array{0: list<NormalizedMetric>, 1: int, 2: int, 3: int} [metrics, records that stored nothing, of which:
+     *                                                                  matched a campaign still filed under another
+     *                                                                  project, records whose money was withheld
+     *                                                                  because nobody stated its currency]
      */
     public function normalise(ExternalAccount $account, array $records, array $carriedKeys, ?string $projectId = null): array
     {
         $metrics = [];
         $skipped = 0;
         $misfiled = 0;
+        $unlabelled = 0;
 
         /*
          * SEC-CLUSTER-2 — a metric belongs to the project the account is bound to RIGHT NOW.
@@ -84,12 +87,17 @@ final class InsightRowNormaliser
              *
              * Per row first, because a platform that labels each insight is the authority on its own
              * figures; the ad account's own currency is the fallback, and it is what every platform
-             * this product speaks to publishes at account level. Only if BOTH are missing does the
-             * reporting currency stand in — treating an unlabelled figure as already converted, which
-             * is what the old code did unconditionally and without saying so.
+             * this product speaks to publishes at account level.
+             *
+             * MONEY-CURRENCY-NEVER-ASSUMED-001 — and if BOTH are missing, NOTHING stands in. This line
+             * ended `?? $reporting`, which took an unlabelled figure to be dollars already and stored
+             * it at rate 1.0: four ChatGPT Ads accounts billed in riyals were totalled as dollars that
+             * way. A null source withholds the money (see `ReportingCurrency::normalise`) and the row
+             * is counted, so the run reports «currency unknown» instead of a wrong number.
              */
             $reporting = $this->currency->forProject($projectId);
-            $source = strtoupper((string) ($row['currency'] ?? $account->currency ?? $reporting));
+            $source = SourceCurrency::of($row, $account);
+            $withheldForCurrency = false;
 
             /*
              * META-ATTRIB-001 — the window this row's figures were measured over.
@@ -127,6 +135,7 @@ final class InsightRowNormaliser
                 }
 
                 $money = $this->currency->normalise($amount, $source, $reporting, $date);
+                $withheldForCurrency = $withheldForCurrency || $source === null;
 
                 $metrics[] = $this->metric(
                     $account, $link, $projectId, $key, $date,
@@ -137,9 +146,13 @@ final class InsightRowNormaliser
                     $money,
                 );
             }
+
+            if ($withheldForCurrency) {
+                $unlabelled++;
+            }
         }
 
-        return [$metrics, $skipped, $misfiled];
+        return [$metrics, $skipped, $misfiled, $unlabelled];
     }
 
     /**

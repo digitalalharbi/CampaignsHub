@@ -83,8 +83,8 @@ describe('the page says what nothing else on it can', () => {
     route([reading()])
     renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
 
-    expect(await screen.findByTestId('spend-limit-l1-amount')).toHaveTextContent('10K SAR')
-    expect(screen.getByTestId('spend-limit-l1-consumed')).toHaveTextContent('4.5K SAR')
+    expect(await screen.findByTestId('spend-limit-l1-amount')).toHaveTextContent('10K ر.س')
+    expect(screen.getByTestId('spend-limit-l1-consumed')).toHaveTextContent('4.5K ر.س')
     expect(screen.getByTestId('spend-limit-l1-utilisation')).toHaveTextContent('45%')
   })
 })
@@ -110,6 +110,7 @@ describe('what it refuses to show', () => {
       projected_exhaustion: { date: null, reason: 'no_comparable_spend' },
     })])
     renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('spend-limit-l1-details'))
 
     expect(await screen.findByTestId('spend-limit-l1-consumed')).toHaveTextContent('—')
     expect(screen.getByTestId('spend-limit-l1-utilisation')).toHaveTextContent('—')
@@ -121,6 +122,7 @@ describe('what it refuses to show', () => {
   it('explains why there is no date instead of leaving it empty', async () => {
     route([reading({ projected_exhaustion: { date: null, reason: 'too_early' } })])
     renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('spend-limit-l1-details'))
 
     expect(await screen.findByTestId('spend-limit-l1-projection'))
       .toHaveTextContent('one day multiplied by thirty is not a forecast')
@@ -129,6 +131,7 @@ describe('what it refuses to show', () => {
   it('states the date when the rate supports one', async () => {
     route([reading({ projected_exhaustion: { date: '2026-08-22', reason: 'projected' } })])
     renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('spend-limit-l1-details'))
 
     expect(await screen.findByTestId('spend-limit-l1-projection')).toHaveTextContent('2026-08-22')
   })
@@ -141,12 +144,14 @@ describe('what it refuses to show', () => {
   it('says through which day the pace was measured when the data stops before today', async () => {
     route([reading({ paced_through: '2026-08-10', elapsed_days: 10, pace: 1.0, projected_period_spend: 13_950 })])
     renderWithProviders(<SpendLimitsPage />, { locale: 'ar' })
+    fireEvent.click(await screen.findByTestId('spend-limit-l1-details'))
     expect((await screen.findByTestId('spend-limit-l1-paced-through')).textContent).toContain('حتى 2026-08-10')
   })
 
   it('says nothing about the day when the pace runs to today', async () => {
     route([reading({ paced_through: null })])
     renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('spend-limit-l1-details'))
     await screen.findByTestId('spend-limit-l1-projection')
     expect(screen.queryByTestId('spend-limit-l1-paced-through')).not.toBeInTheDocument()
   })
@@ -156,7 +161,7 @@ describe('what it refuses to show', () => {
     renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
 
     expect(await screen.findByTestId('spend-limit-l1-state')).toHaveTextContent('Over the limit')
-    expect(screen.getByText('-1.2K SAR')).toBeInTheDocument()
+    expect(screen.getByText('-1.2K ر.س')).toBeInTheDocument()
   })
 })
 
@@ -255,6 +260,7 @@ describe('actions on a campaign limit', () => {
     vi.mocked(postData).mockResolvedValue({ id: 'p1', status: 'pending' } as never)
 
     renderWithProviders(<SpendLimitsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByTestId('spend-limit-c1-details'))
 
     expect(await screen.findByTestId('limit-action-linkedin-why')).toHaveTextContent('cannot be paused from here')
     fireEvent.click(screen.getByTestId('limit-action-meta-ask'))

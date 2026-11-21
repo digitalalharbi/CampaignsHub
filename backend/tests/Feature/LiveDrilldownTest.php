@@ -38,6 +38,9 @@ use Tests\TestCase;
 final class LiveDrilldownTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected bool $selectsSeededAccounts = false;
+
     use SeedsDrilldownFixture;
 
     protected function setUp(): void

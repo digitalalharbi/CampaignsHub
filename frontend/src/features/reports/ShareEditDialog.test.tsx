@@ -58,6 +58,29 @@ describe('ShareEditDialog', () => {
     await waitFor(() => expect(updateShare).toHaveBeenCalledWith('p', 'r', 's1', { sections: { account_names: true } }))
   })
 
+  /** REPORT-LINK-EDIT-ADS-001 — a published link with no ad section gains it in place, with the activity listing policy. */
+  it('turns the ad section on for a published link and sends the switches with the listing policy', async () => {
+    mount()
+    expect(screen.getByText('This link shows no ads')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Ad ads/i }))
+    expect(screen.queryByTestId('creative-ceiling')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('creatives-master'))
+    fireEvent.click(screen.getByTestId('edit-save'))
+    await waitFor(() => expect(updateShare).toHaveBeenCalledWith('p', 'r', 's1', {
+      creatives: { creatives: true },
+      creative_display: { policy: 'activity', include_zero_activity: false, auto_refresh: true },
+    }))
+  })
+
+  it('starts the ad section from what the link publishes and leaves it unsent when untouched', async () => {
+    const withAds = { ...share, creatives: { creatives: true, video: true }, creative_display: { policy: 'all', include_zero_activity: false, auto_refresh: true } } as unknown as ShareRow
+    renderWithProviders(<ShareEditDialog projectId="p" reportId="r" share={withAds} onClose={vi.fn()} onSaved={vi.fn()} />, { locale: 'en' })
+    expect(screen.getByText(/Shown — 2 options on/)).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('edit-watermark'))
+    fireEvent.click(screen.getByTestId('edit-save'))
+    await waitFor(() => expect(updateShare).toHaveBeenCalledWith('p', 'r', 's1', { watermark: true }))
+  })
+
   it('sends only what was changed', async () => {
     const onSaved = vi.fn()
     const onClose = vi.fn()

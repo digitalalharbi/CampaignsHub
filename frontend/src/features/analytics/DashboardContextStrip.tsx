@@ -35,7 +35,7 @@ export function DashboardContextStrip() {
    * The same query key the Connection Hub uses, so opening the dashboard after the hub costs
    * nothing and a reconnect made there is reflected here without a reload.
    */
-  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: fetchConnectionHub, retry: false })
+  const hub = useQuery({ queryKey: ['connection-hub'], queryFn: () => fetchConnectionHub(), retry: false })
 
   const connections = hub.data?.connections ?? []
 
@@ -57,7 +57,7 @@ export function DashboardContextStrip() {
     */
     <span data-testid="dashboard-context-strip" className="flex flex-wrap items-center gap-x-2 gap-y-1">
       <span className="flex items-center gap-1.5 text-[11px] font-bold text-text-muted">
-        <Plug size={13} aria-hidden /> {ar ? 'يغذّي هذه الصفحة' : 'Feeding this page'}
+        <Plug size={13} aria-hidden /> {ar ? 'المنصات المربوطة' : 'Feeding this page'}
       </span>
 
       <ul className="flex flex-wrap items-center gap-1.5">
@@ -65,7 +65,7 @@ export function DashboardContextStrip() {
           <li
             key={key}
             data-testid={`dashboard-context-platform-${key}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2 py-0.5 text-[12px] font-semibold text-text-secondary"
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2 py-0.5 text-xs font-semibold text-text-secondary"
           >
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: platformColor(key) }} aria-hidden />
             {PLATFORM_LABELS[key as AdPlatform]?.[ar ? 'ar' : 'en'] ?? key}
@@ -81,10 +81,10 @@ export function DashboardContextStrip() {
         <Link
           to="/app/integrations"
           data-testid="dashboard-context-attention"
-          className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-[var(--warning-background)] px-2.5 py-0.5 text-[12px] font-bold text-text-primary hover:border-warning"
+          className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-[var(--warning-background)] px-2.5 py-0.5 text-xs font-bold text-text-primary hover:border-warning"
         >
           <AlertTriangle size={12} aria-hidden />
-          {ar ? 'يحتاج انتباه' : 'Needs attention'} <Num>{attention}</Num>
+          {ar ? 'تنبيهات' : 'Needs attention'} <Num>{attention}</Num>
         </Link>
       )}
     </span>

@@ -5,12 +5,20 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Support;
 
 use App\Domains\Alerts\Services\AlertEventMailer;
+use App\Domains\Notifications\Engine\Content\ComposedMessage;
+use App\Domains\Notifications\Engine\Sending\EngineMail;
+use App\Domains\Notifications\External\Consent\ConsentMessage;
+use App\Domains\Notifications\External\Content\ExternalMode;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Mail\CredentialMail;
 use App\Domains\Notifications\Mail\DailyDigestMail;
 use App\Domains\Notifications\Mail\InvitationMail;
+use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Mail\OperationalMail;
+use App\Domains\Notifications\Mail\PlatformReplyMail;
+use App\Domains\Notifications\Mail\ScheduledReportMail;
 use App\Domains\Notifications\Mail\SecurityAlertMail;
+use App\Domains\Notifications\Mail\SpendSummaryMail;
 use App\Support\Frontend;
 use Illuminate\Mail\Mailable;
 
@@ -33,6 +41,9 @@ use Illuminate\Mail\Mailable;
  */
 final class MailGallery
 {
+    /** Opens nothing: it has no valid signature. Only so a preview shows the footer as an optional message carries it. */
+    private const SAMPLE_UNSUBSCRIBE = 'https://api.campaignshub.io/mail/unsubscribe/sample.0000000000';
+
     /** @return list<string> the keys, in the order the gallery should show them */
     public static function keys(): array
     {
@@ -52,7 +63,119 @@ final class MailGallery
         return isset($messages[$key]) ? $messages[$key]->render() : null;
     }
 
+    /**
+     * A template as a test message, or the plain mail check when no key is given. Null when nothing goes
+     * by that name. Fixtures only: there is no other source of data in this class, and
+     * `MailTestSendTest` proves that none of these asks the database for anything.
+     */
+    public static function testMessage(?string $key, string $locale): ?Mailable
+    {
+        $mail = $key === null ? self::plainCheck($locale) : (self::messages($locale)[$key] ?? null);
+
+        return $mail === null ? null : TestSendMark::apply($mail, $locale);
+    }
+
+    private static function plainCheck(string $locale): OperationalMail
+    {
+        $ar = $locale === 'ar';
+
+        return new OperationalMail(
+            kind: 'message', severity: 'info',
+            title: $ar ? 'فحص إرسال البريد' : 'Mail sending check',
+            detail: $ar ? 'طلب مشرف المنصة فحص إرسال البريد.' : 'A platform admin asked to check outgoing mail.',
+            context: $ar ? 'كامبينز هب' : 'CampaignsHub',
+            lang: $locale,
+            // «You follow this project» would be false here, and this message is about the mail itself.
+            why: $ar ? 'لا تحتاج إلى أي إجراء.' : 'No action needed.',
+        );
+    }
+
     /** @return array<string, Mailable> */
+    /**
+     * SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — the shape `ProjectSpendSummary::build()` returns, every state on purpose: over the
+     * limit, close to it, within it, unconverted (never a 0), and no limit set. The outside recipient's sees its two projects only.
+     *
+     * @return array<string,mixed>
+     */
+    private static function spendSummary(bool $external = false): array
+    {
+        $row = static fn (string $name, string $state, ?float $spend, ?float $cap, ?float $consumed, ?float $used, ?int $days, bool $withheld = false): array => [
+            'id' => md5($name), 'name' => $name, 'spend' => $spend, 'spend_currency' => 'SAR', 'spend_withheld' => $withheld,
+            'cap' => $cap, 'cap_currency' => $cap === null ? null : 'SAR', 'consumed' => $consumed,
+            'remaining' => $cap !== null && $consumed !== null ? $cap - $consumed : null, 'used' => $used,
+            'limit_from' => '2026-11-01', 'limit_to' => '2026-11-30', 'days_left' => $days, 'state' => $state,
+        ];
+        $projects = [
+            $row('Diwan Coffee', 'over', 4200.0, 15000.0, 15600.0, 1.04, null),
+            $row('Al-Ettifaq Club', 'near', 6100.0, 20000.0, 17400.0, 0.87, 2),
+            $row('Karam Alnakhil', 'ok', 2100.0, 12000.0, 5200.0, 0.433, 22),
+            $row('Al-Reef Restaurants', 'unconverted', null, 8000.0, null, null, null, true),
+            $row('Rose Store', 'none', 950.0, null, null, null, null),
+        ];
+        if ($external) {
+            $projects = array_slice($projects, 1, 2);
+        }
+
+        return ['from' => '2026-11-08', 'to' => '2026-11-14', 'days' => 7, 'projects' => $projects, 'total' => $external
+            ? ['spend' => 8200.0, 'spend_currency' => 'SAR', 'spend_left_out' => 0, 'cap' => 32000.0, 'remaining' => 9400.0, 'cap_currency' => 'SAR', 'cap_left_out' => 0, 'used' => 0.71, 'near' => 1, 'projects' => 2]
+            : ['spend' => null, 'spend_currency' => 'SAR', 'spend_left_out' => 1, 'cap' => 47000.0, 'remaining' => 8800.0, 'cap_currency' => 'SAR', 'cap_left_out' => 1, 'used' => 0.81, 'near' => 2, 'projects' => 5]];
+    }
+
+    /**
+     * EMAIL-CLIENT-COMPAT-001 — every message the compatibility checks render: the gallery, the seven external templates and the
+     * external subscription confirmation. Fixtures only, like the rest of this class.
+     *
+     * @return array<string, Mailable>
+     */
+    public static function compatMessages(string $locale): array
+    {
+        $out = self::messages($locale);
+        foreach (['finance', 'project_manager', 'admin_owner', 'client', 'achievement', 'continuity_planning', 'month_end'] as $tpl) {
+            $mail = self::externalDemo($tpl, $locale);
+            if ($mail !== null) {
+                $out['external-'.str_replace('_', '-', $tpl)] = $mail;
+            }
+        }
+        $out['external-confirmation'] = new EngineMail(
+            ConsentMessage::compose('Nour Agency', ['Al-Waha Store'], 'https://campaignshub.io/n/c/sample', $locale),
+            'REF-SAMPLE', $locale,
+        );
+
+        return $out;
+    }
+
+    /**
+     * NOTIF-V2 — the seven external templates, from the SAME approved templates in their external mode, on fixture data (previews only:
+     * the real message is composed from the project's own figures by `ExternalMessageComposer`). Null when nothing goes by that name.
+     */
+    public static function externalDemo(string $template, string $locale): ?Mailable
+    {
+        $ar = $locale === 'ar';
+        $scope = ($ar ? 'Nour Agency · مشروع: ' : 'Nour Agency · Project: ');
+        $privacy = static fn (string $role, string $project): string => $ar ? "مخصصة لك بصفتك {$role} — بيانات {$project} فقط" : "For you as {$role} — {$project} data only";
+        $disclaimer = $ar ? 'المرجع المالي: فواتير المنصات والمحاسبة المالية.' : 'Financial reference: platform invoices and accounting records.';
+        $name = $ar ? 'سارة' : 'Sarah';
+        $project = static function (array $row, string $kind, int $days, string $role) use ($locale, $ar, $name, $scope, $privacy, $disclaimer): OperationalDigestMail {
+            $model = ExternalMode::digestModel(OperationalDigestModel::project($row, $locale, $days, $kind), $ar);
+
+            return (new OperationalDigestMail($model, $locale, $name, $kind, 'project', null, external: true, scopeNote: $scope.$model['name'], privacyLine: $privacy($role, (string) $model['name']), disclaimer: $disclaimer))
+                ->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE);
+        };
+        $spend = static fn (bool $near) => (new SpendSummaryMail(self::spendSummary(external: true), $locale, 'weekly', external: true, recipientName: $name,
+            scopeNote: $scope.'Al-Ettifaq Club', privacyLine: $privacy($ar ? 'المالية' : 'Finance', 'Al-Ettifaq Club'), disclaimer: $disclaimer))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE);
+        $ops = self::operationalDigest()['projects'];
+
+        return match ($template) {
+            'finance', 'continuity_planning' => $spend($template === 'continuity_planning'),
+            'project_manager' => $project($ops[0], 'weekly', 7, $ar ? 'مدير المشاريع' : 'Project manager'),
+            'admin_owner' => $project($ops[1], 'weekly', 7, $ar ? 'الإدارة' : 'Management'),
+            'client' => $project($ops[0], 'weekly', 7, $ar ? 'العميل' : 'Client'),
+            'achievement' => $project($ops[1], 'daily', 1, $ar ? 'الإدارة' : 'Management'),
+            'month_end' => $project(DigestDemo::payload(2, 4, monthly: true)['projects'][1], 'monthly', 31, $ar ? 'الإدارة' : 'Management'),
+            default => null,
+        };
+    }
+
     public static function messages(string $locale): array
     {
         $ar = $locale === 'ar';
@@ -60,6 +183,9 @@ final class MailGallery
         return self::accountMessages($locale) + [
             'digest-daily' => new DailyDigestMail(self::digest(), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
             'digest-weekly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly'),
+            'digest-monthly' => new DailyDigestMail(self::digest(weekly: true), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly'),
+            // EMAIL-IDENTITY-001 — a white-label digest: the agency is named, the platform still says who sent it.
+            'digest-agency-branded' => new DailyDigestMail(self::digest(), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', $ar ? 'وكالة المدى' : 'Almada Agency'),
             // MEMBER-VISIBILITY-001 — the agency member whose membership withholds the money: no spend, cost or spend chart, the agency's own intro and button.
             'digest-restricted-daily' => new DailyDigestMail(self::digest(), $locale, $ar ? 'ليان' : 'Layan', 'daily', null, 'restricted'),
             // EMAIL-DECISION-REPORT-001 — the CLIENT weekly: no spend anywhere, outcomes first, the portal behind the button.
@@ -69,6 +195,21 @@ final class MailGallery
                 'projects' => array_slice(self::digest()['projects'], 0, 1),
                 'totals' => array_replace(self::digest()['totals'], ['projects' => 1]),
             ]), $locale, $ar ? 'محمد' : 'Mohammed', 'daily'),
+
+            // EMAIL-DIGESTS-OPERATIONAL-001 — the operational digests: one project with a block per platform, and the portfolio of all of them.
+            'digest-project' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][0], $locale, 7), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'project'),
+            'digest-project-leads' => new OperationalDigestMail(OperationalDigestModel::project(self::operationalDigest()['projects'][1], $locale, 1), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'project', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', $ar)),
+            'digest-portfolio' => new OperationalDigestMail(OperationalDigestModel::portfolio(self::operationalDigest(), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio'),
+            // DIGESTS-CADENCE-BUDGETS-001 — the three rhythms of each: a project's monthly report, and «ملخص المشاريع» daily and monthly over thirty projects.
+            'digest-project-monthly' => new OperationalDigestMail(OperationalDigestModel::project(DigestDemo::payload(2, 4, monthly: true)['projects'][1], $locale, 31, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'project', DigestSchedule::periodLabel('monthly', '2026-10-01', '2026-10-31', $ar)),
+            'digest-projects-daily' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6), $locale, 'daily'), $locale, $ar ? 'محمد' : 'Mohammed', 'daily', 'portfolio', DigestSchedule::periodLabel('daily', '2026-11-11', '2026-11-11', $ar)),
+            'digest-projects-weekly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, weekly: true), $locale, 'weekly'), $locale, $ar ? 'محمد' : 'Mohammed', 'weekly', 'portfolio', DigestSchedule::periodLabel('weekly', '2026-11-05', '2026-11-11', $ar)),
+            'digest-projects-monthly' => new OperationalDigestMail(OperationalDigestModel::portfolio(DigestDemo::payload(30, 6, monthly: true), $locale, 'monthly'), $locale, $ar ? 'محمد' : 'Mohammed', 'monthly', 'portfolio', DigestSchedule::periodLabel('monthly', '2026-10-01', '2026-10-31', $ar)),
+            // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق» for the workspace, and the self-contained follow-up for a recipient outside the platform.
+            'spend-summary-weekly' => new SpendSummaryMail(self::spendSummary(), $locale, 'weekly'),
+            'spend-summary-external' => new SpendSummaryMail(self::spendSummary(external: true), $locale, 'weekly', external: true, recipientName: $ar ? 'سارة' : 'Sarah'),
+            // Every alert family, one card each, built by the real `AlertMailItem::build()` from an alert outbox item.
+            ...self::alertTypes($locale),
 
             /*
              * The alerts as they are actually sent — MAIL-013.
@@ -82,33 +223,42 @@ final class MailGallery
                 items: [
                     [
                         'severity' => 'critical',
-                        'context' => $ar ? 'متجر تجريبي' : 'Demo store',
-                        'title' => $ar ? 'حملة «الصيف» تستهلك الميزانية أسرع من الخطة' : '“Summer” is spending ahead of plan',
-                        'detail' => $ar
-                            ? 'صُرف 8,000.00 SAR من أصل 10,000.00 SAR، أي 167% من الإنفاق المتوقع حتى الآن.'
-                            : '8,000.00 SAR of a 10,000.00 SAR budget is spent — 167% of what was expected by now.',
+                        'context' => $ar ? 'متجر تجريبي · ميتا · المبيعات' : 'Demo store · Meta · Sales',
+                        'title' => $ar ? 'ميزانية ميتا قاربت النفاد' : 'The Meta budget is nearly used up',
+                        'detail' => $ar ? 'استهلكت الحملة نسبة كبيرة من ميزانيتها قبل منتصف الفترة.' : 'The campaign has used a large share of its budget before the middle of the period.',
+                        'numbers' => $ar ? 'الإنفاق 8,000.00 / 10,000.00 (80%)' : 'Spent 8,000.00 / 10,000.00 (80%)',
+                        'rule' => 'budget_risk',
+                        'ctx' => ['spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'basis_class' => 'measured'],
                         // The figures as the pace rule writes them, read by the same reader the real mail uses.
-                        'figures' => AlertFigures::from(['basis_class' => 'measured', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'budget_currency' => 'SAR'], $ar),
+                        'figures' => AlertFigures::from(['basis_class' => 'measured', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'budget_currency' => 'USD'], $ar),
                         'action' => AlertEventMailer::action('budget_risk', $ar),
-                        'url' => Frontend::origin().'/app/alerts?event=demo-1',
+                        'url' => Frontend::origin().'/app/campaigns/demo-project/demo-campaign',
+                        'button' => $ar ? 'افتح الحملة داخل النظام' : 'Open the campaign',
+                        'secondary' => ($ar ? 'الحملة: ' : 'Campaign: ').'Summer sale — retargeting 2026',
                     ],
                     [
                         'severity' => 'warning',
-                        'context' => $ar ? 'متجر تجريبي' : 'Demo store',
-                        'title' => $ar ? 'تراجع معدل النقر' : 'Click-through rate is falling',
-                        'detail' => $ar
-                            ? 'تراجع معدل النقر 30% ليصل إلى 1.20%، وقد يشير ذلك إلى بداية ضعف في أداء المحتوى.'
-                            : 'Click-through rate fell 30% to 1.20%, which can be the first sign of creative wearing out.',
+                        'context' => $ar ? 'متجر تجريبي · سناب شات · المبيعات' : 'Demo store · Snapchat · Sales',
+                        'title' => $ar ? 'تكلفة النتيجة ارتفعت على سناب شات' : 'Cost per result rose on Snapchat',
+                        'detail' => $ar ? 'الحملة تدفع أكثر مقابل كل نتيجة مقارنة بالفترة السابقة.' : 'The campaign pays more for each result than in the previous period.',
+                        'numbers' => $ar ? 'قبل 61.00 ← الآن 88.72 (آخر 7 أيام) · حد التنبيه 25%' : 'Before 61.00 → Now 88.72 (last 7 days) · alert at 25%',
+                        'action' => $ar ? 'راجع الجمهور ← ثم المحتوى ← ابدأ بالأقل أداءً.' : 'Review content and audience, starting with the weakest.',
+                        'rule' => 'cpa_increase',
+                        'ctx' => ['cpa_previous' => 61.0, 'cpa_current' => 88.72, 'threshold_pct' => 25],
+                        'url' => Frontend::origin().'/app/campaigns/demo-project/demo-campaign-2',
+                        'button' => $ar ? 'افتح الحملة داخل النظام' : 'Open the campaign',
+                        'secondary' => ($ar ? 'الحملة: ' : 'Campaign: ').'Bundle carousel',
                     ],
                     [
                         'severity' => 'critical',
-                        'context' => $ar ? 'عميل تجريبي' : 'Demo client',
-                        'title' => $ar ? 'تعذّرت آخر مزامنة لبيانات سناب شات' : 'The Snapchat sync could not complete',
-                        'detail' => $ar
-                            ? 'لم تتحدث بيانات سناب شات منذ ست ساعات، لذلك قد تكون بعض المؤشرات غير مكتملة.'
-                            : 'Snapchat data has not updated for six hours, so some figures may be incomplete.',
+                        'context' => $ar ? 'عيادات النخبة' : 'Elite Clinics',
+                        'title' => $ar ? 'توقفت مزامنة بيانات تيك توك' : 'TikTok data sync has stopped',
+                        'detail' => $ar ? 'آخر محاولة فشلت، فأرقام التقارير قد تكون ناقصة.' : 'The last attempt failed, so report figures may be incomplete.',
+                        'numbers' => $ar ? 'آخر أرقام بتاريخ '.AlertEventText::ltr('2026-08-04') : 'Last figures dated 2026-08-04',
+                        'rule' => 'sync_failure',
                         'action' => AlertEventMailer::action('sync_failed', $ar),
-                        'url' => Frontend::origin().'/app/alerts?event=demo-3',
+                        'url' => Frontend::origin().'/app/projects/demo-project/integrations',
+                        'button' => $ar ? 'افتح صفحة الربط' : 'Open the connections page',
                     ],
                 ],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
@@ -119,21 +269,47 @@ final class MailGallery
             'alerts-one' => new AlertBundleMail(
                 items: [[
                     'severity' => 'warning',
-                    'context' => $ar ? 'متجر تجريبي' : 'Demo store',
-                    'title' => $ar ? 'ارتفاع معدل التكرار' : 'Frequency is climbing',
-                    'detail' => $ar
-                        ? 'يشاهد الشخص الواحد الإعلان 6 مرات في المتوسط، ونوصي بتوسيع الجمهور أو تحديث المحتوى.'
-                        : 'The average person has seen the ad 6 times — worth widening the audience or refreshing the creative.',
+                    'context' => $ar ? 'متجر تجريبي · ميتا · المبيعات' : 'Demo store · Meta · Sales',
+                    'title' => $ar ? 'معدل العائد تراجع على ميتا' : 'Return on ad spend fell on Meta',
+                    'detail' => $ar ? 'كل ريال إعلان يعيد قيمة أقل من الفترة السابقة.' : 'Each unit of ad spend returns less than in the previous period.',
+                    'numbers' => $ar ? 'قبل 4.56× ← الآن 3.10× (آخر 7 أيام) · حد التنبيه 25%' : 'Before 4.56× → Now 3.10× (last 7 days) · alert at 25%',
+                    'action' => $ar ? 'افتح الأقل أداءً ← جدّده أو أوقفه.' : 'Review the weakest ads and decide to pause or refresh them.',
+                    'rule' => 'roas_drop',
+                    'ctx' => ['roas_previous' => 4.56, 'roas_current' => 3.10, 'threshold_pct' => 25],
+                    'url' => Frontend::origin().'/app/campaigns/demo-project/demo-campaign',
+                    'button' => $ar ? 'افتح الحملة داخل النظام' : 'Open the campaign',
+                    'secondary' => ($ar ? 'الحملة: ' : 'Campaign: ').'White Friday — prospecting',
                 ]],
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+            ),
+
+            // NOTIF-V2-ENGINE-001 — the shared engine's own message (internal catalog words, and the consent request).
+            'notifications-v2-notice' => new EngineMail(new ComposedMessage(
+                subject: $ar ? 'متجر تجريبي — وكالة المدى | انتهى ربط منصة' : 'Demo store — Almada Agency | A platform link expired',
+                title: $ar ? 'انتهى ربط منصة' : 'A platform link expired',
+                body: $ar ? 'ربط منصة في متجر تجريبي انتهى ويحتاج إعادة ربط.' : 'A platform link in Demo store expired and needs relinking.',
+                html: $ar ? '<p><strong>انتهى ربط منصة</strong></p><p>ربط منصة في متجر تجريبي انتهى ويحتاج إعادة ربط.</p><p>الرقم المرجعي: N-261115-ABCDEFGH</p>'
+                    : '<p><strong>A platform link expired</strong></p><p>A platform link in Demo store expired and needs relinking.</p><p>Reference: N-261115-ABCDEFGH</p>',
+                text: $ar ? 'انتهى ربط منصة' : 'A platform link expired',
+            ), 'N-261115-ABCDEFGH', $locale),
+
+            // DELIVERY-REMINDERS-001 — a reviewer's nudge, sent by `MemberNotices`.
+            'delivery-reminder' => new OperationalMail(
+                kind: 'delivery_review_due', severity: 'warning',
+                title: $ar ? 'تقرير بانتظار مراجعتك' : 'A report is waiting for your review',
+                detail: $ar ? 'مسودة تقرير متجر تجريبي للفترة 2026-07 جاهزة للمراجعة والاعتماد.' : 'The draft report for Demo store (2026-07) is ready for your review and approval.',
+                context: $ar ? 'متجر تجريبي' : 'Demo store',
+                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+                path: '/agency/clients', action: $ar ? 'فتح التسليم الدوري' : 'Open the periodic delivery',
+                why: $ar ? 'وصلتك لأنك مراجع هذا التسليم.' : 'Sent because you review this delivery.',
             ),
 
             'report-ready' => new OperationalMail(
                 kind: 'report_ready', severity: 'positive',
                 title: $ar ? 'تقرير يوليو جاهز' : 'The July report is ready',
                 detail: $ar
-                    ? 'اكتمل إعداد تقرير الأداء الشهري ويمكنك فتحه أو مشاركته مع العميل.'
-                    : 'The monthly performance report has finished generating and is ready to open or share.',
+                    ? 'تقرير الأداء الشهري جاهز للفتح أو المشاركة.'
+                    : 'The monthly performance report is ready to open or share.',
                 context: $ar ? 'متجر تجريبي' : 'Demo store',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/reports', action: $ar ? 'فتح التقرير' : 'Open the report',
@@ -143,8 +319,8 @@ final class MailGallery
                 kind: 'billing', severity: 'info',
                 title: $ar ? 'فاتورة اشتراكك الجديدة' : 'Your new subscription invoice',
                 detail: $ar
-                    ? 'صدرت فاتورة اشتراك شهر أغسطس، ويمكنك مراجعتها أو تنزيلها من صفحة الفواتير.'
-                    : 'The August subscription invoice has been issued and can be reviewed or downloaded from your billing page.',
+                    ? 'صدرت فاتورة اشتراك شهر أغسطس.'
+                    : 'The August subscription invoice was issued.',
                 context: $ar ? 'الاشتراك' : 'Subscription',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/billing', action: $ar ? 'عرض الفاتورة' : 'View the invoice',
@@ -154,8 +330,8 @@ final class MailGallery
                 kind: 'approval', severity: 'info',
                 title: $ar ? 'طلب ينتظر موافقتك' : 'A request is waiting for your approval',
                 detail: $ar
-                    ? 'أُرسل طلب إعلاني جديد إلى فريقك وينتظر مراجعتك قبل بدء التنفيذ.'
-                    : 'A new advertising request has reached your team and needs your review before work starts.',
+                    ? 'طلب إعلاني جديد ينتظر مراجعتك قبل التنفيذ.'
+                    : 'A new advertising request needs your review before work starts.',
                 context: $ar ? 'الطلبات' : 'Requests',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/requests', action: $ar ? 'مراجعة الطلب' : 'Review the request',
@@ -165,34 +341,96 @@ final class MailGallery
                 kind: 'message', severity: 'info',
                 title: $ar ? 'رسالة جديدة من العميل' : 'A new message from your client',
                 detail: $ar
-                    ? 'وصلت رسالة جديدة في محادثة المشروع وتنتظر ردك.'
-                    : 'There is a new message in the project conversation waiting for a reply.',
+                    ? 'رسالة جديدة في محادثة المشروع تنتظر ردك.'
+                    : 'A new project message is waiting for your reply.',
                 context: $ar ? 'متجر تجريبي' : 'Demo store',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/conversations', action: $ar ? 'فتح المحادثة' : 'Open the conversation',
             ),
+
+            // EMAIL-GAPS — a scheduled report as a decision report: results and content names, no spend, no campaign.
+            'report-scheduled' => (new ScheduledReportMail(
+                reportTitle: $ar ? 'تقرير الأداء الأسبوعي' : 'Weekly performance report',
+                context: $ar ? 'متجر تجريبي' : 'Demo store',
+                period: '2026-10-25 → 2026-10-31',
+                cards: [
+                    ['label' => $ar ? 'النتائج' : 'Results', 'value' => '263', 'unit' => null, 'up' => '+12%'],
+                    ['label' => $ar ? 'الإيرادات' : 'Revenue', 'value' => '96,500', 'unit' => 'SAR', 'up' => '+5%'],
+                    ['label' => $ar ? 'الوصول' : 'Reach', 'value' => '240,000', 'unit' => null, 'up' => null],
+                    ['label' => $ar ? 'النقرات' : 'Clicks', 'value' => '15,619', 'unit' => null, 'up' => '+8.5%'],
+                ],
+                bestContent: $ar ? 'كاروسيل الباقة' : 'Bundle Carousel',
+                improveContent: $ar ? 'عرض ثابت' : 'Static Offer',
+                url: MailLinks::to('/app/reports'),
+                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+            ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
+
+            // EMAIL-GAPS — the same message when no platform reported anything: no empty cells, only the way to the report.
+            'report-scheduled-sparse' => new ScheduledReportMail(
+                reportTitle: $ar ? 'تقرير الأداء الأسبوعي' : 'Weekly performance report',
+                context: $ar ? 'متجر تجريبي' : 'Demo store',
+                period: '2026-10-25 → 2026-10-31',
+                cards: [], bestContent: null, improveContent: null,
+                url: MailLinks::to('/app/reports'),
+                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+            ),
+
+            // EMAIL-GAPS — a client request, to the team who can reach it.
+            'request-to-team' => (new OperationalMail(
+                kind: 'client_request', severity: 'info',
+                title: $ar ? 'طلب جديد من عميل' : 'A new request from a client',
+                detail: $ar
+                    ? 'وصل الطلب REQ-2026-0142 من بوابة العملاء، وينتظر مراجعة فريقك.'
+                    : 'Request REQ-2026-0142 arrived from the client portal and is waiting for your team.',
+                context: $ar ? 'متجر تجريبي' : 'Demo store',
+                lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
+                path: '/agency/requests/01J9Z0PY8QF3T4V6', action: $ar ? 'مراجعة الطلب' : 'Review the request',
+                why: $ar ? 'وصلتك لأن هذا الطلب ضمن نطاق عملك.' : 'Sent because this request is within your access.',
+            ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
+
+            // EMAIL-GAPS — a client request, back to the person who filed it.
+            'request-to-client' => (new OperationalMail(
+                kind: 'client_request', severity: 'warning',
+                title: $ar ? 'طلبك يحتاج معلومات منك' : 'Your request needs information from you',
+                detail: $ar ? 'يحتاج الفريق معلومات إضافية لإكمال طلبك.' : 'The team needs more information to complete your request.',
+                context: 'REQ-2026-0142',
+                lang: $locale, recipientName: $ar ? 'سارة' : 'Sarah',
+                path: '/client/requests/REQ-2026-0142', action: $ar ? 'فتح الطلب' : 'Open the request',
+                why: $ar ? 'وصلتك لأنك صاحب هذا الطلب.' : 'Sent because you filed this request.',
+            ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
+
+            // PLATFORM-INBOX-ATTENTION-001 — an administrator's reply to somebody who wrote from the website.
+            'platform-reply' => (new PlatformReplyMail(
+                about: $ar ? 'استفسار عن الباقات' : 'A question about the plans',
+                body: $ar
+                    ? "شكرًا على تواصلك.\nباقة الفريق تناسب ثلاثة حسابات إعلانية أو أكثر.\n\nإذا رغبت نرتب لك عرضًا قصيرًا هذا الأسبوع."
+                    : "Thank you for writing.\nThe Team plan suits three or more ad accounts.\n\nIf you like, we can arrange a short demo this week.",
+                lang: $locale, recipientName: $ar ? 'سارة' : 'Sarah', reference: 'CH-7Q2M4K',
+            ))->offerUnsubscribe(self::SAMPLE_UNSUBSCRIBE),
 
             // EMAIL-TRANSACTIONAL-SET-001 — the two messages a member is owed about their own access.
             'member-welcome' => new OperationalMail(
                 kind: 'member_welcome', severity: 'positive',
                 title: $ar ? 'أهلًا بك في وكالة العرض' : 'Welcome to Demo Agency',
                 detail: $ar
-                    ? 'انضممت إلى مساحة العمل بدور «محلل». يمكنك الآن متابعة الحملات والتقارير من لوحة التحكم.'
-                    : 'You have joined the workspace as «Analyst». You can now follow campaigns and reports from the dashboard.',
+                    ? 'انضممت بدور «محلل». تابع الحملات والتقارير من الرئيسية.'
+                    : 'You joined as «Analyst». Follow campaigns and reports from the dashboard.',
                 context: $ar ? 'وكالة العرض' : 'Demo Agency',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
-                path: '/app/dashboard', action: $ar ? 'فتح لوحة التحكم' : 'Open the dashboard',
+                path: '/app/dashboard', action: $ar ? 'فتح الرئيسية' : 'Open the dashboard',
+                why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
 
             'role-changed' => new OperationalMail(
                 kind: 'role_changed', severity: 'warning',
                 title: $ar ? 'تغيّر دورك في مساحة العمل' : 'Your role in the workspace changed',
                 detail: $ar
-                    ? 'تغيّر دورك في وكالة العرض بواسطة سارة: من «محلل» إلى «مدير». إن لم تكن تتوقع هذا التغيير فتواصل مع مسؤول الفريق.'
-                    : 'Your role in Demo Agency was changed by Sara: from «Analyst» to «Manager». If you did not expect this, contact a workspace administrator.',
+                    ? 'تغيّر دورك في وكالة العرض بواسطة سارة: من «محلل» إلى «مدير». إن لم تتوقعه، تواصل مع مسؤول الفريق.'
+                    : 'Your role in Demo Agency was changed by Sara: from «Analyst» to «Manager». Not expected? Please contact a workspace administrator.',
                 context: $ar ? 'وكالة العرض' : 'Demo Agency',
                 lang: $locale, recipientName: $ar ? 'محمد' : 'Mohammed',
                 path: '/app/dashboard', action: $ar ? 'فتح كامبينز هب' : 'Open CampaignsHub',
+                why: $ar ? 'وصلتك لأنك عضو في مساحة العمل هذه.' : 'Sent because you are a member of this workspace.',
             ),
         ];
     }
@@ -244,12 +482,28 @@ final class MailGallery
                 workspace: $ar ? 'وكالة المدى' : 'Almada Agency',
             ),
 
+            'account-oauth-link' => new CredentialMail(
+                purpose: CredentialMail::OAUTH_LINK, lang: $locale,
+                url: "{$app}/login?oauth=link&confirm={$token}",
+                expiresInMinutes: 10,
+                provider: 'Google',
+            ),
+
             'account-invitation' => new InvitationMail(
                 workspace: $ar ? 'وكالة المدى' : 'Almada Agency',
                 roleSlug: 'manager',
                 acceptUrl: "{$app}/invite/accept?token={$token}",
                 lang: $locale,
                 invitedBy: $ar ? 'محمد الحربي' : 'Mohammed Alharbi',
+            ),
+
+            // `admin/tenants/{tenant}/owner-invitation` — the platform operator inviting a workspace's first owner.
+            // Sent with the slug the provisioner really passes, so the preview shows what the owner receives.
+            'account-owner-invitation' => new InvitationMail(
+                workspace: $ar ? 'وكالة المدى' : 'Almada Agency',
+                roleSlug: 'tenant-owner',
+                acceptUrl: "{$app}/invite/accept?token={$token}",
+                lang: $locale,
             ),
 
             /*
@@ -281,6 +535,11 @@ final class MailGallery
              * A facts table where three of four rows are absent is the case that reveals whether
              * omission was implemented or whether the rows quietly became «غير معروف».
              */
+            'account-password-changed' => new SecurityAlertMail(
+                event: SecurityAlertMail::PASSWORD_CHANGED, lang: $locale,
+                recipientName: $ar ? 'محمد' : 'Mohammed', at: '2026-08-07 09:14',
+            ),
+
             'account-security-sparse' => new SecurityAlertMail(
                 event: SecurityAlertMail::PASSWORD_CHANGED, lang: $locale,
                 recipientName: $ar ? 'محمد' : 'Mohammed',
@@ -397,7 +656,7 @@ final class MailGallery
                     [
                         'id' => 'b', 'kind' => 'rising_cost', 'severity' => 'warning', 'reveals' => ['spend'],
                         'title' => 'ارتفاع تكلفة النتيجة',
-                        'detail' => 'ارتفعت تكلفة النتيجة 27% لتصل إلى 88.72 SAR، وقد يعود ذلك إلى منافسة أعلى أو ضعف في أداء المحتوى.',
+                        'detail' => 'ارتفعت تكلفة النتيجة 27% إلى 88.72 SAR.',
                         'scope' => ['type' => 'period', 'name' => null],
                     ],
                 ],
@@ -445,6 +704,8 @@ final class MailGallery
                     ],
                 ],
                 'follow_up' => ['received' => 138, 'contacted' => 96, 'overdue' => 11, 'converted' => 24],
+                // GA4-DIGEST-001 — the one GA4 line: counts and USD, never spend and never a campaign name.
+                'ga4' => ['sessions' => 12480.0, 'purchases' => 214.0, 'revenue_usd' => 31800.0, 'claimed' => 262.0, 'gap' => 48.0],
                 'freshness' => ['state' => 'fresh', 'last_sync_at' => '2026-08-07T05:00:00Z', 'missing_days' => 0, 'sync_failed' => false, 'failing' => []],
             ], [
                 /*
@@ -489,5 +750,136 @@ final class MailGallery
                 'freshness' => ['state' => 'fresh', 'last_sync_at' => '2026-08-07T05:00:00Z', 'missing_days' => 0, 'sync_failed' => false, 'failing' => []],
             ]],
         ];
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — one mail per alert family, as the alert engine would compose it, for review and PNG proof.
+     *
+     * @return array<string, Mailable>
+     */
+    public static function alertTypes(string $locale): array
+    {
+        $ar = $locale === 'ar';
+        $item = static fn (string $type, string $severity, array $ctx): array => [
+            'rule_type' => $type, 'severity' => $severity, 'context' => $ctx, 'project_id' => '00000000-0000-4000-8000-000000000001',
+            'project_name' => $ar ? 'متجر الندى' : 'Al Nada Store', 'event_id' => 'demo-'.$type, 'triggered_at' => '2026-11-09T05:40:00Z',
+        ];
+        $types = [
+            'alert-budget' => $item('budget_risk', 'critical', ['provider' => 'meta', 'spend' => 8000.0, 'budget' => 10000.0, 'ratio' => 1.67, 'basis_class' => 'measured', 'budget_currency' => 'SAR']),
+            'alert-roas' => $item('roas_drop', 'warning', ['provider' => 'snapchat', 'roas_previous' => 4.56, 'roas_current' => 3.10, 'threshold_pct' => 25]),
+            'alert-cpl' => $item('cpl_increase', 'warning', ['provider' => 'tiktok', 'cpl_previous' => 64.13, 'cpl_current' => 98.4, 'threshold_pct' => 25]),
+            'alert-sync' => $item('sync_failure', 'critical', ['provider' => 'tiktok', 'last_sync_at' => '2026-11-07T03:50:00Z']),
+            'alert-tracking' => $item('ga4_tracking_loss', 'critical', ['drop' => 0.62, 'previous' => 4200, 'sessions' => 1596]),
+            'alert-leads' => $item('lead_no_contact', 'warning', ['count' => 7, 'minutes' => 240]),
+            'alert-launch' => $item('launch_advance', 'positive', ['from' => 'Launch 1', 'to' => 'Launch 2']),
+            'alert-report-failed' => $item('report_failed', 'critical', []),
+            'alert-security' => $item('security', 'critical', []),
+            'alert-sample' => $item('sample_alert', 'info', []),
+        ];
+
+        return array_map(static fn (array $i): Mailable => new AlertBundleMail([AlertMailItem::build($i, $ar)], $locale, $ar ? 'محمد' : 'Mohammed'), $types);
+    }
+
+    /**
+     * EMAIL-DIGESTS-OPERATIONAL-001 — the operational digests' fixtures: the portfolio above, with every platform's own rows.
+     *
+     * A hand-built payload shaped exactly like `DailyDigest::buildRange()` (the keys it adds are the live report's `byProvider()`
+     * rows), so a preview renders on an empty machine. Three unalike projects — a store on four platforms, a lead-generation
+     * client on two, a brand launch on two (X among them: a platform is a row, not code) — and the awkward cases on purpose:
+     * a platform that sent no reach, a budget off plan, a source that stopped syncing.
+     *
+     * @return array<string,mixed>
+     */
+    public static function operationalDigest(bool $weekly = true): array
+    {
+        $d = self::digest($weekly);
+        $days = ['2026-07-31', '2026-08-01', '2026-08-02', '2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06'];
+        $spark = static fn (array $vals): array => array_map(static fn (string $date, ?float $v): array => ['date' => $date, 'spend' => $v], $days, $vals);
+        $row = static fn (string $provider, array $f): array => ['provider' => $provider, 'spend_withheld_rows' => 0, 'revenue_withheld_rows' => 0] + $f;
+
+        $d['projects'][0]['totals'] += ['purchases' => 263, 'roas' => 4.14];
+        $d['projects'][0]['previous'] += ['purchases' => 300, 'roas' => 4.38];
+        $d['projects'][0]['change'] += ['purchases' => -0.12, 'roas' => -0.055];
+        $d['projects'][0] += [
+            'currency' => 'USD',
+            'series' => $spark([2900.0, 3500.0, 3100.0, 3800.0, 3000.0, 3700.0, 3333.18]),
+            'platform_rows' => [
+                $row('meta', ['spend' => 10100.0, 'purchases' => 118, 'revenue' => 44200.0, 'roas' => 4.38, 'impressions' => 300000, 'clicks' => 7000, 'ctr' => 0.0233]),
+                $row('snapchat', ['spend' => 6200.0, 'purchases' => 82, 'revenue' => 31500.0, 'roas' => 5.08, 'impressions' => 220000, 'clicks' => 5100, 'ctr' => 0.0232]),
+                $row('google', ['spend' => 4733.18, 'purchases' => 41, 'revenue' => 14100.0, 'roas' => 2.98, 'impressions' => 120000, 'clicks' => 2600, 'ctr' => 0.0217]),
+                $row('tiktok', ['spend' => 2300.0, 'purchases' => 22, 'revenue' => 6700.0, 'roas' => 2.91, 'impressions' => 55281, 'clicks' => 919, 'ctr' => 0.0166]),
+            ],
+            'platform_previous' => [
+                $row('meta', ['spend' => 9000.0, 'purchases' => 120, 'revenue' => 41000.0, 'roas' => 4.56]),
+                $row('snapchat', ['spend' => 5500.0, 'purchases' => 70, 'revenue' => 26000.0, 'roas' => 4.73]),
+                $row('google', ['spend' => 4500.0, 'purchases' => 50, 'revenue' => 17500.0, 'roas' => 3.89]),
+                $row('tiktok', ['spend' => 2000.0, 'purchases' => 60, 'revenue' => 7500.0, 'roas' => 3.75]),
+            ],
+            'platform_reported' => [],
+            'platform_series' => [
+                'meta' => $spark([1300.0, 1500.0, 1400.0, 1700.0, 1350.0, 1450.0, 1400.0]),
+                'snapchat' => $spark([800.0, 900.0, 850.0, 1000.0, 880.0, 920.0, 850.0]),
+                'google' => $spark([500.0, 800.0, 600.0, 700.0, 550.0, 900.0, 683.18]),
+                'tiktok' => $spark([300.0, 300.0, 250.0, 400.0, 220.0, 430.0, 400.0]),
+            ],
+            'budget_rows' => [
+                ['provider' => 'meta', 'pace' => 1.67, 'spent' => 8000.0, 'budget' => 10000.0],
+                ['provider' => 'snapchat', 'pace' => 1.0, 'spent' => 6200.0, 'budget' => 7000.0],
+            ],
+        ];
+        $d['projects'][0]['observations'] = [
+            ['id' => 'a', 'kind' => 'budget_pace', 'severity' => 'critical', 'metric' => 'pace', 'value' => '1.67×', 'change' => null, 'scope' => ['type' => 'platform', 'name' => 'ميتا'], 'title' => '', 'detail' => ''],
+            ['id' => 'b', 'kind' => 'rising_cost', 'severity' => 'warning', 'metric' => 'cpa', 'value' => '88.72 USD', 'change' => 0.27, 'scope' => ['type' => 'period', 'name' => null], 'title' => '', 'detail' => ''],
+        ];
+
+        $d['projects'][1] += [
+            'currency' => 'USD',
+            'series' => $spark([1700.0, 1800.0, 1750.0, 1900.0, 1650.0, 1850.0, 1850.0]),
+            'platform_rows' => [
+                $row('meta', ['spend' => 6100.0, 'leads' => 85, 'cpl' => 71.76, 'clicks' => 4400, 'impressions' => 200000]),
+                $row('tiktok', ['spend' => 2400.0, 'leads' => 10, 'cpl' => 240.0, 'clicks' => 1800, 'impressions' => 90000]),
+            ],
+            'platform_previous' => [
+                $row('meta', ['spend' => 5900.0, 'leads' => 92, 'cpl' => 64.13]),
+                $row('tiktok', ['spend' => 2200.0, 'leads' => 18, 'cpl' => 122.2]),
+            ],
+            'platform_reported' => [],
+            'platform_series' => ['meta' => $spark([850.0, 900.0, 870.0, 910.0, 840.0, 870.0, 860.0]), 'tiktok' => $spark([300.0, 350.0, 330.0, 360.0, 320.0, 380.0, 360.0])],
+            'budget_rows' => [['provider' => 'tiktok', 'pace' => 0.44, 'spent' => 2400.0, 'budget' => 9000.0]],
+        ];
+        $d['projects'][1]['totals'] += ['leads' => 95, 'cpl' => 131.58];
+        $d['projects'][1]['previous'] += ['leads' => 110, 'cpl' => 98.18];
+        $d['projects'][1]['change'] += ['leads' => -0.136, 'cpl' => 0.34];
+        $d['projects'][1]['observations'] = [
+            ['id' => 'c', 'kind' => 'rising_cost', 'severity' => 'warning', 'metric' => 'cpl', 'value' => '131.58 USD', 'change' => 0.34, 'scope' => ['type' => 'period', 'name' => null], 'title' => '', 'detail' => ''],
+            ['id' => 'e', 'kind' => 'stale_data', 'severity' => 'critical', 'metric' => null, 'value' => null, 'change' => null, 'scope' => ['type' => 'data', 'name' => null], 'title' => '', 'detail' => ''],
+        ];
+        $d['projects'][1]['freshness']['sync_failed'] = true;
+        $d['projects'][1]['freshness']['failing'] = [['name' => 'TikTok', 'provider' => 'tiktok']];
+
+        $d['projects'][2] += [
+            'currency' => 'USD',
+            'series' => $spark([800.0, 850.0, 900.0, 880.0, 870.0, 900.0, 800.0]),
+            'platform_rows' => [
+                $row('tiktok', ['spend' => 3400.0, 'impressions' => 1100000, 'reach' => 520000, 'cpm' => 3.09]),
+                // X sent no reach: the cell says so instead of printing 0.
+                $row('x', ['spend' => 900.0, 'impressions' => 880400, 'reach' => null, 'cpm' => 1.02]),
+            ],
+            'platform_previous' => [$row('tiktok', ['spend' => 2500.0, 'impressions' => 700000, 'reach' => 400000, 'cpm' => 3.57]), $row('x', ['spend' => 600.0, 'impressions' => 500000, 'reach' => null, 'cpm' => 1.2])],
+            'platform_reported' => ['x' => ['reach' => false]],
+            'platform_series' => ['tiktok' => $spark([480.0, 500.0, 520.0, 490.0, 470.0, 520.0, 420.0]), 'x' => $spark([120.0, 130.0, 140.0, null, 130.0, 140.0, 140.0])],
+            'budget_rows' => [],
+        ];
+        // DIGESTS-CADENCE-BUDGETS-001 — each project's month: ahead of plan, behind plan, and one with no budget recorded.
+        $month = ['from' => '2026-08-01', 'to' => '2026-08-31', 'through' => '2026-08-06', 'elapsed' => 0.1935, 'withheld' => false, 'currencies' => 1, 'excluded' => 0, 'unmeasured' => 0, 'campaigns' => 4];
+        $d['projects'][0]['budget_month'] = ['budget' => 120000.0, 'spent' => 29333.18, 'remaining' => 90666.82, 'projected' => 151590.0, 'pace' => 1.2633, 'currency' => 'USD'] + $month;
+        $d['projects'][1]['budget_month'] = ['budget' => 60000.0, 'spent' => 9500.0, 'remaining' => 50500.0, 'projected' => 49090.0, 'pace' => 0.8182, 'currency' => 'USD'] + $month;
+        $d['projects'][2]['budget_month'] = ['budget' => null, 'spent' => null, 'remaining' => null, 'projected' => null, 'pace' => null, 'currency' => null, 'currencies' => 0] + $month;
+
+        $d['projects'][2]['observations'] = [
+            ['id' => 'f', 'kind' => 'period_comparison', 'severity' => 'positive', 'metric' => 'cpm', 'value' => '3.03 USD', 'change' => -0.14, 'scope' => ['type' => 'period', 'name' => null], 'title' => '', 'detail' => ''],
+        ];
+
+        return $d;
     }
 }

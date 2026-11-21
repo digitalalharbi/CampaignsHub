@@ -1,4 +1,4 @@
-import { api, getEnvelope, postData } from '@/lib/api/client'
+import { api, deleteData, getData, getEnvelope, patchData, postData } from '@/lib/api/client'
 import type { ApiEnvelope } from '@/lib/api/types'
 
 /** An alert rule (config). Mirrors backend AlertRule. */
@@ -13,8 +13,18 @@ export interface AlertRule {
   create_task: boolean
   severity: 'info' | 'warning' | 'critical'
   active: boolean
+  /** ALERT-RULES-MANAGE-001 — null = everyone in scope who chose alert email. */
+  recipients?: AlertRuleRecipients | null
   created_at: string | null
 }
+
+/** Who a rule emails: the project's manager and/or named members of this workspace. */
+export interface AlertRuleRecipients {
+  project_manager: boolean
+  user_ids: number[]
+}
+
+export interface RecipientOption { id: number; name: string; email: string }
 
 /** A firing-ledger entry. Mirrors backend AlertEvent. */
 export interface AlertEvent {
@@ -33,6 +43,34 @@ export interface AlertEvent {
   snoozed_until: string | null
   resolved_at: string | null
   created_at: string | null
+  /** OPERATIONAL-INTELLIGENCE-P1-001 — the anatomy; present on every row the server sends (derived for older ones). */
+  priority?: AlertPriority | null
+  evidence?: AlertEvidence | null
+  anatomy?: AlertAnatomy | null
+  decision_status?: DecisionStatus | null
+  owner_id?: number | null
+}
+
+export type AlertPriority = 'P1' | 'P2' | 'P3'
+export type DecisionStatus = 'new' | 'in_progress' | 'done' | 'dismissed'
+export interface Bilingual { ar: string; en: string }
+export interface AlertEvidence {
+  metric: string | null
+  window_days: number | null
+  before: number | null
+  now: number | null
+  threshold: number | null
+  threshold_unit: string | null
+  completeness: 'complete' | 'unverified' | 'partial'
+  sufficient: boolean
+  missing: string[]
+}
+export interface AlertAnatomy {
+  problem: Bilingual
+  numbers: Bilingual
+  impact: Bilingual | null
+  action: Bilingual | null
+  insufficient_note: Bilingual | null
 }
 
 export const ALERT_TYPES = [
@@ -75,9 +113,24 @@ export interface NewAlertRule {
   create_task?: boolean
   severity?: 'info' | 'warning' | 'critical'
   active?: boolean
+  project_id?: string | null
+  recipients?: AlertRuleRecipients | null
 }
 
 export const createAlertRule = (body: NewAlertRule) => postData<AlertRule>('/alerts/rules', body)
+
+/**
+ * ALERT-RULES-MANAGE-001 — edit, pause and remove.
+ *
+ * The type is not editable (the server refuses it): it decides what the threshold means, so another type is a new
+ * rule. Pausing is `{ active: false }` on the same endpoint. Removing keeps the alerts the rule already raised.
+ */
+export type AlertRulePatch = Partial<Omit<NewAlertRule, 'type' | 'threshold'>> & { threshold?: Record<string, number> | null }
+export const updateAlertRule = (id: string, patch: AlertRulePatch) => patchData<AlertRule>(`/alerts/rules/${id}`, patch)
+export const deleteAlertRule = (id: string) => deleteData<null>(`/alerts/rules/${id}`)
+/** The members a rule on this project (or workspace-wide) may name. */
+export const listRuleRecipients = (projectId?: string | null) =>
+  getData<RecipientOption[]>(projectId ? `/alerts/rules/recipients?project=${encodeURIComponent(projectId)}` : '/alerts/rules/recipients')
 
 /** Counts over the WHOLE ledger, which is not the same set as the page. */
 export interface AlertEventCounts {
@@ -146,3 +199,91 @@ export const snoozeAlert = (id: string, minutes: number) => postData<AlertEvent>
 /** Create a follow-up task from an alert (uses the standard tasks endpoint). */
 export const createTaskFromAlert = (title: string, description: string | null, projectId: string | null) =>
   postData('/tasks', { title, description, project_id: projectId, priority: 'high', status: 'todo' })
+
+
+// ---- OPERATIONAL-INTELLIGENCE-P1-001 — the decision log and the exception-first board -----------------------------------
+
+export type CellStatus = 'problem' | 'no_data' | 'watch' | 'healthy'
+
+export interface AttentionItem {
+  id: string
+  priority: AlertPriority
+  severity: AlertEvent['severity']
+  type: string
+  problem: Bilingual | null
+  numbers: Bilingual | null
+  impact: Bilingual | null
+  action: Bilingual | null
+  insufficient: boolean
+  evidence: { metric: string | null; before: number | null; now: number | null; threshold: number | null; threshold_unit: string | null }
+  automation: { state: 'needs_decision' | 'awaiting_approval' | 'done_automatically' | 'in_flight'; proposals: { action: string; status: string; reason: string }[] }
+  owner: { id: number; name: string } | null
+  decision_status: DecisionStatus
+  project_id: string | null
+  campaign_id: string | null
+  campaign_name: string | null
+  platforms: string[]
+  level: 'campaign' | 'connection'
+  path: string
+}
+
+export interface AttentionBoardData {
+  platforms: string[]
+  rows: { campaign_id: string; project_id: string; name: string; cells: Record<string, { status: CellStatus; last_data: string | null; alert_ids: string[] }> }[]
+  counts: Record<CellStatus, number>
+  cells_total: number
+  coverage: { total: number; checked: number }
+  unchecked: { id: string; name: string; reason: string }[]
+  projects: { id: string; name: string; status: CellStatus | 'unchecked' }[]
+  rows_total: number
+  /** Campaigns that name no platform: counted here, never shown as healthy. */
+  unplaced: number
+  truncated: boolean
+  needs_decision: AttentionItem[]
+  needs_decision_total: number
+  healthy_count: number
+}
+
+export const getAttentionBoard = (projectId?: string | null) =>
+  getData<AttentionBoardData>('/alerts/attention' + (projectId ? `?project=${encodeURIComponent(projectId)}` : ''))
+
+export interface DecisionLogLine {
+  id: string
+  kind: 'status' | 'assign' | 'note' | 'resolve' | 'snooze'
+  by: string | null
+  at: string | null
+  from_status: string | null
+  to_status: string | null
+  action_tag: string | null
+  note: string | null
+  from_owner: string | null
+  to_owner: string | null
+}
+
+export interface AlertImpactResult {
+  state: 'none' | 'not_measurable' | 'insufficient_data' | 'computed'
+  reason?: string
+  metric?: string
+  window_days?: number
+  action_tag?: string | null
+  before?: number | null
+  after?: number
+  change_pct?: number | null
+  verdict?: 'improved' | 'worsened' | 'flat' | 'unclear'
+  days_remaining?: number
+}
+
+export interface AlertDetail {
+  event: AlertEvent
+  owner: { id: number; name: string } | null
+  log: DecisionLogLine[]
+  impact: AlertImpactResult
+  assignees: { id: number; name: string }[]
+  action_tags: string[]
+}
+
+export const getAlertDetail = (id: string) => getData<AlertDetail>(`/alerts/events/${id}`)
+export const decideAlert = (id: string, body: { status: DecisionStatus; reason?: string; action_tag?: string; note?: string }) =>
+  postData<AlertEvent>(`/alerts/events/${id}/decision`, body)
+export const assignAlert = (id: string, ownerId: number | null) => postData<AlertEvent>(`/alerts/events/${id}/assign`, { owner_id: ownerId })
+export const noteAlert = (id: string, note: string) => postData<null>(`/alerts/events/${id}/note`, { note })

@@ -12,6 +12,8 @@ use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientReportsControll
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientsController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientTaxonomyController;
 use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ClientTeamController;
+use App\Domains\ClientWorkspaces\Http\Controllers\Internal\ContentApprovalsController;
+use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -33,13 +35,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency', 'entitlement:clien
     Route::post('/{client}/logo', [ScopedLogoController::class, 'storeClient'])->name('logo.store');
     Route::delete('/{client}/logo', [ScopedLogoController::class, 'destroyClient'])->name('logo.destroy');
     Route::post('/{client}/archive', [ClientManagementController::class, 'archive'])->name('archive');
-    Route::post('/{client}/restore', [ClientManagementController::class, 'restore'])->name('restore');
+    Route::get('/{client}/archive-impact', [ClientManagementController::class, 'archiveImpact'])->name('archive-impact');
+    // Restoring takes a slot back — guarded like `client-workspaces/{id}/restore`.
+    Route::post('/{client}/restore', [ClientManagementController::class, 'restore'])->name('restore')
+        ->middleware(EnsureWithinPlanLimit::class.':clients');
 
     // Command-center tabs backed by existing engines (metrics/reports/…).
     Route::get('/{client}/analytics', ClientAnalyticsController::class)->name('analytics');
 
     Route::get('/{client}/reports', [ClientReportsController::class, 'index'])->name('reports.index');
-    Route::post('/{client}/reports', [ClientReportsController::class, 'store'])->name('reports.store');
+    Route::post('/{client}/reports', [ClientReportsController::class, 'store'])->name('reports.store')
+        ->middleware(EnsureWithinPlanLimit::class.':reports_per_month');
     Route::post('/{client}/reports/{report}/share', [ClientReportsController::class, 'share'])->name('reports.share');
     Route::post('/{client}/reports/{report}/shares/{share}/revoke', [ClientReportsController::class, 'revoke'])->name('reports.revoke');
 
@@ -54,6 +60,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:agency', 'entitlement:clien
     Route::get('/{client}/portal-users', [ClientPortalUsersController::class, 'index'])->name('portal-users.index');
     Route::post('/{client}/portal-users', [ClientPortalUsersController::class, 'store'])->name('portal-users.store');
     Route::delete('/{client}/portal-users/{membership}', [ClientPortalUsersController::class, 'destroy'])->name('portal-users.destroy');
+
+    // CLIENT-CONTENT-APPROVAL-001 — content put before the client in «بانتظار اعتمادك».
+    Route::get('/{client}/content-approvals', [ContentApprovalsController::class, 'index'])->name('content-approvals.index');
+    Route::post('/{client}/content-approvals', [ContentApprovalsController::class, 'store'])->name('content-approvals.store');
+    Route::post('/{client}/content-approvals/{approval}/withdraw', [ContentApprovalsController::class, 'withdraw'])->name('content-approvals.withdraw');
 
     // Files (read-only over existing private stores) + secure streamed download.
     Route::get('/{client}/files', [ClientFilesController::class, 'index'])->name('files.index');

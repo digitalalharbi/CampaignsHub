@@ -15,6 +15,7 @@ import {
   type Project,
 } from './api'
 import { Badge } from '@/components/ui/Badge'
+import { formatWholePercent } from '@/lib/percent'
 import { PLATFORM_LABELS, PLATFORM_ORDER } from '@/lib/platforms'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -27,7 +28,7 @@ import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/Pag
 import { StatCard } from '@/components/ui/StatCard'
 import { ErrorSummary, type FieldError } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
-import { usePortalPath } from '@/app/portalPath'
+import { useInAdvertiserPortal, usePortalPath } from '@/app/portalPath'
 import { useT } from '@/lib/i18n'
 import { adAccounts, campaigns as countedCampaigns, days as countedDays, hours as countedHours, members } from '@/lib/counted'
 import { useAuth } from '@/stores/auth'
@@ -218,12 +219,20 @@ export function ProjectsPage() {
   const notices = PROJ_NOTICES[locale]
   const surface = PROJ_SURFACE[locale]
   const mayDelete = useAuth((s) => s.hasPermission('projects.delete'))
+  // PROJECT-LIFECYCLE-001 — archive / un-archive are their own permissions (workspace owner by default); the server enforces them.
+  const mayArchive = useAuth((s) => s.hasPermission('projects.archive'))
+  const mayRestore = useAuth((s) => s.hasPermission('projects.restore'))
 
   const projects = useQuery({
     queryKey: ['projects', { showArchived }],
     queryFn: () => listProjects(showArchived),
   })
-  const workspaces = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces })
+  /*
+   * ENSURE-PORTAL-SESSION-001 — agency-scoped, and served from the AGENCY's tenant whatever this screen is in. Asked from
+   * the advertiser portal by somebody holding both, it would put another workspace's clients on this workspace's screen.
+   */
+  const inAdvertiserPortal = useInAdvertiserPortal()
+  const workspaces = useQuery({ queryKey: ['client-workspaces'], queryFn: listClientWorkspaces, enabled: !inAdvertiserPortal })
   const wsById = new Map<string, ClientWorkspace>((workspaces.data ?? []).map((w) => [w.id, w]))
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['projects'] })
@@ -340,8 +349,8 @@ export function ProjectsPage() {
         testid="projects-intro"
         title={t('projects')}
         purpose={locale === 'ar'
-          ? 'كل مشروع مساحة معزولة لعميل واحد — حساباته الإعلانية وحملاته وفريقه وتقاريره.'
-          : 'Each project is one client’s isolated workspace — its ad accounts, campaigns, team and reports.'}
+          ? 'كل مشروع يتبع عميلًا واحدًا ويعزل حساباته الإعلانية وحملاته وفريقه وتقاريره.'
+          : 'Each project belongs to one client and keeps its ad accounts, campaigns, team and reports apart.'}
         badges={items.length > 0
           ? (
             <Badge tone={needingAttention > 0 ? 'warning' : 'success'} data-testid="projects-health">
@@ -462,7 +471,7 @@ export function ProjectsPage() {
                 </div>
                 <p className="mt-2 text-xs text-text-secondary">{ws?.name ?? '—'}</p>
                 <span className="mt-1 block text-xs text-text-muted">
-                  {t('setup')}: <span className="tnum">{p.setup_completion}%</span>
+                  {t('setup')}: <span className="tnum">{formatWholePercent(p.setup_completion)}</span>
                 </span>
 
                 {/*
@@ -511,6 +520,20 @@ export function ProjectsPage() {
                       </span>
                     </div>
 
+                    {p.summary.ga4 && (
+                      <div data-testid={`project-ga4-${p.id}`} data-state={p.summary.ga4.state} className="flex flex-wrap items-center gap-1">
+                        <Badge tone={p.summary.ga4.state === 'connected' ? 'success' : p.summary.ga4.state === 'failed' ? 'danger' : 'warning'}>
+                          {locale === 'ar' ? 'الموقع' : 'Website'} · {p.summary.ga4.state === 'connected' ? (locale === 'ar' ? 'متصل' : 'Live') : p.summary.ga4.state === 'failed' ? (locale === 'ar' ? 'فشل' : 'Failed') : (locale === 'ar' ? 'متأخر' : 'Stale')}
+                        </Badge>
+                        {p.summary.ga4.last_read_at && <span className="text-xs text-text-muted">{freshnessLabel(p.summary.ga4.last_read_at, locale)}</span>}
+                        {p.summary.ga4.gap_share !== null && p.summary.ga4.gap_share !== undefined && (
+                          <Badge tone={Math.abs(p.summary.ga4.gap_share) >= 0.2 ? 'warning' : 'neutral'}>
+                            <span className="tnum">{locale === 'ar' ? 'فرق' : 'Gap'} {p.summary.ga4.gap_share > 0 ? '+' : p.summary.ga4.gap_share < 0 ? '−' : ''}{Math.round(Math.abs(p.summary.ga4.gap_share) * 100)}%</span>
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+
                     {p.summary.providers.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         {p.summary.providers.map((key) => (
@@ -537,24 +560,24 @@ export function ProjectsPage() {
                   <button type="button" onClick={() => openEdit(p)} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
                     <Pencil size={13} /> {t('edit')}
                   </button>
-                  <button type="button" onClick={() => actionMutation.mutate({ id: p.id, action: 'clone' })} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
+                  <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'clone' })} className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary">
                     <Copy size={13} /> {t('clone')}
                   </button>
                   {archived ? (
-                    <button type="button" onClick={() => actionMutation.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
+                    mayRestore && <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'restore' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
                       <RotateCcw size={13} /> {t('restore')}
                     </button>
                   ) : paused ? (
-                    <button type="button" onClick={() => actionMutation.mutate({ id: p.id, action: 'resume' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
+                    <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'resume' })} className="inline-flex items-center gap-1 text-success hover:opacity-80">
                       <Play size={13} /> {t('resume')}
                     </button>
                   ) : (
-                    <button type="button" onClick={() => actionMutation.mutate({ id: p.id, action: 'pause' })} className="inline-flex items-center gap-1 text-warning hover:opacity-80">
+                    <button type="button" disabled={actionMutation.isPending} onClick={() => actionMutation.mutate({ id: p.id, action: 'pause' })} className="inline-flex items-center gap-1 text-warning hover:opacity-80">
                       <Pause size={13} /> {t('pause')}
                     </button>
                   )}
-                  {!archived && (
-                    <button type="button" onClick={() => archiveMutation.mutate(p.id)} className="inline-flex items-center gap-1 text-text-muted hover:text-danger">
+                  {!archived && mayArchive && (
+                    <button type="button" disabled={archiveMutation.isPending} onClick={() => archiveMutation.mutate(p.id)} className="inline-flex items-center gap-1 text-text-muted hover:text-danger">
                       {t('archive')}
                     </button>
                   )}

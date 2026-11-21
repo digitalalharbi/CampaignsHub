@@ -8,6 +8,7 @@ use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -41,8 +42,9 @@ final class ClientAnalyticsService
     public function forClient(ClientWorkspace $client, Carbon $from, Carbon $to, ?array $onlyProjectIds = null): array
     {
         $tenantId = (string) $this->tenant->tenantId();
-        $projectIds = DB::table('projects')->where('tenant_id', $tenantId)
-            ->where('client_workspace_id', $client->id)->whereNull('deleted_at')
+        // PROJECT-LIFECYCLE-001 — the client's analytics fold in its LIVE projects only.
+        $projectIds = LiveProjects::constrain(DB::table('projects')->where('tenant_id', $tenantId)
+            ->where('client_workspace_id', $client->id))
             ->when($onlyProjectIds !== null, fn ($q) => $q->whereIn('id', $onlyProjectIds))
             ->pluck('name', 'id'); // [id => name]
         $ids = $projectIds->keys()->map(fn ($v) => (string) $v)->all();
@@ -53,7 +55,7 @@ final class ClientAnalyticsService
         $currencyMode = count($currencies) > 1 ? 'mixed' : (count($currencies) === 1 ? 'single' : 'none');
         $currency = count($currencies) === 1 ? $currencies[0] : null;
 
-        $objectiveMix = $this->objectiveMix($tenantId, (string) $client->id);
+        $objectiveMix = $this->objectiveMix($tenantId, (string) $client->id, $onlyProjectIds === null ? null : $ids);
         $roasPrimary = $this->roasIsPrimary($objectiveMix);
 
         $agg = $this->metrics->forProjects($ids);
@@ -122,10 +124,12 @@ final class ClientAnalyticsService
     }
 
     /** @return list<array{objective:string,count:int}> */
-    private function objectiveMix(string $tenantId, string $clientId): array
+    /** @param  list<string>|null  $onlyProjectIds  the campaigns of these projects only (a reader confined to some of the client's projects) */
+    private function objectiveMix(string $tenantId, string $clientId, ?array $onlyProjectIds = null): array
     {
         return DB::table('unified_campaigns')
             ->where('tenant_id', $tenantId)->where('client_workspace_id', $clientId)->whereNull('deleted_at')
+            ->when($onlyProjectIds !== null, fn ($q) => $q->whereIn('project_id', $onlyProjectIds))
             ->groupBy('objective')->select('objective', DB::raw('count(*) as count'))
             ->get()->map(fn ($r) => ['objective' => (string) $r->objective, 'count' => (int) $r->count])->all();
     }

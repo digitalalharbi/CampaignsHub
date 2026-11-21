@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { E2E_ORIGIN } from './env'
+import { execFileSync } from 'node:child_process'
+import { E2E_BACKEND_ENV, E2E_ORIGIN } from './env'
 import { RAIL_PAINT_TIMEOUT, railBudget } from './railWalkTimeout'
 
 /**
@@ -62,6 +63,25 @@ export async function openFilters(page: Page, id: string) {
     const controls = page.getByTestId(`${id}-filters-controls`)
     if (!(await controls.isVisible().catch(() => false))) await toggle.click()
   }
+}
+
+/**
+ * NOV-SIDEBAR-001 — open the agency rail, if it is the 64px icon strip.
+ *
+ * The rail starts collapsed, and in the strip a section's name is a tooltip and its link sits in a flyout that is not
+ * in the accessibility tree until it opens. A spec that reads names from the rail, or clicks a rail link by its name,
+ * opens it first, exactly as a reader does. Safe to call when it is already open.
+ */
+export async function openRail(page: Page, options: { optional?: boolean } = {}): Promise<void> {
+  const toggle = page.getByTestId('rail-toggle')
+  if (options.optional) {
+    // A portal whose rail is not this one (the advertiser's is always open) has no toggle — nothing to do there.
+    await page.locator('main').first().waitFor({ state: 'visible', timeout: 30_000 })
+    if ((await toggle.count()) === 0) return
+  }
+  await toggle.waitFor({ state: 'visible', timeout: 30_000 })
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
 }
 
 /** Flip the app to English for stable selectors (default locale is Arabic). */
@@ -151,6 +171,20 @@ export async function selectProject(page: Page, projectId: string) {
 }
 
 /**
+ * INTEG-PROJECT-SPACE-001 — the integrations centre is the SELECTED project's space, so a spec that reads
+ * the centre stands in a project first. The workspace's first project: the one `connectSandbox` links to.
+ * Without a project the page is the project chooser, which is a different surface with its own checks.
+ */
+export async function selectFirstProject(page: Page): Promise<string | null> {
+  const projects = (await (await page.request.get('/api/v1/projects', { headers: API_HEADERS })).json())
+    .data as Array<{ id: string }> | null
+  const first = projects?.[0]?.id ?? null
+  if (first !== null) await selectProject(page, first)
+
+  return first
+}
+
+/**
  * Put an external campaign back in the unlinked pool, whatever a previous run left behind.
  *
  * `campaigns-linking` starts by linking a named external to campaign A and only then expects the
@@ -221,10 +255,24 @@ export async function seedExternals(request: APIRequestContext, projectId: strin
   await request.post(`/api/v1/projects/${projectId}/integrations/bindings/${bindingId}/sync`, { headers })
 }
 
-export async function createCampaign(page: Page, name: string) {
+/**
+ * Open the campaign DRAFT builder (the modal) the way the product reaches it now.
+ *
+ * NAV-HOME-PLANS-001 — «حملة جديدة» on the campaigns page opens the launch page (`/launch`), which publishes on the
+ * platforms' APIs and is therefore not something a spec can drive. The internal draft builder these specs create
+ * campaigns through is still there, opened by the campaigns page's own address (`?launch=1`), so that is the path
+ * walked here: same page, same modal, same permission check. `launch.spec.ts` covers the button's own destination.
+ */
+export async function openCampaignBuilder(page: Page) {
   // The campaigns page opens on the chart-heavy overview; wait for it to be interactive first.
   await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
-  await page.getByRole('button', { name: /New campaign|حملة جديدة/ }).click()
+  const here = new URL(page.url())
+  await page.goto(`${here.pathname}?launch=1`)
+  await expect(page.getByLabel(/Campaign name|اسم الحملة/), 'the draft builder did not open').toBeVisible({ timeout: 20000 })
+}
+
+export async function createCampaign(page: Page, name: string) {
+  await openCampaignBuilder(page)
 
   /*
    * Assert the field actually HOLDS the name before saving.
@@ -371,7 +419,8 @@ export async function untranslatedChrome(page: Page): Promise<string[]> {
         .map((n) => n.textContent ?? '')
         .join(' ')
 
-      const arabic = own.match(/[؀-ۿ]+/g)
+      // «ر.س» is the SAR currency mark, the same in both languages (MONEY-MARKS-001) — not untranslated copy.
+      const arabic = own.replace(/ر\.س/g, '').match(/[؀-ۿ]+/g)
       if (arabic) out.push(arabic.join(' '))
     }
 
@@ -521,33 +570,71 @@ export async function signIn(page: Page, email: string, password = 'password'): 
   await page.getByTestId('login-identify').locator('button[type="submit"]').click()
 }
 
+/** The password a contact chooses in these journeys. Theirs, set through the recovery link, as a real contact's would be. */
+export const CONTACT_PASSWORD = 'contact-chosen-password'
+
 /**
- * Sign in as a client contact — the one-time-code half of the unified door.
+ * LOGIN-SINGLE-DOOR-001 — a client contact with no password takes the real way in: recovery, then the one door.
  *
- * A contact has never had a password, so `/login` sends them down the code step instead. Outside
- * production the backend returns the code it just issued (`dev_code`, hard-gated server-side) and the
- * page fills the field with it, which is what makes this branch testable at all without an inbox.
- *
- * The wait is on the field HAVING a value rather than on the step being visible: the step renders
- * immediately, and submitting before `POST /client/login/start` has answered sends an empty code.
+ * The link is what the service would have mailed. There is no inbox here, so `e2e:reset-link` (E2E database only, never production)
+ * asks the real forgot-password service and prints a usable link; the page, the token check and the account it opens are the product's.
  */
-export async function signInWithCode(page: Page, contact: string): Promise<void> {
-  await openLogin(page)
-  await page.getByTestId('login-email').fill(contact)
-  await page.getByTestId('login-request-code').click()
+export async function chooseContactPassword(page: Page, contact: string): Promise<void> {
+  const link = execFileSync('php', ['artisan', 'e2e:reset-link', contact], {
+    cwd: new URL('../../backend', import.meta.url).pathname,
+    env: { ...process.env, ...E2E_BACKEND_ENV },
+    encoding: 'utf-8',
+  }).trim().split('\n').at(-1) as string
 
-  const form = page.getByTestId('login-code')
-  await expect(
-    form,
-    `${contact} was not offered a code step — the server says it signs in another way`,
-  ).toBeVisible({ timeout: 20_000 })
-
-  const field = form.getByTestId('login-otp-5')
-  await expect(field, 'the issued code never arrived, so there is nothing to submit').not.toHaveValue('', { timeout: 20_000 })
-  await form.locator('button[type="submit"]').click()
+  await page.goto(link)
+  const fields = page.locator('input[type="password"]')
+  await expect(fields, 'the recovery link did not open the form').toHaveCount(2, { timeout: 20_000 })
+  await fields.nth(0).fill(CONTACT_PASSWORD)
+  await fields.nth(1).fill(CONTACT_PASSWORD)
+  await page.locator('form button[type="submit"]').click()
+  await expect(fields, 'the recovery link was refused').toHaveCount(0, { timeout: 20_000 })
 }
 
-/** The contact seeded by `DemoAccountsSeeder` — a real client contact, with no password anywhere. */
+/** Recovery, then `/login`, carrying `redirect` when the journey was interrupted on a page. */
+export async function signInAsContact(page: Page, contact: string, redirect?: string): Promise<void> {
+  await chooseContactPassword(page, contact)
+  await page.goto(redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login')
+  await signIn(page, contact, CONTACT_PASSWORD)
+}
+
+/**
+ * The email code, ON, for this page only.
+ *
+ * The gate's server runs the default, OFF, because that is what Production runs and what the baselines must show. So the code step is
+ * walked here against answers the test states; what the engine really does when on is `PortalEmailSignInTest`.
+ */
+export async function enableEmailCode(page: Page, answers: {
+  delivery?: string
+  verify?: { status: number; json: unknown }
+  onVerify?: (body: Record<string, unknown>) => void
+} = {}): Promise<void> {
+  await page.route('**/auth/oauth/providers', (route) => route.fulfill({ json: { data: { providers: [], email_code: true } } }))
+  await page.route('**/client/login/start', (route) => route.fulfill({
+    status: 201,
+    json: { data: { verification_id: 'v1', delivery_status: answers.delivery ?? 'sent', resend_after: 60, expires_in_minutes: 10, dev_code: '424242' } },
+  }))
+  await page.route('**/client/login/verify', async (route) => {
+    answers.onVerify?.(route.request().postDataJSON() as Record<string, unknown>)
+    const { status, json } = answers.verify ?? { status: 200, json: { data: { authenticated: true, contact: 'x', dev_token: null, destination: '/portal/requests' } } }
+
+    return route.fulfill({ status, json })
+  })
+}
+
+/** Open the code step of `/login`, which only exists while the code is enabled. */
+export async function openEmailCode(page: Page, email: string): Promise<void> {
+  await page.getByTestId('login-email-code').click()
+  await page.getByTestId('email-code-address').fill(email)
+  await page.getByTestId('email-code-send').click()
+  await expect(page.getByTestId('email-code-step')).toBeVisible({ timeout: 20_000 })
+}
+
+/** The contact seeded by `DemoAccountsSeeder` — a real client contact, with no account until they prove the address. */
 export const DEMO_CLIENT_CONTACT = 'customer@demo-client.local'
 
 /**

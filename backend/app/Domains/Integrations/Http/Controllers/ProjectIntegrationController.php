@@ -16,8 +16,10 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\ManualSyncDebounce;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Lifecycle\ArchiveEffects;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Exceptions\PlanLimitReached;
 use App\Domains\Subscriptions\Seats\AdAccountSeats;
@@ -40,6 +42,7 @@ final class ProjectIntegrationController extends Controller
         private readonly ProjectContext $project,
         private readonly AccountAssignment $assignment,
         private readonly AdAccountSeats $seats,
+        private readonly ManualSyncDebounce $debounce,
     ) {}
 
     /** Bindings attached to the current project (project-scoped). */
@@ -60,9 +63,19 @@ final class ProjectIntegrationController extends Controller
          * `ConfirmAccountSelection` both do, which is why a deactivated binding does not block the
          * account from being bound elsewhere. This is the listing catching up with them.
          */
+        /*
+         * PROJECT-LIFECYCLE-001 §8 (N2) — the «مشترك» warning: for each account ALSO linked (actively) to another
+         * project, the other projects' names. Archiving/deleting this project stops only this project's link.
+         */
+        $project = Project::find(app(ProjectContext::class)->projectId());
+        $shared = $project === null ? [] : collect(app(ArchiveEffects::class)->sharedAccounts($project))
+            ->mapWithKeys(fn (array $a) => [$a['external_account_id'] => $a['other_projects']])->all();
         $bindings = ProjectIntegrationBinding::with('externalAccount.connection')
             ->where('is_active', true)->latest()->get()
-            ->map(fn (ProjectIntegrationBinding $b) => $this->bindingArray($b));
+            ->map(fn (ProjectIntegrationBinding $b) => $this->bindingArray($b) + ['shared_with' => array_map(
+                static fn (array $p): array => ['id' => $p['id'], 'name' => $p['name']],
+                $shared[(string) $b->external_account_id] ?? [],
+            )]);
 
         return ApiResponse::success($bindings, 'Project integrations retrieved.');
     }
@@ -117,7 +130,7 @@ final class ProjectIntegrationController extends Controller
         abort_unless(
             $this->assignment->mayAssign($account, $project),
             403,
-            'This account belongs to a different client workspace and cannot be assigned to this project.',
+            'This account belongs to a different client workspace, or to a connection opened for another project, and cannot be assigned to this project.',
         );
 
         /*
@@ -446,6 +459,23 @@ final class ProjectIntegrationController extends Controller
             'This account is not selected for this project, so nothing was fetched. Select it again first.',
         );
 
+        /*
+         * INTEGRATIONS-CENTRE-001 §4 — the second press within two minutes is refused, and told when
+         * the first one was. 429 with `Retry-After`, so a client that retries on its own waits the
+         * right amount, and the time named is the time of the REQUEST — never shown as a completion.
+         */
+        $held = $this->debounce->claim('binding', (string) $model->id);
+
+        if ($held !== null) {
+            $retryAfter = $this->debounce->retryAfter($held);
+
+            return ApiResponse::error(
+                "A sync for this account was already requested at {$held->toIso8601String()}. It can be requested again in {$retryAfter} seconds.",
+                ['last_requested_at' => $held->toIso8601String(), 'retry_after_seconds' => $retryAfter],
+                status: 429,
+            )->header('Retry-After', (string) $retryAfter);
+        }
+
         $run = IntegrationSyncRun::create([
             'binding_id' => $model->id,
             'type' => 'campaigns',
@@ -484,7 +514,12 @@ final class ProjectIntegrationController extends Controller
             'error' => $result->success ? null : $result->message,
             'finished_at' => now(),
         ]);
-        $model->externalAccount->update(['last_synced_at' => now()]);
+
+        // `last_synced_at` is the moment data ARRIVED. A failed run has a request time and a finish
+        // time; it has no synced-at, and stamping one here showed a failure as a fresh sync.
+        if ($result->success) {
+            $model->externalAccount->update(['last_synced_at' => now()]);
+        }
 
         return ApiResponse::success(
             ['sync_run_id' => $run->id, 'status' => $run->status, 'records' => $run->records, 'imported' => $imported],

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Integrations\Measurement\Ga4Visibility;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Access\ProjectAbilities;
@@ -16,8 +17,8 @@ use App\Domains\Reports\Sections\ReportSectionRegistry;
 use App\Domains\Reports\Sections\ReportSectionResolver;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\ReportViews;
-use App\Domains\Reports\Sections\SectionContext;
 use App\Domains\Reports\Sections\SectionSettings;
+use App\Domains\Reports\Support\GenericNames;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -90,7 +91,15 @@ final class ReportSectionController extends Controller
 
         $views = $this->validatedViews($request, ($base ?? $before)['views'] ?? null);
 
-        $model->section_settings = SectionSettings::fromArray(['sections' => $sections, 'streams' => $streams, 'views' => $views], $this->registry)->toArray();
+        $ga4Hidden = $request->exists('ga4_hidden')
+            ? Ga4Visibility::normalise($request->validate(['ga4_hidden' => ['present', 'nullable', 'array', 'max:200'], 'ga4_hidden.*' => ['string', 'max:60']])['ga4_hidden'])
+            : ($base ?? $before)['ga4_hidden'] ?? [];
+        $model->section_settings = SectionSettings::fromArray(['sections' => $sections, 'streams' => $streams, 'views' => $views, 'ga4_hidden' => $ga4Hidden], $this->registry)->toArray();
+        // REPORT-GENERIC-LABELS-001 — which names this report replaces with generic labels, on every surface and every link of it.
+        $namesBefore = GenericNames::ofReport($model);
+        if ($request->exists('generic_names')) {
+            $model->config = self::withGenericNames((array) ($model->config ?? []), $this->validatedGenericNames($request));
+        }
         $model->save();
 
         /*
@@ -107,8 +116,8 @@ final class ReportSectionController extends Controller
             action: 'report.sections_updated',
             entityType: Report::class,
             entityId: (string) $model->getKey(),
-            before: $before,
-            after: $model->section_settings,
+            before: $before + ['generic_names' => $namesBefore],
+            after: (array) $model->section_settings + ['generic_names' => GenericNames::ofReport($model)],
         );
 
         return ApiResponse::success($this->reportShape($model->fresh() ?? $model), 'Report sections saved.');
@@ -165,6 +174,16 @@ final class ReportSectionController extends Controller
         } else {
             $settings['views'] = $views;
         }
+        // REPORT-GENERIC-LABELS-001 — the link's own name switches; what the report hides stays hidden whatever these say.
+        $namesBefore = GenericNames::ofShare($link);
+        if ($request->exists('generic_names')) {
+            $settings = self::withGenericNames($settings, $this->validatedGenericNames($request));
+        }
+        // GA4-VISIBILITY-001 — the link's own element switches; what the report hides stays hidden whatever these say.
+        if ($request->exists('ga4_hidden')) {
+            $ga4 = Ga4Visibility::normalise($request->validate(['ga4_hidden' => ['present', 'nullable', 'array', 'max:200'], 'ga4_hidden.*' => ['string', 'max:60']])['ga4_hidden']);
+            $ga4 === [] ? $settings = array_diff_key($settings, ['ga4_hidden' => 1]) : $settings['ga4_hidden'] = $ga4;
+        }
         $link->settings = $settings;
 
         /*
@@ -186,8 +205,8 @@ final class ReportSectionController extends Controller
             action: 'report.shared_link_sections_updated',
             entityType: ReportShare::class,
             entityId: (string) $link->getKey(),
-            before: ['hidden' => $before, 'views' => $viewsBefore, ...$moneyBefore],
-            after: ['hidden' => $settings['section_overrides'], 'views' => $views, 'hide_spend' => (bool) $link->hide_spend, 'hide_revenue' => (bool) $link->hide_revenue],
+            before: ['hidden' => $before, 'views' => $viewsBefore, 'generic_names' => $namesBefore, ...$moneyBefore],
+            after: ['hidden' => $settings['section_overrides'], 'views' => $views, 'generic_names' => GenericNames::ofShare($link), 'hide_spend' => (bool) $link->hide_spend, 'hide_revenue' => (bool) $link->hide_revenue],
         );
 
         return ApiResponse::success($this->shareShape($model, $link->fresh() ?? $link), 'Link sections saved.');
@@ -228,10 +247,15 @@ final class ReportSectionController extends Controller
             'visible' => $resolved->visible(),
             'availability_judged' => $resolved->availabilityJudged,
             // REPORT-COMPOSITION-CONTROL-001 — what the report offers, what this link chose, and the result.
-            'report_views' => $report->sectionSettings()->views(),
-            'views' => $link->views(),
-            'effective_views' => $surfaces->viewsFor($report, $link) ?? ReportViews::VIEWS,
+            'report_views' => ReportViews::visible($report->sectionSettings()->views()),
+            'views' => ReportViews::visible($link->views()),
+            'effective_views' => ReportViews::visible($surfaces->viewsFor($report, $link)) ?? ReportViews::VIEWS,
             'offers_views' => $surfaces->offersViews($report, $link),
+            'generic_names' => GenericNames::ofShare($link),
+            'generic_names_of_report' => GenericNames::ofReport($report),
+            // GA4-VISIBILITY-001 — the link's own element list, and the report's, which it can only add to.
+            'ga4_hidden' => Ga4Visibility::normalise(((array) ($link->settings ?? []))['ga4_hidden'] ?? null),
+            'ga4_hidden_of_report' => $report->sectionSettings()->ga4Hidden(),
         ];
     }
 
@@ -316,10 +340,39 @@ final class ReportSectionController extends Controller
         }
         $request->validate([
             'views' => ['array', 'min:1'],
-            'views.*' => [Rule::in(ReportViews::VIEWS)],
+            'views.*' => [Rule::in([...ReportViews::VIEWS, ReportViews::WEBSITE_OFF])],
         ]);
 
-        return ReportViews::normalise($request->input('views'));
+        return ReportViews::normalise(ReportViews::explicit($request->input('views')));
+    }
+
+    /** @return list<string> */
+    private function validatedGenericNames(Request $request): array
+    {
+        $request->validate([
+            'generic_names' => ['present', 'nullable', 'array'],
+            'generic_names.*' => [Rule::in(GenericNames::KINDS)],
+        ]);
+
+        return GenericNames::normalise($request->input('generic_names'));
+    }
+
+    /**
+     * Stored only when somebody chose one, so a report or link that never did keeps exactly the settings it had.
+     *
+     * @param  array<string, mixed>  $stored
+     * @param  list<string>  $kinds
+     * @return array<string, mixed>
+     */
+    private static function withGenericNames(array $stored, array $kinds): array
+    {
+        if ($kinds === []) {
+            unset($stored['generic_names']);
+        } else {
+            $stored['generic_names'] = $kinds;
+        }
+
+        return $stored;
     }
 
     /**
@@ -437,25 +490,19 @@ final class ReportSectionController extends Controller
     {
         $audience = (string) ($report->audience ?? 'client');
         $settings = $report->sectionSettings();
-        $data = is_array($report->data) && $report->data !== [] ? $report->data : null;
-
-        $resolved = $this->resolver->resolve($settings, new SectionContext(
-            audience: $audience,
-            form: (string) ($report->form ?? 'detailed'),
-            providers: array_values(array_filter((array) (($report->scope ?? [])['providers'] ?? []), 'is_string')),
-            objective: $report->campaign_objective,
-            payload: $data,
-            surface: 'preview',
-        ));
+        // REPORT-PARITY-FOUR-SURFACES-001 — the preview asks the surfaces' own resolver, not a copy of it.
+        $resolved = app(ReportSectionSurfaces::class)->resolveReport($report);
 
         return [
             'report_id' => (string) $report->getKey(),
             'audience' => $audience,
             'chosen' => $settings->toArray()['sections'],
             'streams' => $settings->streams(),
+            'ga4_hidden' => $settings->ga4Hidden(),
             // REPORT-COMPOSITION-CONTROL-001 — null is «every main section», which is what an untouched report offers.
-            'views' => $settings->views(),
+            'views' => ReportViews::visible($settings->views()),
             'offers_views' => app(ReportSectionSurfaces::class)->offersViews($report),
+            'generic_names' => GenericNames::ofReport($report),
             'effective' => $settings->effective($this->registry, $audience),
             'resolved' => $resolved->toArray(),
             'visible' => $resolved->visible(),

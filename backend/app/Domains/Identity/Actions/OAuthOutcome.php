@@ -16,8 +16,17 @@ use RuntimeException;
  */
 final class OAuthOutcome extends RuntimeException
 {
-    public function __construct(public readonly string $reason, string $message)
-    {
+    public function __construct(
+        public readonly string $reason,
+        string $message,
+        /**
+         * LOGIN-004 — the local account a VERIFIED provider address matches, when linking in place may be offered.
+         *
+         * Never set for an address the provider did not verify, and never rendered or put in a URL: it is how the callback
+         * knows which account the person must prove they own before anything is linked.
+         */
+        public readonly int|string|null $matchedUserId = null,
+    ) {
         parent::__construct($message);
     }
 }

@@ -80,7 +80,9 @@ test.describe('the platform filter scopes what is asked for, not only what is dr
      * product as broken for a translation. The chip and the row are the same product naming the same
      * platform, so they are what get compared.
      */
-    const metaLabel = ((await page.getByTestId('analytics-platform-meta').innerText()) ?? '').trim().toLowerCase()
+    // The chip is a logo since ANALYTICS-FILTERS-COMPACT-001; its name is its aria-label.
+    const metaChip = page.getByTestId('analytics-platform-meta')
+    const metaLabel = (((await metaChip.getAttribute('aria-label')) || (await metaChip.innerText())) ?? '').trim().toLowerCase()
 
     await expect.poll(async () => (await providersOnScreen(page)).join(','), { timeout: 20000 }).toBe(metaLabel)
 

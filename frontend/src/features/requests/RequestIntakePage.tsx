@@ -18,6 +18,8 @@ import { DateField } from '@/components/ui/DateField'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { withMark } from '@/lib/money/mark'
+import { uuid } from '@/lib/uuid'
 
 const DRAFT_KEY = 'ch-request-draft-v2' // v2: stores only non-sensitive {type, step, ts}
 const DRAFT_TTL_MS = 24 * 60 * 60 * 1000
@@ -81,7 +83,7 @@ function detailFields(module: string): { key: string; labelAr: string; labelEn: 
       return [
         { key: 'site_or_app', labelAr: 'الموقع أو التطبيق', labelEn: 'Website or app' },
         { key: 'platform_tech', labelAr: 'المنصة التقنية', labelEn: 'Tech platform' },
-        { key: 'ga4', labelAr: 'GA4', labelEn: 'GA4' },
+        { key: 'ga4', labelAr: 'الموقع', labelEn: 'Website' },
         { key: 'gtm', labelAr: 'GTM', labelEn: 'GTM' },
         { key: 'pixels', labelAr: 'Pixels / CAPI', labelEn: 'Pixels / CAPI' },
         { key: 'events', labelAr: 'الأحداث المطلوبة', labelEn: 'Required events', type: 'textarea' },
@@ -228,7 +230,7 @@ function DefaultIntake() {
     const token = await ensureSession()
     if (!token) return
     for (const file of selected) {
-      const localId = crypto.randomUUID()
+      const localId = uuid()
       setFiles((prev) => [...prev, { localId, name: file.name, size: file.size, status: 'uploading', pct: 0, file }])
       await uploadOne(token, localId, file)
     }
@@ -531,7 +533,7 @@ function DefaultIntake() {
                 <Row k={ar ? 'البريد' : 'Email'} v={form.contact_email} />
                 {form.company_name && <Row k={ar ? 'الشركة' : 'Company'} v={form.company_name} />}
                 <Row k={ar ? 'الهدف' : 'Objective'} v={form.objective} />
-                {showBudget && form.budget && <Row k={ar ? 'الميزانية' : 'Budget'} v={`${form.budget} ${form.currency}`} />}
+                {showBudget && form.budget && <Row k={ar ? 'الميزانية' : 'Budget'} v={withMark(String(form.budget), form.currency)} />}
                 <Row k={ar ? 'الأولوية' : 'Priority'} v={form.priority} />
                 <Row k={ar ? 'الملفات' : 'Files'} v={files.filter((f) => f.status === 'done').length ? files.filter((f) => f.status === 'done').map((f) => f.name).join('، ') : (ar ? 'لا يوجد' : 'None')} />
               </dl>

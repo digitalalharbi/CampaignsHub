@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
-use App\Domains\Commerce\Jobs\SyncStoreJob;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
+use App\Domains\Integrations\Jobs\ProcessWebhookEventJob;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\IntegrationWebhookEvent;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
-use App\Domains\Metrics\Jobs\SyncAccountMetricsJob;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -124,7 +123,7 @@ final class IntegrationWebhookTest extends TestCase
         $this->postJson('/api/v1/webhooks/ads/meta', ['entry' => [['id' => 'act_123456']]])
             ->assertStatus(401);
 
-        $this->assertDatabaseCount('integration_webhook_events', 0);
+        $this->assertOnlyBodylessRefusalsRecorded();
         Queue::assertNothingPushed();
     }
 
@@ -137,7 +136,7 @@ final class IntegrationWebhookTest extends TestCase
             'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $body, 'the-wrong-secret'),
         ], $body)->assertStatus(401);
 
-        $this->assertDatabaseCount('integration_webhook_events', 0);
+        $this->assertOnlyBodylessRefusalsRecorded();
     }
 
     /**
@@ -155,7 +154,7 @@ final class IntegrationWebhookTest extends TestCase
             'HTTP_X_SALLA_SIGNATURE' => hash_hmac('sha256', $body, 'anything'),
         ], $body)->assertStatus(401);
 
-        $this->assertDatabaseCount('integration_webhook_events', 0);
+        $this->assertOnlyBodylessRefusalsRecorded();
     }
 
     /** A provider that does not deliver webhooks has no endpoint, rather than one that always refuses. */
@@ -182,6 +181,16 @@ final class IntegrationWebhookTest extends TestCase
         $this->assertDatabaseCount('integration_webhook_events', 0);
     }
 
+    /**
+     * INTEG-WEBHOOK-ENGINE-001 — a refused delivery now leaves a RECORD of the refusal, never of the body.
+     * What the original assertions protected still holds: no unverified content is stored as an event.
+     */
+    private function assertOnlyBodylessRefusalsRecorded(): void
+    {
+        $this->assertSame(0, IntegrationWebhookEvent::query()->where('status', '!=', 'rejected')->count());
+        $this->assertSame(0, IntegrationWebhookEvent::query()->whereNotNull('payload')->count());
+    }
+
     // ── the happy path ────────────────────────────────────────────────────────────────────────
 
     public function test_a_verified_delivery_is_recorded_placed_and_triggers_the_same_sync_the_scheduler_runs(): void
@@ -191,12 +200,13 @@ final class IntegrationWebhookTest extends TestCase
         $event = IntegrationWebhookEvent::query()->firstOrFail();
 
         $this->assertTrue($event->signature_verified);
-        $this->assertSame('processed', $event->status);
+        // INTEG-WEBHOOK-ENGINE-001 — answering 200 is not «processed»: the worker says that after the sync ran.
+        $this->assertSame('queued', $event->status);
         // Derived from the account we already hold — never read out of the payload.
         $this->assertSame($this->tenant->id, $event->tenant_id);
         $this->assertSame($this->account->getKey(), $event->external_account_id);
 
-        Queue::assertPushed(SyncAccountMetricsJob::class, 1);
+        Queue::assertPushed(ProcessWebhookEventJob::class, 1);
     }
 
     /**
@@ -215,7 +225,7 @@ final class IntegrationWebhookTest extends TestCase
         $this->signed($payload)->assertOk();
 
         $this->assertDatabaseCount('integration_webhook_events', 1);
-        Queue::assertPushed(SyncAccountMetricsJob::class, 1);
+        Queue::assertPushed(ProcessWebhookEventJob::class, 1);
     }
 
     /** Two genuinely different events are two events, even without an event id to tell them apart. */
@@ -291,13 +301,13 @@ final class IntegrationWebhookTest extends TestCase
         ], $body)->assertOk();
 
         $event = IntegrationWebhookEvent::query()->where('provider', 'salla')->firstOrFail();
-        $this->assertSame('processed', $event->status);
+        // INTEG-WEBHOOK-ENGINE-001 — answering 200 is not «processed»: the worker says that after the sync ran.
+        $this->assertSame('queued', $event->status);
         $this->assertSame('order.updated', $event->topic);
         $this->assertSame($store->getKey(), $event->external_account_id);
 
-        Queue::assertPushed(SyncStoreJob::class, 1);
-        // And NOT the advertising job — the two families do not share a consumer.
-        Queue::assertNotPushed(SyncAccountMetricsJob::class);
+        // One queued piece of work for the store; the window it reads and the ad/store split are proven in WebhookEngineHardeningTest.
+        Queue::assertPushed(ProcessWebhookEventJob::class, 1);
     }
 
     // ── Meta's subscription handshake ─────────────────────────────────────────────────────────

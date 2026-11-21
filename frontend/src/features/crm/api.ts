@@ -7,6 +7,9 @@ export interface LeadListParams {
   source?: string
   search?: string
   per_page?: number
+  page?: number
+  sort?: string
+  dir?: 'asc' | 'desc'
   /** LEAD-DEDUP-001 — narrow the LIST to canonicals. Both counts come back either way. */
   unique?: 1
 }
@@ -45,6 +48,8 @@ export interface LeadListResult {
   leads: Lead[]
   pagination: Pagination
   counts: LeadCounts | null
+  /** UX-COMPACT-CHARTS-001 — leads that arrived per day, over the same rows the list is filtered to. */
+  inflow: { date: string; count: number }[] | null
   stages: LeadStageCount[] | null
   /**
    * The shape ignores a status filter that narrows the list, and this says when that happened.
@@ -64,6 +69,7 @@ export async function listLeads(params: LeadListParams): Promise<LeadListResult>
   return {
     leads: response.data.data,
     counts: counts ?? null,
+    inflow: Array.isArray(response.data.meta.inflow) ? (response.data.meta.inflow as { date: string; count: number }[]) : null,
     stages: Array.isArray(stages) ? stages : null,
     stagesIgnoreStatusFilter: response.data.meta.stages_ignore_status_filter === true,
     pagination: (response.data.meta.pagination as Pagination) ?? {

@@ -175,7 +175,12 @@ test.describe('the video previews on /app/content', () => {
 
     await page.goto(`/agency/content/${films[0].id}`)
 
-    const video = page.locator('video')
+    /*
+     * CREATIVE-VIEWER-FORMATS-001 — before Play the player now lays the film's own first frame under
+     * its play button (`data-cover="video-first-frame"`), so the PLAYER is the other `<video>`.
+     */
+    await expect(page.locator('video[data-cover="video-first-frame"]'), 'a coverless film opened to a black box').toHaveCount(1, { timeout: 30000 })
+    const video = page.locator('video:not([data-cover])')
     await expect(video, 'the detail page rendered no player').toBeVisible({ timeout: 30000 })
 
     const play = page.getByRole('button', { name: /play|تشغيل/i }).first()

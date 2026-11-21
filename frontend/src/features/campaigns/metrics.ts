@@ -187,7 +187,15 @@ export interface CampaignCreative {
    */
   preview: CreativePreview
   is_demo: boolean
-  metrics: { spend: number; impressions: number; clicks: number; conversions: number; revenue: number; roas: number | null; cpa: number | null; ctr: number | null; cpm: number | null; view_rate: number | null; completion_rate: number | null }
+  metrics: {
+    spend: number; impressions: number; clicks: number; conversions: number; revenue: number; roas: number | null; cpa: number | null; ctr: number | null; cpm: number | null; view_rate: number | null; completion_rate: number | null
+    /* OBJECTIVE-RESULT-001 — the ad's result for its campaign's objective (`ObjectiveResult`). Optional: older payloads lack it. */
+    landing_page_views?: number
+    result_key?: string | null
+    result?: number | null
+    cost_per_result?: number | null
+    result_missing_reason?: string | null
+  }
   rank_metric: string
   rank_value: number | null
   classification: string

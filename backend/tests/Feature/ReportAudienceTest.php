@@ -248,14 +248,15 @@ final class ReportAudienceTest extends TestCase
         $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$internal->id}/send", ['recipients' => ['client@external.test']])
             ->assertStatus(422);
 
-        // An internal team member (same tenant) is allowed.
+        // REPORT-SEND-HONEST-001: nothing can be sent yet, so the two the guard lets through get 501, not 422.
+        // An internal team member (same tenant) passes the guard.
         $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$internal->id}/send", ['recipients' => [$this->owner->email]])
-            ->assertOk();
+            ->assertStatus(501);
 
-        // A client report can go to anyone.
+        // A client report passes the guard for anyone.
         $client = $this->report('client');
         $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$client->id}/send", ['recipients' => ['client@external.test']])
-            ->assertOk();
+            ->assertStatus(501);
     }
 
     public function test_client_print_response_has_no_internal_data(): void

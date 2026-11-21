@@ -212,7 +212,7 @@ describe('AttributionPanel', () => {
   /**
    * An order count and a money amount are different units and must not read as one token.
    *
-   * Found live: the cell rendered «26794K SAR» — 267 orders followed immediately by 94K SAR. A
+   * Found live: the cell rendered «26794K ر.س» — 267 orders followed immediately by 94K ر.س. A
    * four-pixel inline margin is not a separator, and the result is a number this product does not
    * have. Each figure now occupies its own line and names its own unit.
    */
@@ -225,8 +225,8 @@ describe('AttributionPanel', () => {
 
     // The count is its own text node, not a prefix of the amount.
     expect(within(meta).getByText('40')).toBeInTheDocument()
-    expect(within(meta).getByText('20K SAR')).toBeInTheDocument()
-    expect(within(meta).queryByText('4020K SAR')).not.toBeInTheDocument()
+    expect(within(meta).getByText('20K ر.س')).toBeInTheDocument()
+    expect(within(meta).queryByText('4020K ر.س')).not.toBeInTheDocument()
     // And every count says what it counts, so a bare number is never ambiguous.
     expect(within(meta).getAllByText('orders').length).toBeGreaterThan(0)
   })
@@ -528,7 +528,7 @@ describe('the platform-reported vs store-confirmed comparison', () => {
       const m = await screen.findByTestId('reconciliation-measurement')
       expect(m).toHaveTextContent('7')
       // `moneyExact` keeps cents only under 1,000 — the product's rule, so 1,234.5 reads as 1,235.
-      expect(m).toHaveTextContent('1,235 SAR')
+      expect(m).toHaveTextContent('1,235 ر.س')
     })
 
     it('says the reconciled layer is unavailable without a store, not zero', async () => {
@@ -554,7 +554,7 @@ describe('the platform-reported vs store-confirmed comparison', () => {
       const line = await screen.findByTestId('reconciliation-influencer')
       expect(line).toHaveTextContent('عبر أكواد المؤثرين')
       expect(line).toHaveTextContent('2')
-      expect(line).toHaveTextContent('450 SAR')
+      expect(line).toHaveTextContent('450 ر.س')
       expect(line).toHaveTextContent('SARA20 (2)')
       expect(screen.getByTestId('ledger-coupon-REF-9')).toHaveTextContent('مؤثر · SARA20')
     })

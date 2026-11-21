@@ -19,6 +19,7 @@ import { listTasks, OPEN_STATUSES } from '@/features/tasks/api'
 import { useProjectCampaignActivity } from '@/features/campaigns/metrics'
 import { listNotifications } from '@/features/notifications/api'
 import { useProjectCapabilities } from '@/features/projects/capabilities'
+import { formatWholePercent } from '@/lib/percent'
 
 /**
  * OPS-PANEL-001 — the operational side panel of the advertiser shell.
@@ -85,7 +86,7 @@ function Section({
         className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-start outline-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-brand-600"
       >
         <Icon size={15} className="shrink-0 text-text-muted" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text-primary">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-text-primary">{title}</span>
         {status}
         <ChevronDown size={14} className={`shrink-0 text-text-muted transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
       </button>
@@ -142,7 +143,7 @@ const SYNC_STATE: Record<string, { ar: string; en: string }> = {
 }
 
 function useHub(enabled: boolean) {
-  return useQuery({ queryKey: ['connection-hub'], queryFn: fetchConnectionHub, enabled, retry: false, refetchInterval: POLL })
+  return useQuery({ queryKey: ['connection-hub'], queryFn: () => fetchConnectionHub(), enabled, retry: false, refetchInterval: POLL })
 }
 
 function IntegrationsSection({ ar }: { ar: boolean }) {
@@ -159,7 +160,7 @@ function IntegrationsSection({ ar }: { ar: boolean }) {
   ) : bad > 0 ? (
     <Pill tone="danger" testId="ops-integrations-status">{bad} {ar ? 'تحتاج إصلاحاً' : 'need fixing'}</Pill>
   ) : warn > 0 ? (
-    <Pill tone="warning" testId="ops-integrations-status">{warn} {ar ? 'تحتاج انتباهاً' : 'need attention'}</Pill>
+    <Pill tone="warning" testId="ops-integrations-status">{warn} {ar ? 'تنبيهات' : 'need attention'}</Pill>
   ) : (
     <Pill tone="success" testId="ops-integrations-status">{rows.length} {ar ? 'تعمل' : 'healthy'}</Pill>
   )
@@ -425,7 +426,7 @@ function WorkspaceSection({ ar, projectId }: { ar: boolean; projectId: string | 
       <Row label={ar ? 'المشروع الحالي' : 'Current project'} value={project?.name ?? (ar ? 'لم يُختر' : 'None selected')} />
       {project && (
         <>
-          <Row label={ar ? 'اكتمال الإعداد' : 'Setup'} value={`${project.setup_completion}%`} tone={project.setup_completion >= 100 ? 'success' : 'warning'} />
+          <Row label={ar ? 'اكتمال الإعداد' : 'Setup'} value={formatWholePercent(project.setup_completion)} tone={project.setup_completion >= 100 ? 'success' : 'warning'} />
           <Link to={portalPath(`projects/${project.id}`)} className="font-semibold text-brand-600 hover:underline">{ar ? 'فتح المشروع' : 'Open project'}</Link>
         </>
       )}

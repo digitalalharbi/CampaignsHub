@@ -285,7 +285,7 @@ final class PortalAccessTest extends TestCase
 
         $this->actingAs($user, 'sanctum')->withHeaders($this->spaHeaders)
             ->getJson('/api/v1/auth/memberships?portal=agency')
-            ->assertOk()->assertJsonPath('data.destination', '/agency');
+            ->assertOk()->assertJsonPath('data.destination', '/agency/dashboard');
     }
 
     public function test_asking_for_an_unheld_portal_lands_on_your_own(): void

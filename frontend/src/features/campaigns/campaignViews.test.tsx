@@ -47,6 +47,7 @@ describe('the campaigns workspace and its record-state views', () => {
 
   it('counts drafts, scheduled and paused as their own bands', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'ar' })
+    fireEvent.click(await screen.findByTestId('view-overview'))
     await screen.findByTestId('campaigns-bands')
     // The strip draws at zero while the list loads; the counts are the thing under test.
     await waitFor(() => expect(screen.getByTestId('campaigns-band-drafts')).toHaveAttribute('data-count', '1'))
@@ -57,6 +58,7 @@ describe('the campaigns workspace and its record-state views', () => {
 
   it('narrows the table to the band whose chip was pressed, and keeps the counts whole', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'ar' })
+    fireEvent.click(await screen.findByTestId('view-overview'))
     await screen.findByTestId('campaigns-bands')
     await waitFor(() => expect(screen.getByTestId('campaigns-band-drafts')).toHaveAttribute('data-count', '1'))
     fireEvent.click(screen.getByTestId('campaigns-band-drafts'))
@@ -73,6 +75,7 @@ describe('the campaigns workspace and its record-state views', () => {
 
   it('shows the project change history as a view, each event naming its campaign and its change', async () => {
     renderWithProviders(<CampaignsPage />, { locale: 'ar' })
+    fireEvent.click(await screen.findByTestId('view-overview'))
     await screen.findByTestId('campaigns-bands')
     fireEvent.click(screen.getByTestId('view-history'))
     const history = await screen.findByTestId('project-change-history')

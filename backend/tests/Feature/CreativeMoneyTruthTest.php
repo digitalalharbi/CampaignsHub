@@ -21,6 +21,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\WithoutMigratedSarPeg;
 use Tests\TestCase;
 
 /**
@@ -46,6 +47,7 @@ use Tests\TestCase;
 final class CreativeMoneyTruthTest extends TestCase
 {
     use RefreshDatabase;
+    use WithoutMigratedSarPeg;
 
     private Tenant $tenant;
 

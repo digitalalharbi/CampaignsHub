@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isProviderSignedStill } from './providerMedia'
 
 /**
  * AD-PREVIEW-001 — the still, and what happens when the browser cannot draw it.
@@ -72,7 +73,17 @@ export function PosterImage({
     setNatural(null)
   }, [src])
 
-  if (state === 'failed') {
+  // A refused signed still is a failure the caller may have a second answer for (the library card's film).
+  useEffect(() => {
+    if (isProviderSignedStill(src)) onFailed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src])
+
+  /*
+   * CREATIVE-PREVIEWS-001 — a provider's short-lived signed still is not loaded at all: it would draw a
+   * broken frame once its expiry passed. The caller's stated absence is drawn instead, at once.
+   */
+  if (state === 'failed' || isProviderSignedStill(src)) {
     return <>{fallback}</>
   }
 

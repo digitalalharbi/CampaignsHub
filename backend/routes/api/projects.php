@@ -7,21 +7,27 @@ use App\Domains\Agents\Http\Controllers\AgentAutonomyController;
 use App\Domains\Agents\Http\Controllers\AgentChatController;
 use App\Domains\Agents\Http\Controllers\AgentRoutinesController;
 use App\Domains\Agents\Http\Controllers\AgentRulesController;
+use App\Domains\Analytics\Http\Controllers\AnalyticsReadController;
+use App\Domains\Analytics\Http\Controllers\InfluencerLinkController;
 use App\Domains\Automation\Http\Controllers\AutomationRulesController;
 use App\Domains\Branding\Http\Controllers\ScopedLogoController;
 use App\Domains\Campaigns\Http\Controllers\CampaignManagementController;
 use App\Domains\Campaigns\Http\Controllers\CreativeAnalysisController;
 use App\Domains\Campaigns\Http\Controllers\LaunchPlanController;
+use App\Domains\Commerce\Http\Controllers\StoreAnalyticsController;
 use App\Domains\Commerce\Http\Controllers\StoreFunnelController;
 use App\Domains\Disclaimers\Http\Controllers\DisclaimerController;
 use App\Domains\Forms\Http\Controllers\ConversionDestinationController;
 use App\Domains\Forms\Http\Controllers\FormDataController;
 use App\Domains\Forms\Http\Controllers\FormFunnelController;
 use App\Domains\Forms\Http\Controllers\LeadFormController;
+use App\Domains\Funding\Http\Controllers\ProjectBudgetController;
 use App\Domains\Integrations\Http\Controllers\SiteAnalyticsController;
 use App\Domains\Metrics\Http\Controllers\AttributionSettingsController;
+use App\Domains\Metrics\Http\Controllers\AudienceController;
 use App\Domains\Metrics\Http\Controllers\LiveOperatingViewController;
 use App\Domains\Metrics\Http\Controllers\MetricsController;
+use App\Domains\Metrics\Http\Controllers\PeriodController;
 use App\Domains\Metrics\Http\Controllers\SavedDashboardViewController;
 use App\Domains\Metrics\Http\Controllers\SpendLimitController;
 use App\Domains\Metrics\Http\Controllers\SyncRunController;
@@ -36,6 +42,7 @@ use App\Domains\Reports\Http\Controllers\LiveReportBuilderController;
 use App\Domains\Reports\Http\Controllers\ProjectReportViewsController;
 use App\Domains\Reports\Http\Controllers\ReportAnnotationController;
 use App\Domains\Reports\Http\Controllers\ReportAttentionController;
+use App\Domains\Reports\Http\Controllers\ReportAutoComposeController;
 use App\Domains\Reports\Http\Controllers\ReportBreakdownController;
 use App\Domains\Reports\Http\Controllers\ReportController;
 use App\Domains\Reports\Http\Controllers\ReportIdentityController;
@@ -44,6 +51,7 @@ use App\Domains\Reports\Http\Controllers\ReportScheduleController;
 use App\Domains\Reports\Http\Controllers\ReportScopeController;
 use App\Domains\Reports\Http\Controllers\ReportSectionController;
 use App\Domains\Reports\Http\Controllers\ReportShareController;
+use App\Domains\Reports\Http\Controllers\ReportVersionController;
 use App\Domains\Reports\Http\Controllers\ResultEventsController;
 use App\Domains\Subscriptions\Http\Middleware\EnsureWithinPlanLimit;
 use App\Domains\Tasks\Http\Controllers\TaskController;
@@ -68,8 +76,16 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency'])->prefix('proj
     Route::post('{project}/clone', [ProjectController::class, 'clone'])->name('clone')
         ->middleware(EnsureWithinPlanLimit::class.':projects');
     Route::post('{project}/archive', [ProjectController::class, 'archive'])->name('archive');
+    // PROJECT-LIFECYCLE-001 — what archiving would stop (read-only) and the transition log.
+    Route::get('{project}/archive-impact', [ProjectController::class, 'archiveImpact'])->name('archive-impact');
+    Route::get('{project}/lifecycle', [ProjectController::class, 'lifecycleHistory'])->name('lifecycle');
     Route::post('{project}/restore', [ProjectController::class, 'restore'])->name('restore')
         ->middleware(EnsureWithinPlanLimit::class.':projects');
+    // PROJECT-LIFECYCLE-001 §4–§5 (N2) — restore window, permanent delete from «المحذوفات», move to another client.
+    Route::get('{project}/restore-impact', [ProjectController::class, 'restoreImpact'])->name('restore-impact');
+    Route::post('{project}/purge', [ProjectController::class, 'purge'])->name('purge');
+    Route::get('{project}/move-impact', [ProjectController::class, 'moveImpact'])->name('move-impact');
+    Route::post('{project}/move', [ProjectController::class, 'move'])->name('move');
     Route::post('{project}/pause', [ProjectController::class, 'pause'])->name('pause');
     Route::post('{project}/resume', [ProjectController::class, 'resume'])->name('resume');
 
@@ -165,13 +181,14 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // Effective disclaimer/methodology copy for live surfaces (dashboard/analytics/live report).
     Route::get('disclaimer', [DisclaimerController::class, 'resolve'])->name('disclaimer.resolve');
 
-    // C3 metrics aggregation (read-only; requires campaigns.view).
-    Route::get('metrics/summary', [MetricsController::class, 'summary'])->name('metrics.summary');
-    Route::get('metrics/timeseries', [MetricsController::class, 'timeseries'])->name('metrics.timeseries');
-    Route::get('metrics/drivers', [MetricsController::class, 'drivers'])->name('metrics.drivers');
-    Route::get('metrics/platforms', [MetricsController::class, 'platforms'])->name('metrics.platforms');
-    Route::get('metrics/accounts', [MetricsController::class, 'accounts'])->name('metrics.accounts');
-    Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->name('metrics.campaigns');
+    // C3 metrics aggregation (read-only; requires campaigns.view). ANALYTICS-READ-CACHE-001 — each read is kept 60 s per person.
+    Route::get('metrics/summary', [MetricsController::class, 'summary'])->middleware('read.cache:60')->name('metrics.summary');
+    Route::get('metrics/timeseries', [MetricsController::class, 'timeseries'])->middleware('read.cache:60')->name('metrics.timeseries');
+    Route::get('metrics/drivers', [MetricsController::class, 'drivers'])->middleware('read.cache:60')->name('metrics.drivers');
+    Route::get('metrics/platforms', [MetricsController::class, 'platforms'])->middleware('read.cache:60')->name('metrics.platforms');
+    Route::get('metrics/accounts', [MetricsController::class, 'accounts'])->middleware('read.cache:60')->name('metrics.accounts');
+    Route::get('metrics/accounts/pulse', [MetricsController::class, 'accountPulse'])->middleware('read.cache:60')->name('metrics.accounts.pulse');
+    Route::get('metrics/campaigns', [MetricsController::class, 'campaigns'])->middleware('read.cache:60')->name('metrics.campaigns');
     /*
      * UX-MULTISELECT-SCALE-001 — the filter's options, searched on the server rather than filled from
      * the full metric breakdown. Declared beside it so the two stay visibly related: one carries
@@ -241,6 +258,12 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * `daily_metrics` and has no notion of an order.
      */
     Route::get('commerce/funnel', [StoreFunnelController::class, 'show'])->middleware('project.can:analytics.view')->name('commerce.funnel');
+    // STORE-ANALYTICS-DEPTH-001 — the store's own reading, and each order tied to its source by evidence. No customer identity.
+    Route::get('commerce/depth', [StoreAnalyticsController::class, 'depth'])->middleware('project.can:analytics.view')->name('commerce.depth');
+    Route::get('commerce/orders', [StoreAnalyticsController::class, 'orders'])->middleware('project.can:analytics.view')->name('commerce.orders');
+    Route::get('commerce/orders/export', [StoreAnalyticsController::class, 'exportOrders'])->middleware('project.can:analytics.view')->name('commerce.orders.export');
+    Route::get('commerce/orders/sources', [StoreAnalyticsController::class, 'sources'])->middleware('project.can:analytics.view')->name('commerce.orders.sources');
+    Route::get('commerce/orders/sources/export', [StoreAnalyticsController::class, 'exportSources'])->middleware('project.can:analytics.view')->name('commerce.orders.sources.export');
     // REPORT-OBJECTIVE-001: spend and results split by marketing path, Direct and Blended apart.
     Route::get('metrics/objective-performance', [MetricsController::class, 'objectivePerformance'])->name('metrics.objective');
     /*
@@ -254,6 +277,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/platform-objectives', [MetricsController::class, 'platformObjectives'])->name('metrics.platform-objectives');
     Route::get('metrics/objective-leaders', [MetricsController::class, 'objectiveLeaders'])->name('metrics.objective-leaders');
     Route::get('metrics/objective-explanations', [MetricsController::class, 'objectiveExplanations'])->name('metrics.objective-explanations');
+    Route::get('metrics/objective-paths', [MetricsController::class, 'objectivePathCards'])->name('metrics.objective-paths');
     Route::get('metrics/objective-trend', [MetricsController::class, 'objectiveTrend'])->name('metrics.objective-trend');
     Route::get('metrics/budget', [MetricsController::class, 'budget'])->middleware('project.can:budget.view')->name('metrics.budget');
     Route::get('metrics/budget-explanation', [MetricsController::class, 'budgetExplanation'])->middleware('project.can:budget.view')->name('metrics.budget-explanation');
@@ -272,6 +296,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
      * `budget.view` and `budget.manage` say so on the route, so the refusal happens on the server
      * for every caller, ours or otherwise.
      */
+    // ONE-BUDGET-001 — the approved budget (one source, the budget's own period) for the project-scoped pages.
+    Route::get('approved-budget', ProjectBudgetController::class)->middleware('project.can:budget.view')->name('approved-budget');
     Route::get('spend-limits', [SpendLimitController::class, 'index'])->middleware('project.can:budget.view')->name('spend-limits.index');
     Route::post('spend-limits', [SpendLimitController::class, 'store'])->middleware('project.can:budget.manage')->name('spend-limits.store');
     Route::match(['put', 'patch'], 'spend-limits/{spendLimit}', [SpendLimitController::class, 'update'])->middleware('project.can:budget.manage')->name('spend-limits.update');
@@ -280,6 +306,11 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/budget-platforms', [MetricsController::class, 'budgetPlatforms'])->middleware('project.can:budget.view')->name('metrics.budget-platforms');
     Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->middleware('project.can:budget.view')->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
+    // CLIENT-RESULTS-001 — the project's own Results, counted as its reports count them.
+    Route::get('metrics/results', [MetricsController::class, 'results'])->middleware('read.cache:60')->name('metrics.results');
+    // DATE-RANGE-001 — the Riyadh dates of a named period, and per account which complete days of it have no figures.
+    Route::get('metrics/period', [PeriodController::class, 'resolve'])->name('metrics.period');
+    Route::get('metrics/period-coverage', [PeriodController::class, 'coverage'])->name('metrics.period-coverage');
     // LIVE-OPERATING-VIEW-001 — per source: latest successful sync · source timestamp · next sync · state; never «real-time».
     Route::get('live-view', [LiveOperatingViewController::class, 'show'])->middleware('project.can:campaigns.view')->name('live-view');
     // NORM-001: what was done to the numbers before they were shown — currency, timezone, attribution,
@@ -302,7 +333,29 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('attribution-settings', [AttributionSettingsController::class, 'show'])->middleware(['module:attribution_intelligence', 'project.can:analytics.view'])->name('attribution-settings.show');
     Route::put('attribution-settings', [AttributionSettingsController::class, 'update'])->middleware(['module:attribution_intelligence', 'project.can:reports.manage'])->name('attribution-settings.update');
     // GA4-ANALYTICS-PRODUCT-001 — what the site measured, beside (never inside) the platform figures.
+    // GA4-PLATFORM-COMPARE-001 — the three sources side by side, never added.
+    Route::get('measurement/compare', [SiteAnalyticsController::class, 'compare'])->middleware('project.can:analytics.view')->name('measurement.compare');
+    Route::get('measurement/store', [SiteAnalyticsController::class, 'store'])->middleware('project.can:analytics.view')->name('measurement.store');
     Route::get('measurement/analytics', [SiteAnalyticsController::class, 'show'])->middleware('project.can:analytics.view')->name('measurement.analytics');
+    Route::get('measurement/attribution', [SiteAnalyticsController::class, 'attribution'])->middleware('project.can:analytics.view')->name('measurement.attribution');
+    /*
+     * ANALYTICS-DATA-001 — the analytics sections of this project, read-only, from the one service layer the MCP server
+     * also calls: site (GA4), store, influencers, attribution. Sales-bearing sections need the store capability.
+     */
+    Route::get('analytics/binding', [AnalyticsReadController::class, 'binding'])->middleware('project.can:analytics.view')->name('analytics.binding');
+    Route::get('analytics/report-view', [AnalyticsReadController::class, 'reportView'])->middleware('project.can:analytics.view')->name('analytics.report-view');
+    Route::get('analytics/site', [AnalyticsReadController::class, 'site'])->middleware('project.can:analytics.view')->name('analytics.site');
+    Route::get('analytics/store', [AnalyticsReadController::class, 'store'])->middleware('project.can:analytics.store.view')->name('analytics.store');
+    Route::get('analytics/influencers', [AnalyticsReadController::class, 'influencers'])->middleware('project.can:analytics.store.view')->name('analytics.influencers');
+    Route::get('analytics/attribution', [AnalyticsReadController::class, 'attribution'])->middleware('project.can:analytics.store.view')->name('analytics.attribution');
+    Route::get('analytics/influencer-links', [InfluencerLinkController::class, 'index'])->middleware('project.can:analytics.view')->name('analytics.influencer-links.index');
+    Route::post('analytics/influencer-links', [InfluencerLinkController::class, 'store'])->middleware(['module:smart_links', 'project.can:campaigns.manage'])->name('analytics.influencer-links.store');
+    // AUDIENCE-001 — targeting / paid delivery / site events / organic, kept apart, per platform.
+    Route::get('audience', [AudienceController::class, 'show'])->middleware('project.can:analytics.view')->name('audience.show');
+    Route::get('measurement/gap', [SiteAnalyticsController::class, 'gap'])->middleware('project.can:analytics.view')->name('measurement.gap');
+    Route::get('measurement/classification', [SiteAnalyticsController::class, 'classification'])->middleware('project.can:analytics.view')->name('measurement.classification');
+    Route::get('measurement/analytics/table', [SiteAnalyticsController::class, 'table'])->middleware('project.can:analytics.view')->name('measurement.analytics.table');
+    Route::get('measurement/analytics/table/export', [SiteAnalyticsController::class, 'export'])->middleware('project.can:analytics.view')->name('measurement.analytics.table.export');
 
     // SYNC-001: the sync pipeline's operator surface — what ran, what it produced, what broke.
     /*
@@ -327,6 +380,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('creatives/format-intelligence', [CreativeAnalysisController::class, 'formatIntelligence'])
         ->middleware('project.can:campaigns.view')
         ->name('creatives.format-intelligence');
+    // CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى»: per format and objective, results, cost and the winner.
+    Route::get('creatives/format-comparison', [CreativeAnalysisController::class, 'formatComparison'])
+        ->middleware('project.can:campaigns.view')
+        ->name('creatives.format-comparison');
     Route::post('creatives/compare', [CreativeAnalysisController::class, 'compare'])->middleware('project.can:campaigns.view')->name('creatives.compare');
     /*
      * The group listing, which this surface was missing while the workspace surface had it.
@@ -364,6 +421,7 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     // AGENTS-ROUTINES-001 — scheduled routines, off until a project switches one on.
     Route::get('agent-routines', [AgentRoutinesController::class, 'index'])->middleware('project.can:campaigns.view')->name('agent-routines.index');
     Route::put('agent-routines', [AgentRoutinesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('agent-routines.update');
+    Route::post('agent-routines/{routine}/run', [AgentRoutinesController::class, 'run'])->middleware('project.can:campaigns.manage')->name('agent-routines.run');
     // AGENTS-AUTONOMY-001 — the trust ladder and an owner's switch per action class.
     Route::get('agent-autonomy', [AgentAutonomyController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-autonomy.show');
     Route::put('agent-autonomy', [AgentAutonomyController::class, 'update'])->middleware('project.can:budget.manage')->name('agent-autonomy.update');
@@ -389,12 +447,20 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::delete('agent-threads/{thread}', [AgentChatController::class, 'destroy'])->middleware('project.can:campaigns.view')->name('agent-threads.destroy');
     Route::delete('agent-threads', [AgentChatController::class, 'clear'])->middleware('project.can:campaigns.view')->name('agent-threads.clear');
     Route::post('agent-threads', [AgentChatController::class, 'send'])->middleware('project.can:campaigns.view')->name('agent-threads.send');
+    // AGENTS-ASSISTANT-001 — the team by job and autonomy, the live reply, Stop, and rename/pin of my own conversation.
+    Route::get('agents/team', [AgentChatController::class, 'team'])->middleware('project.can:campaigns.view')->name('agents.team');
+    Route::get('agent-threads/{thread}/live', [AgentChatController::class, 'live'])->middleware('project.can:campaigns.view')->name('agent-threads.live');
+    Route::post('agent-threads/{thread}/stop', [AgentChatController::class, 'stop'])->middleware('project.can:campaigns.view')->name('agent-threads.stop');
+    Route::patch('agent-threads/{thread}', [AgentChatController::class, 'update'])->middleware('project.can:campaigns.view')->name('agent-threads.update');
     // AGENTS-CLIENT-RULES-001 — goals, decision rules and gateway limits; the comparison agents start from.
     Route::get('agent-rules', [AgentRulesController::class, 'show'])->middleware('project.can:campaigns.view')->name('agent-rules.show');
     Route::put('agent-rules', [AgentRulesController::class, 'update'])->middleware('project.can:campaigns.manage')->name('agent-rules.update');
     Route::get('agent-rules/compare', [AgentRulesController::class, 'compare'])->middleware('project.can:analytics.view')->name('agent-rules.compare');
     Route::get('agent-proposals', [ActionProposalController::class, 'index'])->middleware('project.can:campaigns.view')->name('agent-proposals.index');
     Route::post('agent-proposals', [ActionProposalController::class, 'store'])->middleware('project.can:campaigns.manage')->name('agent-proposals.store');
+    // AGENTS-ASSISTANT-001 — several decisions at once (each one still re-checked one by one) and a person's edit of a pending budget.
+    Route::post('agent-proposals/bulk', [ActionProposalController::class, 'bulk'])->middleware('project.can:campaigns.manage')->name('agent-proposals.bulk');
+    Route::patch('agent-proposals/{proposal}', [ActionProposalController::class, 'amend'])->middleware('project.can:campaigns.manage')->name('agent-proposals.amend');
     Route::post('agent-proposals/{proposal}/approve', [ActionProposalController::class, 'approve'])->middleware('project.can:campaigns.manage')->name('agent-proposals.approve');
     Route::post('agent-proposals/{proposal}/reject', [ActionProposalController::class, 'reject'])->middleware('project.can:campaigns.manage')->name('agent-proposals.reject');
     Route::get('reports/live/options', [LiveReportBuilderController::class, 'options'])->middleware('project.can:reports.view')->name('reports.live.options');
@@ -441,6 +507,10 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('reports/{report}/sections', [ReportSectionController::class, 'show'])->middleware('project.can:reports.view')->name('reports.sections.show');
     Route::put('reports/{report}/sections', [ReportSectionController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.sections.update');
     // A link's own section switches: the same registry, off-only on top of the report.
+    // REPORT-AUTO-COMPOSE-001 — propose, pick and go back; `share_id` narrows it to one link.
+    Route::get('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.auto-compose.show');
+    Route::post('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'store'])->middleware('project.can:reports.manage')->name('reports.auto-compose.store');
+    Route::delete('reports/{report}/auto-compose', [ReportAutoComposeController::class, 'destroy'])->middleware('project.can:reports.manage')->name('reports.auto-compose.destroy');
     Route::get('reports/{report}/shares/{share}/sections', [ReportSectionController::class, 'showShare'])->middleware('project.can:reports.view')->name('reports.shares.sections.show');
     Route::put('reports/{report}/shares/{share}/sections', [ReportSectionController::class, 'updateShare'])->middleware('project.can:reports.manage')->name('reports.shares.sections.update');
     /*
@@ -451,7 +521,17 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
         ->middleware(EnsureWithinPlanLimit::class.':reports_per_month');
     Route::get('reports/{report}', [ReportController::class, 'show'])->middleware('project.can:reports.view')->name('reports.show');
     Route::match(['put', 'patch'], 'reports/{report}', [ReportController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.update');
+    // REPORT-DUPLICATE-001 (Owner correction 2026-11-04) — «تكرار» stores nothing: it hands the editor a pre-filled draft.
+    Route::post('reports/{report}/duplicate', [ReportController::class, 'duplicate'])->middleware('project.can:reports.manage')->name('reports.duplicate')->whereUuid('report');
+    // The editor's preview (stores nothing), a saved draft reopened and edited, and the one way a draft is published.
+    Route::post('reports/draft-preview', [ReportController::class, 'previewDraft'])->middleware(['project.can:reports.manage', 'throttle:20,1'])->name('reports.draft.preview');
+    Route::get('reports/{report}/draft', [ReportController::class, 'draft'])->middleware('project.can:reports.view')->name('reports.draft.show')->whereUuid('report');
+    Route::put('reports/{report}/draft', [ReportController::class, 'updateDraft'])->middleware('project.can:reports.manage')->name('reports.draft.update')->whereUuid('report');
+    Route::post('reports/{report}/publish', [ReportController::class, 'publish'])->middleware('project.can:reports.manage')->name('reports.publish')->whereUuid('report');
     Route::post('reports/{report}/regenerate', [ReportController::class, 'regenerate'])->middleware('project.can:reports.manage')->name('reports.regenerate');
+    // REPORT-SNAPSHOT-PROTECT-001 — the copies a rebuild replaced, and putting one back.
+    Route::get('reports/{report}/versions', [ReportVersionController::class, 'index'])->middleware('project.can:reports.view')->name('reports.versions');
+    Route::post('reports/{report}/versions/{version}/restore', [ReportVersionController::class, 'restore'])->middleware('project.can:reports.manage')->name('reports.versions.restore');
     // REPORT-DRILLDOWN-001 — the optional drill-down sections a report's PDF carries (off by default).
     Route::put('reports/{report}/breakdowns', [ReportBreakdownController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.breakdowns.update')->whereUuid('report');
     Route::get('reports/{report}/scope', [ReportScopeController::class, 'show'])->middleware('project.can:reports.view')->name('reports.scope.show');
@@ -473,6 +553,9 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::post('reports/{report}/shares/{share}/revoke', [ReportShareController::class, 'revoke'])->middleware('project.can:reports.manage')->name('reports.shares.revoke');
     Route::post('reports/{report}/shares/{share}/pause', [ReportShareController::class, 'pause'])->middleware('project.can:reports.manage')->name('reports.shares.pause');
     Route::post('reports/{report}/shares/{share}/resume', [ReportShareController::class, 'resume'])->middleware('project.can:reports.manage')->name('reports.shares.resume');
+    // REPORT-LIVE-SNAPSHOT-CONVERT-001 / REPORT-LIFECYCLE-MENU-001 — convert a link's mode on the same URL; copy the current link.
+    Route::post('reports/{report}/shares/{share}/convert', [ReportShareController::class, 'convert'])->middleware('project.can:reports.manage')->name('reports.shares.convert');
+    Route::get('reports/{report}/shares/{share}/link', [ReportShareController::class, 'link'])->middleware('project.can:reports.view')->name('reports.shares.link');
     Route::post('reports/{report}/shares/{share}/renew', [ReportShareController::class, 'renew'])->middleware('project.can:reports.manage')->name('reports.shares.renew');
     Route::patch('reports/{report}/shares/{share}', [ReportShareController::class, 'update'])->middleware('project.can:reports.manage')->name('reports.shares.update');
     Route::get('reports/{report}/shares/{share}/analytics', [ReportShareController::class, 'analytics'])->middleware('project.can:reports.view')->name('reports.shares.analytics');

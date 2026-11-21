@@ -46,6 +46,27 @@ describe('UserAccessDialog', () => {
     expect(screen.getByTestId('access-result')).toHaveTextContent(/verifying who they are/i)
   })
 
+  it('deactivates the account with only a reason, and offers activation once it is off', async () => {
+    vi.mocked(actOnUserAccess).mockResolvedValue({ action: 'deactivate', disabled: true, sessions_revoked: true })
+    renderWithProviders(<UserAccessDialog person={person} ar={false} onClose={() => {}} />, { locale: 'en' })
+
+    expect(screen.queryByTestId('access-action-activate')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('access-action-deactivate'))
+    expect(screen.queryByTestId('access-password')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByTestId('access-reason'), { target: { value: 'Left the agency' } })
+    fireEvent.click(screen.getByTestId('access-submit'))
+
+    await waitFor(() => expect(actOnUserAccess).toHaveBeenCalledWith('u-7', { action: 'deactivate', reason: 'Left the agency', current_password: undefined }))
+  })
+
+  it('says the account is off and offers to turn it back on', () => {
+    renderWithProviders(<UserAccessDialog person={{ ...person, disabled: true }} ar onClose={() => {}} />, { locale: 'ar' })
+
+    expect(screen.getByTestId('access-disabled')).toHaveTextContent('موقوف')
+    expect(screen.getByTestId('access-action-activate')).toBeInTheDocument()
+    expect(screen.queryByTestId('access-action-deactivate')).not.toBeInTheDocument()
+  })
+
   it('does not offer a two-factor reset to someone without two-factor', () => {
     renderWithProviders(<UserAccessDialog person={{ ...person, mfa_enabled: false }} ar={false} onClose={() => {}} />, { locale: 'en' })
 

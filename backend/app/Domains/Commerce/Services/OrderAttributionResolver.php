@@ -192,7 +192,7 @@ final class OrderAttributionResolver
     }
 
     /** The projects a collaboration's orders can come from: its campaign's project, else its client's projects. */
-    private function projectIdsOf(?InfluencerCollaboration $collaboration): array
+    public function projectIdsOf(?InfluencerCollaboration $collaboration): array
     {
         if ($collaboration === null) {
             return [];

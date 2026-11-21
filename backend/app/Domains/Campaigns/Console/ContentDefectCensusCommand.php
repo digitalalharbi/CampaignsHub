@@ -78,7 +78,7 @@ final class ContentDefectCensusCommand extends Command
     private const RAW_MAX_BODIES = 5000;
 
     /** States that draw nothing by design — truthful, but still a creative with no picture. */
-    private const ABSENCE_STATES = ['withheld', 'expired', 'never_fetched', 'shape_not_fetched', 'unavailable'];
+    private const ABSENCE_STATES = ['withheld', 'expired', 'never_fetched', 'shape_not_fetched', 'unavailable', 'cover_pending', 'cover_failed'];
 
     /** How much of an asset is read to judge it: enough for a still's header, never the file. */
     private const PREFIX_BYTES = 262_144;

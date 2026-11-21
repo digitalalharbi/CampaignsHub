@@ -156,7 +156,9 @@ final class CreativePresenter
     {
         return $this->card($creative, $campaign) + [
             'copy' => [
-                'body' => $creative->body,
+                // CONTENT-TEXT-CTA-001 — a TikTok row synced before `ad_text` was written as the body still holds it in `raw`.
+                // Under `copy`, so every client surface's «نص الإعلان» switch removes it exactly as it removes the column.
+                'body' => $creative->body ?? (strtolower((string) $creative->provider) === 'tiktok' ? $this->plain(((array) ($creative->raw ?? []))['ad_text'] ?? null) : null),
                 'headline' => $creative->headline,
                 'description' => $creative->description,
                 'cta' => $creative->cta,
@@ -251,7 +253,8 @@ final class CreativePresenter
      *     cards: list<array<string, mixed>>|null,
      *     cards_reported: bool,
      *     cards_withheld: int,
-     *     text: array{headline: string|null, body: string|null}|null
+     *     text: array{headline: string|null, body: string|null}|null,
+     *     cover: array{state: string, reason: string|null}
      * }
      */
     public function preview(ExternalCreative $creative): array
@@ -281,10 +284,32 @@ final class CreativePresenter
          * A row with nothing but a share link now reads as what it is: an ad the platform exposed no
          * asset for. That sentence is true, and a reader can act on it. A blank rectangle is neither.
          */
-        $image = $this->safe($creative->asset_url);
+        /*
+         * CREATIVE-PREVIEWS-001 — our copy first; a short-lived platform grant is never given to the browser.
+         *
+         * Owner, 2026-11-07: Meta and TikTok drew no preview and no cover; Snapchat did. Meta's still was its
+         * `asset_url` — a `scontent-*.fbcdn.net` link signed with an `oe=` expiry — read BEFORE the cover we had
+         * already copied, so a dead link won over a good file. TikTok's were `*-sign.tiktokcdn.com` links that
+         * live an hour (images) or six (video covers). The cached cover now IS the still, for every kind; where
+         * there is none yet, a Meta or TikTok link is withheld and the card says the cover is on its way (or
+         * why it is not), and anyone else's link (Snapchat's) is shown exactly as before.
+         * The playable film (`video_url`) is left alone: it is fetched on a click, and copying films is not
+         * what a cover cache is for.
+         */
+        $cover = CoverCache::urlFor($creative);
+        $still = fn (?string $url): ?string => CoverCache::hotlinkable($url) ? $url : null;
+        $image = $cover ?? $still($this->safe($creative->asset_url));
         $video = $this->safe($creative->video_url);
         // TIKTOK-MEDIA-002 — cached cover first, the provider's live link second, the honest absence last.
-        $thumb = CoverCache::urlFor($creative) ?? $this->safe($creative->thumbnail_url);
+        $thumb = $cover ?? $still($this->safe($creative->thumbnail_url));
+        $expired = $creative->assetExpired();
+        if ($cover !== null && $expired) {
+            // The film's link has lapsed; the cover has not. The card draws the cover and offers no dead film.
+            $video = null;
+            $expired = false;
+        }
+        $awaitingCopy = $cover === null && $image === null && $thumb === null
+            && ($this->safe($creative->asset_url) !== null || $this->safe($creative->thumbnail_url) !== null);
 
         $blocked = $this->wasWithheld($creative);
 
@@ -306,7 +331,7 @@ final class CreativePresenter
          * so they carry the same credential and the same expiry — `cards()` says exactly that — and
          * promoting one would be reaching around a refusal this product made on purpose.
          */
-        if ($image === null && $video === null && $thumb === null && ! $blocked && ! $creative->assetExpired()) {
+        if ($image === null && $video === null && $thumb === null && ! $blocked && ! $expired && ! $awaitingCopy) {
             [$image, $video, $thumb] = $this->heroFromCards($creative);
         }
 
@@ -320,7 +345,7 @@ final class CreativePresenter
                 'note_ar' => 'رابط المعاينة من المنصة يحمل بيانات اعتماد، فلا يُعرض.',
                 'note_en' => 'The platform’s preview link carries a credential, so it is not shown.',
             ],
-            $creative->assetExpired() => [
+            $expired => [
                 'state' => 'expired',
                 'kind' => $kind,
                 'aspect' => $aspect,
@@ -328,6 +353,24 @@ final class CreativePresenter
                 'thumbnail_url' => $thumb,
                 'expires_at' => $creative->asset_expires_at?->toIso8601String(),
                 ...$this->expiredNote($creative),
+            ],
+            /*
+             * CREATIVE-PREVIEWS-001 — the platform gave a still, and our copy of it is not there yet (or could
+             * not be taken). Neither is «the platform exposed nothing», and neither may draw the platform's link.
+             */
+            $awaitingCopy && $video === null => [
+                'state' => CoverCache::stateOf($creative) === CoverCache::STATE_FAILED ? 'cover_failed' : 'cover_pending',
+                'kind' => $kind,
+                'aspect' => $aspect,
+                'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                'expires_at' => null,
+                ...(CoverCache::stateOf($creative) === CoverCache::STATE_FAILED ? [
+                    'note_ar' => 'تعذّر جلب الغلاف من المنصة — سيُعاد المحاولة تلقائيًا.',
+                    'note_en' => 'The cover could not be fetched from the platform — it will be retried automatically.',
+                ] : [
+                    'note_ar' => 'الغلاف قيد التجهيز.',
+                    'note_en' => 'The cover is being prepared.',
+                ]),
             ],
             /*
              * AD-MEDIA-RECOVERY-001 — «never fetched» is not «the platform refused».
@@ -493,13 +536,11 @@ final class CreativePresenter
                 'note_en' => 'This ad’s cards were fetched and none of them carried a usable asset.',
             ],
             /*
-             * OPENAI-CHAT-CARD-TEXT-001 — a ChatGPT Ads card has a file the API will not give back.
+             * OPENAI-CHAT-CARD-TEXT-001 — a ChatGPT Ads card whose picture the single-ad read did not resolve.
              *
-             * The Ads API documents `POST /upload` (which returns a `file_id`) and attaches that id to
-             * a card, and documents no call that reads a file by its id. So the picture exists and is
-             * out of reach by design, which is neither «the platform exposed no asset» (it did name
-             * one) nor a gap in this product to fix with a request. The card's own words are shown in
-             * its place, and the state stays `unavailable`: no image is claimed.
+             * CREATIVE-SYNC-MEDIA-001 — the connector now reads `GET /ads/{id}`, which resolves the
+             * card's `image_url` / `images[]`; a card reaching this branch is one OpenAI returned with
+             * a null URL (or a text-only card), so no picture is claimed and its own words are shown.
              */
             $image === null && $video === null && $thumb === null && strtolower((string) $creative->format) === 'chat_card' => [
                 'state' => 'unavailable',
@@ -507,8 +548,17 @@ final class CreativePresenter
                 'aspect' => $aspect,
                 'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
                 'expires_at' => null,
-                'note_ar' => 'بطاقة محادثة من إعلانات ChatGPT: صورتها ملف مرفوع لا تتيح واجهة المنصة قراءته، فيُعرض نصّ الإعلان بدلًا منها.',
-                'note_en' => 'A ChatGPT Ads chat card: its image is an uploaded file the platform’s API offers no way to read back, so the ad’s own text is shown instead.',
+                'note_ar' => 'بطاقة محادثة من إعلانات ChatGPT: لم تُرجع المنصة رابطًا لصورتها (أو أنها بطاقة نصية)، فيُعرض نصّ الإعلان بدلًا منها.',
+                'note_en' => 'A ChatGPT Ads chat card: the platform returned no image link for it (or it is text-only), so the ad’s own text is shown instead.',
+            ],
+            $image === null && $video === null && $thumb === null && strtolower((string) $creative->format) === 'text_card' => [
+                'state' => 'unavailable',
+                'kind' => $kind,
+                'aspect' => $aspect,
+                'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
+                'expires_at' => null,
+                'note_ar' => 'إعلان نصّي: لا صورة له على المنصة، فيُعرض نصّ الإعلان.',
+                'note_en' => 'A text ad: it has no picture on the platform, so the ad’s own words are shown.',
             ],
             $image === null && $video === null && $thumb === null => [
                 'state' => 'unavailable',
@@ -516,8 +566,11 @@ final class CreativePresenter
                 'aspect' => $aspect,
                 'image_url' => null, 'video_url' => null, 'thumbnail_url' => null,
                 'expires_at' => null,
-                'note_ar' => 'جُلب هذا الإعلان من المنصة، ولم تُتِح المنصة أصل المحتوى.',
-                'note_en' => 'This ad was fetched from the platform, and the platform exposed no asset for it.',
+                // CONTENT-PREVIEW-COVERAGE-001 — the connector's stored reason, when it kept one, beats the generic sentence.
+                ...($this->storedReasonNote($creative) ?? [
+                    'note_ar' => 'جُلب هذا الإعلان من المنصة، ولم تُتِح المنصة أصل المحتوى.',
+                    'note_en' => 'This ad was fetched from the platform, and the platform exposed no asset for it.',
+                ]),
             ],
             default => [
                 'state' => 'available',
@@ -532,7 +585,11 @@ final class CreativePresenter
             ],
         };
 
-        return $shape + ['text' => $this->copyText($creative)] + $this->cards($creative, $shape['state']);
+        return $shape + [
+            'text' => $this->copyText($creative),
+            // CREATIVE-PREVIEWS-001 — the cover's own state, so a card can say «pending» or «failed» in a chip.
+            'cover' => ['state' => CoverCache::stateOf($creative), 'reason' => $creative->cover_error],
+        ] + $this->cards($creative, $shape['state']);
     }
 
     /**
@@ -546,15 +603,112 @@ final class CreativePresenter
      */
     private function copyText(ExternalCreative $creative): ?array
     {
-        if (strtolower((string) $creative->format) !== 'chat_card') {
+        // CREATIVE-SYNC-MEDIA-001 — `text_card`: a Google responsive search ad / X text post, whose words are the creative.
+        if (! in_array(strtolower((string) $creative->format), ['chat_card', 'text_card'], true)) {
             return null;
         }
 
         $raw = (array) ($creative->raw ?? []);
-        $body = $this->plain($creative->body) ?? $this->plain($raw['body'] ?? null);
+        // CONTENT-TEXT-CTA-001 — TikTok keeps the ad's text as `ad_text` in rows synced before it was written as the body.
+        $body = $this->plain($creative->body) ?? $this->plain($raw['body'] ?? null) ?? $this->plain($raw['ad_text'] ?? null);
         $headline = $this->plain($creative->headline) ?? $this->plain($creative->name);
 
         return $body === null && $headline === null ? null : ['headline' => $headline, 'body' => $body];
+    }
+
+    /**
+     * CONTENT-PREVIEW-COVERAGE-001 — WHY a TikTok creative draws nothing, in the connector's own stored word.
+     *
+     * `TikTokConnector` writes `raw.media_reason` for every creative it could not resolve, and nothing read it:
+     * 352 live creatives said «the platform exposed no asset» whether TikTok refused the file, no longer serves
+     * the post, or never named the account that owns it. Rows synced before the reason existed have none and
+     * keep the generic sentence — no reason is invented for them.
+     *
+     * @return array{note_ar: string, note_en: string}|null
+     */
+    private function storedReasonNote(ExternalCreative $creative): ?array
+    {
+        // X-TWEET-CONTENT-001 — the Ads API answered and did not return this tweet (deleted, or out of every promotable user's reach).
+        if (strtolower((string) $creative->provider) === 'x' && (((array) ($creative->raw ?? []))['media_reason'] ?? null) === 'x_tweet_not_returned') {
+            return [
+                'note_ar' => 'إعلان إكس: لم تُرجع إكس هذه التغريدة عند طلبها من حساب الإعلانات، فلا نص ولا صورة لها — غالبًا حُذفت التغريدة.',
+                'note_en' => 'An X ad: X did not return this post when the ads account asked for it, so it has no text or picture — usually the post was deleted.',
+            ];
+        }
+
+        if (strtolower((string) $creative->provider) === 'linkedin') {
+            $raw = (array) ($creative->raw ?? []);
+            $said = is_string($raw['provider_message'] ?? null) && trim($raw['provider_message']) !== '' ? trim($raw['provider_message']) : null;
+
+            return $this->linkedinReasonNote((string) ($raw['media_reason'] ?? ''), $said);
+        }
+
+        if (strtolower((string) $creative->provider) !== 'tiktok') {
+            return null;
+        }
+
+        return match ((string) (((array) ($creative->raw ?? []))['media_reason'] ?? '')) {
+            'video_info_missing' => [
+                'note_ar' => 'لم تُرجع مكتبة أصول TikTok بيانات هذا الفيديو — غالبًا لأن التطبيق لا يملك صلاحية الوصول إلى ملفه، أو لأنه حُذف من المكتبة.',
+                'note_en' => 'TikTok’s Asset Library returned no data for this video — usually because the app has no access to its file, or it was removed from the library.',
+            ],
+            'image_info_missing' => [
+                'note_ar' => 'لم تُرجع مكتبة أصول TikTok بيانات هذه الصورة — غالبًا لأن التطبيق لا يملك صلاحية الوصول إلى ملفها، أو حُذفت من المكتبة.',
+                'note_en' => 'TikTok’s Asset Library returned no data for this image — usually because the app has no access to its file, or it was removed from the library.',
+            ],
+            'spark_post_info_missing' => [
+                'note_ar' => 'إعلان Spark: سُئلت TikTok عن المنشور فلم تُعد غلافًا ولا ملفًا — المنشور محذوف أو غير متاح للهوية المرتبطة به.',
+                'note_en' => 'A Spark ad: TikTok was asked for the post and returned no cover or file — the post is removed or not available to its linked identity.',
+            ],
+            'spark_identity_unknown' => [
+                'note_ar' => 'إعلان Spark: لم ترسل TikTok هوية الحساب الناشر للمنشور، فلا يمكن طلب غلافه.',
+                'note_en' => 'A Spark ad: TikTok did not name the identity that owns the post, so its cover cannot be requested.',
+            ],
+            default => null,
+        };
+    }
+
+    /**
+     * X-LINKEDIN-CONTENT-001 — why a LinkedIn sponsored post draws nothing, in the connector's stored word.
+     *
+     * LINKEDIN-SCOPES-001 — the remedy is the ADVERTISER's reconnect: a token holds only the scopes its consent asked
+     * for, so approving a product on the LinkedIn app changes nothing until LinkedIn is linked again (proven on
+     * Production 2026-11-13). The old note sent the Owner to the app, where everything was already approved. When
+     * LinkedIn refused with the scope granted, its own sentence is shown — it names the API that refused.
+     *
+     * @return array{note_ar: string, note_en: string}|null
+     */
+    private function linkedinReasonNote(string $reason, ?string $said = null): ?array
+    {
+        $reconnect = [
+            'note_ar' => 'أعد ربط لينكدإن لمنح صلاحية قراءة المنشورات',
+            'note_en' => 'Reconnect LinkedIn to allow reading posts (r_organization_social).',
+        ];
+
+        return match ($reason) {
+            'linkedin_reconnect_for_posts' => $reconnect,
+            // A row written before the grant was read first carries no sentence; its cause was the missing grant.
+            'linkedin_post_scope_missing' => $said === null ? $reconnect : [
+                'note_ar' => 'لينكدإن رفضت قراءة المنشور: '.$said,
+                'note_en' => 'LinkedIn refused to read the post: '.$said,
+            ],
+            'linkedin_media_scope_missing' => $said === null ? [
+                'note_ar' => 'أعد ربط لينكدإن لمنح صلاحية قراءة الصور والفيديو',
+                'note_en' => 'Reconnect LinkedIn to allow reading images and videos (rw_ads).',
+            ] : [
+                'note_ar' => 'لينكدإن رفضت قراءة ملف الصورة أو الفيديو: '.$said,
+                'note_en' => 'LinkedIn refused to read the image or video file: '.$said,
+            ],
+            'linkedin_post_unreadable', 'linkedin_media_unreadable' => [
+                'note_ar' => 'منشور ممول في لينكدإن: لم ترجع لينكدإن المنشور أو ملفه في آخر تحديث.',
+                'note_en' => 'A LinkedIn sponsored post: LinkedIn did not return the post or its file on the last refresh.',
+            ],
+            'linkedin_no_post_reference' => [
+                'note_ar' => 'إعلان لينكدإن لا يشير إلى منشور، فلا صورة له.',
+                'note_en' => 'This LinkedIn ad names no post, so it has no picture.',
+            ],
+            default => null,
+        };
     }
 
     private function plain(mixed $value): ?string
@@ -613,9 +767,9 @@ final class CreativePresenter
 
             $given = static fn (string $key): ?string => is_string($card[$key] ?? null) ? $card[$key] : null;
 
-            $image = $this->safe($given('image_url')) ?? $this->safe($given('asset_url'));
+            $image = $this->cardStill($creative, $given('image_url')) ?? $this->cardStill($creative, $given('asset_url'));
             $video = $this->safe($given('video_url'));
-            $thumb = $this->safe($given('thumbnail_url'));
+            $thumb = $this->cardStill($creative, $given('thumbnail_url'));
 
             if ($image !== null || $video !== null || $thumb !== null) {
                 return [$image, $video, $thumb];
@@ -649,9 +803,9 @@ final class CreativePresenter
 
             $given = static fn (string $key): ?string => is_string($card[$key] ?? null) ? $card[$key] : null;
 
-            $image = $this->safe($given('image_url')) ?? $this->safe($given('asset_url'));
+            $image = $this->cardStill($creative, $given('image_url')) ?? $this->cardStill($creative, $given('asset_url'));
             $video = $this->safe($given('video_url'));
-            $thumb = $this->safe($given('thumbnail_url'));
+            $thumb = $this->cardStill($creative, $given('thumbnail_url'));
 
             $hadLink = $given('image_url') ?? $given('asset_url') ?? $given('video_url') ?? $given('thumbnail_url');
 
@@ -682,6 +836,19 @@ final class CreativePresenter
         }
 
         return ['cards' => $cards, 'cards_reported' => true, 'cards_withheld' => $withheld];
+    }
+
+    /**
+     * CREATIVE-PREVIEWS-001 — a card's still obeys the hero's rule: a short-lived platform grant is not drawn.
+     *
+     * A carousel card's link is a Meta `fbcdn` grant like the hero's. It is withheld (and counted, so the strip
+     * can say how many it is not showing) rather than drawn as a frame that breaks once its `oe=` passes.
+     */
+    private function cardStill(ExternalCreative $creative, ?string $url): ?string
+    {
+        $safe = $this->safe($url);
+
+        return CoverCache::hotlinkable($safe) ? $safe : null;
     }
 
     private function text(mixed $value): ?string

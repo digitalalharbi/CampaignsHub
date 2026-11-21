@@ -61,13 +61,25 @@ final class SubscriptionInvoicing
             ?? $tenant?->billing_email
             ?? '');
 
-        $treatment = (string) ($options['tax_treatment'] ?? TaxTreatment::DEFAULT);
+        /*
+         * PRICING-VAT-001 — the invoice states what the charge asked for; it never adds tax on top of it.
+         *
+         * The charge carries its own split (price, VAT, treatment), captured when it was opened. A charge opened before that
+         * existed was an all-in amount: its VAT is shown as included, so the total is still exactly what was asked for.
+         */
+        if ($payment->tax_treatment !== null && $payment->net_amount !== null && $payment->tax_amount !== null) {
+            $treatment = (string) $payment->tax_treatment;
+            $unit = (float) $payment->net_amount;
+            $tax = (float) $payment->tax_amount;
+        } else {
+            $split = app(SubscriptionTax::class)->split($payment->plan_code, (string) $payment->amount);
+            $treatment = $split['treatment'];
+            $unit = (float) $split['net'];
+            $tax = (float) $split['tax'];
+        }
         $rate = TaxTreatment::rate($treatment);
-
-        $unit = (float) $payment->amount;
-        $discount = (float) ($options['discount'] ?? 0);
-        $subtotal = max(0, $unit - $discount);
-        $tax = round($subtotal * $rate, 2);
+        $discount = 0.0;
+        $subtotal = $unit;
 
         return DB::transaction(function () use (
             $payment, $tenant, $request, $billToName, $billToEmail,

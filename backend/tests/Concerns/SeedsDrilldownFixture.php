@@ -23,6 +23,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Support\SeededAccountBinder;
 
 /**
  * REPORT-DRILLDOWN-001 — the drill-down fixture: meta and tiktok under their own accounts, plus a
@@ -69,11 +70,14 @@ trait SeedsDrilldownFixture
             'external_id' => $ext, 'name' => $ext, 'status' => 'active', 'discovered_at' => now(),
         ])->getKey();
 
+        // The two accounts this project READS are selected for it; the third below is deselected and the test classes opt out of the
+        // automatic selection so that it stays so (see Tests\Support\SeededAccountBinder).
+        $selected = fn (string $provider, string $ext): string => SeededAccountBinder::ensure((string) $this->project->getKey(), $account($provider, $ext), $provider);
         $deselected = $account('meta', 'act-elsewhere');
         $fixture = [
             // label, provider, account, [spend, impressions, clicks, conversions, revenue]
-            ['Meta Summer', 'meta', $account('meta', 'act-meta'), [300, 20000, 400, 12, 1500]],
-            ['TikTok Launch', 'tiktok', $account('tiktok', 'act-tiktok'), [100, 30000, 300, 4, 200]],
+            ['Meta Summer', 'meta', $selected('meta', 'act-meta'), [300, 20000, 400, 12, 1500]],
+            ['TikTok Launch', 'tiktok', $selected('tiktok', 'act-tiktok'), [100, 30000, 300, 4, 200]],
             ['Meta Elsewhere', 'meta', $deselected, [9000, 90000, 900, 90, 90000]],
         ];
 

@@ -177,7 +177,7 @@ final class SallaOnboarding
         // At most one client exists here (see `mayPlaceWithoutAsking`): the only one, or a fresh one.
         $client = ClientWorkspace::query()->first() ?? ClientWorkspace::create([
             'tenant_id' => $tenant->id,
-            'name' => $tenant->name,
+            'name' => $this->storeName($install),
             'slug' => Str::slug($tenant->name.'-'.Str::random(4)),
             'mode' => 'managed',
             'status' => 'active',

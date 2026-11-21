@@ -85,29 +85,14 @@ final class SharedLinkBranding
          * report whose config carries no branding at all, which rendered a blank header and is the
          * «never a blank header» clause of BRANDING-HIERARCHY-001.
          */
-        $resolved = $this->forReport(
+        // REPORT-PARITY-FOUR-SURFACES-001 — the frozen identity is applied inside forReport(), so the PDF and the preview read it too.
+        return $this->forReport(
             $report,
             (string) $share->tenant_id,
             fn (?string $role = null): string => $this->tokenUrl(
                 "/api/v1/reports/shared/{$rawToken}/branding/logo".($role === null ? '' : "/{$role}"),
             ),
         );
-
-        $config = (array) ($report === null ? [] : ($report->config ?? []));
-        $frozen = (array) ($config['branding'] ?? []);
-        if (($frozen['name'] ?? null) !== null || ($frozen['logo_url'] ?? null) !== null) {
-            // The frozen identity keeps the name and mark it was shared under; the two marks beside it still resolve.
-            return [
-                'name' => (string) ($frozen['name'] ?? 'CampaignsHub'),
-                'logo_url' => $frozen['logo_url'] ?? null,
-                'logo_source' => 'report',
-                'by' => null,
-                'agency' => $resolved['agency'],
-                'client' => $resolved['client'],
-            ];
-        }
-
-        return $resolved;
     }
 
     /**
@@ -183,7 +168,7 @@ final class SharedLinkBranding
         $agencyMark = $this->markFor('agency', $client, $tenantId);
         $clientMark = $client === null ? null : $this->markFor('client', $client, $tenantId, $report);
 
-        return [
+        $resolved = [
             /*
              * REPORT BRANDING — the two marks a client report carries, side by side: the agency that
              * issued it and the client it is about. Each is its OWN layer's logo or none — never the
@@ -227,6 +212,27 @@ final class SharedLinkBranding
                 ? null
                 : ($prefer === 'agency' ? $clientName : $agencyName),
         ];
+
+        /*
+         * REPORT-PARITY-FOUR-SURFACES-001 — the identity a report was frozen with is the report's, on every surface that heads it.
+         *
+         * This lived in forShare(), so the link and its card said «Nakheel, as it was in July» while the PDF of the same link, and
+         * the operator's preview, resolved the live records and said something else. The frozen name and mark are kept; the two marks
+         * beside them still resolve.
+         */
+        $frozen = (array) ($report === null ? [] : (((array) ($report->config ?? []))['branding'] ?? []));
+        if (($frozen['name'] ?? null) !== null || ($frozen['logo_url'] ?? null) !== null) {
+            return [
+                'name' => (string) ($frozen['name'] ?? 'CampaignsHub'),
+                'logo_url' => $frozen['logo_url'] ?? null,
+                'logo_source' => 'report',
+                'by' => null,
+                'agency' => $resolved['agency'],
+                'client' => $resolved['client'],
+            ];
+        }
+
+        return $resolved;
     }
 
     /** The workspace this share's report belongs to, resolved through the report's project. */

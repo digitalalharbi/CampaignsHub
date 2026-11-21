@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen } from '@testing-library/react'
 import { useState } from 'react'
-import { ShareCreativeControls, creativeSharingBody, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
+import { ShareCreativeControls, creativeSharingBody, defaultCreativeSharing, emptyCreativeSharing, type CreativeSharing } from './ShareCreativeControls'
 import { renderWithProviders } from '@/test/utils'
 
 vi.mock('@/features/content/api', () => ({ listCreatives: vi.fn(() => Promise.resolve({ creatives: [] })) }))
@@ -20,6 +20,15 @@ describe('creative display policy', () => {
       creatives: { creatives: true },
       creative_display: { policy: 'activity', include_zero_activity: false, auto_refresh: true },
     })
+  })
+
+  /* REPORT-ADS-ALL-ON-001 — a new link starts with the ad section and all fifteen switches on, and sends the activity policy. */
+  it('opens a new link with every ad switch on', () => {
+    const body = creativeSharingBody(defaultCreativeSharing())
+    const flags = body.creatives as Record<string, boolean>
+    expect(Object.keys(flags)).toHaveLength(15)
+    expect(Object.values(flags).every(Boolean)).toBe(true)
+    expect(body).toMatchObject({ creative_display: { policy: 'activity' } })
   })
 
   it('sends no policy while the ad section is off', () => {

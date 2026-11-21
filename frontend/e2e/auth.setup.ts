@@ -57,7 +57,17 @@ for (const role of ROLES) {
      * browser still has to leave `/login`.
      */
     const [response] = await Promise.all([
-      page.waitForResponse((r) => r.url().includes('/api/v1/auth/login') && r.request().method() === 'POST'),
+      /*
+       * The answer that DECIDES the sign-in, not the first one on the wire. The client heals a 419
+       * by itself (CSRF-SELF-HEAL-001: one fresh prime, one retry), so on the first login of a cold
+       * server a 419 can precede the 200 the user actually gets. Waiting on the first response read
+       * a healed race as a refusal (chromium, 2026-11-06: first role 419, the next five 200). A 419
+       * that is NOT followed by another answer still fails here, on the timeout, with its reason.
+       */
+      page.waitForResponse(
+        (r) => r.url().includes('/api/v1/auth/login') && r.request().method() === 'POST' && r.status() !== 419,
+        { timeout: 30_000 },
+      ),
       page.getByRole('button', { name: /تسجيل الدخول|Sign in/ }).click(),
     ])
     // The body travels with the failure. A bare status tells you it was refused; the body tells you

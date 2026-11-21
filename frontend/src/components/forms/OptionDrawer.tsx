@@ -188,7 +188,7 @@ export function OptionDrawer({
           )}
 
           {error && (
-            <span className="text-[13px] text-danger" role="alert">
+            <span className="text-xs text-danger" role="alert">
               {error}
             </span>
           )}

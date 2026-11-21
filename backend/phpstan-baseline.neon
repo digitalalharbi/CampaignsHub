@@ -327,18 +327,6 @@ parameters:
 			path: app/Domains/Platform/Http/Controllers/PlatformAccessController.php
 
 		-
-			message: '#^Method App\\Domains\\Platform\\Http\\Controllers\\PlatformEmailController\:\:digests\(\) should return Illuminate\\Support\\Collection\<int, array\<string, mixed\>\> but returns Illuminate\\Support\\Collection\<int, array\{id\: string, source\: string, at\: string, kind\: string, template\: string, recipient\: mixed, tenant_name\: mixed, locale\: null, \.\.\.\}\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Domains/Platform/Http/Controllers/PlatformEmailController.php
-
-		-
-			message: '#^Method App\\Domains\\Platform\\Http\\Controllers\\PlatformEmailController\:\:transactional\(\) should return Illuminate\\Support\\Collection\<int, array\<string, mixed\>\> but returns Illuminate\\Support\\Collection\<int, array\{id\: string, source\: string, at\: string, kind\: string, template\: string, recipient\: string, tenant_name\: mixed, locale\: string, \.\.\.\}\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Domains/Platform/Http/Controllers/PlatformEmailController.php
-
-		-
 			message: '#^Strict comparison using \!\=\= between mixed and null will always evaluate to true\.$#'
 			identifier: notIdentical.alwaysTrue
 			count: 1
@@ -656,13 +644,7 @@ parameters:
 			count: 2
 			path: database/seeders/DemoIntegrationsSeeder.php
 		-
-			message: '#^Method App\\Domains\\Integrations\\Providers\\LinkedInConnector\:\:fetchAds\(\) should return list\<array\{external_id\: string, ad_set_external_id\: string\|null, campaign_external_id\: string\|null, name\: string, status\: string, review_status\?\: string\|null, destination_url\?\: string\|null, creative\?\: array\{external_id\: string, name\?\: string\|null, format\?\: string\|null, thumbnail_url\?\: string\|null, preview_url\?\: string\|null, asset_url\?\: string\|null, video_url\?\: string\|null, asset_expires_at\?\: string\|null, \.\.\.\}, \.\.\.\}\> but returns list\<array\{external_id\: string, campaign_external_id\?\: string, name\: non\-falsy\-string, status\: string, review_status\?\: ''approved''\|''pending''\|''rejected'', raw\: array\<string, mixed\>\}\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Domains/Integrations/Providers/LinkedInConnector.php
-
-		-
-			message: '#^Method App\\Domains\\Integrations\\Providers\\SnapchatConnector\:\:fetchAds\(\) should return list\<array\{external_id\: string, ad_set_external_id\: string\|null, campaign_external_id\: string\|null, name\: string, status\: string, review_status\?\: string\|null, destination_url\?\: string\|null, creative\?\: array\{external_id\: string, name\?\: string\|null, format\?\: string\|null, thumbnail_url\?\: string\|null, preview_url\?\: string\|null, asset_url\?\: string\|null, video_url\?\: string\|null, asset_expires_at\?\: string\|null, \.\.\.\}, \.\.\.\}\> but returns list\<array\{external_id\: string, ad_set_external_id\?\: string, name\: string, status\: string, review_status\?\: string, creative\?\: mixed, raw\: non\-empty\-array\<string, mixed\>\}\>\.$#'
+			message: '#^Method App\\Domains\\Integrations\\Providers\\SnapchatConnector\:\:fetchAds\(\) should return list\<array\{external_id\: string, ad_set_external_id\: string\|null, campaign_external_id\: string\|null, name\: string, status\: string, review_status\?\: string\|null, destination_url\?\: string\|null, creative\?\: array\{external_id\: string, name\?\: string\|null, format\?\: string\|null, thumbnail_url\?\: string\|null, preview_url\?\: string\|null, asset_url\?\: string\|null, video_url\?\: string\|null, asset_expires_at\?\: string\|null, \.\.\.\}, \.\.\.\}\> but returns list\<array\{external_id\: string, ad_set_external_id\?\: string, name\: string, status\: string, review_status\?\: string, destination_url\?\: string, creative\?\: mixed, raw\: non\-empty\-array\<string, mixed\>\}\>\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Domains/Integrations/Providers/SnapchatConnector.php

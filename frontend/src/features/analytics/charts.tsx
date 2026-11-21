@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { ProviderMark } from '@/components/ProviderMark'
 import {
   Area,
@@ -207,6 +207,79 @@ export function SpendRevenueAreaChart({ data, height = 288, currency = '' }: { d
   )
 }
 
+// ---- Stacked area: one metric over time, one series per platform (or one total) -------------------
+
+/**
+ * REPORT-WEBSITE-TAB-001 — the interactive daily chart that replaced the measurement table.
+ *
+ * Presentational: it draws the rows it is given, stacked, with a tooltip on hover and the SAME readout on the keyboard
+ * (Left / Right move the cursor along the days, Home / End jump), so a reader without a pointer gets every value.
+ * A fixed height, so toggling a series or switching the metric never moves the page.
+ */
+export function StackedAreaChart({
+  data,
+  series,
+  height = 280,
+  formatValue,
+  label,
+}: {
+  data: Array<Record<string, unknown>>
+  series: Array<{ key: string; name: string; color?: string }>
+  height?: number
+  formatValue: (v: number) => string
+  label: string
+}) {
+  const [cursor, setCursor] = useState<number | null>(null)
+  const last = data.length - 1
+  const at = cursor === null ? null : Math.min(Math.max(cursor, 0), last)
+  const row = at === null ? null : data[at]
+  const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (data.length === 0) return
+    const step = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : 0
+    if (step !== 0) { e.preventDefault(); setCursor((c) => (c === null ? (step > 0 ? 0 : last) : c + step)) }
+    else if (e.key === 'Home') { e.preventDefault(); setCursor(0) }
+    else if (e.key === 'End') { e.preventDefault(); setCursor(last) }
+    else if (e.key === 'Escape') setCursor(null)
+  }
+
+  return (
+    <div className={TICK_LTR} data-testid="stacked-area" data-points={data.length} data-series={series.length}>
+      <div
+        tabIndex={0}
+        role="group"
+        aria-label={label}
+        onKeyDown={onKey}
+        onBlur={() => setCursor(null)}
+        className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-brand-600"
+        style={{ height }}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+            {GRID}
+            <XAxis dataKey="date" tick={AXIS} tickFormatter={(d) => String(d).slice(5)} minTickGap={24} />
+            <YAxis tick={AXIS} tickFormatter={(v) => compact(Number(v))} width={44} />
+            <Tooltip {...tooltipProps} formatter={(v: number) => formatValue(Number(v))} />
+            {series.map((s, i) => {
+              const color = s.color ?? CHART_SERIES[i % CHART_SERIES.length]
+
+              return <Area key={s.key} stackId="one" name={s.name} type="monotone" dataKey={s.key} stroke={color} strokeWidth={2} fill={color} fillOpacity={0.18} isAnimationActive={false} />
+            })}
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+      {/* The keyboard's readout (and a harmless duplicate of the tooltip for a pointer): the day and each series' value. */}
+      <p aria-live="polite" data-testid="stacked-area-readout" className="mt-1 min-h-[1.25rem] text-center text-xs text-text-secondary">
+        {row ? (
+          <>
+            <span className="tnum font-semibold text-text-primary">{String(row.date)}</span>
+            {series.map((s) => <span key={s.key} className="tnum ms-3">{s.name} {typeof row[s.key] === 'number' ? formatValue(row[s.key] as number) : '—'}</span>)}
+          </>
+        ) : null}
+      </p>
+    </div>
+  )
+}
+
 // ---- Donut: distribution with total in the center, share %, Others grouping ----------------------
 
 /**
@@ -229,6 +302,7 @@ export function PlatformDonutChart({
   currency = '',
   colorBy = 'platform',
   legend = true,
+  valueKind = 'money',
 }: {
   /** `key` is the platform's stored key, for its colour; `name` is what the reader sees. */
   data: Array<{ name: string; value: number; key?: string }>
@@ -239,6 +313,8 @@ export function PlatformDonutChart({
   colorBy?: 'platform' | 'series'
   /** Off where the surface draws its own legend — the executive summary's legend is interactive. */
   legend?: boolean
+  /** CONTENT-FORMAT-COMPARISON-001 — a share of RESULTS is a count, and its tooltip must not print it as money. */
+  valueKind?: FmtKind
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const total = data.reduce((a, b) => a + b.value, 0)
@@ -256,10 +332,10 @@ export function PlatformDonutChart({
           <Pie data={rows} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="92%" paddingAngle={2} strokeWidth={2} stroke="var(--surface)">
             {rows.map((r, i) => <Cell key={r.name} fill={color(r.name, i)} />)}
           </Pie>
-          <Tooltip {...tooltipProps} formatter={(v: number) => `${money(v, currency)} · ${percent(v / (total || 1), 1)}`} />
+          <Tooltip {...tooltipProps} formatter={(v: number) => `${fmt(valueKind, currency)(v)} · ${percent(v / (total || 1), 1)}`} />
           {/* REPORT-PLATFORM-LOGOS-001 — a platform slice is named with the platform's own logo, not a bare word. */}
           {legend && <Legend wrapperStyle={{ fontSize: 13 }} content={() => (
-            <ul className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[13px] text-text-secondary" data-testid="donut-legend">
+            <ul className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-text-secondary" data-testid="donut-legend">
               {rows.map((r, i) => (
                 <li key={r.name} className="inline-flex items-center gap-1.5">
                   {colorBy === 'platform' && keyOf(r.name) !== r.name ? <ProviderMark provider={keyOf(r.name)} size={16} /> : <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: color(r.name, i) }} aria-hidden />}
@@ -289,6 +365,7 @@ export function RankingBarChart({
   horizontal = false,
   colorByPlatform = false,
   currency = '',
+  rowColor,
 }: {
   data: Array<Record<string, unknown>>
   bars: Array<{ key: string; name: string; color?: string; kind?: FmtKind }>
@@ -296,6 +373,8 @@ export function RankingBarChart({
   horizontal?: boolean
   colorByPlatform?: boolean
   currency?: string
+  /** A fill for one bar of one row — the status colour of a budget bar. Returning undefined keeps the bar's own colour. */
+  rowColor?: (row: Record<string, unknown>, barKey: string) => string | undefined
 }) {
   const cat = horizontal ? { type: 'category' as const } : {}
   return (
@@ -326,6 +405,7 @@ export function RankingBarChart({
         {bars.map((b, i) => (
           <Bar key={b.key} name={b.name} dataKey={b.key} radius={horizontal ? [0, 6, 6, 0] : [6, 6, 0, 0]} fill={b.color ?? CHART_SERIES[i % CHART_SERIES.length]}>
             {colorByPlatform && data.map((d) => <Cell key={String(d.label)} fill={platformColor(String(d.platform ?? d.label))} />)}
+            {rowColor && !colorByPlatform && data.map((d, j) => <Cell key={`${j}-${String(d.label)}`} fill={rowColor(d, b.key) ?? b.color ?? CHART_SERIES[i % CHART_SERIES.length]} />)}
           </Bar>
         ))}
       </BarChart>
@@ -361,21 +441,67 @@ function countRead(value: number | null | undefined): { text: string; exact: str
   return { text: read.text, exact: read.exact }
 }
 
-export function ConversionFunnelChart({ stages, currency = '', ar = false }: { stages: Array<{ stage?: string; label: string; count: number | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>; currency?: string; ar?: boolean }) {
+export type FunnelStageRow = {
+  stage?: string
+  label: string
+  count: number | null
+  step_rate: number | null
+  cost_per: number | null
+  exceeds_previous?: boolean
+  drop_off?: number | null
+  /** FUNNEL-ALIGNED-001 — the platforms that reported this stage, and the ones its rate is measured on. */
+  providers?: string[]
+  rate_providers?: string[]
+  rate_partial?: boolean
+}
+
+/**
+ * SHOW-AVAILABLE-002 — Owner 2026-11-20: «أي جزء بدل صفر أو لا توجد بيانات لا يظهر بالأساس». A funnel stage is drawn only
+ * when it holds a figure above zero; a stage the platform never sent, or one at zero, is left out (a «زيارات صفحة الهبوط»
+ * row on a campaign whose goal is not visits, «0 · تسرّب 100%» under it). Fewer than two stages left is not a funnel.
+ */
+export const shownFunnelStages = <T extends { count: number | null | undefined }>(stages: T[]): T[] =>
+  stages.filter((s) => s.count !== null && s.count !== undefined && s.count > 0)
+export const hasFunnel = (stages: Array<{ count: number | null | undefined }>): boolean => shownFunnelStages(stages).length >= 2
+
+export function ConversionFunnelChart({ stages: all, currency = '', ar = false, differLabel }: { differLabel?: string; stages: FunnelStageRow[]; currency?: string; ar?: boolean }) {
+  const stages = shownFunnelStages(all)
+  if (stages.length < 2) return null
   const counts = stages.map((s) => s.count).filter((c): c is number => c !== null && c !== undefined)
   const top = counts.length > 0 ? Math.max(...counts) : 1
+  // FUNNEL-ALIGNED-001 — a stage reported by fewer platforms than the funnel spans names them; a full stage says nothing.
+  const everyone = new Set(stages.flatMap((s) => s.providers ?? []))
   return (
-    <div className="space-y-2.5">
+    /*
+     * FUNNEL-NARROW-CARD-001 — the row's layout follows the CARD's width, not the screen's. In the live report's
+     * four-column card (≈290px) the `sm:` row kept a 128px label and a 144px rate, which left the bar 0px wide and
+     * every count hidden inside it. A container query stacks the row whenever the card itself is narrow.
+     */
+    <div className="@container space-y-2.5">
       {stages.map((s, i) => {
         const reported = s.count !== null && s.count !== undefined
         const w = reported ? Math.max(8, ((s.count as number) / (top || 1)) * 100) : 0
+        const fewer = reported && (s.providers?.length ?? 0) > 0 && (s.providers?.length ?? 0) < everyone.size
         return (
-          <div key={s.label} className="flex items-center gap-3">
+          /*
+           * FUNNEL-MOBILE-001 — Owner 2026-11-18: «الأرقام ما تظهر في تصفح الجوال، أول رقم يظهر والباقي مختفي».
+           *
+           * Below `sm` the row stacks — the label and the rate on one line, the bar the whole width under them — and a count
+           * whose bar is too short to hold it is written just after the bar, in the text colour, so every stage states its number.
+           */
+          <div key={s.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 @lg:flex @lg:gap-3" data-testid={`funnel-stage-${s.stage ?? i}`} data-row="funnel">
             {/* UX-COPY-001 — the payload labels its stages in English only. */}
-            <span className="w-32 shrink-0 text-sm font-medium text-text-secondary">{funnelStageLabel(s.stage ?? '', s.label, ar)}</span>
+            <span className="flex min-w-0 flex-col gap-0.5 @lg:w-32 @lg:shrink-0">
+              <span className="truncate text-sm font-medium text-text-secondary">{funnelStageLabel(s.stage ?? '', s.label, ar)}</span>
+              {fewer && (
+                <span className="inline-flex items-center gap-0.5" data-testid="funnel-stage-providers" title={ar ? 'المنصات التي ترسل هذه المرحلة' : 'Platforms that report this stage'}>
+                  {(s.providers ?? []).map((p) => <ProviderMark key={p} provider={p} size={12} />)}
+                </span>
+              )}
+            </span>
             {reported ? (
-              <div className="h-9 flex-1 overflow-hidden rounded-xl bg-surface-secondary">
-                <div className="flex h-full items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>
+              <div className="order-last col-span-2 flex h-9 min-w-0 items-center overflow-hidden rounded-xl bg-surface-secondary @lg:order-none @lg:flex-1">
+                <div className="flex h-full shrink-0 items-center justify-between rounded-xl px-3 text-sm font-semibold text-white transition-all" style={{ width: `${w}%`, background: `color-mix(in oklab, var(--brand-600) ${100 - i * 10}%, var(--brand-700))` }}>
                   {/*
                     NUMBER-PRESENTATION-001 — the funnel wrote its counts at full width.
                     *
@@ -392,15 +518,16 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false }: { s
                     * legitimate: «6.6M» a reader cannot get back to 6,596,500 is a figure they
                     * cannot audit.
                   */}
-                  <span className="tnum" title={countRead(s.count).exact ?? undefined}>{countRead(s.count).text}</span>
+                  {w >= 40 && <span className="tnum" data-testid="funnel-count" title={countRead(s.count).exact ?? undefined}>{countRead(s.count).text}</span>}
                 </div>
+                {w < 40 && <span className="tnum ms-2 shrink-0 text-sm font-semibold text-text-primary" data-testid="funnel-count" data-outside="true" title={countRead(s.count).exact ?? undefined}>{countRead(s.count).text}</span>}
               </div>
             ) : (
-              <div className="flex h-9 flex-1 items-center rounded-xl border border-dashed border-border px-3 text-xs text-text-muted">
+              <div className="order-last col-span-2 flex h-9 items-center rounded-xl border border-dashed border-border px-3 text-xs text-text-muted @lg:order-none @lg:flex-1">
                 {ar ? 'لم ترسل المنصة هذه المرحلة' : 'This stage was never reported'}
               </div>
             )}
-            <div className="w-36 shrink-0 text-end text-xs text-text-muted">
+            <div className="text-end text-xs text-text-muted @lg:w-36 @lg:shrink-0">
               {/*
                 FUNNEL-NOT-NESTED-001 — «165%» is not a conversion rate, and this said it was.
                 *
@@ -414,20 +541,38 @@ export function ConversionFunnelChart({ stages, currency = '', ar = false }: { s
                 * widened. The figure stays, because it is real and hiding it would hide a fact about
                 * the account; what changes is that it stops claiming to be a conversion.
               */}
-              {s.step_rate !== null && (
+              {s.step_rate !== null && (s.exceeds_previous || s.step_rate > 1) && (
+                /* REPORT-WEBSITE-TAB-001 — a stage larger than the one above it is a different definition, never a percentage over 100. */
                 <span
-                  className={`tnum ${s.exceeds_previous ? 'text-warning' : ''}`}
-                  title={s.exceeds_previous
-                    ? (ar
-                        ? 'هذه المرحلة أكبر من التي قبلها، فالمرحلتان لا تتداخلان: يمكن الوصول إلى الدفع دون إضافة للسلة، وكل حدث يُنسب في نافذته. النسبة ليست معدل تحويل.'
-                        : 'This stage is larger than the one above it, so the two do not nest: checkout is reachable without an add to cart, and each event is attributed in its own window. This ratio is not a conversion rate.')
-                    : undefined}
+                  data-testid="funnel-definitions-differ"
+                  className="inline-flex items-center rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] font-semibold text-text-secondary"
+                  title={ar
+                    ? 'هذه المرحلة أكبر من التي قبلها: كل منصة تعرّف الحدث بنافذتها ونموذجها، فلا تتداخل المرحلتان. لا تُحسب نسبة.'
+                    : 'This stage is larger than the one above it: each platform defines the event with its own window and model, so the two do not nest. No rate is computed.'}
                 >
-                  {percent(s.step_rate, 0)}
-                  {s.exceeds_previous && <span aria-hidden> ⚠</span>}
+                  {differLabel ?? (ar ? 'تعريفات المنصات تختلف' : 'Platform definitions differ')}
                 </span>
               )}
-              {s.cost_per !== null && <span className="tnum ms-2">{moneyExact(s.cost_per, currency ?? null)}</span>}
+              {s.step_rate !== null && !s.exceeds_previous && s.step_rate <= 1 && (
+                <span className="inline-flex flex-col items-end leading-tight">
+                  <span className="inline-flex items-center gap-1">
+                    {s.rate_partial && (s.rate_providers ?? []).length > 0 && (
+                      <span
+                        className="inline-flex items-center gap-0.5"
+                        data-testid="funnel-rate-providers"
+                        title={ar ? 'النسبة محسوبة على المنصات التي ترسل المرحلتين فقط' : 'Rate measured on the platforms that report both stages'}
+                      >
+                        {(s.rate_providers ?? []).map((p) => <ProviderMark key={p} provider={p} size={11} />)}
+                      </span>
+                    )}
+                    <span className="tnum text-sm font-bold text-text-primary">{percent(s.step_rate, s.step_rate < 0.1 ? 1 : 0)}</span>
+                  </span>
+                  {s.drop_off != null && s.drop_off > 0 && (
+                    <span className="tnum text-xs text-danger" data-testid="funnel-drop-off">{ar ? 'تسرّب' : 'drop'} {percent(s.drop_off, 0)}</span>
+                  )}
+                </span>
+              )}
+              {s.cost_per != null && <span className="tnum ms-2">{moneyExact(s.cost_per, currency ?? null)}</span>}
             </div>
           </div>
         )

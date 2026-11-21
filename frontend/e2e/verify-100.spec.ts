@@ -282,7 +282,7 @@ test.describe('DEMO-001 — demo data that admits what it is', () => {
   test('surfaces that show demo figures say so on the page', async ({ page }) => {
     await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
 
-    for (const path of ['/app/dashboard', '/app/campaigns']) {
+    for (const path of ['/app/analytics', '/app/campaigns']) {
       await page.goto(path)
       const main = page.locator('main')
       await expect.poll(async () => (await main.innerText()).length, { timeout: 20000 }).toBeGreaterThan(150)
@@ -347,12 +347,12 @@ test.describe('UX-DASH-001 — the advertiser dashboard', () => {
   })
 
   test('opens on the figures, with its filters on the page', async ({ page }) => {
-    await page.goto('/app/dashboard')
+    await page.goto('/app/analytics')
 
-    const bar = page.getByTestId('dashboard-filters')
+    const bar = page.getByTestId('analytics-filters')
     await expect(bar, 'the dashboard has no visible filter bar').toBeVisible({ timeout: 20000 })
 
-    for (const id of ['dashboard-period', 'dashboard-platform', 'dashboard-objective']) {
+    for (const id of ['analytics-period', 'analytics-platform', 'analytics-objective']) {
       await expect(page.getByTestId(id), `${id} is not on the page`).toBeVisible()
     }
 
@@ -362,20 +362,20 @@ test.describe('UX-DASH-001 — the advertiser dashboard', () => {
      * A path and an objective were one decision offered twice, and the reader could set the two to
      * disagree. This assertion is what keeps the removal from being quietly undone.
      */
-    await expect(page.getByTestId('dashboard-path')).toHaveCount(0)
+    await expect(page.getByTestId('analytics-path')).toHaveCount(0)
 
     // Nothing narrowed on arrival, and nothing had to be opened to reach the controls.
-    await expect(page.getByTestId('dashboard-applied')).toHaveCount(0)
+    await expect(page.getByTestId('analytics-applied')).toHaveCount(0)
     await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 
   test('narrowing names itself, and can be undone one value at a time', async ({ page }) => {
-    await page.goto('/app/dashboard')
-    await expect(page.getByTestId('dashboard-filters')).toBeVisible({ timeout: 20000 })
+    await page.goto('/app/analytics')
+    await expect(page.getByTestId('analytics-filters')).toBeVisible({ timeout: 20000 })
 
-    await page.getByTestId('dashboard-objective').selectOption('sales')
+    await page.getByTestId('analytics-objective').locator(`[data-value="sales"]`).click()
 
-    const chip = page.getByTestId('dashboard-applied-objective:sales')
+    const chip = page.getByTestId('analytics-applied-objective:sales')
     await expect(chip, 'the page does not say what is narrowing it').toBeVisible({ timeout: 20000 })
 
     /*
@@ -389,25 +389,25 @@ test.describe('UX-DASH-001 — the advertiser dashboard', () => {
       filter changes the page and can be taken back — is unchanged, and the panel below the KPI row
       is scoped by the same filters.
     */
-    await expect(page.getByTestId('dashboard-overview')).toContainText(/الإنفاق والنتائج والإيرادات|Spend, results and revenue/i, { timeout: 20000 })
+    await expect(page.getByTestId('analytics-overview')).toContainText(/الإنفاق وتحويلات المنصة والإيرادات|Spend, platform conversions and revenue/i, { timeout: 20000 })
 
-    await page.getByTestId('dashboard-reset').click()
-    await expect(page.getByTestId('dashboard-applied')).toHaveCount(0)
+    await page.getByTestId('analytics-reset').click()
+    await expect(page.getByTestId('analytics-applied')).toHaveCount(0)
   })
 
   /** Saved views are the one thing rare enough to fold — and they still open and still work. */
   test('saved views are behind More filters, and still reachable', async ({ page }) => {
-    await page.goto('/app/dashboard')
-    await expect(page.getByTestId('dashboard-more-filters')).toBeVisible({ timeout: 20000 })
+    await page.goto('/app/analytics')
+    await expect(page.getByTestId('analytics-more-filters')).toBeVisible({ timeout: 20000 })
 
-    await page.getByTestId('dashboard-more-filters').click()
+    await page.getByTestId('analytics-more-filters').click()
     await expect(page.getByRole('dialog')).toContainText(/العروض المحفوظة|Saved views/i)
   })
 
   test('it holds together on a phone', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 })
-    await page.goto('/app/dashboard')
-    await expect(page.getByTestId('dashboard-filters')).toBeVisible({ timeout: 20000 })
+    await page.goto('/app/analytics')
+    await expect(page.getByTestId('analytics-filters')).toBeVisible({ timeout: 20000 })
     await page.waitForLoadState('networkidle')
 
     // The inline row of controls is now the thing most likely to burst a phone, so it is measured
@@ -419,8 +419,8 @@ test.describe('UX-DASH-001 — the advertiser dashboard', () => {
 
     // The bar folds on a phone (MOBILE-FILTERS-001); «More filters» is behind the fold, so a reader
     // opens it first and so does this.
-    await openFilters(page, 'dashboard')
-    await page.getByTestId('dashboard-more-filters').click()
+    await openFilters(page, 'analytics')
+    await page.getByTestId('analytics-more-filters').click()
     await expect(page.getByRole('dialog')).toBeVisible()
 
     expect(

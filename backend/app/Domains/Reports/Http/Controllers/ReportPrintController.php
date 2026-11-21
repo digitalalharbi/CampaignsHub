@@ -14,7 +14,10 @@ use App\Domains\Reports\Services\ClientReportView;
 use App\Domains\Reports\Services\ExportReadinessGate;
 use App\Domains\Reports\Services\LiveReportService;
 use App\Domains\Reports\Services\ReportPlatformDrilldowns;
+use App\Domains\Reports\Services\ReportSourceContainment;
 use App\Domains\Reports\Services\ShareService;
+use App\Domains\Reports\Support\ChosenFigures;
+use App\Domains\Reports\Support\GenericNames;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -65,7 +68,10 @@ final class ReportPrintController extends Controller
         abort_if($ctx === null, 404, 'Print token invalid or expired.');
 
         $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
-        abort_if($report === null || $report->status !== 'completed', 404, 'Report not available.');
+        // REPORT-SNAPSHOT-PROTECT-001 — a link's PDF prints the stored copy while it is rebuilt, as the link's page shows it; the
+        // link itself is re-checked below. An operator's own export still waits for the rebuild.
+        $forLink = ($ctx['share_id'] ?? null) !== null;
+        abort_if($report === null || ! ($forLink ? $report->servesStoredCopy() : $report->status === 'completed'), 404, 'Report not available.');
         /*
          * LIVE-FILE-PARITY-001 — a live report prints the page's payload. A link's own file is materialised through THAT link,
          * after it is re-checked below (`downloadDocument`); an operator's export reads through the report's definition link.
@@ -78,7 +84,8 @@ final class ReportPrintController extends Controller
         // Backend audience transform — the print route receives client-safe data for a client report;
         // internal fields (checksum/tenant/project) are removed from the BODY, so CSS can never be the
         // only thing hiding them. Provenance stays only in the response envelope for PDF /Title metadata.
-        $body = $report->data ?? [];
+        // REPORT-SOURCE-ISOLATION-001 — the printed copy is contained like the page (a link's own document is contained in `downloadDocument`).
+        $body = app(ReportSourceContainment::class)->apply($report->data ?? [], $report);
         $share = null;
 
         /*
@@ -99,11 +106,8 @@ final class ReportPrintController extends Controller
             $body = app(ShareService::class)->downloadDocument($report, $share);
         }
 
-        if ($audience === 'client') {
-            $body = app(ClientReportView::class)->filter($body);
-        } elseif ($audience === 'executive') {
-            $body = app(ClientReportView::class)->executive($body);
-        }
+        // REPORT-PARITY-FOUR-SURFACES-001 — the document is chosen by the same method as the link's page: audience AND the link's form.
+        $body = app(ClientReportView::class)->document($body, (string) $audience, $share !== null ? $share->formOr($report->form) : $report->form);
         // REPORT-SECTION-SURFACES-001 — the PDF carries exactly the sections the page does.
         $body = app(ReportSectionSurfaces::class)->apply($body, $report, $share, 'print', audience: (string) $audience);
         // REPORT-KPI-CONTRACT-001 — the PDF lists the KPIs the link shows, the same allowlist the CSV and XLSX read: nothing hidden is printed.
@@ -118,7 +122,13 @@ final class ReportPrintController extends Controller
          */
         $drilldowns = app(ReportPlatformDrilldowns::class)->forPrint($report, $body, $share);
         if ($drilldowns !== []) {
-            $body['platform_drilldowns'] = $drilldowns;
+            // REPORT-GENERIC-LABELS-001 — attached after the sweep, so it passes through the sweep itself.
+            $body['platform_drilldowns'] = GenericNames::for($report, $share)->apply($drilldowns);
+        }
+
+        // REPORT-FILTERS-FUNCTIONAL-001 — the document holds the values of what was chosen, not only their list. An internal copy keeps everything.
+        if ($audience !== 'internal') {
+            $body = ChosenFigures::for($report, $share)->cut($body);
         }
 
         /*
@@ -178,6 +188,7 @@ final class ReportPrintController extends Controller
 
         $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
         abort_if($report === null, 404);
+        $this->assertShareStillOpen($ctx, $report);
 
         $file = $branding->logoFor($report, (string) $report->tenant_id, $role);
         abort_unless($file !== null, 404);
@@ -195,11 +206,29 @@ final class ReportPrintController extends Controller
         abort_if($ctx === null, 404, 'Print token invalid or expired.');
         $report = Report::withoutGlobalScopes()->find($ctx['report_id']);
         abort_if($report === null, 404);
+        $this->assertShareStillOpen($ctx, $report);
 
         $row = $appendix->forReport($report)->first(fn (PlatformEvidence $e): bool => (string) $e->getKey() === $evidence);
         abort_if($row === null || ! in_array($row->mime, ReportEvidence::IMAGE_MIMES, true), 404);
 
         return Storage::disk($row->disk)->response($row->path, null, ['Content-Type' => $row->mime, 'Cache-Control' => 'private, no-store']);
+    }
+
+    /**
+     * REPORT-LINK-PAUSE-001 — a print token minted for a shared link is only as alive as the link.
+     *
+     * `data()` already re-checks it; the logo and the evidence image of the same token did not, so pausing (or revoking)
+     * a link left its in-flight print context serving files for up to the token's lifetime.
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    private function assertShareStillOpen(array $ctx, Report $report): void
+    {
+        if (($ctx['share_id'] ?? null) === null) {
+            return;
+        }
+        $share = ReportShare::withoutGlobalScopes()->find($ctx['share_id']);
+        abort_if($share === null || ! $share->isActive() || (string) $share->report_id !== (string) $report->id, 404);
     }
 
     private function key(string $token): string

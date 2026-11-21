@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, E2E_ORIGIN, seededProject } from './helpers'
+import { AUTH, E2E_ORIGIN, seededProject, selectFirstProject } from './helpers'
 
 /**
  * The integrations surface offers the EIGHT providers this product integrates with — INTEG-RUNTIME §2.
@@ -21,10 +21,10 @@ test.describe('the integrations surface', () => {
   /** The two stores, which complete the eight this product integrates with. */
   const STORES = ['salla', 'zid']
 
-  /** The STORE CARDS — a separate section, and deliberately not part of the ad-account journey. */
-  async function storeKeys(page: import('@playwright/test').Page): Promise<string[]> {
-    return page.locator('[data-testid="store-card"]').evaluateAll((els) =>
-      els.map((el) => (el as HTMLElement).dataset.platform ?? '').filter(Boolean),
+  /** The STORE and MEASUREMENT rows of the project's «المنصات» — linked like an ad platform, never an ad source. */
+  async function sourceRows(page: import('@playwright/test').Page, kind: 'commerce' | 'measurement'): Promise<string[]> {
+    return page.locator(`[data-testid^="hub-platform-"][data-kind="${kind}"]`).evaluateAll((els) =>
+      els.map((el) => ((el as HTMLElement).dataset.testid ?? '').replace('hub-platform-', '')).filter(Boolean),
     )
   }
 
@@ -36,6 +36,7 @@ test.describe('the integrations surface', () => {
    * not the permanent shape of the page.
    */
   test('opens on the connection hub', async ({ page }) => {
+    await selectFirstProject(page)
     await page.goto('/app/integrations')
 
     await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
@@ -51,20 +52,22 @@ test.describe('the integrations surface', () => {
    * that cannot exist. No provider has credentials in the gate, so the picker must say so and stop.
    */
   test('the platform picker offers only what can be started, and explains an empty list', async ({ page }) => {
+    await selectFirstProject(page)
     await page.goto('/app/integrations')
     await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
 
-    await page.getByTestId(
-      (await page.getByTestId('hub-connect').count()) > 0 ? 'hub-connect' : 'hub-connect-empty',
-    ).click()
+    // Whichever of the two the space settles on once its sources have loaded — read after the load, never during it.
+    await page.locator('[data-testid="hub-connect"], [data-testid="hub-connect-empty"]').click()
 
-    const picker = page.getByTestId('provider-picker')
+    // INTEG-PROJECT-SPACE-001 — the platform is chosen inside the project's own journey.
+    const picker = page.getByTestId('project-link-flow')
     await expect(picker).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('link-step-platform-body')).toBeVisible({ timeout: 20000 })
 
-    const choices = page.locator('[data-testid^="provider-pick-"]')
+    const choices = page.locator('[data-testid^="link-platform-row-"]')
 
     if (await choices.count() === 0) {
-      await expect(page.getByTestId('provider-picker-empty')).toBeVisible()
+      await expect(page.getByTestId('link-no-platform')).toBeVisible()
     } else {
       // Whatever is offered is a real provider this product integrates with — never the local fake.
       const keys = await choices.evaluateAll((els) =>
@@ -75,23 +78,53 @@ test.describe('the integrations surface', () => {
   })
 
   /**
-   * The other two of the eight — INTEG-STORES-001.
+   * The other two of the eight, and GA4 — INTEG-STORES-001, INTEG-PROJECT-LINK-STORES-GA4-001.
    *
-   * Salla and Zid are commerce connectors with a store and no ad accounts, so they keep their own
-   * section and their own journey (§7). They were reachable only through a separate panel once, so a
-   * customer saw six of the eight things this product integrates with.
+   * Salla, Zid and GA4 are rows of the project's «المنصات», beside the ad platforms, and are linked the
+   * same way: from the project, through the platform's own page, back to the project. The older connect
+   * step is gone with its three dropdowns and its list of every property a sign-in could see.
    */
-  test('the two stores complete the eight, in their own section', async ({ page }) => {
+  test('the two stores and GA4 are rows of the project\'s platforms, with no connect step of their own', async ({ page }) => {
+    await selectFirstProject(page)
     await page.goto('/app/integrations')
-    await expect(page.locator('main')).toBeVisible()
-    await expect.poll(async () => (await storeKeys(page)).length, { timeout: 20000 }).toBe(2)
+    await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
+    await page.getByTestId('hub-section-link-platforms').click()
+    await expect.poll(async () => (await sourceRows(page, 'commerce')).length, { timeout: 20000 }).toBe(2)
 
-    expect((await storeKeys(page)).sort()).toEqual([...STORES].sort())
-    await expect(page.getByTestId('stores-heading')).toBeVisible()
+    expect((await sourceRows(page, 'commerce')).sort()).toEqual([...STORES].sort())
+    await expect.poll(async () => sourceRows(page, 'measurement'), { timeout: 20000 }).toEqual(['ga4'])
+
+    // The older step is not on the page in any form.
+    for (const gone of ['store-client-workspace', 'measurement-client-workspace', 'measurement-project']) {
+      await expect(page.getByTestId(gone)).toHaveCount(0)
+    }
+    await expect(page.locator('[data-testid^="ga4-select-"], [data-testid^="store-project-"], [data-testid^="connect-store-"], [data-testid^="measurement-connect-"]')).toHaveCount(0)
+    await expect(page.getByTestId('hub-platforms').locator('select')).toHaveCount(0)
+    expect(await page.locator('main').innerText()).not.toMatch(/المتجر يخصّ العميل|الخاصية تخصّ العميل|الاختيار لمشروع|اختر لهذا المشروع/)
+
+    // Each row either links through the project's journey or says, in one chip, that it is not available here.
+    for (const key of [...STORES, 'ga4']) {
+      const row = page.getByTestId(`hub-platform-${key}`)
+      await expect(row.locator(`[data-testid="hub-platform-link-${key}"], [data-testid="hub-platform-unavailable-${key}"]`)).toHaveCount(1)
+    }
+
+    // A row that can be linked opens THIS project's journey with the platform already marked and its own short steps.
+    for (const key of [...STORES, 'ga4']) {
+      const button = page.getByTestId(`hub-platform-link-${key}`)
+      if (await button.count() === 0) continue
+      await button.click()
+      await expect(page.getByTestId('project-link-flow')).toBeVisible({ timeout: 20000 })
+      await expect(page.getByTestId(`link-platform-${key}`)).toBeChecked()
+      await expect(page.getByTestId(key === 'ga4' ? 'link-step-property' : 'link-step-store')).toBeVisible()
+      await expect(page.getByTestId('link-step-organisation')).toHaveCount(0)
+      await page.getByTestId('project-link-close').click()
+      await expect(page.getByTestId('project-link-flow')).toHaveCount(0)
+    }
   })
 
   /** A store is never dragged through the ad-account flow: it has no ad account to be asked about. */
   test('a store is not offered as an advertising source', async ({ page }) => {
+    await selectFirstProject(page)
     await page.goto('/app/integrations')
     await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
 
@@ -102,6 +135,7 @@ test.describe('the integrations surface', () => {
 
   /** Nothing claims to be connected without credentials, and no raw enum reaches the reader. */
   test('no source claims a connection it does not have', async ({ page }) => {
+    await selectFirstProject(page)
     await page.goto('/app/integrations')
     const main = page.locator('main')
     await expect(main).toBeVisible()
@@ -112,29 +146,26 @@ test.describe('the integrations surface', () => {
   })
 
   /**
-   * «Everything we can see» stays reachable, and stays closed until it is asked for (§11 §28).
+   * INTEGRATIONS-CENTRE-001 — the tenant-wide discovered inventory is gone from the page.
    *
-   * Three hundred discovered rows under the things somebody came for is the page this replaced. The
-   * drawer answers the narrower question — which of THIS authorisation's accounts are ours — and
-   * this control answers the tenant-wide one for whoever genuinely wants it.
+   * It used to sit behind a «show the list» toggle. An account nobody selected is not shown in the
+   * centre at all now; searching and paging the rest belongs to the connection wizard. The page also
+   * draws exactly ONE connect entry, whichever of the two states it is in.
    */
-  test('the discovered inventory is reachable and is not rendered until it is asked for', async ({ page }) => {
+  test('the page has no discovered-accounts section and exactly one connect entry', async ({ page }) => {
+    await selectFirstProject(page)
     await page.goto('/app/integrations')
     await expect(page.getByTestId('connection-hub')).toBeVisible({ timeout: 30000 })
 
-    const toggle = page.getByTestId('toggle-account-inventory')
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByTestId('toggle-account-inventory')).toHaveCount(0)
     await expect(page.locator('[data-testid="inventory-row"]')).toHaveCount(0)
+    expect(await page.locator('main').innerText()).not.toMatch(/جميع الحسابات المكتشفة|Every discovered account/)
 
-    await expect(async () => {
-      if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
-      expect(await toggle.getAttribute('aria-expanded')).toBe('true')
-    }).toPass({ timeout: 20000 })
-
+    // Awaited: while the sources are still loading the space draws neither, and a count read then is zero.
     await expect(
-      page.locator('[data-testid="inventory-row"], [data-testid="inventory-empty"]').first(),
-      'the accounts panel never resolved',
-    ).toBeVisible({ timeout: 30000 })
+      page.locator('[data-testid="hub-connect"], [data-testid="hub-connect-empty"]'),
+      'the hub must draw one connect button, never two',
+    ).toHaveCount(1, { timeout: 20000 })
   })
 })
 

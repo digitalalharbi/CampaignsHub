@@ -57,6 +57,25 @@ final class Ga4PropertyDiscovery
      */
     public function discover(ProviderConnection $connection): array
     {
+        $properties = $this->list($connection);
+
+        $this->record($connection, $properties);
+
+        return ['properties' => $properties, 'discovered' => count($properties)];
+    }
+
+    /**
+     * INTEG-PROJECT-LINK-STORES-GA4-001 — what this sign-in can read, ASKED and not written.
+     *
+     * A project's link journey shows this list and stores the one property that is confirmed; nothing here
+     * touches `external_accounts`.
+     *
+     * @return list<array{property_id:string, display_name:string, account_id:string, account_name:string, property_type:mixed}>
+     *
+     * @throws Ga4DiscoveryFailed
+     */
+    public function list(ProviderConnection $connection): array
+    {
         $tokens = $this->vault->fresh($connection);
 
         $properties = [];
@@ -108,9 +127,7 @@ final class Ga4PropertyDiscovery
             }
         }
 
-        $this->record($connection, $properties);
-
-        return ['properties' => $properties, 'discovered' => count($properties)];
+        return $properties;
     }
 
     /**

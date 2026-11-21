@@ -72,7 +72,7 @@ export function LiveCampaignBreakdown({ payload, currency, ar }: { payload: Live
   return (
     <section data-testid="live-campaign-breakdown" className="rounded-2xl border border-border bg-surface p-4">
       <h3 className="mb-3 text-sm font-bold text-text-primary">{ar ? `الحملات (${rows.length})` : `Campaigns (${rows.length})`}</h3>
-      <MetricTable head={head} rows={rows.map(cells)} values={values} />
+      <MetricTable pageSize={8} head={head} rows={rows.map(cells)} values={values} />
     </section>
   )
 }

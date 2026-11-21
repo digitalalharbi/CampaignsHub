@@ -63,13 +63,14 @@ describe('the lower budget rungs show the plan figures', () => {
 
   it('the account rung carries expected, daily average and over / under, blank where no cap is stated', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
     const capped = (await screen.findByText('Main Meta')).closest('tr') as HTMLElement
     const table = capped.closest('table') as HTMLElement
     for (const h of ['Expected to date', 'Daily average', 'Over / under']) expect(within(table).getByText(h)).toBeInTheDocument()
 
-    expect(capped.textContent).toContain('+4K SAR')
+    expect(capped.textContent).toContain('+4K ر.س')
     const uncapped = within(table).getByText('No cap').closest('tr') as HTMLElement
     // No ceiling: expected and over / under refuse, the daily average is still a fact.
     expect(within(uncapped).getAllByText('—').length).toBeGreaterThanOrEqual(2)
@@ -77,11 +78,12 @@ describe('the lower budget rungs show the plan figures', () => {
 
   it('the campaign rung carries the same three', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
-    const row = (await screen.findByText('Spring launch')).closest('tr') as HTMLElement
-    expect(row.textContent).toContain('5K SAR500 SAR')
-    expect(row.textContent).toContain('+4K SAR')
+    const row = (await within(await screen.findByTestId('budget-campaign-table')).findByText('Spring launch')).closest('tr') as HTMLElement
+    expect(row.textContent).toContain('5K ر.س500 ر.س')
+    expect(row.textContent).toContain('+4K ر.س')
     const table = row.closest('table') as HTMLElement
     for (const h of ['Expected to date', 'Daily average', 'Over / under']) expect(within(table).getByText(h)).toBeInTheDocument()
   })

@@ -19,11 +19,11 @@ import { useUi } from '@/stores/ui'
  * That distinction is stated on the panel, not left to be inferred. An operator who needs a creative
  * genuinely unavailable has to exclude it, and this is the only place they will be told so.
  *
- * ## Everything starts off
+ * ## Defaults
  *
- * The switches default to false, matching the backend, so a link created by an operator who never
- * opened this panel shows no creative section at all. Nothing about a client's ad content is
- * published because a form had a helpful default.
+ * A new link starts from `defaultCreativeSharing()` — everything on (REPORT-ADS-ALL-ON-001). The backend
+ * still reads an ABSENT `creatives` key as «nothing shown», so an API caller that never names the panel
+ * publishes no ad content; the default is the form's, chosen by the Owner, and visible before sharing.
  */
 
 export interface CreativeSharing {
@@ -47,6 +47,19 @@ export const emptyCreativeSharing = (): CreativeSharing => ({
   display: { policy: 'activity', includeZeroActivity: false },
 })
 
+/**
+ * REPORT-ADS-ALL-ON-001 — Owner 2026-11-18: «اجعلها افتراضية … أي تفاصيل لتحليل المحتوى لا تبخل فيها أبداً».
+ *
+ * Every NEW client link opens with the ad section and all fifteen switches on — copy, analysis and recommendations included,
+ * superseding REPORT-ADS-ON-001's «copy and analysis off». The operator can still untick anything before sharing, and the server
+ * still closes cost and return on a link that hides spend or revenue, so «on» here never widens past the link's money switches.
+ * `emptyCreativeSharing()` stays all-off: it is the shape of «nothing chosen», not the default a new link starts from.
+ */
+export const defaultCreativeSharing = (): CreativeSharing => ({
+  ...emptyCreativeSharing(),
+  permissions: Object.fromEntries(['creatives', ...GROUP_KEYS()].map((k) => [k, true])),
+})
+
 /** The switches, grouped the way an operator thinks about them rather than alphabetically. */
 const GROUPS: Array<{
   title: [string, string]
@@ -59,8 +72,8 @@ const GROUPS: Array<{
       { key: 'image_zoom', ar: 'تكبير الصور', en: 'Zoom images' },
       {
         key: 'download',
-        ar: 'تحميل الأصل',
-        en: 'Download the asset',
+        ar: 'تحميل الإعلان',
+        en: 'Download the ad',
         note: [
           'إيقافه يزيل الزر ورابط الملف. لمنع الوصول إلى إعلان فعليًا، استبعده أعلاه.',
           'Turning this off removes the button and the file URL. To truly withhold a ad, exclude it above.',
@@ -84,7 +97,7 @@ const GROUPS: Array<{
       { key: 'spend', ar: 'الإنفاق', en: 'Spend' },
       { key: 'revenue', ar: 'الإيراد', en: 'Revenue' },
       { key: 'cpa', ar: 'تكلفة الطلب', en: 'Cost per order' },
-      { key: 'roas', ar: 'العائد على الإنفاق', en: 'Return on ad spend' },
+      { key: 'roas', ar: 'معدل العائد', en: 'Return on ad spend' },
     ],
   },
   {
@@ -96,14 +109,24 @@ const GROUPS: Array<{
   },
 ]
 
+function GROUP_KEYS(): string[] {
+  return GROUPS.flatMap((g) => g.keys.map((k) => k.key))
+}
+
 export function ShareCreativeControls({
   projectId,
   value,
   onChange,
+  hideCeiling = false,
 }: {
   projectId: string
   value: CreativeSharing
   onChange: (next: CreativeSharing) => void
+  /**
+   * REPORT-LINK-EDIT-ADS-001 — the include/exclude ceiling is part of a published link's scope, which the edit dialog does not
+   * read back; drawing it there would show an empty list over a link that may already narrow its ads, and a save would widen it.
+   */
+  hideCeiling?: boolean
 }) {
   const ar = useUi((s) => s.locale) === 'ar'
   const [open, setOpen] = useState(false)
@@ -133,7 +156,7 @@ export function ShareCreativeControls({
     queryFn: () => listCreatives({ per_page: 48 }, projectId),
     // Only fetched once the operator opens the section: a share modal that always loaded a project's
     // whole creative library would pay for a list most links never narrow.
-    enabled: open && on('creatives'),
+    enabled: open && on('creatives') && !hideCeiling,
   })
 
   const rows = useMemo(() => creatives.data?.creatives ?? [], [creatives.data])
@@ -223,6 +246,7 @@ export function ShareCreativeControls({
               </div>
 
               {/* The ceiling first: it decides what exists, before anything decides what is shown. */}
+              {!hideCeiling && (
               <div className="grid gap-2 rounded-xl border border-border p-3">
                 <span className="text-xs font-bold text-text-muted">
                   {ar ? 'أي إعلان يستطيع هذا الرابط الوصول إليه؟' : 'Which ads may this link reach?'}
@@ -287,6 +311,7 @@ export function ShareCreativeControls({
                     : 'Leave the selection empty to cover every ad in the link’s scope. An excluded ad cannot be opened by any address or id.'}
                 </p>
               </div>
+              )}
 
               {GROUPS.map((group) => (
                 <div key={group.title[1]} className="grid gap-1.5">

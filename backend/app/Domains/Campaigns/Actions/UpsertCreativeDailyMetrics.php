@@ -9,6 +9,7 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Metrics\Services\SourceCurrency;
 use App\Support\GroupedUpsert;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -71,7 +72,7 @@ final class UpsertCreativeDailyMetrics
 
     /**
      * @param  list<array<string,mixed>>  $rows  canonical rows; the provider creative id is in `campaign_id`
-     * @return array{upserted:int,skipped:int,ambiguous:int,rows_received:int,ids_received:int,ids_mapped:int,ids_unmapped:int,unmapped_sample:list<string>}
+     * @return array{upserted:int,skipped:int,ambiguous:int,rows_received:int,ids_received:int,ids_mapped:int,ids_unmapped:int,unmapped_sample:list<string>,currency_unknown:int}
      */
     public function execute(ExternalAccount $account, array $rows): array
     {
@@ -79,7 +80,7 @@ final class UpsertCreativeDailyMetrics
             return [
                 'upserted' => 0, 'skipped' => 0, 'ambiguous' => 0,
                 'rows_received' => 0, 'ids_received' => 0, 'ids_mapped' => 0,
-                'ids_unmapped' => 0, 'unmapped_sample' => [],
+                'ids_unmapped' => 0, 'unmapped_sample' => [], 'currency_unknown' => 0,
             ];
         }
 
@@ -151,6 +152,7 @@ final class UpsertCreativeDailyMetrics
 
         $upserted = 0;
         $skipped = 0;
+        $unlabelled = 0;
         $payload = [];
         $now = Carbon::now();
 
@@ -169,12 +171,15 @@ final class UpsertCreativeDailyMetrics
              * reads it.
              *
              * Snapchat states the currency on the ACCOUNT, not on the stats row, which is why the
-             * account is the fallback and the reporting currency is only the last resort. Letting
-             * the reporting currency stand in unconditionally is precisely the bug: it treats an
-             * unlabelled figure as already converted.
+             * account is the fallback.
+             *
+             * MONEY-CURRENCY-NEVER-ASSUMED-001 — there is no last resort. The reporting currency used
+             * to stand in when both were missing, which treats an unlabelled figure as already
+             * converted; a null source now withholds the money and the row is counted.
              */
             $reporting = $this->currency->forProject((string) $creative->project_id);
-            $source = strtoupper((string) ($row['currency'] ?? $account->currency ?? $reporting));
+            $source = SourceCurrency::of($row, $account);
+            $withheldForCurrency = false;
 
             $measures = [];
             $money = [];
@@ -211,6 +216,7 @@ final class UpsertCreativeDailyMetrics
                 $money["{$key}_original"] = $amount;
                 $money['original_currency'] = $source;
                 $money['project_currency'] = $reporting;
+                $withheldForCurrency = $withheldForCurrency || $source === null;
 
                 // A day whose money was withheld is still a day the creative ran, so delivery is
                 // judged on the amount the platform reported, never on the withheld null.
@@ -231,6 +237,10 @@ final class UpsertCreativeDailyMetrics
                 ...$money,
             ];
             $upserted++;
+
+            if ($withheldForCurrency) {
+                $unlabelled++;
+            }
         }
 
         GroupedUpsert::run(
@@ -244,6 +254,8 @@ final class UpsertCreativeDailyMetrics
                 'spend_original', 'revenue_original', 'original_currency', 'project_currency',
                 'campaign_id', 'updated_at',
             ],
+            // PERF-RECOVERY-001 — a row the provider repeated is not written again.
+            stamps: ['updated_at'],
         );
 
         $this->recordDelivery(array_values(array_unique(array_column($payload, 'creative_id'))));
@@ -275,6 +287,7 @@ final class UpsertCreativeDailyMetrics
             'ids_mapped' => count($byProviderId),
             'ids_unmapped' => count($unmapped),
             'unmapped_sample' => array_slice($unmapped, 0, 10),
+            'currency_unknown' => $unlabelled,
         ];
     }
 

@@ -4,6 +4,7 @@ import { AgencyAlerts, AgencyHeadline, AgencyTrendAndPlatforms } from './AgencyH
 import type { AgencyOverview } from './api'
 import type { AlertEvent } from '@/features/alerts/api'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
+import { resetPeriodSession } from '@/lib/period/usePeriod'
 
 vi.mock('./api', () => ({ fetchAgencyOverview: vi.fn() }))
 vi.mock('@/features/alerts/api', async (orig) => ({ ...(await orig<Record<string, unknown>>()), listAlertEvents: vi.fn() }))
@@ -14,7 +15,6 @@ import { listAlertEvents } from '@/features/alerts/api'
  * DASHBOARD-FIRST-SCREEN-001 — the first screen states money, results, cost and movement under the
  * money and coverage contracts, and opens the surface that answers each in depth.
  */
-const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1
 const PROVIDERS = ['meta', 'google']
 const complete = { state: 'complete', expected_contributors: PROVIDERS, included_contributors: PROVIDERS, excluded_contributors: [], partial_contributors: [], reported_through: {} }
 const truncated = { state: 'partial', expected_contributors: PROVIDERS, included_contributors: [], excluded_contributors: PROVIDERS, partial_contributors: PROVIDERS, reported_through: { meta: '2026-09-27', google: '2026-09-27' } }
@@ -32,6 +32,7 @@ const overview = (over: Partial<AgencyOverview> = {}): AgencyOverview => ({
   currency: 'SAR',
   current: totals(61_200, 741, complete),
   previous: totals(50_000, 600, complete),
+  by_objective: objectives,
   by_provider: [
     { provider: 'google', ...totals(24_700, 300, complete) },
     { provider: 'meta', ...totals(21_900, 441, complete) },
@@ -40,6 +41,13 @@ const overview = (over: Partial<AgencyOverview> = {}): AgencyOverview => ({
   freshness: { last_synced_at: '2026-10-09T20:03:00Z' },
   ...over,
 })
+
+const objectives: AgencyOverview['by_objective'] = [
+  { family: 'traffic', campaigns: 2, spend: 100, result: 50, result_key: 'clicks', result_label: { ar: 'النقرات', en: 'Clicks' }, cost_per_result: 2, cost_per_result_label: { ar: 'تكلفة النقرة (CPC)', en: 'Cost per click (CPC)' }, missing_reason: null, missing_label: null, roas: null, roas_campaigns: null, sales_campaigns: null },
+  { family: 'leads', campaigns: 1, spend: 400, result: 20, result_key: 'leads', result_label: { ar: 'المهتمين', en: 'Leads' }, cost_per_result: 20, cost_per_result_label: { ar: 'تكلفة المهتم (CPL)', en: 'Cost per lead (CPL)' }, missing_reason: null, missing_label: null, roas: null, roas_campaigns: null, sales_campaigns: null },
+  { family: 'sales', campaigns: 3, spend: 1500, result: 12, result_key: 'conversions', result_label: { ar: 'الطلبات', en: 'Orders' }, cost_per_result: 125, cost_per_result_label: { ar: 'تكلفة الطلب (CPA)', en: 'Cost per order (CPA)' }, missing_reason: null, missing_label: null, roas: 4, roas_campaigns: 2, sales_campaigns: 3 },
+  { family: 'video', campaigns: 1, spend: 80, result: null, result_key: 'video_views', result_label: { ar: 'المشاهدات', en: 'Video views' }, cost_per_result: null, cost_per_result_label: { ar: 'تكلفة المشاهدة (CPV)', en: 'Cost per view (CPV)' }, missing_reason: 'not_reported', missing_label: { ar: 'بدون بيانات: المنصة لم ترسل هذا المؤشر', en: 'No data: the platform did not send this metric' }, roas: null, roas_campaigns: null, sales_campaigns: null },
+]
 
 const alert = (id: string, severity: AlertEvent['severity'], type = 'budget_risk'): AlertEvent => ({
   id, project_id: 'p1', rule_id: 'r', type, entity_type: 'App\\Domains\\Campaigns\\Models\\UnifiedCampaign', entity_id: 'c1',
@@ -53,19 +61,36 @@ describe('the agency headline', () => {
   })
   afterEach(() => signOut())
 
-  it('states spend, results, cost and ROAS in the window’s currency, with movement when both windows are whole', async () => {
+  it('states spend, a result and its own cost per objective, and ROAS over sales only with how many entered it', async () => {
     vi.mocked(fetchAgencyOverview).mockResolvedValue(overview())
-    renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
+    renderWithProviders(<AgencyHeadline ar={true} />, { locale: 'ar' })
     const spend = await screen.findByTestId('agency-kpi-spend')
-    expect(spend).toHaveTextContent('61.2K SAR')
-    expect(screen.getByTestId('agency-kpi-results')).toHaveTextContent('741')
-    expect(screen.getByTestId('agency-kpi-cpa')).toHaveTextContent('SAR')
-    expect(screen.getByTestId('agency-kpi-roas')).toHaveTextContent('4.00×')
+    expect(spend).toHaveTextContent('61.2K ر.س')
+    // Each objective has its own result and its own cost — never one «cost per result» across them.
+    expect(screen.getByTestId('agency-kpi-result-sales')).toHaveTextContent('12')
+    expect(screen.getByTestId('agency-kpi-result-sales')).toHaveTextContent('تكلفة الطلب (CPA)')
+    expect(screen.getByTestId('agency-kpi-result-leads')).toHaveTextContent('تكلفة المهتم (CPL)')
+    expect(screen.getByTestId('agency-kpi-result-traffic')).toHaveTextContent('تكلفة النقرة (CPC)')
+    expect(screen.getByTestId('agency-kpi-result-video')).toHaveTextContent('بدون بيانات')
+    expect(screen.queryByTestId('agency-kpi-cpa')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('agency-kpi-results')).not.toBeInTheDocument()
+    expect(screen.queryByText('تحويلات المنصة')).not.toBeInTheDocument()
+    const roas = screen.getByTestId('agency-kpi-roas')
+    expect(roas).toHaveTextContent('4.00×')
+    expect(roas).toHaveTextContent(/دخلت 2 من 3 حملات مبيعات/) // 3–10 take the plural (lib/counted)
     // Movement against the previous window, shown because both windows are complete.
     expect(within(spend).getByText(/22/)).toBeInTheDocument()
     expect(screen.queryByTestId('agency-coverage-note')).not.toBeInTheDocument()
-    expect(screen.getByTestId('agency-compared-with')).toHaveTextContent('2026-08-12 → 2026-09-10')
+    expect(screen.getByTestId('agency-compared-with')).toHaveTextContent('12 أغسطس – 10 سبتمبر 2026')
     expect(screen.getByTestId('agency-freshness')).toBeInTheDocument()
+  })
+
+  it('prints no ROAS when no sales campaign reported revenue', async () => {
+    vi.mocked(fetchAgencyOverview).mockResolvedValue(overview({ by_objective: (objectives ?? []).filter((o) => o.family !== 'sales') }))
+    renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
+    const roas = await screen.findByTestId('agency-kpi-roas')
+    expect(roas).toHaveTextContent('—')
+    expect(roas).toHaveTextContent('No sales campaign reported revenue')
   })
 
   /** UX-COMPACT-CHARTS-001 — each card carries the window's daily shape, and only for a metric the series holds. */
@@ -80,8 +105,8 @@ describe('the agency headline', () => {
     renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
     const spend = await screen.findByTestId('agency-kpi-spend')
     expect(within(spend).getByTestId('agency-kpi-spend-spark')).toBeInTheDocument()
-    expect(within(screen.getByTestId('agency-kpi-results')).getByTestId('agency-kpi-conversions-spark')).toBeInTheDocument()
-    // The daily rows carry no cost per result and no return: no line is invented from zeros.
+    // No blended results or cost cards exist any more, so no blended line is drawn either.
+    expect(screen.queryByTestId('agency-kpi-conversions-spark')).not.toBeInTheDocument()
     expect(screen.queryByTestId('agency-kpi-cpa-spark')).not.toBeInTheDocument()
     expect(screen.queryByTestId('agency-kpi-roas-spark')).not.toBeInTheDocument()
   })
@@ -90,7 +115,7 @@ describe('the agency headline', () => {
     vi.mocked(fetchAgencyOverview).mockResolvedValue(overview({ current: totals(40_000, 500, truncated) }))
     renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
     const spend = await screen.findByTestId('agency-kpi-spend')
-    expect(spend).toHaveTextContent('40K SAR')
+    expect(spend).toHaveTextContent('40K ر.س')
     expect(within(spend).queryByText(/%/)).not.toBeInTheDocument()
     expect(screen.queryByTestId('agency-compared-with')).not.toBeInTheDocument()
     expect(screen.getByTestId('agency-coverage-note')).toHaveTextContent('2026-09-27')
@@ -100,7 +125,7 @@ describe('the agency headline', () => {
     vi.mocked(fetchAgencyOverview).mockResolvedValue(overview({ currency: null }))
     renderWithProviders(<AgencyHeadline ar={false} />, { locale: 'en' })
     const spend = await screen.findByTestId('agency-kpi-spend')
-    expect(spend).not.toHaveTextContent('SAR')
+    expect(spend).not.toHaveTextContent(/SAR|ر\.س/)
     expect(screen.getByTestId('agency-currency-note')).toBeInTheDocument()
   })
 
@@ -109,7 +134,7 @@ describe('the agency headline', () => {
     renderWithProviders(<AgencyTrendAndPlatforms ar={false} />, { locale: 'en' })
     const google = await screen.findByTestId('agency-platform-google')
     expect(google).toHaveAttribute('href', '/agency/content?providers=google')
-    expect(screen.getByTestId('agency-platforms')).toHaveTextContent('24.7K SAR')
+    expect(screen.getByTestId('agency-platforms')).toHaveTextContent('24.7K ر.س')
   })
 
   it('lists the open alerts most severe first, each opening its campaign', async () => {
@@ -123,16 +148,31 @@ describe('the agency headline', () => {
     expect(links[0]).toHaveAttribute('href', '/agency/campaigns/p1/c1')
   })
 
+  /** DATE-RANGE-001 — the window is the system's period: seven complete days to start, ending YESTERDAY. */
   it('lets the operator choose the window, and asks the server for exactly that window', async () => {
-    vi.mocked(fetchAgencyOverview).mockResolvedValue(overview())
-    renderWithProviders(<AgencyHeadline ar={false} />, { route: '/agency/dashboard', locale: 'en' })
-    await screen.findByTestId('agency-kpi-spend')
-    const first = vi.mocked(fetchAgencyOverview).mock.calls[0]![0] as { from: string; to: string }
-    expect(daysBetween(first.from, first.to)).toBe(30)
-    fireEvent.click(screen.getByRole('button', { name: '7 days' }))
-    await waitFor(() => expect(vi.mocked(fetchAgencyOverview).mock.calls.length).toBeGreaterThan(1))
-    const last = vi.mocked(fetchAgencyOverview).mock.calls.at(-1)![0] as { from: string; to: string }
-    expect(daysBetween(last.from, last.to)).toBe(7)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-15T06:00:00Z'))
+    resetPeriodSession()
+    window.localStorage.clear()
+    try {
+      // RIYADH-DAY-001 — calls[0] must be THIS render's: the earlier tests run on the real clock, and from 00:00 to 03:00
+      // Riyadh their window is a day later than this frozen one, which is how this read another test's call.
+      vi.mocked(fetchAgencyOverview).mockClear()
+      vi.mocked(fetchAgencyOverview).mockResolvedValue(overview())
+      renderWithProviders(<AgencyHeadline ar={false} />, { route: '/agency/dashboard', locale: 'en' })
+      await screen.findByTestId('agency-kpi-spend')
+      expect(vi.mocked(fetchAgencyOverview).mock.calls[0]![0]).toEqual({ from: '2026-11-08', to: '2026-11-14' })
+      fireEvent.click(screen.getByTestId('agency-period-picker-button'))
+      fireEvent.click(await screen.findByTestId('agency-period-picker-preset-last_30'))
+      fireEvent.click(screen.getByTestId('agency-period-picker-compare-toggle'))
+      fireEvent.click(screen.getByTestId('agency-period-picker-apply'))
+      await waitFor(() => expect(vi.mocked(fetchAgencyOverview).mock.calls.length).toBeGreaterThan(1))
+      const last = vi.mocked(fetchAgencyOverview).mock.calls.at(-1)!
+      expect(last[0]).toEqual({ from: '2026-10-16', to: '2026-11-14' })
+      expect(last[1]).toEqual({ from: '2026-09-16', to: '2026-10-15' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('says there is nothing to read when the operator reaches no project', async () => {

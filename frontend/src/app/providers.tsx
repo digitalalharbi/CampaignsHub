@@ -1,14 +1,38 @@
 import { useEffect, type ReactNode } from 'react'
 import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fetchCurrentUser } from '@/features/auth/api'
+import { probeSession } from '@/features/auth/api'
+import { bootSession } from '@/features/bootstrap/bootstrap'
+import { listenForWorkspaceSwitch } from '@/features/auth/workspaceSwitch'
 import { toApiError } from '@/lib/api/client'
 import { useAuth } from '@/stores/auth'
 import { applyDocument, useUi } from '@/stores/ui'
 import { upgradeRefusalFrom, useUpgrade } from '@/stores/upgrade'
 import { UpgradeRequiredDialog } from '@/components/UpgradeRequiredDialog'
 import { OverlayBoundary } from '@/components/OverlayBoundary'
+import { SaveFeedback } from '@/components/ui/SaveFeedback'
+import { DialogHost } from '@/components/ui/DialogHost'
+import { useSaveFeedback } from '@/stores/saveFeedback'
+import { QUERY_GC_TIME_MS, QUERY_STALE_TIME_MS } from '@/lib/query/swr'
 
-const queryClient = new QueryClient({
+/**
+ * How long an answer is reused by a second asker — PERF-REFETCH-001.
+ *
+ * React Query dedupes requests that are IN FLIGHT; it does not dedupe a request that has just
+ * landed. With the default `staleTime: 0`, a component mounting a moment after its sibling resolved
+ * the same key asks again — and the dashboard asks the same freshness, drivers and summary keys from
+ * the header, the KPI strip and a tab. Measured on the analytics page: three `/freshness` requests
+ * for one screen, identical in every byte. Thirty seconds is shorter than any figure on these screens
+ * changes, long enough to cover a page's mount, and every mutation still invalidates its keys on
+ * success, which refetches regardless of this.
+ */
+export { QUERY_STALE_TIME_MS, QUERY_GC_TIME_MS }
+
+/** A mutation reports its save state unless it opted out with `meta: { feedback: 'none' }`. */
+function reportsSave(meta: Record<string, unknown> | undefined): boolean {
+  return meta?.feedback !== 'none'
+}
+
+export const queryClient = new QueryClient({
   /*
    * Every commercial refusal, caught in one place — PAY-AUDIT-004.
    *
@@ -24,9 +48,36 @@ const queryClient = new QueryClient({
    * than saying nothing.
    */
   mutationCache: new MutationCache({
-    onError: (error) => {
-      const refusal = upgradeRefusalFrom(toApiError(error))
+    /*
+     * SAVE-STATE-001 — every save shows «يحفظ…» → «انحفظ» / «ما انحفظ + السبب», and the screen refreshes in place.
+     *
+     * One hook for hundreds of mutations. A mutation that is not a save (a sign-in, a sync, a test send, an export)
+     * sets `meta: { feedback: 'none' }` and keeps its own message — «انحفظ» after a sync would be a lie. A commercial
+     * refusal is answered by the upgrade dialog, so it is not also announced here.
+     */
+    onMutate: (_variables, mutation) => {
+      if (!reportsSave(mutation.meta)) return
+      useSaveFeedback.getState().begin()
+    },
+    onSuccess: (_data, _variables, _context, mutation) => {
+      if (!reportsSave(mutation.meta)) return
+      useSaveFeedback.getState().succeed()
+    },
+    /*
+     * Settled, not success: the mutation's own `onSuccess` has already run (a workspace switch clears the cache there, a
+     * delete navigates away), so what is refetched is what the screen still shows — and only after a request that worked.
+     */
+    onSettled: (_data, error, _variables, _context, mutation) => {
+      if (error !== null || !reportsSave(mutation.meta)) return
+      void queryClient.invalidateQueries({ refetchType: 'active' }, { cancelRefetch: false })
+    },
+    onError: (error, _variables, _context, mutation) => {
+      const failure = toApiError(error)
+      const refusal = upgradeRefusalFrom(failure)
       if (refusal !== null) useUpgrade.getState().show(refusal)
+      if (!reportsSave(mutation.meta)) return
+      if (refusal !== null) useSaveFeedback.setState((s) => ({ pending: Math.max(0, s.pending - 1), notice: s.pending > 1 ? s.notice : null }))
+      else useSaveFeedback.getState().fail(failure.message)
     },
   }),
   defaultOptions: {
@@ -42,6 +93,9 @@ const queryClient = new QueryClient({
         return failureCount < 1
       },
       refetchOnWindowFocus: false,
+      staleTime: QUERY_STALE_TIME_MS,
+      /* PERF-INSTANT-DATA-001 — an answer outlives its reader, so a revisit paints on the first frame. */
+      gcTime: QUERY_GC_TIME_MS,
     },
   },
 })
@@ -64,6 +118,18 @@ const queryClient = new QueryClient({
  * list is the surfaces where the answer is not merely unnecessary but meaningless.
  */
 const SESSIONLESS_PREFIXES = ['/r/', '/reports/share/', '/reports/print/', '/data-deletion']
+
+/**
+ * PERF-INSTANT-DATA-001 — the surfaces whose guards read the membership list.
+ * `/portal/login` is a sign-in form, not a portal page, and has no session to list.
+ */
+const MEMBERSHIP_PREFIXES = ['/app', '/agency', '/influencers', '/portal']
+
+export function readsMemberships(pathname: string): boolean {
+  if (pathname === '/portal/login') return false
+
+  return MEMBERSHIP_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+}
 
 export function isSessionlessSurface(pathname: string): boolean {
   return SESSIONLESS_PREFIXES.some((prefix) => pathname.startsWith(prefix))
@@ -111,10 +177,29 @@ export function Providers({ children }: { children: ReactNode }) {
       return
     }
 
-    void fetchCurrentUser().then((user) => {
-      if (useAuth.getState().status === 'loading') setUser(user)
+    /*
+     * PERF-BOOTSTRAP-001 — on a surface that reads memberships the probe IS the bootstrap: one request answers who you are, your
+     * memberships, your access, the subscription, the branding, the bell and the disclaimer, and files each under the key its hook
+     * reads BEFORE the store leaves `loading` — so nothing below mounts and asks again. It replaces the two requests this used to
+     * send side by side (`/auth/me` and `/auth/memberships`) and the five the page would have sent once it rendered.
+     *
+     * Anywhere else (the marketing pages, sign-in) there is nothing to file and the plain probe runs, as it always did. If the
+     * bootstrap does not answer, `bootSession` falls back to the plain probe and the memberships prefetch — the previous behaviour.
+     */
+    const probe = readsMemberships(window.location.pathname) ? bootSession(queryClient) : probeSession()
+
+    void probe.then(({ user, unreachable }) => {
+      if (useAuth.getState().status !== 'loading') return
+      if (unreachable) useAuth.getState().setStatus('unreachable')
+      else setUser(user)
     })
   }, [setUser])
+
+  /*
+   * WORKSPACE-SWITCH-001 — the active workspace belongs to the SESSION, so every tab of this browser has just moved.
+   * A tab left behind would keep drawing the old workspace while its next request runs in the new one.
+   */
+  useEffect(() => listenForWorkspaceSwitch(queryClient), [])
 
   /*
    * The upgrade prompt is mounted ABOVE the router, so a commercial refusal is answered the same way
@@ -130,6 +215,8 @@ export function Providers({ children }: { children: ReactNode }) {
       */}
       <OverlayBoundary>
         <UpgradeRequiredDialog />
+        <DialogHost />
+        <SaveFeedback />
       </OverlayBoundary>
     </QueryClientProvider>
   )

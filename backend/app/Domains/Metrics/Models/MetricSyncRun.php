@@ -32,6 +32,9 @@ final class MetricSyncRun extends Model
         'queued_at' => 'datetime',
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
+        // INTEG-SYNC-ENGINE-001 — set when the job behind this run exhausted its retries; the status stays one of §8's six words.
+        'dead_lettered_at' => 'datetime',
+        'redriven_at' => 'datetime',
         'metrics_upserted' => 'integer',
         /*
          * INTEG-RUNTIME §7 — nullable integers, and the nullability is the point.
@@ -177,6 +180,8 @@ final class MetricSyncRun extends Model
             'started_at' => $this->started_at?->toIso8601String(),
             'finished_at' => $this->finished_at?->toIso8601String(),
             'error' => $this->error,
+            // X-NO-ACTIVITY-001 — success where every stored figure was zero.
+            'no_activity' => (bool) (((array) ($this->meta ?? []))['no_activity'] ?? false),
             // Demo runs are labelled, never disguised as production traffic.
             'is_demo' => (bool) $this->is_demo,
         ];

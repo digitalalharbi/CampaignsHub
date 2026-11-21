@@ -1,27 +1,32 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, FileText, MessagesSquare, Receipt, ScrollText } from 'lucide-react'
+import { ArrowRight, BadgeCheck, FileText, MessagesSquare, Receipt } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { listPortalRequests, type PortalRequestCard } from '../clientPortalApi'
-import { listPortalInvoices, listPortalQuotes, listPortalThreads, formatDate } from './portalAccountApi'
+import { listPortalContentApprovals, listPortalInvoices, listPortalQuotes, listPortalThreads, formatDate } from './portalAccountApi'
+import { usePortalVisibility } from './usePortalVisibility'
 import { PortalShell } from './PortalShell'
 import { usePortalGuard } from './usePortalGuard'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
-import { PortfolioPerformance } from './PortfolioPerformance'
+import { lazy, Suspense, useState } from 'react'
+import { ClientLiveDashboard } from './ClientLiveDashboard'
+import { PortalAudience } from './PortalAudience'
+import { listClientReports } from './portalAccountApi'
+import { portalReportToken } from '@/features/reports/sharedBase'
 import { PortalAttention } from './PortalAttention'
 
 const COPY = {
   ar: {
-    title: 'مرحباً بك', subtitle: 'نظرة سريعة على طلباتك وفواتيرك ورسائلك.',
-    open_requests: 'طلبات مفتوحة', pending_quotes: 'عروض بانتظار ردّك',
+    title: 'الأداء', subtitle: 'نتائج حملاتك وما ينتظرك.',
+    open_requests: 'طلبات مفتوحة', pending_quotes: 'بانتظار اعتمادك',
     unpaid_invoices: 'فواتير غير مدفوعة', unread_messages: 'رسائل غير مقروءة',
     recent: 'أحدث الطلبات', none: 'لا توجد طلبات بعد.', view_all: 'عرض الكل', details: 'التفاصيل',
   },
   en: {
-    title: 'Welcome', subtitle: 'A quick look at your requests, invoices and messages.',
-    open_requests: 'Open requests', pending_quotes: 'Quotes awaiting you',
+    title: 'Performance', subtitle: 'How your campaigns are doing, and what is waiting for you.',
+    open_requests: 'Open requests', pending_quotes: 'Awaiting you',
     unpaid_invoices: 'Unpaid invoices', unread_messages: 'Unread messages',
     recent: 'Recent requests', none: 'No requests yet.', view_all: 'View all', details: 'Details',
   },
@@ -38,6 +43,9 @@ export function ClientDashboardPage() {
   const quotes = useQuery({ queryKey: ['client', 'quotes'], queryFn: listPortalQuotes, retry: false })
   const invoices = useQuery({ queryKey: ['client', 'invoices'], queryFn: listPortalInvoices, retry: false })
   const threads = useQuery({ queryKey: ['client', 'threads'], queryFn: listPortalThreads, retry: false })
+  const { allows } = usePortalVisibility()
+  // CLIENT-CONTENT-APPROVAL-001 — content waiting for the client counts beside open quotes.
+  const content = useQuery({ queryKey: ['client', 'content-approvals'], queryFn: listPortalContentApprovals, retry: false, enabled: allows('content') })
 
   // A 401 on any query means the session expired — bounce to login.
   usePortalGuard(requests.isError, requests.error)
@@ -50,6 +58,7 @@ export function ClientDashboardPage() {
     summary tile to say: «four unpaid invoices» means four in what you can see.
   */
   const pendingQuotes = (quotes.data?.items ?? []).filter((q) => ['draft', 'sent'].includes(q.status)).length
+    + (content.data?.items ?? []).filter((a) => a.status === 'pending').length
   const unpaidInvoices = (invoices.data?.items ?? []).filter((i) => ['unpaid', 'partially_paid'].includes(i.payment_status)).length
   const unreadMessages = (threads.data?.items ?? []).reduce((sum, th) => sum + (th.unread ?? 0), 0)
 
@@ -57,24 +66,31 @@ export function ClientDashboardPage() {
   const loading = requests.isLoading || quotes.isLoading || invoices.isLoading || threads.isLoading
 
   return (
-    <PortalShell title={ar ? 'الرئيسية' : 'Dashboard'} nav showLogout>
-      <div className="mb-5">
-        <h1 className="font-heading text-2xl font-extrabold text-text-primary">{t.title}</h1>
-        <p className="mt-1 text-sm text-text-secondary">{t.subtitle}</p>
+    <PortalShell title={t.title} nav showLogout>
+      <div className="mb-3">
+        <h1 className="font-heading text-xl font-extrabold text-text-primary">{t.title}</h1>
+        <p className="mt-0.5 text-sm text-text-secondary">{t.subtitle}</p>
       </div>
 
       <PortalAttention />
 
-      <PortfolioPerformance />
-
+      {/* CLIENT-DASHBOARD-PARITY-001 — what is waiting on the client first, then the live dashboard (the agency's own engine). */}
       <StatGrid columns="grid-cols-2 lg:grid-cols-4">
         <PortalStat to={spaceTo('/requests')} icon={FileText} label={t.open_requests} value={openRequests} loading={loading} />
-        <PortalStat to={spaceTo('/quotes')} icon={ScrollText} label={t.pending_quotes} value={pendingQuotes} loading={loading} tone={pendingQuotes > 0 ? 'warning' : undefined} />
+        <PortalStat to={spaceTo('/approvals')} icon={BadgeCheck} label={t.pending_quotes} value={pendingQuotes} loading={loading} tone={pendingQuotes > 0 ? 'warning' : undefined} />
         <PortalStat to={spaceTo('/invoices')} icon={Receipt} label={t.unpaid_invoices} value={unpaidInvoices} loading={loading} tone={unpaidInvoices > 0 ? 'warning' : undefined} />
         <PortalStat to={spaceTo('/messages')} icon={MessagesSquare} label={t.unread_messages} value={unreadMessages} loading={loading} tone={unreadMessages > 0 ? 'brand' : undefined} />
       </StatGrid>
 
-      <section className="mt-6 rounded-2xl border border-border bg-surface p-5">
+      {/*
+        PORTAL-REPORT-HOME-001 — Owner 2026-11-21: the client's report IS the dashboard, opening straight away as before. The
+        live dashboard stands in only where no report is shared with this client yet.
+      */}
+      <div className="mt-4">
+        <PortalHomeReport ar={ar} />
+      </div>
+
+      <section className="mt-3 rounded-2xl border border-border bg-surface p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-bold text-text-primary">{t.recent}</h2>
           <Link to={spaceTo('/requests')} className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700">{t.view_all} <ArrowRight size={13} className="rtl:rotate-180" /></Link>
@@ -139,5 +155,59 @@ function RecentRow({ r, ar, details }: { r: PortalRequestCard; ar: boolean; deta
         </div>
       </Link>
     </li>
+  )
+}
+
+// Loaded on demand: the shared report is a large page of its own, and its route (/r/) keeps its own budget.
+const PublicReport = lazy(() => import('@/features/reports/PublicReport').then((m) => ({ default: m.PublicReport })))
+
+/**
+ * PORTAL-REPORT-HOME-001 — the client's shared report, whole, as the first page: the latest one opens directly, and a
+ * client with several reports switches between them here. Without a shared report the live dashboard takes its place.
+ */
+function PortalHomeReport({ ar }: { ar: boolean }) {
+  const q = useQuery({ queryKey: ['client', 'reports'], queryFn: listClientReports, retry: false })
+  const shared = (q.data ?? []).filter((r) => r.share?.shared)
+  const [chosen, setChosen] = useState<string | null>(null)
+  if (q.isLoading) return <div className="h-72 animate-pulse rounded-2xl bg-surface-secondary" />
+  if (shared.length === 0) {
+    return (
+      <>
+        <ClientLiveDashboard />
+        <PortalAudience />
+      </>
+    )
+  }
+  const report = shared.find((r) => r.id === chosen) ?? shared[0]!
+
+  return (
+    <section data-testid="portal-home-report">
+      {shared.length > 1 && (
+        <div role="tablist" aria-label={ar ? 'التقارير' : 'Reports'} className="mb-3 flex flex-wrap gap-1.5" data-untranslatable>
+          {shared.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              role="tab"
+              aria-selected={r.id === report.id}
+              data-testid={`portal-home-report-${r.id}`}
+              onClick={() => setChosen(r.id)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition-colors ${r.id === report.id ? 'border-brand-600 bg-brand-600/10 text-brand-600' : 'border-border text-text-secondary hover:bg-surface-hover'}`}
+            >
+              {r.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {/*
+        The report is the client's own document, in the language it was published in (its own locale), not the portal's
+        chrome — so the interface-language guard reads around it, as it does for any tenant value.
+      */}
+      <div data-untranslatable>
+        <Suspense fallback={<div className="h-72 animate-pulse rounded-2xl bg-surface-secondary" />}>
+          <PublicReport key={report.id} token={portalReportToken(report.id)} embedded />
+        </Suspense>
+      </div>
+    </section>
   )
 }

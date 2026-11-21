@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Reports\Measurement\AudienceReportSections;
 use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportExport;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Sections\ReportSectionSurfaces;
 use App\Domains\Reports\Sections\ResolvedSections;
+use App\Domains\Reports\Support\ChosenFigures;
+use App\Domains\Reports\Support\ReportFxFacts;
 use App\Domains\Reports\Support\ReportIdentity;
 use App\Support\AdPlatforms;
+use App\Support\PeriodLabel;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -41,6 +45,9 @@ final class ReportExporter
         'impressions', 'clicks', 'ctr', 'conversions', 'spend', 'revenue', 'cpc', 'cpm', 'cpa', 'roas',
     ];
 
+    /** @var array<string, array<string, mixed>> FX-APPLY-001 — rate facts per report and period, read once per export */
+    private array $fxMemo = [];
+
     public function __construct(
         private readonly ExportReadinessGate $gate,
         private readonly ChromiumPdfRenderer $chromium,
@@ -66,7 +73,7 @@ final class ReportExporter
         $this->gate->ensureReady($this->stored($report, $share));
         // SINGLE enforcement point: every export path (admin export, scheduled, email, share) is filtered
         // by the report's audience here — an authenticated admin can NEVER bypass client filtering.
-        $data = $this->withoutHiddenSections($report, $this->audienceData($report));
+        $data = $this->withoutHiddenSections($report, $this->audienceData($report, $share));
 
         // REPORT-SECTION-SURFACES-001 — the file carries the same section set as the page and the PDF,
         // narrowed by the link's own switches when a link produced it.
@@ -85,7 +92,8 @@ final class ReportExporter
             $applied['kpi_allowlist'] = array_values($applied['metric_set']);
         }
 
-        return $applied;
+        // REPORT-FILTERS-FUNCTIONAL-001 — the file is built from the same cut document as the page and the PDF (four surfaces, one answer).
+        return ChosenFigures::for($report, $share)->cut($applied);
     }
 
     /**
@@ -229,6 +237,44 @@ final class ReportExporter
         return [$head, $rows];
     }
 
+    /**
+     * FX-APPLY-001 — the stored rate facts for this file's period (memoised per report and period).
+     *
+     * @param  array<string,mixed>  $data
+     * @return array{currency: string, includes_converted: bool, stale: bool, withheld_rows: int, by_currency: list<array<string, mixed>>, by_provider: array<string, list<string>>, header: string}
+     */
+    private function fxFacts(Report $report, array $data): array
+    {
+        $from = is_string($data['period']['from'] ?? null) ? $data['period']['from'] : null;
+        $to = is_string($data['period']['to'] ?? null) ? $data['period']['to'] : null;
+        $key = $report->getKey().'|'.$from.'|'.$to;
+
+        return $this->fxMemo[$key] ??= ReportFxFacts::for($report, $from, $to);
+    }
+
+    /**
+     * FX-APPLY-001 — every platform row says the currency its platform reported in, beside the converted figures, so the file
+     * reconciles with the screen («253 EUR» → 283.36 in the reporting currency). Codes only — never an amount, never a name.
+     *
+     * @param  array<string,mixed>  $data
+     * @param  list<string>  $head
+     * @param  list<array<int,mixed>>  $rows
+     * @param  array<string, list<string>>  $byProvider
+     * @return array{0: list<string>, 1: list<array<int,mixed>>}
+     */
+    private static function withOriginalCurrency(array $data, array $head, array $rows, array $byProvider): array
+    {
+        $platforms = array_values((array) ($data['platforms'] ?? []));
+        $head[] = 'Original currency / العملة الأصلية';
+        foreach ($rows as $i => $row) {
+            $provider = (string) ($platforms[$i]['provider'] ?? '');
+            $codes = $byProvider[$provider] ?? $byProvider[AdPlatforms::canonical($provider)] ?? [];
+            $rows[$i] = [...$row, implode(', ', $codes)];
+        }
+
+        return [$head, $rows];
+    }
+
     /** Render a report to file bytes for a format, without persisting anything (used by public share). */
     public function render(Report $report, string $format, ?ReportShare $share = null): string
     {
@@ -355,12 +401,14 @@ final class ReportExporter
      *
      * @return array<string,mixed>
      */
-    private function audienceData(Report $report): array
+    private function audienceData(Report $report, ?ReportShare $share = null): array
     {
-        $data = $report->data ?? [];
+        // REPORT-SOURCE-ISOLATION-001 — an operator's own export of an older copy stays inside the report's accounts too.
+        $data = app(ReportSourceContainment::class)->apply($report->data ?? [], $report);
         $audience = $report->audience ?? 'client';
         if (in_array($audience, ['client', 'executive'], true)) {
-            $data = $audience === 'executive' ? $this->clientView->executive($data) : $this->clientView->filter($data);
+            // REPORT-PARITY-FOUR-SURFACES-001 — the same method the link's page and the print route use; a link's own form counts.
+            $data = $this->clientView->document($data, $audience, $share !== null ? $share->formOr($report->form) : $report->form);
             $violations = $this->contentValidator->scan($data);
             abort_if(
                 $violations !== [],
@@ -432,7 +480,10 @@ final class ReportExporter
         $put = fn (array $row) => fputcsv($fh, $row, ',', '"', '');
         $put(["Report: {$report->name}", $report->type]);
         // The currency the figures are IN — a live report's figures come from the page, which names its own.
-        $put(['Period', ($data['period']['from'] ?? '').' → '.($data['period']['to'] ?? ''), 'Currency', (string) ($data['currency'] ?? $report->currency)]);
+        $put(['Period', is_string($data['period']['from'] ?? null) && is_string($data['period']['to'] ?? null) ? PeriodLabel::range($data['period']['from'], $data['period']['to'], 'en') : '', 'Currency', (string) ($data['currency'] ?? $report->currency)]);
+        // FX-APPLY-001 — the rates behind the figures: original currencies, rate, dates, kind, withheld.
+        $fx = $this->fxFacts($report, $data);
+        $put(['Exchange rates / أسعار الصرف', $fx['header']]);
         $put([]);
         $put(['KPIs']);
         foreach (self::kpiRows($data) as $k => $v) {
@@ -443,6 +494,7 @@ final class ReportExporter
             static fn ($p) => [$p['provider'] ?? '', $p['spend'] ?? '', $p['revenue'] ?? '', $p['conversions'] ?? '', $p['roas'] ?? '', $p['cpa'] ?? '', $p['ctr'] ?? '', $p['spend_share'] ?? ''],
             array_values((array) ($data['platforms'] ?? [])),
         )));
+        [$platHead, $platRows] = self::withOriginalCurrency($data, $platHead, $platRows, $fx['by_provider']);
         $put($platHead);
         foreach ($platRows as $row) {
             $put($row);
@@ -471,6 +523,27 @@ final class ReportExporter
                     $p['orders'] ?? '',
                     // A path never bought for a result has no cost per one — empty, not zero.
                     ($p['result_metrics_apply'] ?? false) ? ($p['cpa'] ?? '') : '',
+                ]);
+            }
+        }
+
+        /*
+         * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», one block per objective, in the file the section is
+         * in. The block arrives already cut for the audience (a client's has no spend or cost), and a cell the reading
+         * did not answer is EMPTY, never zero. A hidden part is absent from `$data`, so nothing is written.
+         */
+        foreach ((array) (($data['content_format_comparison'] ?? [])['objectives'] ?? []) as $objective) {
+            if (! is_array($objective)) {
+                continue;
+            }
+            $put([]);
+            $put(['Content types / أنواع المحتوى', (string) ($objective['label']['en'] ?? $objective['family'] ?? ''), 'result: '.($objective['result_metric'] ?? ''), 'winner: '.($objective['winner']['format'] ?? '')]);
+            $put(['format', 'creatives', 'spend', 'results', 'cost per result', 'ctr', 'cpm', 'cpc', 'conversion rate', 'roas', 'share of spend', 'share of results', 'small sample']);
+            foreach ((array) ($objective['formats'] ?? []) as $f) {
+                $put([
+                    $f['format'] ?? '', $f['creatives'] ?? '', $f['spend'] ?? '', $f['results'] ?? '', $f['cost_per_result'] ?? '', $f['ctr'] ?? '',
+                    $f['cpm'] ?? '', $f['cpc'] ?? '', $f['conversion_rate'] ?? '', $f['roas'] ?? '', $f['share_of_spend'] ?? '', $f['share_of_results'] ?? '',
+                    ($f['small_sample'] ?? false) ? 'yes' : '',
                 ]);
             }
         }
@@ -657,6 +730,7 @@ final class ReportExporter
             static fn ($p) => [$p['provider'] ?? '', $p['spend'] ?? null, $p['revenue'] ?? null, $p['conversions'] ?? null, $p['roas'] ?? null, $p['cpa'] ?? null, $p['ctr'] ?? null, $p['spend_share'] ?? null],
             array_values((array) ($data['platforms'] ?? [])),
         )));
+        [$platHead, $platRows] = self::withOriginalCurrency($data, $platHead, $platRows, $this->fxFacts($report, $data)['by_provider']);
         $ps->fromArray($platHead, null, 'A1');
         $row = 2;
         foreach ($platRows as $platRow) {
@@ -802,6 +876,80 @@ final class ReportExporter
      * @param  list<array<int,mixed>>  $rows
      */
     /**
+     * AUDIENCE-001 — the audience parts as file tables, one per kind, the same rows the page draws.
+     *
+     * Read from `$data` after the report's sections and the link's switches were applied, so a part somebody hid is not
+     * here to write. Every share keeps its numerator and denominator; a measure not reported is an EMPTY cell, never 0;
+     * spend appears only where the part carries it (never on a client's file), per currency, never converted.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<array{title: string, sheet: string, head: list<string>, rows: list<list<mixed>>}>
+     */
+    private static function audienceTables(array $data): array
+    {
+        $out = [];
+        $delivery = [];
+        $money = false;
+        foreach (AudienceReportSections::DELIVERY as $key => $_) {
+            foreach ((array) (((array) ($data[$key] ?? []))['groups'] ?? []) as $g) {
+                foreach ((array) ($g['rows'] ?? []) as $r) {
+                    $money = $money || array_key_exists('spend', (array) $r);
+                    $delivery[] = [$g, (array) $r];
+                }
+            }
+        }
+        if ($delivery !== []) {
+            $head = ['Platform / المنصة', 'Dimension / التقسيم', 'Value / القيمة', 'Impressions / الظهور', 'Numerator / البسط', 'Denominator / المقام', 'Share / النسبة', 'Clicks / النقرات', 'Source / المصدر'];
+            if ($money) {
+                $head[] = 'Spend (original currency) / الإنفاق بعملته';
+            }
+            $rows = [];
+            foreach ($delivery as [$g, $r]) {
+                $share = is_array($r['share'] ?? null) ? $r['share'] : null;
+                $row = [
+                    (string) ($g['provider'] ?? ''), (string) ($g['dimension'] ?? ''), (string) ($r['value'] ?? ''),
+                    $r['impressions'] ?? '', $share['numerator'] ?? '', $share['denominator'] ?? '', $share['ratio'] ?? '',
+                    $r['clicks'] ?? '', (string) ($g['source_field'] ?? ''),
+                ];
+                if ($money) {
+                    $row[] = implode(' · ', array_map(static fn ($m): string => ((array) $m)['amount'].' '.((array) $m)['currency'], (array) ($r['spend'] ?? [])));
+                }
+                $rows[] = $row;
+            }
+            $rows[] = ['Basis / الأساس', 'Paid delivery as each platform reported it; platforms are never added together / التسليم المدفوع كما أبلغت كل منصة، ولا تُجمع المنصات'];
+            $out[] = ['title' => 'Audience — paid delivery / الجمهور — التسليم المدفوع', 'sheet' => 'Audience delivery', 'head' => $head, 'rows' => $rows];
+        }
+
+        $items = (array) (((array) ($data['audience_targeting'] ?? []))['items'] ?? []);
+        if ($items !== []) {
+            $rows = array_map(static function ($i): array {
+                $i = (array) $i;
+                $settings = [];
+                foreach ((array) ($i['settings'] ?? []) as $k => $v) {
+                    $settings[] = $k.': '.(is_array($v) ? implode(', ', array_map('strval', $v)) : (string) $v);
+                }
+
+                return [(string) ($i['provider'] ?? ''), (string) ($i['ad_set'] ?? ''), implode(' | ', $settings), implode(', ', (array) ($i['not_stored'] ?? []))];
+            }, array_values($items));
+            $out[] = ['title' => 'Audience — targeting settings / الجمهور — إعدادات الاستهداف', 'sheet' => 'Audience targeting', 'head' => ['Platform / المنصة', 'Ad set / المجموعة', 'Settings (not delivery) / الإعدادات (ليست تسليمًا)', 'Not stored / غير محفوظ'], 'rows' => $rows];
+        }
+
+        $site = (array) (((array) ($data['audience_site'] ?? []))['groups'] ?? []);
+        if ($site !== []) {
+            $rows = [];
+            foreach ($site as $g) {
+                foreach ((array) ($g['rows'] ?? []) as $r) {
+                    $r = (array) $r;
+                    $rows[] = [(string) ($g['dimension'] ?? ''), (string) ($r['value'] ?? ''), $r['sessions'] ?? '', ((array) ($r['share'] ?? []))['ratio'] ?? ''];
+                }
+            }
+            $out[] = ['title' => 'Site visitors (not ad delivery) / زوار الموقع (ليس تسليم الإعلان)', 'sheet' => 'Audience site', 'head' => ['Dimension / التقسيم', 'Value / القيمة', 'Sessions / الجلسات', 'Share / النسبة'], 'rows' => $rows];
+        }
+
+        return $out;
+    }
+
+    /**
      * WIDGET-REGISTRY-001 — the tables a link's widgets become in a file.
      *
      * Built ONLY from `$data['widgets']`, which `ShareService::downloadDocument` fills from the same client-safe
@@ -814,7 +962,8 @@ final class ReportExporter
      */
     private static function widgetTables(array $data): array
     {
-        $out = [];
+        // AUDIENCE-001 — the audience parts the page carries become tables of their own; a hidden part is absent from $data.
+        $out = self::audienceTables($data);
         foreach ((array) ($data['widgets'] ?? []) as $widget) {
             if (! is_array($widget) || ! is_array($widget['data'] ?? null)) {
                 continue;
@@ -985,6 +1134,7 @@ final class ReportExporter
             $rows[] = ['Attribution window / نافذة الإسناد', (string) ($report->attribution_window ?? '—')];
         }
         $rows[] = ['Currency / العملة', (string) ($data['currency'] ?? $report->currency)];
+        $rows[] = ['Exchange rates / أسعار الصرف', $this->fxFacts($report, $data)['header']];
         $rows[] = ['Timezone / المنطقة الزمنية', (string) $report->timezone];
         $live = ($data['mode'] ?? null) === 'live' || ($report->config['mode'] ?? 'snapshot') === 'live' || (($report->config['live'] ?? false) === true);
         $rows[] = ['Report mode / وضع التقرير', $live ? 'Live' : 'Snapshot'];
@@ -1010,7 +1160,17 @@ final class ReportExporter
 
         $fresh = Report::withoutGlobalScopes()->find($report->getKey());
 
-        return $fresh === null ? $report : app(LiveReportService::class)->materialise($fresh, $share);
+        if ($fresh === null) {
+            return $report;
+        }
+        $stored = app(LiveReportService::class)->materialise($fresh, $share);
+        // REPORT-SNAPSHOT-PROTECT-001 — a link's file is made from the stored copy while that copy is rebuilt. The gate still
+        // validates the document; only the row's «being rebuilt» is not held against the finished copy it carries. In memory only.
+        if ($stored->status === 'processing' && $stored->hasStoredCopy()) {
+            $stored->setAttribute('status', 'completed');
+        }
+
+        return $stored;
     }
 
     private function pdf(Report $report, array $data, ?ReportShare $share = null): string

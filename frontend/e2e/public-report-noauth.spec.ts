@@ -54,7 +54,7 @@ test.describe('a client with a link and no account', () => {
        * would be requiring the demo scope to have a broken connection. The range control is what
        * this case is actually about: the report is interactive without a session.
        */
-      await expect(page.getByTestId('live-range-7')).toBeVisible()
+      await expect(page.getByTestId('live-range-picker-button')).toBeVisible()
     })
   }
 
@@ -79,7 +79,9 @@ test.describe('a client with a link and no account', () => {
     const headline = page.getByTestId('live-kpis').locator('.tnum').first()
 
     const before = await headline.innerText()
-    await page.getByTestId('live-range-7').click()
+    await page.getByTestId('live-range-picker-button').click()
+    await page.getByTestId('live-range-picker-preset-yesterday').click()
+    await page.getByTestId('live-range-picker-apply').click()
 
     await expect.poll(async () => headline.innerText(), { timeout: 20000 }).not.toBe(before)
 
@@ -101,7 +103,9 @@ test.describe('a client with a link and no account', () => {
 
     await page.goto(`/r/${TOKEN}`)
     await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
-    await page.getByTestId('live-range-7').click()
+    await page.getByTestId('live-range-picker-button').click()
+    await page.getByTestId('live-range-picker-preset-yesterday').click()
+    await page.getByTestId('live-range-picker-apply').click()
     await page.waitForLoadState('networkidle')
 
     expect(refused, 'a public client link asked for authentication').toEqual([])

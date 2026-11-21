@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Settings\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Bootstrap\Support\WorkspaceReadCache;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Http\Controllers\Controller;
@@ -30,10 +31,24 @@ final class BrandingController extends Controller
 
     public function show(Request $request): JsonResponse
     {
-        $tenant = $this->tenant();
-        $branding = array_merge(self::DEFAULTS, (array) (($tenant->settings ?? [])['branding'] ?? []));
+        return ApiResponse::success(['branding' => $this->branding()], 'Branding retrieved.');
+    }
 
-        return ApiResponse::success(['branding' => $branding], 'Branding retrieved.');
+    /**
+     * The workspace's branding, with the defaults filled in. PERF-BOOTSTRAP-001 — read through the per-tenant cache
+     * ({@see WorkspaceReadCache}); a save to the tenant row bumps its epoch, so the next read is the new value.
+     *
+     * @return array<string, mixed>
+     */
+    public function branding(): array
+    {
+        $tenantId = app(TenantContext::class)->tenantId();
+        abort_if($tenantId === null, 403, 'No tenant context.');
+
+        return WorkspaceReadCache::remember(WorkspaceReadCache::BRANDING, $tenantId, fn (): array => array_merge(
+            self::DEFAULTS,
+            (array) (($this->tenant()->settings ?? [])['branding'] ?? []),
+        ));
     }
 
     public function update(Request $request, AuditLogger $audit): JsonResponse

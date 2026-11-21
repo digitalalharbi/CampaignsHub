@@ -2,8 +2,8 @@ import { useMemo } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { providerLabel } from '@/features/campaigns/labels'
 import { ProviderName } from '@/components/ProviderMark'
-import { canonicalPlatform } from '@/lib/platforms'
-import { ChartCard, ConversionFunnelChart, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
+import { canonicalPlatform, isAdPlatform } from '@/lib/platforms'
+import { ChartCard, ConversionFunnelChart, hasFunnel, MetricLineChart, PlatformDonutChart } from '@/features/analytics/charts'
 import { moneyState, rankableMoney, type MoneyTotals } from '@/lib/money/contract'
 import { Num } from '@/components/ui/Num'
 import { ratio } from '@/features/analytics/format'
@@ -11,6 +11,7 @@ import type { LivePayload } from '../api'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
 import { resultWords } from './leadResults'
+import { withMark } from '@/lib/money/mark'
 
 /*
  * The sections a live link composes its modes from — lifted out of the single long page so each mode
@@ -241,9 +242,9 @@ export function TrendAndDistribution({ payload, ar, currency }: { payload: LiveP
 export function FunnelSection({ payload, ar, currency }: { payload: LivePayload; ar: boolean; currency: string }) {
   return (
     <>
-        {(payload.funnel ?? []).length > 0 && (
+        {hasFunnel(payload.funnel ?? []) && (
         <div className="mt-3 grid gap-3" data-testid="live-funnel">
-          <ChartCard title={ar ? 'قمع الأداء' : 'Performance funnel'}>
+          <ChartCard title={ar ? 'قمع المنصات الإعلانية' : 'Ad platforms funnel'}>
             <ConversionFunnelChart stages={payload.funnel ?? []} currency={currency} ar={ar} />
             {/* FUNNEL-NULL-001 — said once in a sentence as well as drawn. The client has no second
                 view of their account to check a gap against, so the gap must explain itself. */}
@@ -316,8 +317,8 @@ export function SiteMeasurementSection({ payload, ar }: { payload: LivePayload; 
           */}
           <p data-testid="site-measurement-not-blended" className="mt-1 text-xs leading-relaxed text-text-secondary">
             {ar
-              ? 'هذه أرقام موقعك كما قاسها جوجل أناليتكس، ولا تُجمع مع أرقام المنصات الإعلانية أعلاه — نموذج الإحالة مختلف.'
-              : 'These are your site’s own figures as Google Analytics measured them. They are not added to the ad platforms’ figures above — the attribution model is different.'}
+              ? 'أرقام القياس الرقمي لموقعك لا تُجمع مع أرقام المنصات الإعلانية — لكلٍّ نموذج إسناده.'
+              : 'Your website’s digital measurement, never added to the platforms’ figures — each has its own attribution.'}
           </p>
         </div>
         {measured.property.timezone && (
@@ -344,9 +345,8 @@ export function SiteMeasurementSection({ payload, ar }: { payload: LivePayload; 
             <dt className="text-[11px] text-text-muted">{ar ? MEASURED_LABELS.revenue!.ar : MEASURED_LABELS.revenue!.en}</dt>
             <dd className="font-extrabold text-text-primary">
               <Num className="tnum">
-                {measured.totals.revenue.toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { maximumFractionDigits: 2 })}
                 {/* The PROPERTY's currency, which is frequently not the report's. Stated, never converted. */}
-                {measured.currency ? ` ${measured.currency}` : ''}
+                {withMark(measured.totals.revenue.toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { maximumFractionDigits: 2 }), measured.currency)}
               </Num>
             </dd>
           </div>
@@ -393,7 +393,7 @@ export function StoreFunnelSection({ payload, ar }: { payload: LivePayload; ar: 
     <>
         {payload.store_funnel && (
           <div data-testid="shared-store-funnel" className="rounded-2xl border border-border bg-surface p-4">
-            <h3 className="font-bold text-text-primary">{ar ? 'الفانل والمتجر' : 'Funnel & store'}</h3>
+            <h3 className="font-bold text-text-primary">{ar ? 'طلبات المتجر' : 'Store orders'}</h3>
             <ol className="mt-3 space-y-1.5">
               {payload.store_funnel.stages.map((stage) => (
                 <li key={stage.key} data-testid={`shared-stage-${stage.key}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-sm">
@@ -483,26 +483,33 @@ export function FreshnessStrip({
    * include Snapchat — and everything about our plumbing goes. The platform is NAMED rather than
    * keyed, because `snapchat` is a database value and «سناب شات» is a platform they buy on.
    */
-  const excluded = freshness.filter((f) => f.state === 'awaiting_credentials')
+  // REPORT-WEBSITE-TAB-001 — the website is not an excluded ad platform: it has its own tab and its own empty state.
+  const excluded = freshness.filter((f) => f.state === 'awaiting_credentials' && isAdPlatform(f.provider))
 
-  if (excluded.length === 0) return null
+  // REPORT-FRESHNESS-DATE-001 — no banner over the figures: a late platform holds the footer's date back instead (`reportStamp`).
+  const stamp = null
+
+  if (excluded.length === 0) return stamp
 
   const names = excluded
     .map((f) => providerLabel(canonicalPlatform(f.provider), ar ? 'ar' : 'en'))
     .join(ar ? '، ' : ', ')
 
   return (
-    <p
-      data-testid="live-freshness"
-      className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning"
-    >
-      <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
-      <span>
-        {ar
-          ? `الأرقام في هذا التقرير لا تشمل: ${names}.`
-          : `The figures in this report do not include: ${names}.`}
-      </span>
-    </p>
+    <>
+      {stamp}
+      <p
+        data-testid="live-freshness"
+        className="flex items-start gap-1.5 rounded-xl border border-border bg-[var(--warning-background)] px-3 py-2 text-xs text-warning"
+      >
+        <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
+        <span>
+          {ar
+            ? `الأرقام في هذا التقرير لا تشمل: ${names}.`
+            : `The figures in this report do not include: ${names}.`}
+        </span>
+      </p>
+    </>
   )
 }
 

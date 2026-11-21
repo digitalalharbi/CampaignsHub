@@ -39,7 +39,7 @@ export const CATEGORY_NOTES: Record<string, Words> = {
     en: 'Notes about how the figures moved: conversion rate, and the comparison with the previous period.',
   },
   budget: {
-    ar: 'ما يكلّفك مالًا وأنت غير منتبه: سرعة الاستهلاك، وارتفاع التكلفة، وتوزيع الإنفاق.',
+    ar: 'ما يكلّفك مالًا وأنت غير منتبه: سرعة الصرف، وارتفاع التكلفة، وتوزيع الإنفاق.',
     en: 'What costs money while nobody is looking: pacing, rising cost, and how spend is distributed.',
   },
   content: {
@@ -67,7 +67,7 @@ export const TYPE_LABELS: Record<string, Words> = {
   falling_rate: { ar: 'انخفاض معدل التحويل', en: 'Conversion rate falling' },
   period_comparison: { ar: 'مقارنة بالفترة السابقة', en: 'Compared with the previous period' },
   // الميزانية
-  budget_pace: { ar: 'سرعة استهلاك الميزانية', en: 'Budget pacing' },
+  budget_pace: { ar: 'سرعة صرف الميزانية', en: 'Budget pacing' },
   rising_cost: { ar: 'ارتفاع تكلفة النتيجة', en: 'Cost per result rising' },
   reallocation: { ar: 'إعادة توزيع الإنفاق', en: 'Spend worth reallocating' },
   budget_risk: { ar: 'تجاوز حدود الميزانية', en: 'Budget threshold crossed' },
@@ -82,43 +82,54 @@ export const TYPE_LABELS: Record<string, Words> = {
   // العمليات
   /* Somebody waiting for the call they were sold. It printed as «lead_sla». */
   lead_sla: { ar: 'تأخّر الرد على عميل محتمل', en: 'A lead has waited too long' },
+  delivery_reminder: { ar: 'تذكير بتسليم التقارير', en: 'Report delivery reminder' },
   // التكاملات
   stale_data: { ar: 'بيانات لم تُحدَّث', en: 'Data has stopped updating' },
   data_gap: { ar: 'انقطاع في البيانات', en: 'A gap in the data' },
   sync_failed: { ar: 'فشل المزامنة', en: 'Syncing failed' },
   token_expiring: { ar: 'قرب انتهاء صلاحية الربط', en: 'A connection is about to expire' },
   // التقارير
-  daily_digest: { ar: 'الملخص اليومي', en: 'Daily summary' },
-  weekly_digest: { ar: 'الملخص الأسبوعي', en: 'Weekly summary' },
+  // DIGESTS-CADENCE-BUDGETS-001 — the cross-project mail is «ملخص المشاريع», led by the budgets, on all three rhythms.
+  daily_digest: { ar: 'ملخص المشاريع اليومي', en: 'Daily projects summary' },
+  weekly_digest: { ar: 'ملخص المشاريع الأسبوعي', en: 'Weekly projects summary' },
   /*
    * The third rhythm. The backend has dispatched it since EMAIL-INTELLIGENCE-001 and the catalogue
    * lists it beside the other two; this map did not, so the settings table printed the raw key
    * «monthly_digest» in a column where every sibling reads as a sentence — a database identifier in
    * front of a reader, which is the defect the portal audit has an E2E against.
    */
-  monthly_digest: { ar: 'الملخص الشهري', en: 'Monthly summary' },
+  monthly_digest: { ar: 'ملخص المشاريع الشهري', en: 'Monthly projects summary' },
   report_ready: { ar: 'تقرير جاهز', en: 'A report is ready' },
   report_failed: { ar: 'تعذّر إنشاء تقرير', en: 'A report could not be built' },
+  scheduled_report: { ar: 'التقرير المجدول', en: 'A scheduled report' },
   // التشغيل
   message: { ar: 'رسالة جديدة', en: 'A new message' },
   request: { ar: 'طلب جديد أو تحديث عليه', en: 'A request, new or updated' },
   journey_transition: { ar: 'انتقال طلب إلى مرحلة جديدة', en: 'A request moved to a new stage' },
-  client_needs_attention: { ar: 'عميل يحتاج انتباهًا', en: 'A client needs attention' },
+  client_needs_attention: { ar: 'تنبيه على عميل', en: 'A client needs attention' },
+  // NOTIFICATION-CHANNELS-001 — what a rule the person built did, which used to reach the bell and nothing else.
+  automation_rule: { ar: 'تطابق قاعدة أتمتة', en: 'An automation rule matched' },
+  // FIN-LOOP-001 — the approved budget of a project: added, running low, over.
+  project_budget: { ar: 'ميزانية المشروع', en: 'Project budget' },
+  client_request: { ar: 'طلب عميل جديد أو تحديث عليه', en: 'A client request, new or updated' },
   // المالية
   subscription: { ar: 'الاشتراك والفواتير', en: 'Subscription and invoices' },
   // الحساب
   password_reset: { ar: 'إعادة تعيين كلمة المرور', en: 'Password reset' },
   email_verification: { ar: 'تأكيد البريد الإلكتروني', en: 'Email verification' },
   sign_in_code: { ar: 'رمز تسجيل الدخول', en: 'Sign-in code' },
+  oauth_link: { ar: 'تأكيد ربط Google', en: 'Google link confirmation' },
   member_setup: { ar: 'تهيئة حساب عضو جديد', en: 'New member account setup' },
   invitation: { ar: 'دعوة للانضمام', en: 'Invitation to join' },
   security_alert: { ar: 'تنبيه أمني', en: 'Security alert' },
+  role_changed: { ar: 'تغيّر دورك في مساحة العمل', en: 'Your workspace role changed' },
+  member_welcome: { ar: 'الترحيب بعد الانضمام', en: 'Welcome after joining' },
 }
 
 export const TYPE_NOTES: Record<string, Words> = {
   daily_digest: {
-    ar: 'ملخص أمس لكل مشروع تصل إليه، في الساعة التي تختارها.',
-    en: 'Yesterday, for every project you can see, at the hour you choose.',
+    ar: 'الميزانيات ثم حالة كل مشروع تصل له، آخر 7 أيام، في الساعة اللي تختارها.',
+    en: 'Budgets first, then every project you can see — the last 7 days, at the hour you choose.',
   },
   /*
    * «On the day you choose», not «Monday»: `digest_weekday` is now shown and accepted by the
@@ -126,8 +137,8 @@ export const TYPE_NOTES: Record<string, Words> = {
    * the row's own timing column does, from the chosen value.
    */
   weekly_digest: {
-    ar: 'ملخص الأسبوع المنتهي، في اليوم الذي تختاره.',
-    en: 'The finished week, on the day you choose.',
+    ar: 'الميزانيات وحالة المشاريع للأسبوع المنتهي، في اليوم اللي تختاره.',
+    en: 'Budgets and project health for the finished week, on the day you choose.',
   },
   /*
    * The month that FINISHED, not the one in progress: the sender reports the previous month, which
@@ -136,12 +147,20 @@ export const TYPE_NOTES: Record<string, Words> = {
    * states it. This sentence stays silent about the day because it is static and the day is not.
    */
   monthly_digest: {
-    ar: 'ملخص الشهر المنتهي، بعد اكتمال أرقامه.',
-    en: 'The finished month, once its figures are complete.',
+    ar: 'الميزانيات وحالة المشاريع للشهر المنتهي، بعد اكتمال أرقامه.',
+    en: 'Budgets and project health for the finished month, once its figures are complete.',
   },
   message: {
     ar: 'يصلك داخل النظام دائمًا. البريد مغلق افتراضيًا لأن رسائل المحادثات كثيرة.',
     en: 'Always reaches the bell. Email is off by default — conversations are frequent.',
+  },
+  automation_rule: {
+    ar: 'يصلك على البريد وداخل النظام عندما تطابق قاعدة كتبتها حملة أو إعلانًا.',
+    en: 'Reaches your inbox and the bell when a rule you wrote matches a campaign or an ad.',
+  },
+  project_budget: {
+    ar: 'إضافة ميزانية، وقرب نفادها، وتجاوزها.',
+    en: 'A budget added, running low, or over.',
   },
   security_alert: {
     ar: 'عند تسجيل دخول جديد أو تغيير كلمة المرور.',

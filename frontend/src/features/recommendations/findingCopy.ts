@@ -11,18 +11,20 @@ type Pair = { ar: string; en: string }
 const pick = (p: Pair | undefined, ar: boolean, fallback: string) => (p ? (ar ? p.ar : p.en) : fallback)
 
 const HEADLINES: Record<string, Pair> = {
-  roas_drop: { ar: 'تراجع العائد على الإنفاق', en: 'Return on ad spend fell' },
+  roas_drop: { ar: 'تراجع معدل العائد', en: 'Return on ad spend fell' },
   cpa_increase: { ar: 'ارتفعت تكلفة النتيجة', en: 'Cost per result rose' },
   cpl_increase: { ar: 'ارتفعت تكلفة العميل المحتمل', en: 'Cost per lead rose' },
-  no_results: { ar: 'إنفاق بلا نتائج', en: 'Spending with no results' },
+  no_results: { ar: 'صرف بدون نتائج', en: 'Spend with no results' },
   budget_risk: { ar: 'الميزانية تقترب من النفاد', en: 'Budget close to exhausted' },
   campaign_over_budget: { ar: 'الحملة تجاوزت ميزانيتها', en: 'Campaign is over its budget' },
   campaign_pace_overrun: { ar: 'الحملة تصرف أسرع من خطتها', en: 'Campaign is spending faster than planned' },
   metric_anomaly: { ar: 'يوم غير معتاد', en: 'An unusual day' },
-  sync_failure: { ar: 'فشلت مزامنة البيانات', en: 'Data sync failed' },
+  sync_failure: { ar: 'فشلت تحديث البيانات', en: 'Data sync failed' },
   sync_outage: { ar: 'انقطاع المزامنة', en: 'Sync outage' },
   sla_warning: { ar: 'تحذير مستوى الخدمة', en: 'Service-level warning' },
   token_expiry: { ar: 'صلاحية الربط تنتهي قريبًا', en: 'Connection authorisation expiring' },
+  // LINK-HEALTH-YESTERDAY-001 — the one link card, the same words as the server's `LinkHealth::STATES['not_synced']`.
+  link_not_synced: { ar: 'بيانات أمس ما وصلت من المنصة', en: 'Yesterday’s data did not arrive from the platform' },
   lead_unassigned: { ar: 'عملاء محتملون بلا مسؤول', en: 'Leads with no owner' },
   lead_no_contact: { ar: 'عملاء محتملون لم يُتواصل معهم', en: 'Leads not contacted' },
   lead_follow_up_overdue: { ar: 'متابعات متأخرة', en: 'Follow-ups overdue' },
@@ -60,6 +62,7 @@ const ACTIONS: Record<FindingAction, Pair> = {
   refresh_creative: { ar: 'جدّد هذا المحتوى أو خفّف الإنفاق عليه', en: 'Refresh this creative or reduce its spend' },
   scale_winner: { ar: 'فكّر في منحه ميزانية أكبر', en: 'Consider giving it more budget' },
   reconnect: { ar: 'أعد ربط المنصة', en: 'Reconnect the platform' },
+  check_sync: { ar: 'افحص المزامنة', en: 'Check the sync' },
   assign_leads: { ar: 'عيّن مسؤولًا لهؤلاء العملاء', en: 'Assign an owner to these leads' },
   contact_leads: { ar: 'تواصل مع هؤلاء العملاء', en: 'Contact these leads' },
   investigate_day: { ar: 'افتح الحملة وافحص هذا اليوم', en: 'Open the campaign and inspect that day' },
@@ -97,12 +100,14 @@ export const impactBasis = (k: ImpactKind, ar: boolean, against?: 'limit' | 'bud
 const FACTS: Record<FindingFactKey, Pair> = {
   provider: { ar: 'المنصة', en: 'Platform' },
   expires_at: { ar: 'تنتهي في', en: 'Expires' },
+  missing_day: { ar: 'اليوم الناقص', en: 'Missing day' },
+  last_day: { ar: 'آخر يوم وصل', en: 'Last day that arrived' },
   error: { ar: 'الخطأ', en: 'Error' },
   count: { ar: 'العدد', en: 'Count' },
   basis: { ar: 'سبب تعذّر القياس', en: 'Why it cannot be measured' },
-  threshold: { ar: 'العتبة', en: 'Threshold' },
+  threshold: { ar: 'الحد', en: 'Threshold' },
   window_days: { ar: 'النافذة (أيام)', en: 'Window (days)' },
-  utilisation: { ar: 'الاستهلاك', en: 'Utilisation' },
+  utilisation: { ar: 'نسبة الإنفاق', en: 'Utilisation' },
   pace: { ar: 'الوتيرة', en: 'Pace' },
   exhaustion: { ar: 'النفاد المتوقع', en: 'Projected exhaustion' },
   date: { ar: 'اليوم', en: 'Day' },
@@ -111,7 +116,7 @@ export const factLabel = (k: FindingFactKey, ar: boolean) => pick(FACTS[k], ar, 
 
 export const extraMetricLabel = (key: string, ar: boolean): string | null =>
   key === 'projected_spend' ? (ar ? 'الإنفاق المتوقع' : 'Projected spend')
-    : key === 'spend_without_results' ? (ar ? 'إنفاق بلا نتائج إضافية' : 'Spend, results flat')
+    : key === 'spend_without_results' ? (ar ? 'صرف بدون نتائج إضافية' : 'Spend, results flat')
       : key === 'lpv_rate' ? (ar ? 'نسبة زيارات صفحة الهبوط' : 'Landing-page view rate')
         : key === 'cost_per_lpv' ? (ar ? 'تكلفة زيارة صفحة الهبوط' : 'Cost per landing-page view')
           : key === 'results' ? (ar ? 'النتائج' : 'Results')

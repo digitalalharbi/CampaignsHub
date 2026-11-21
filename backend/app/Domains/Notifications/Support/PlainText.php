@@ -20,6 +20,9 @@ final class PlainText
         $html = (string) preg_replace('~<(head|style|script|title)\b.*?</\1>~is', '', $html);
         $html = (string) preg_replace('~<(div|span|td)\b[^>]*display\s*:\s*none[^>]*>.*?</\1>~is', '', $html);
 
+        // Before the links: a logo inside a link is that link's only label, and it printed as a bare address.
+        $html = (string) preg_replace('~<img\b[^>]*alt="([^"]*)"[^>]*>~i', '$1', $html);
+
         $html = (string) preg_replace_callback(
             '~<a\b[^>]*href="([^"]+)"[^>]*>(.*?)</a>~is',
             static function (array $m): string {
@@ -33,7 +36,6 @@ final class PlainText
             $html,
         );
 
-        $html = (string) preg_replace('~<img\b[^>]*alt="([^"]*)"[^>]*>~i', '$1', $html);
         $html = (string) preg_replace('~<br\s*/?>~i', "\n", $html);
         $html = (string) preg_replace('~</(p|div|tr|h[1-6]|li|table)>~i', "\n", $html);
         $html = (string) preg_replace('~</t[dh]>~i', '  ', $html);
@@ -42,6 +44,8 @@ final class PlainText
         $text = str_replace("\u{00A0}", ' ', $text);
         $text = (string) preg_replace('~[ \t]+~', ' ', $text);
         $text = (string) preg_replace('~ *\n *~', "\n", $text);
+        // The dots between footer links are for the eye; alone on a line they are noise.
+        $text = (string) preg_replace('~^·\n~mu', '', $text);
         $text = (string) preg_replace('~\n{3,}~', "\n\n", $text);
 
         return trim($text)."\n";

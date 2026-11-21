@@ -61,7 +61,7 @@ final class InvoiceDocumentTest extends TestCase
         $this->assertStringContainsString('Smart Code Agency', $html);
         $this->assertStringContainsString('300000000000003', $html);
         $this->assertStringContainsString('Razzah Avenue Trading Co.', $html);
-        $this->assertStringContainsString('2026-10-11 → 2026-10-17', $html);
+        $this->assertStringContainsString('11 أكتوبر – 17 أكتوبر 2026', $html);
         $this->assertStringContainsString('1,000.00', $html);
         $this->assertStringContainsString('150.00', $html);
         $this->assertStringContainsString('1,150.00 SAR', $html);

@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
-import { useNotifPrefs, useSaveNotifPrefs, type CatalogueType, type NotifPrefs, type Rhythm } from '../api'
+import { useNotifPrefs, useSaveNotifPrefs, useSendDigestNow, useSendSampleAlert, type DigestKind, type CatalogueType, type Importance, type NotifPrefs, type Rhythm } from '../api'
 import { CATEGORY_LABELS, CATEGORY_NOTES, TYPE_LABELS, TYPE_NOTES, words } from '../messageLabels'
 import { Switch } from '@/components/ui/Switch'
 import { Select } from '@/components/ui/Select'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Checkbox } from '@/components/ui/Checkbox'
+import { ChannelChip, type ChipState } from '../ChannelChip'
+import { ChannelsPanel } from '../ChannelsPanel'
+import { ExternalRecipientsPanel } from '../ExternalRecipientsPanel'
+import { SendNowChip } from '../SendNowChip'
+import { sendNowFailure, sendNowWord } from '../sendNowWords'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
@@ -32,9 +37,9 @@ const FREQ = [
 
 const RHYTHM_LABELS: Record<Rhythm, { ar: string; en: string }> = {
   immediate: { ar: 'فور حدوثه', en: 'As it happens' },
-  daily: { ar: 'مع الملخص اليومي', en: 'With the daily summary' },
-  weekly: { ar: 'مع الملخص الأسبوعي', en: 'With the weekly summary' },
-  monthly: { ar: 'مع الملخص الشهري', en: 'With the monthly summary' },
+  daily: { ar: 'مع ملخص المشاريع اليومي', en: 'With the daily projects summary' },
+  weekly: { ar: 'مع ملخص المشاريع الأسبوعي', en: 'With the weekly projects summary' },
+  monthly: { ar: 'مع ملخص المشاريع الشهري', en: 'With the monthly projects summary' },
 }
 
 /**
@@ -70,6 +75,8 @@ export function NotificationsTab() {
   const ar = useUi((u) => u.locale) === 'ar'
   const { data, isLoading } = useNotifPrefs()
   const save = useSaveNotifPrefs()
+  const digestNow = useSendDigestNow()
+  const sampleAlert = useSendSampleAlert()
   const [p, setP] = useState<NotifPrefs | null>(null)
   const [saved, setSaved] = useState(false)
 
@@ -77,6 +84,23 @@ export function NotificationsTab() {
   if (isLoading || !p) return <div className="space-y-3"><Skeleton className="h-10" /><Skeleton className="h-72" /></div>
 
   const label = (map: Record<string, { ar: string; en: string }>, key: string) => words(map, key, ar)
+
+  // NOTIFICATION-ENROLMENT-001 — the real digest / the marked sample alert, to this person's own address only; the answer is one word.
+  const sendDigest = async (kind: DigestKind): Promise<string> => {
+    try {
+      const r = await digestNow.mutateAsync(kind)
+      return sendNowWord(ar, r.state, r.reason)
+    } catch (e) {
+      return sendNowWord(ar, sendNowFailure(e))
+    }
+  }
+  const sendSample = async (): Promise<string> => {
+    try {
+      return sendNowWord(ar, (await sampleAlert.mutateAsync()).state)
+    } catch (e) {
+      return sendNowWord(ar, sendNowFailure(e))
+    }
+  }
 
   const submit = async () => {
     /*
@@ -111,7 +135,7 @@ export function NotificationsTab() {
     setTimeout(() => setSaved(false), 2500)
   }
 
-  const setType = (key: string, patch: Partial<{ email: boolean; in_app: boolean; rhythm: Rhythm }>) =>
+  const setType = (key: string, patch: Partial<{ email: boolean; in_app: boolean; whatsapp: boolean; rhythm: Rhythm; min_severity: Importance | null }>) =>
     setP({ ...p, types: { ...p.types, [key]: { ...p.types[key], ...patch } } })
 
   const chosenProjects = p.project_ids ?? []
@@ -129,6 +153,35 @@ export function NotificationsTab() {
     if (r === 'weekly' && !p.digests.weekly) return 'weekly'
     if (r === 'monthly' && !p.digests.monthly) return 'monthly'
     return null
+  }
+  const chipWords = { on: ar ? 'مفعّل' : 'On', off: ar ? 'متوقف' : 'Off', locked: ar ? 'دائم' : 'Always', soon: ar ? 'قريبًا' : 'Soon' }
+  const wa = p.whatsapp ?? { provider_configured: false, opted_in: false, opted_out: false, number_hint: null }
+
+  /** A cell that is a fact rather than a choice: a lock, or a dash where the channel does not exist. */
+  const chip = (t: CatalogueType, channel: 'in_app' | 'email' | 'whatsapp', state: 'locked' | 'na') => {
+    // A locked row still has no bell item when the policy says so: a lock on a channel that does not exist is a lie.
+    const resolved: ChipState = state === 'locked' && channel === 'in_app' && t.channels?.in_app === false ? 'na' : state
+    const name = channel === 'in_app' ? (ar ? 'داخل النظام' : 'in-app') : channel === 'email' ? (ar ? 'بريد' : 'email') : (ar ? 'واتساب' : 'WhatsApp')
+
+    return <ChannelChip state={resolved} label={`${label(TYPE_LABELS, t.key)} — ${name}`} words={chipWords} />
+  }
+
+  /** WhatsApp: never for some types, «قريبًا» until a provider exists, a switch only for a person with an opt-in. */
+  const whatsappChip = (t: CatalogueType, value: { whatsapp?: boolean }) => {
+    const name = `${label(TYPE_LABELS, t.key)} — ${ar ? 'واتساب' : 'WhatsApp'}`
+    if (t.channels?.whatsapp === 'never') return <ChannelChip state="na" label={name} words={chipWords} />
+    if (!wa.provider_configured) return <ChannelChip state="soon" label={name} words={chipWords} testId={`whatsapp-soon-${t.key}`} />
+
+    return (
+      <ChannelChip
+        state={wa.opted_in && value.whatsapp ? 'on' : 'off'}
+        label={name}
+        words={chipWords}
+        disabled={!wa.opted_in}
+        testId={`whatsapp-${t.key}`}
+        onToggle={(on) => setType(t.key, { whatsapp: on })}
+      />
+    )
   }
 
   return (
@@ -151,20 +204,18 @@ export function NotificationsTab() {
         </p>
         {saved && <div className="mt-4"><Alert severity="positive" title={ar ? 'تم حفظ التفضيلات' : 'Preferences saved'} /></div>}
 
-        <div className="mt-5 flex flex-wrap gap-6 border-t border-border pt-5">
-          <Switch
-            checked={p.channels.in_app}
-            onCheckedChange={(v) => setP({ ...p, channels: { ...p.channels, in_app: v } })}
-            label={ar ? 'إشعارات داخل النظام' : 'In-app notifications'}
-          />
-          <Switch
-            checked={p.channels.email}
-            onCheckedChange={(v) => setP({ ...p, channels: { ...p.channels, email: v } })}
-            label={ar ? 'البريد الإلكتروني' : 'Email'}
-          />
+        <ChannelsPanel p={p} setP={setP} ar={ar} />
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <SendNowChip testId="send-sample-alert" label={ar ? 'أرسل تنبيهًا تجريبيًا' : 'Send a sample alert'} run={sendSample} />
         </div>
+        {/* SMS is stated rather than offered: a switch for a channel with no provider is a promise the product cannot keep. */}
+        {p.available_channels?.some((c) => c.key === 'sms' && !c.available) && (
+          <p data-testid="sms-unavailable" className="mt-3 text-xs leading-6 text-text-muted">
+            {ar ? 'الرسائل النصية غير متاحة حاليًا: لا يوجد مزوّد مربوط.' : 'SMS is not available yet: no provider is wired.'}
+          </p>
+        )}
         {!p.channels.email && (
-          <p className="mt-3 text-[13px] leading-6 text-warning">
+          <p className="mt-3 text-xs leading-6 text-warning">
             {ar
               ? 'البريد مغلق كليًا، لذلك لن تصلك أي رسالة بريد مهما كان المحدد أدناه — عدا رسائل الحساب والأمان.'
               : 'Email is off entirely, so nothing below will reach your inbox — apart from account and security messages.'}
@@ -176,15 +227,16 @@ export function NotificationsTab() {
       {p.catalogue.map((group) => (
         <div key={group.key} className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
           <h3 className="text-base font-bold text-text-primary">{label(CATEGORY_LABELS, group.key)}</h3>
-          <p className="mt-1 max-w-2xl text-[13px] leading-6 text-text-secondary">{label(CATEGORY_NOTES, group.key)}</p>
+          <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">{label(CATEGORY_NOTES, group.key)}</p>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-border text-text-muted">
-                  <th className="p-2 text-start">{ar ? 'الرسالة' : 'Message'}</th>
+                  <th className="w-[150px] p-2 text-start sm:w-auto">{ar ? 'الرسالة' : 'Message'}</th>
                   <th className="p-2 text-center">{ar ? 'داخل النظام' : 'In-app'}</th>
                   <th className="p-2 text-center">{ar ? 'بريد' : 'Email'}</th>
+                  <th className="p-2 text-center">{ar ? 'واتساب' : 'WhatsApp'}</th>
                   <th className="p-2 text-start">{ar ? 'التوقيت' : 'When'}</th>
                 </tr>
               </thead>
@@ -196,40 +248,37 @@ export function NotificationsTab() {
 
                   return (
                     <tr key={t.key} className="border-b border-border align-top last:border-0">
-                      <td className="p-2">
+                      <td className="w-[150px] p-2 sm:w-auto">
                         <div className="font-medium text-text-primary">{label(TYPE_LABELS, t.key)}</div>
+                        {/* A note wider than the phone pushes the chips off-screen; it stays narrow there and opens up from `sm`. */}
                         {TYPE_NOTES[t.key] && (
-                          <p className="mt-0.5 max-w-md text-[13px] leading-6 text-text-muted">{label(TYPE_NOTES, t.key)}</p>
+                          <p className="mt-0.5 max-w-[140px] text-xs leading-6 text-text-muted sm:max-w-md">{label(TYPE_NOTES, t.key)}</p>
                         )}
                       </td>
 
                       {t.mandatory ? (
-                        <td colSpan={3} className="p-2 text-[13px] leading-6 text-text-secondary">
-                          {ar ? 'تُرسل دائمًا عند الحاجة إليها.' : 'Always sent whenever it applies.'}
-                        </td>
+                        <>
+                          <td className="p-2 text-center">{chip(t, 'in_app', 'locked')}</td>
+                          <td className="p-2 text-center">{chip(t, 'email', 'locked')}</td>
+                          <td className="p-2 text-center">{whatsappChip(t, value)}</td>
+                          <td className="p-2 text-xs leading-6 text-text-secondary">
+                            {ar ? 'تُرسل دائمًا عند الحاجة إليها.' : 'Always sent whenever it applies.'}
+                          </td>
+                        </>
                       ) : digest !== null ? (
                         <>
-                          <td className="p-2 text-center text-[13px] text-text-muted">—</td>
+                          <td className="p-2 text-center">{chip(t, 'in_app', 'na')}</td>
                           <td className="p-2 text-center">
-                            <Checkbox
-                              id={`digest-${digest}`}
-                              aria-label={label(TYPE_LABELS, t.key)}
-                              checked={p.digests[digest]}
-                              onChange={(e) => setP({ ...p, digests: { ...p.digests, [digest]: e.target.checked } })}
+                            <ChannelChip
+                              state={p.digests[digest] ? 'on' : 'off'}
+                              label={label(TYPE_LABELS, t.key)}
+                              words={chipWords}
+                              testId={`digest-${digest}`}
+                              onToggle={(on) => setP({ ...p, digests: { ...p.digests, [digest]: on } })}
                             />
                           </td>
-                          <td className="p-2 text-[13px] text-text-muted">
-                            {/*
-                              Three rhythms, not two. This was `daily ? … : weekly`, so the MONTHLY
-                              row — which the sender has dispatched since EMAIL-INTELLIGENCE-001 —
-                              announced «Weekly, Monday morning»: a false statement about when a
-                              reader's mail arrives, printed on the screen they opened to find out.
-                              Both days are now named, because both now reach this screen: the
-                              endpoint shows and accepts `digest_weekday` and `digest_monthday`,
-                              which the sender had been reading all along. The weekly line used to
-                              say «Monday morning» as a constant — true only while the column could
-                              not move off its default.
-                            */}
+                          <td className="p-2 text-center">{chip(t, 'whatsapp', 'na')}</td>
+                          <td className="p-2 text-xs text-text-muted">
                             {digest === 'daily'
                               ? (ar ? `يوميًا، الساعة ${p.digest_hour}:00` : `Daily, at ${p.digest_hour}:00`)
                               : digest === 'monthly'
@@ -239,27 +288,39 @@ export function NotificationsTab() {
                                 : (ar
                                   ? `أسبوعيًا، ${WEEKDAYS_AR[p.digest_weekday] ?? WEEKDAYS_AR[1]}`
                                   : `Weekly, ${WEEKDAYS_EN[p.digest_weekday] ?? WEEKDAYS_EN[1]}`)}
+                            <div className="mt-1.5">
+                              <SendNowChip
+                                testId={`send-now-${digest}`}
+                                label={ar ? 'أرسل لي الآن' : 'Send me now'}
+                                run={() => sendDigest(digest as DigestKind)}
+                              />
+                            </div>
                           </td>
                         </>
                       ) : (
                         <>
                           <td className="p-2 text-center">
-                            <Checkbox
-                              id={`in-app-${t.key}`}
-                              aria-label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'داخل النظام' : 'in-app'}`}
-                              checked={value.in_app}
-                              onChange={(e) => setType(t.key, { in_app: e.target.checked })}
-                            />
+                            {t.channels?.in_app === false
+                              ? chip(t, 'in_app', 'na')
+                              : (
+                                <ChannelChip
+                                  state={value.in_app ? 'on' : 'off'}
+                                  label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'داخل النظام' : 'in-app'}`}
+                                  words={chipWords}
+                                  onToggle={(on) => setType(t.key, { in_app: on })}
+                                />
+                              )}
                           </td>
                           <td className="p-2 text-center">
-                            <Checkbox
-                              id={`email-${t.key}`}
-                              aria-label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'بريد' : 'email'}`}
-                              checked={value.email}
+                            <ChannelChip
+                              state={value.email ? 'on' : 'off'}
+                              label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'بريد' : 'email'}`}
+                              words={chipWords}
                               disabled={!p.channels.email}
-                              onChange={(e) => setType(t.key, { email: e.target.checked })}
+                              onToggle={(on) => setType(t.key, { email: on })}
                             />
                           </td>
+                          <td className="p-2 text-center">{whatsappChip(t, value)}</td>
                           <td className="p-2">
                             {t.rhythms.length > 1 ? (
                               <>
@@ -272,16 +333,27 @@ export function NotificationsTab() {
                                   onChange={(e) => setType(t.key, { rhythm: e.target.value as Rhythm })}
                                   options={t.rhythms.map((r) => ({ value: r, label: ar ? RHYTHM_LABELS[r].ar : RHYTHM_LABELS[r].en }))}
                                 />
+                                <Select
+                                  className="mt-1 max-w-[210px]"
+                                  aria-label={`${label(TYPE_LABELS, t.key)} — ${ar ? 'الأهمية' : 'importance'}`}
+                                  value={value.min_severity ?? ''}
+                                  onChange={(e) => setType(t.key, { min_severity: (e.target.value || null) as Importance | null })}
+                                  options={[
+                                    { value: '', label: ar ? 'كل المستويات' : 'Every level' },
+                                    { value: 'warning', label: ar ? 'التحذيرات فأعلى' : 'Warnings and above' },
+                                    { value: 'critical', label: ar ? 'الحرجة فقط' : 'Critical only' },
+                                  ]}
+                                />
                                 {stranded && (
-                                  <p className="mt-1 max-w-xs text-[13px] leading-6 text-warning">
+                                  <p className="mt-1 max-w-xs text-xs leading-6 text-warning">
                                     {ar
-                                      ? `لن تصلك هذه الرسالة لأن ${stranded === 'daily' ? 'الملخص اليومي' : stranded === 'weekly' ? 'الملخص الأسبوعي' : 'الملخص الشهري'} غير مفعّل لديك.`
+                                      ? `لن تصلك هذه الرسالة لأن ${stranded === 'daily' ? 'ملخص المشاريع اليومي' : stranded === 'weekly' ? 'ملخص المشاريع الأسبوعي' : 'ملخص المشاريع الشهري'} غير مفعّل لديك.`
                                       : `This will not reach you: your ${stranded} summary is switched off.`}
                                   </p>
                                 )}
                               </>
                             ) : (
-                              <span className="text-[13px] text-text-muted">{ar ? 'فور حدوثه' : 'As it happens'}</span>
+                              <span className="text-xs text-text-muted">{ar ? 'فور حدوثه' : 'As it happens'}</span>
                             )}
                           </td>
                         </>
@@ -296,9 +368,58 @@ export function NotificationsTab() {
       ))}
 
       {/* ── الملخصات والتوقيت ─────────────────────────────────────────────────────────────── */}
+      {/*
+        DIGESTS-CADENCE-BUDGETS-001 — the report PER PROJECT, on each rhythm, beside «ملخص المشاريع» above.
+
+        Each switch is its own: somebody who wants every project's report does not have to take the projects summary, and
+        the other way round. The weekly and monthly follow the daily answer until they are set — the server states all three.
+      */}
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]" data-testid="per-project-reports">
+        <h3 className="text-base font-bold text-text-primary">{ar ? 'تقرير كل مشروع' : 'A report per project'}</h3>
+        <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">
+          {ar
+            ? 'رسالة لكل مشروع تصل له: الميزانية، المؤشرات حسب الهدف، المنصات، وما يحتاج قرارك.'
+            : 'One mail per project you can see: its budget, the figures its objective is judged on, each platform, and what needs your decision.'}
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {([
+            ['per_project', ar ? 'يومي' : 'Daily'],
+            ['per_project_weekly', ar ? 'أسبوعي' : 'Weekly'],
+            ['per_project_monthly', ar ? 'شهري' : 'Monthly'],
+          ] as const).map(([key, word]) => (
+            <Switch
+              key={key}
+              testId={`digest-${key}`}
+              checked={p.digests[key] === true}
+              onCheckedChange={(v) => setP({ ...p, digests: { ...p.digests, [key]: v } })}
+              label={word}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — «ملخص الإنفاق» weekly, and the recipients outside the platform. */}
+      <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]" data-testid="spend-summary">
+        <h3 className="text-base font-bold text-text-primary">{ar ? 'ملخص الإنفاق' : 'Spend summary'}</h3>
+        <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">
+          {ar
+            ? 'أسبوعي، في يوم ملخصك الأسبوعي: إنفاق آخر 7 أيام لكل المشاريع، والمتبقي من حد الإنفاق لكل مشروع.'
+            : 'Weekly, on your weekly digest day: the last 7 days of spend across your projects, and what is left of each project’s spend limit.'}
+        </p>
+        <div className="mt-4">
+          <Switch
+            testId="digest-spend_summary"
+            checked={p.digests.spend_summary === true}
+            onCheckedChange={(v) => setP({ ...p, digests: { ...p.digests, spend_summary: v } })}
+            label={ar ? 'أسبوعي' : 'Weekly'}
+          />
+        </div>
+      </div>
+      <ExternalRecipientsPanel ar={ar} />
+
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <h3 className="text-base font-bold text-text-primary">{ar ? 'المواعيد واللغة' : 'Timing and language'}</h3>
-        <p className="mt-1 max-w-2xl text-[13px] leading-6 text-text-secondary">
+        <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">
           {ar
             ? 'الساعة التي تختارها هي ساعتك أنت. تغيير المنطقة الزمنية يغيّر وقت الوصول ولا يغيّر ما اخترته.'
             : 'The hour you choose is your own. Changing timezone changes when mail arrives, not what you asked for.'}
@@ -311,7 +432,7 @@ export function NotificationsTab() {
             label={ar ? 'أرسل لي التنبيهات فور حدوثها' : 'Send me alerts as they happen'}
           />
           {!p.digests.alerts && (
-            <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted">
+            <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted">
               {ar
                 ? 'مع إيقاف هذا الخيار لن تصلك تنبيهات فورية بالبريد، وتبقى الملاحظات ظاهرة داخل النظام وفي الملخصات التي اخترتها.'
                 : 'With this off, no alert reaches your inbox as it happens. The findings still appear in the product and in whichever summaries you chose.'}
@@ -333,7 +454,7 @@ export function NotificationsTab() {
             colleague's approved judgement should arrive in their inbox, and the sentence says that
             rather than describing a feature.
           */}
-          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted" data-testid="recommendations-note">
+          <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted" data-testid="recommendations-note">
             {p.digests.recommendations
               ? (ar
                 ? 'يقتبس الملخص التوصيات المعتمدة فقط، ضمن الفترة التي يغطيها. لا يُنشئ النظام توصيات من الأرقام.'
@@ -433,7 +554,7 @@ export function NotificationsTab() {
             second because somebody who assumes their security alerts are being held has been told
             something untrue about their own account.
           */}
-          <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted">
+          <p className="mt-2 max-w-2xl text-xs leading-6 text-text-muted">
             {ar
               ? 'خلال هذه الساعات لا تصلك التنبيهات الفورية بالبريد، وتُرسل بعد انتهائها إن كانت الملاحظة ما زالت قائمة. الساعات محسوبة بتوقيتك أنت. أما رسائل الحساب والأمان — إعادة تعيين كلمة المرور ورموز الدخول والتنبيهات الأمنية — فتصلك فورًا دائمًا.'
               : 'During these hours no alert reaches your inbox; it is sent once they end, if the finding still stands. The hours are read in your own timezone. Account and security messages — password resets, sign-in codes and security alerts — always arrive immediately.'}
@@ -444,7 +565,7 @@ export function NotificationsTab() {
       {/* ── نطاق المشاريع ─────────────────────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
         <h3 className="text-base font-bold text-text-primary">{ar ? 'المشاريع' : 'Projects'}</h3>
-        <p className="mt-1 max-w-2xl text-[13px] leading-6 text-text-secondary">
+        <p className="mt-1 max-w-2xl text-xs leading-6 text-text-secondary">
           {ar
             ? 'حدّد المشاريع التي تريد ملخصاتها وتنبيهاتها. القائمة تعرض ما تملك صلاحية الاطلاع عليه فقط، والاختيار يضيّق ولا يوسّع.'
             : 'Choose which projects you want summaries and alerts about. The list shows only what you may already see, and choosing narrows — it never widens.'}

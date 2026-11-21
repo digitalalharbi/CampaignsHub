@@ -13,6 +13,7 @@ import { Num } from '@/components/ui/Num'
 import { usePortalBase } from '@/app/portalPath'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * EXECUTIVE-OPS-DASHBOARD-001 — one project view that joins paid media, lead generation and team
@@ -115,7 +116,7 @@ export function ExecutiveOpsPage() {
         </label>
         {d && (
           <span className="text-text-muted text-xs" data-testid="executive-window" dir="ltr">
-            {d.window.from} → {d.window.to}
+            <PeriodText from={d.window.from} to={d.window.to} />
           </span>
         )}
       </div>
@@ -128,7 +129,7 @@ export function ExecutiveOpsPage() {
         <>
           {/* What needs a person — first, as sentences, each opening the screen that fixes it. */}
           <div className="rounded-2xl border border-border bg-surface p-4" data-testid="executive-attention">
-            <h2 className="text-sm font-bold text-text-primary">{ar ? 'ما يحتاج انتباهك' : 'Needs attention'}</h2>
+            <h2 className="text-sm font-bold text-text-primary">{ar ? 'تنبيهات' : 'Needs attention'}</h2>
             {d.attention.length === 0 ? (
               <p className="mt-2 text-sm text-text-secondary" data-testid="executive-attention-clear">
                 {ar ? 'لا شيء متأخر أو بلا مسؤول في هذه الفترة.' : 'Nothing is late or unowned in this period.'}

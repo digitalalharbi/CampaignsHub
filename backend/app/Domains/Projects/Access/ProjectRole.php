@@ -57,6 +57,7 @@ final class ProjectRole
         $read = [
             ProjectCapability::DASHBOARD_VIEW,
             ProjectCapability::ANALYTICS_VIEW,
+            ProjectCapability::ANALYTICS_STORE_VIEW,
             ProjectCapability::CAMPAIGNS_VIEW,
             ProjectCapability::REPORTS_VIEW,
             // MEMBER-VISIBILITY-001 — the money comes with reading, until a membership withholds it.

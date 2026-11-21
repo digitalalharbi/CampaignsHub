@@ -33,7 +33,7 @@ describe('the downloads on a live link', () => {
     renderWithProviders(<PublicReport />, { locale: 'en', route: '/r/tok', path: '/r/:token' })
 
     const pdf = await screen.findByRole('link', { name: /Download PDF/ })
-    expect(pdf).toHaveAccessibleName(/2026-08-18 → 2026-09-16/)
-    expect(screen.getByTestId('shared-report-download-period')).toHaveTextContent('2026-08-18 → 2026-09-16')
+    expect(pdf).toHaveAccessibleName(/18 أغسطس – 16 سبتمبر 2026/)
+    expect(screen.getByTestId('shared-report-download-period')).toHaveTextContent('18 أغسطس – 16 سبتمبر 2026')
   })
 })

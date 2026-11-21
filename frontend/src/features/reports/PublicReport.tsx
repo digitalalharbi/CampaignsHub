@@ -1,21 +1,35 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Download, Lock } from 'lucide-react'
-import { fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
+import { downloadSharedFile, fetchSharedReport, sharedBranding, sharedDownloadUrl } from './api'
 import type { ReportFormat } from './api'
 import { BrandMark } from '@/components/brand/BrandMark'
 import { coverMeta, headerIdentity, reportPageTitle, type SharedBranding } from './sharedBranding'
-import { InteractiveReport } from './InteractiveReport'
 import { LiveSharedReport } from './LiveSharedReport'
 import { clientBlurb } from './reportProduct'
-import { SharedAttributionSection } from './SharedAttributionSection'
-import { SharedWidgetsSection } from '@/features/widgets/SharedWidgetsSection'
-import { SharedCreativeSection } from './SharedCreativeSection'
+import { lazyPage } from '@/app/lazyPage'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
 import { CampaignsHubBrandFooter } from '@/components/brand/CampaignsHubBrandFooter'
 import { ReportWatermark } from './ReportWatermark'
+import { setCodeMarks } from '@/lib/money/mark'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
+
+/*
+ * PERF-RECOVERY-001 — the live link loads only what the live dashboard draws.
+ *
+ * `/r/:token` serves two products: a SNAPSHOT (the generated document, `InteractiveReport`, with its
+ * creative library and attribution appendix) and a LIVE dashboard (`LiveSharedReport`). Statically,
+ * the page imported both, so a client opening a live link downloaded the whole slide renderer and
+ * the carousel before a single number. The snapshot halves arrive when `report.mode` says so; the
+ * live half stays static because it is what the route is for. `routeBudget` holds the figure.
+ */
+const InteractiveReport = lazyPage(() => import('./InteractiveReport'), 'InteractiveReport')
+const SharedAttributionSection = lazyPage(() => import('./SharedAttributionSection'), 'SharedAttributionSection')
+const SharedCreativeSection = lazyPage(() => import('./SharedCreativeSection'), 'SharedCreativeSection')
+// Loaded when the report draws it, like the sections above: most links carry no widget, and the route stays inside its budget.
+const SharedWidgetsSection = lazyPage(() => import('@/features/widgets/SharedWidgetsSection'), 'SharedWidgetsSection')
 
 interface Shared {
   name: string
@@ -56,13 +70,24 @@ interface Shared {
 }
 
 /** Client-facing report at /reports/share/:token — no app chrome, token-gated, optional password. */
-export function PublicReport() {
-  const { token = '' } = useParams()
+/**
+ * PORTAL-FULL-REPORTS-001 — `token` / `embedded`: the same report, opened inside the client portal. The token is then
+ * `portal:{reportId}` (see sharedBase.ts), the portal's own shell carries the identity, and the page drops its full-screen frame.
+ */
+export function PublicReport({ token: tokenProp, embedded = false }: { token?: string; embedded?: boolean } = {}) {
+  const params = useParams()
+  const token = tokenProp ?? params.token ?? ''
+  const Body = embedded ? 'div' : 'main'
+  // REPORT-CURRENCY-CODE-001 — the shared report names its currency by code (USD, SAR), set before any figure renders.
+  setCodeMarks(true)
+  useEffect(() => () => setCodeMarks(false), [])
   const { locale } = useUi()
   const [state, setState] = useState<'loading' | 'password' | 'ready' | 'error'>('loading')
   const [report, setReport] = useState<Shared | null>(null)
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
+  /** SHARED-DOWNLOAD-PASSWORD-001 — a protected file that did not arrive says so beside the buttons. */
+  const [downloadFailed, setDownloadFailed] = useState(false)
 
   /*
    * The password that actually worked, kept so the live endpoint can be called with it.
@@ -94,7 +119,7 @@ export function PublicReport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
-  const filesPeriod = report?.period?.from && report.period.to ? `${report.period.from} → ${report.period.to}` : null
+  const filesPeriod = report?.period?.from && report.period.to ? formatPeriodRange(report.period.from, report.period.to, 'ar') : null
   const platforms = ((report?.data?.platforms as Array<Record<string, unknown>>) ?? []).map((p) => String(p.provider))
 
   /*
@@ -105,6 +130,7 @@ export function PublicReport() {
   const [branding, setBranding] = useState<SharedBranding | undefined>(undefined)
   useEffect(() => {
     let alive = true
+    if (embedded) return () => { alive = false }
     sharedBranding(token)
       .then((b) => alive && setBranding(b))
       // A failed branding lookup must never take the report down with it: `headerIdentity`
@@ -144,8 +170,8 @@ export function PublicReport() {
   }, [report])
 
   return (
-    <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-background text-text-primary">
-      <header className="sticky top-0 z-10 border-b border-border bg-surface/85 px-4 py-3 backdrop-blur-md sm:px-8">
+    <div dir={locale === 'ar' ? 'rtl' : 'ltr'} className={embedded ? 'text-text-primary' : 'min-h-screen bg-background text-text-primary'} data-embedded={embedded ? 'true' : undefined}>
+      <header className={embedded ? 'pb-2' : 'sticky top-0 z-10 border-b border-border bg-surface/85 px-4 py-3 backdrop-blur-md sm:px-8'}>
         <div className="mx-auto flex max-w-[1240px] items-center justify-between gap-3">
           {/*
             BRANDING-HIERARCHY-001 — the client's own identity, or the agency's, or the product's.
@@ -155,7 +181,7 @@ export function PublicReport() {
             chain is resolved by the backend, which alone knows the tenant; `logoUrl` is null rather
             than a URL that 404s, because a broken image here reads as a broken report.
           */}
-          <span className="flex min-w-0 items-center gap-2">
+          <span className={embedded ? 'hidden' : 'flex min-w-0 items-center gap-2'}>
             {/*
               REPORT-IDENTITY-PROPORTION-001 — the subject's mark and the preparer's share one plate
               size, so the header reads as two identities rather than as two unrelated images. They
@@ -208,8 +234,13 @@ export function PublicReport() {
                       {locale === 'ar' ? 'الملفات:' : 'Files:'} <bdi dir="ltr">{filesPeriod}</bdi>
                     </span>
                   )}
+                  {downloadFailed && (
+                    <span role="alert" data-testid="shared-report-download-failed" className="text-[11px] text-danger">
+                      {locale === 'ar' ? 'تعذّر تنزيل الملف' : 'The file could not be downloaded'}
+                    </span>
+                  )}
                   {(['pdf', 'xlsx', 'csv'] as ReportFormat[]).map((f) => (
-                    <a key={f} href={sharedDownloadUrl(token, f)} title={filesPeriod ?? undefined} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}${filesPeriod ? ` — ${filesPeriod}` : ''}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
+                    <a key={f} href={sharedDownloadUrl(token, f)} data-testid={`shared-report-download-${f}`} onClick={accepted ? (e) => { e.preventDefault(); void downloadSharedFile(token, f, accepted).catch(() => setDownloadFailed(true)) } : undefined} title={filesPeriod ?? undefined} aria-label={`${locale === 'ar' ? 'تنزيل' : 'Download'} ${f.toUpperCase()}${filesPeriod ? ` — ${filesPeriod}` : ''}`} className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold hover:bg-surface-hover">
                       <Download size={12} aria-hidden /> <span className="hidden sm:inline">{f.toUpperCase()}</span>
                     </a>
                   ))}
@@ -220,7 +251,8 @@ export function PublicReport() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1240px] px-4 py-6 sm:px-8 sm:py-8">
+      {/* A page has one <main>: embedded in the portal, the portal's own shell owns it. */}
+      <Body className={embedded ? '' : 'mx-auto max-w-[1240px] px-4 py-6 sm:px-8 sm:py-8'}>
         {/* A shape rather than a sentence: the page is about to be a dashboard, so it looks like one while it loads. */}
         {state === 'loading' && (
           <div data-testid="shared-report-loading" aria-busy="true" aria-label={locale === 'ar' ? 'جارٍ التحميل' : 'Loading'} className="grid gap-4">
@@ -333,7 +365,7 @@ export function PublicReport() {
             cta
           />
         </div>
-      </main>
+      </Body>
     </div>
   )
 }

@@ -8,6 +8,7 @@ use App\Domains\Integrations\Measurement\Ga4Metrics;
 use App\Domains\Integrations\Measurement\Ga4PropertyDiscovery;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Reports\Support\ReportReadMemo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -48,7 +49,7 @@ final class SiteMeasurementService
      * project with no Analytics property is the ordinary case and is not a gap to be filled.
      *
      * @return array{
-     *     property: array{id: string, name: string, timezone: ?string},
+     *     property: array{timezone: ?string},
      *     currency: ?string,
      *     from: string,
      *     to: string,
@@ -114,12 +115,9 @@ final class SiteMeasurementService
         return [
             'property' => [
                 /*
-                 * The GA4 property id and its name — never the internal `external_accounts` uuid.
-                 * «Do not expose asset ids or private storage paths»; a primary key on a client's
-                 * report is the same mistake in a different column.
+                 * REPORT-WEBSITE-GAP-READING-001 (Owner 2026-11-07) — a report names no measurement tool, no property and no URL: the
+                 * source is «الموقع». Only the calendar the days were measured on is the reader's fact.
                  */
-                'id' => (string) $property->external_id,
-                'name' => (string) $property->name,
                 'timezone' => $property->timezone,
             ],
             'currency' => $currency,
@@ -143,13 +141,11 @@ final class SiteMeasurementService
      */
     private function selectedProperty(string $tenantId, string $projectId): ?ExternalAccount
     {
-        $accountId = ProjectIntegrationBinding::withoutGlobalScopes()
-            ->where('tenant_id', $tenantId)
-            ->where('project_id', $projectId)
-            ->where('is_active', true)
-            ->where('provider', 'ga4')
-            ->orderBy('created_at')
-            ->value('external_account_id');
+        // PERF-RECOVERY-001 — one read per build: the site, the store reading and the traffic split all ask it.
+        $accountId = ReportReadMemo::remember('ga4-binding|'.$tenantId.'|'.$projectId, static fn (): mixed => ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)->where('project_id', $projectId)
+            ->where('is_active', true)->where('provider', 'ga4')
+            ->orderBy('created_at')->value('external_account_id'));
 
         if (! is_string($accountId) || $accountId === '') {
             return null;

@@ -1,5 +1,8 @@
 import type { ReactElement } from 'react'
-import { JourneyDemoPage } from './JourneyDemoPage'
+import { lazyPage } from '@/app/lazyPage'
+
+// PERF-RECOVERY-001 — a route table's pages load when the route is opened, like the router's own.
+const JourneyDemoPage = lazyPage(() => import('./JourneyDemoPage'), 'JourneyDemoPage')
 
 /**
  * Route fragment for the internal Request Journey tool. The reusable control lives in JourneyControl (mount it

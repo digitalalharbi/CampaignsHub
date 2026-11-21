@@ -1,3 +1,4 @@
+import { sharedBase, sharedPath } from '@/features/reports/sharedBase'
 import type { AdGroup, AdPlatformGroup, AdsReading, ReportAd } from './ReportAdsSection'
 import type { RosterRow } from './ReportCreativeRoster'
 import type { ObjectivePerformance } from './InteractiveReport'
@@ -5,7 +6,7 @@ import type { PathLeaders } from '@/features/analytics/api'
 import type { ObjectiveAnalytics } from './objectiveAnalytics'
 
 import { deleteData, getData, patchData, postData, putData } from '@/lib/api/client'
-import type { FormatIntelligencePayload } from '@/features/content/api'
+import type { FormatComparisonPayload, FormatIntelligencePayload } from '@/features/content/api'
 import type { AttentionItem } from './attention'
 import type { SharedBranding } from './sharedBranding'
 import type { BusinessStreamRow } from './BusinessStreamsSection'
@@ -42,6 +43,12 @@ export interface ReportRow {
   name: string
   type: string
   status: ReportStatus
+  /** REPORT-DUPLICATE-001 — saved from the editor and not published. The status `draft` alone is also the column's default. */
+  is_draft?: boolean
+  /** REPORT-DUPLICATE-001 — the link switches a copy was started with. The share dialog opens filled from them; it is not a link. */
+  share_preferences?: SharePreferences | null
+  /** Sent by the list payload; an `internal` report cannot be shared by link. */
+  audience?: string | null
   period: { from: string | null; to: string | null }
   currency: string
   is_demo: boolean
@@ -55,9 +62,14 @@ export interface ReportRow {
 }
 export interface ReportsIndex {
   reports: ReportRow[]
-  summary: { total: number; completed: number; processing: number; failed: number }
+  summary: { total: number; completed: number; processing: number; failed: number; draft?: number }
 }
 export interface ReportDetail extends ReportRow {
+  /**
+   * REPORT-PARITY-FOUR-SURFACES-001 — what the operator's pickers choose from. The body below is the client's document and carries
+   * no campaign roster, so the link builder reads the report's campaigns and platforms from here.
+   */
+  scope_options?: { campaigns: Array<{ campaign_id: string; campaign_name: string }>; platforms: string[] }
   data: {
     period: { from: string; to: string }
     currency: string
@@ -98,14 +110,12 @@ export interface ReportSectionChoice {
 
 export const listReportSections = (p: string) =>
   getData<{ sections: ReportSectionChoice[] }>(`${base(p)}/sections`)
-export const regenerateReport = (p: string, id: string) => postData<ReportRow>(`${base(p)}/${id}/regenerate`)
+export const regenerateReport = (p: string, id: string) => postData<ReportRow>(`${base(p)}/${id}/regenerate`, { confirm: true })
 export const exportReport = (p: string, id: string, format: ReportFormat) =>
   postData<{ id: string; format: string; status: string }>(`${base(p)}/${id}/export`, { format })
 /** REPORT-DRILLDOWN-001 — switch a report's optional PDF drill-down section on or off (reports.manage). */
 export const setReportPdfBreakdowns = (p: string, id: string, pdf: { platform_drilldown: boolean }) =>
   putData<{ pdf: { platform_drilldown: boolean; content_drilldown: boolean } }>(`${base(p)}/${id}/breakdowns`, { pdf })
-export const sendReport = (p: string, id: string, recipients: string[]) =>
-  postData<{ sent_to: number }>(`${base(p)}/${id}/send`, { recipients })
 export const deleteReport = (p: string, id: string) => api.delete(`${base(p)}/${id}`)
 
 /** Public, signed, expiring download link for a finished export. */
@@ -137,6 +147,9 @@ export interface ShareRow {
   /** How much of the report this link is; null means the report's own. */
   form?: 'executive_summary' | 'detailed' | null
   sections?: { previous_comparison?: boolean } & Record<string, boolean | undefined>
+  /** REPORT-LINK-EDIT-ADS-001 — the ad section as the link publishes it now (resolved), and its listing policy (null: never chosen). */
+  creatives?: Record<string, boolean>
+  creative_display?: { policy: 'activity' | 'all' | 'selected'; include_zero_activity: boolean; auto_refresh: boolean } | null
   scope: {
     project_id?: string
     campaign_ids?: string[]
@@ -159,6 +172,97 @@ export const resumeShare = (p: string, reportId: string, shareId: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/resume`)
 export const revokeShare = (p: string, reportId: string, shareId: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/revoke`)
+
+// ---- REPORT-LIFECYCLE-MENU-001 / REPORT-DUPLICATE-001 / REPORT-LIVE-SNAPSHOT-CONVERT-001 ----------
+
+export const renameReport = (p: string, id: string, name: string) => patchData<ReportRow>(`${base(p)}/${id}`, { name })
+
+/**
+ * REPORT-DUPLICATE-001 (Owner correction 2026-11-04) — a report as the editor's fields.
+ *
+ * What «تكرار» starts from and what a saved draft reopens with: settings only. It carries no link, token, password or stored
+ * document, and `id` is null until «حفظ كمسودة» has stored the draft.
+ */
+export interface ReportEditorState {
+  id: string | null
+  name: string | null
+  description: string | null
+  type: string
+  mode: 'live' | 'snapshot'
+  form: string
+  detail_level: 'summary' | 'standard' | 'detailed'
+  audience: string
+  campaign_objective: string | null
+  period_start: string | null
+  period_end: string | null
+  period_mode: string
+  period_kind: string
+  branding_identity: 'client' | 'agency' | null
+  prepared_for_name: string | null
+  prepared_by_name: string | null
+  columns: Record<string, string[]>
+  sections: Record<string, boolean>
+  scope: ReportScopeShape | null
+  /** The original link's switches, carried as preferences only: no token, password, expiry or scope ids. Null when it had no link. */
+  share_preferences?: SharePreferences | null
+}
+/**
+ * REPORT-DUPLICATE-001 — what a copy remembers of its original's link. Switches only; `was_locked` says a password was asked
+ * for and never what it was. The share dialog starts from these, and a link exists only once someone makes one there.
+ */
+export interface SharePreferences {
+  allow_download?: boolean
+  hide_spend?: boolean
+  hide_revenue?: boolean
+  hide_campaign_names?: boolean
+  watermark?: boolean
+  mode: 'live' | 'snapshot'
+  form: string | null
+  generic_names: GenericNameKind[]
+  sections: Record<string, boolean>
+  creatives: Record<string, boolean>
+  was_locked: boolean
+}
+export interface DuplicateStart {
+  source: { id: string; name: string; status: ReportStatus }
+  suggested_name: { ar: string; en: string }
+  draft: ReportEditorState
+}
+/** «تكرار»: stores NOTHING. It answers with the editor's starting state; the copy exists only after a save or a publish. */
+export const startDuplicate = (p: string, id: string) => postData<DuplicateStart>(`${base(p)}/${id}/duplicate`, {})
+/** A saved draft, as the editor's state, to carry on editing it. */
+export const getReportDraft = (p: string, id: string) => getData<{ draft: ReportEditorState }>(`${base(p)}/${id}/draft`)
+/** «حفظ كمسودة» on a draft that already exists; it stays a draft. */
+export const saveReportDraft = (p: string, id: string, body: Record<string, unknown>) => putData<ReportRow>(`${base(p)}/${id}/draft`, body)
+/** «نشر التقرير»: the settings and the scope are validated again, then the report is queued. No link is made. */
+export const publishReportDraft = (p: string, id: string, body: Record<string, unknown>) => postData<ReportRow>(`${base(p)}/${id}/publish`, body)
+/** The editor's preview, through the published report's own engine. Nothing is stored and no link exists. */
+export const previewReportDraft = (p: string, body: Record<string, unknown>) =>
+  postData<{ name: string; data: Record<string, unknown>; platforms: string[] }>(`${base(p)}/draft-preview`, body)
+
+export interface ShareConversion {
+  changed: boolean
+  requires_confirmation: boolean
+  from: 'live' | 'snapshot'
+  to: 'live' | 'snapshot'
+  notice: { ar: string; en: string }
+  link: ShareRow
+}
+/** Without `confirm` nothing is written and the notice says what will happen; with it the same URL changes mode. */
+export const convertShare = (p: string, reportId: string, shareId: string, to: 'live' | 'snapshot', confirm: boolean) =>
+  postData<ShareConversion>(`${base(p)}/${reportId}/shares/${shareId}/convert`, { to, confirm })
+
+export interface CurrentShareLink {
+  available: boolean
+  reason: 'revoked' | 'created_before_copy_support' | null
+  url: string | null
+  path: string | null
+  mode: 'live' | 'snapshot'
+  active: boolean
+}
+/** The existing link, to copy: creates nothing and never changes the link's type. */
+export const getCurrentShareLink = (p: string, reportId: string, shareId: string) =>
+  getData<CurrentShareLink>(`${base(p)}/${reportId}/shares/${shareId}/link`)
 
 // ---- LIVEREP-002: build a live link from a choice, not from a document ---------------------------
 
@@ -229,7 +333,7 @@ export const createLiveLink = (p: string, body: Record<string, unknown>) =>
 
 /** Public (unauthenticated) shared report fetch. Sends the optional password via header. */
 export async function fetchSharedReport(token: string, password?: string) {
-  const res = await fetch(`/api/v1/reports/shared/${token}`, {
+  const res = await fetch(`${sharedBase(token)}`, {
     headers: { Accept: 'application/json', ...(password ? { 'X-Report-Password': password } : {}) },
   })
   const body = await res.json()
@@ -243,7 +347,7 @@ export async function fetchSharedReport(token: string, password?: string) {
  * URL and time.
  */
 export const sharedBranding = (token: string) =>
-  getData<SharedBranding>(`/reports/shared/${encodeURIComponent(token)}/branding`)
+  getData<SharedBranding>(`${sharedPath(token)}/branding`)
 
 /**
  * REPORT-IDENTITY-001 — the two identities a report for this project WILL carry.
@@ -284,7 +388,31 @@ export const removeReportIdentityLogo = (projectId: string, role: 'agency' | 'cl
 
 
 export const sharedDownloadUrl = (token: string, format: ReportFormat) =>
-  `/api/v1/reports/shared/${token}/download/${format}`
+  `${sharedBase(token)}/download/${format}`
+
+/**
+ * SHARED-DOWNLOAD-PASSWORD-001 — the file of a password-protected link, taken with the password.
+ *
+ * A plain address cannot carry a header, and the password does not belong in an address (history,
+ * referrers, server logs). So a protected link fetches the file with the header the page already
+ * uses and hands the bytes to the browser under the name the server gave it.
+ */
+export async function downloadSharedFile(token: string, format: ReportFormat, password: string): Promise<void> {
+  const response = await fetch(sharedDownloadUrl(token, format), { headers: { 'X-Report-Password': password } })
+  if (!response.ok) throw new Error(`download_failed_${response.status}`)
+  const disposition = response.headers.get('content-disposition') ?? ''
+  const starred = /filename\*=UTF-8''([^;]+)/i.exec(disposition)
+  const plain = /filename="?([^";]+)"?/i.exec(disposition)
+  const name = starred ? decodeURIComponent(starred[1]) : plain ? plain[1] : `report.${format}`
+  const url = URL.createObjectURL(await response.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
 
 export const renewShare = (p: string, reportId: string, shareId: string, expiresAt: string) =>
   postData<ShareRow>(`${base(p)}/${reportId}/shares/${shareId}/renew`, { expires_at: expiresAt })
@@ -312,6 +440,10 @@ export interface ShareEdit {
   sections?: Record<string, boolean>
   /** REPORT-TABLES-OWNER-COLUMNS-001 — the whole column choice per table; a table absent means every column. */
   columns?: Record<string, string[]>
+  /** REPORT-LINK-EDIT-ADS-001 — the ad section's fifteen switches, sent whole; the server resolves the dependencies. */
+  creatives?: Record<string, boolean>
+  /** REPORT-LINK-EDIT-ADS-001 — which ads the link lists. */
+  creative_display?: { policy: 'activity' | 'all' | 'selected'; include_zero_activity: boolean; auto_refresh: boolean }
 }
 
 export const updateShare = (p: string, reportId: string, shareId: string, body: ShareEdit) =>
@@ -351,6 +483,13 @@ export interface AdsBasis {
   label_en: string | null
   family_label_ar: string | null
   family_label_en: string | null
+  /**
+   * CHATGPT-ADS-CONTENT-RANKABLE-001 — the objective's own result is not reported by the platform, so the ads are
+   * ordered on the volume it did report; `note_*` is the plain sentence that says so.
+   */
+  fallback?: boolean
+  note_ar?: string | null
+  note_en?: string | null
 }
 
 export interface ShareWindow { from: string; to: string; views: number; devices: number; downloads: number }
@@ -415,7 +554,25 @@ export interface LiveCampaignRow {
   landing_leads: number | null
 }
 
+/** REPORT-FRESHNESS-STAMP-001 */
+export type DataStatus = 'fresh' | 'delayed' | 'stale' | 'failed' | 'unknown'
+
+/** SPEND-RECONCILE-RECORD-001 */
+export type ReconcileStatus = 'matched' | 'drifted' | 'failed' | 'never'
+
+/**
+ * PERF-RECOVERY-001 — how this answer was obtained, present only when the server's last-build store is on.
+ * `last_confirmed` is a complete earlier build of THIS link, never older than `max_age_seconds`; `built_at` is when it ran.
+ */
+export interface LiveDelivery {
+  source: 'fresh' | 'last_confirmed'
+  built_at: string | null
+  refreshing: boolean
+  max_age_seconds: number
+}
+
 export interface LivePayload {
+  delivery?: LiveDelivery
   /** LEAD-EVIDENCE-001 — which base metrics any platform actually sent; a `false` is «not reported», never zero. */
   reported?: Record<string, boolean>
   /** LIVE-LINK-BEFORE-CAMPAIGNS-001 — nothing has synced for this window yet: say so, never print zeros. */
@@ -501,6 +658,10 @@ export interface LivePayload {
   /** REPORT-EXECUTIVE-SUMMARY-001 — campaigns that spent, as a COUNT; `previous` null where the windows do not compare. */
   delivering_campaigns?: { current: number; previous: number | null }
   timeseries: Array<Record<string, unknown>>
+  /** REPORT-WEBSITE-TAB-001 — the same days per platform, for the interactive daily chart; money keys redacted exactly as `timeseries`'s are. */
+  platform_series?: Record<string, Array<Record<string, unknown>>>
+  /** LIVE-LINK-DAILY-LOG-001 — one row per DAY for the ledger when `timeseries` is bucketed to weeks or months; absent when `timeseries` is already daily. */
+  daily_rows?: Array<Record<string, unknown>>
   platforms: Array<Record<string, unknown> & { provider: string; spend: number | null }>
   /**
    * CLIENT-REPORT-ENTITY-BOUNDARY-001 — always empty on a client payload, and typed that way.
@@ -534,7 +695,7 @@ export interface LivePayload {
    * the client's own report could not tell a conversion rate from a ratio between two stages that do
    * not nest. It is optional because an older cached payload will not carry it.
    */
-  funnel: Array<{ stage: string; label: string; reported: boolean; count: number | null; from_stage: string | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean }>
+  funnel: Array<{ stage: string; label: string; reported: boolean; count: number | null; from_stage: string | null; step_rate: number | null; cost_per: number | null; exceeds_previous?: boolean; drop_off?: number | null; providers?: string[]; rate_providers?: string[]; rate_partial?: boolean }>
   /**
    * RESULT-STAGE-TRUTH-001 — the stage counts, independent of the funnel SECTION.
    *
@@ -558,6 +719,8 @@ export interface LivePayload {
    * page would render the block and then read a key off it.
    */
   content_formats?: FormatIntelligencePayload | null
+  /** CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى», cut for the link's reader on the server. */
+  content_format_comparison?: FormatComparisonPayload | null
   /**
    * FUNNEL-001 — «الفانل والمتجر» for this link's project, or null when it has no store.
    *
@@ -649,6 +812,13 @@ export interface LivePayload {
    */
   attention?: AttentionItem[] | null
   store_funnel: StoreFunnelPayload | null
+  /** STORE-ANALYTICS-DEPTH-001 §3.1 — absent unless the operator switched the category on for this report. */
+  store_analytics?: import('./StoreAnalyticsBlock').StoreAnalyticsPayload | null
+  /** GA4-REPORT-SECTIONS-001 — each present only where the server resolved the part as shown and the property has figures. */
+  ga4_overview?: import('./Ga4ReportBlocks').WithGa4Sections['ga4_overview']
+  ga4_acquisition?: import('./Ga4ReportBlocks').WithGa4Sections['ga4_acquisition']
+  ga4_platform_gap?: import('./Ga4ReportBlocks').WithGa4Sections['ga4_platform_gap']
+  ga4_tables?: import('./Ga4ReportBlocks').WithGa4Sections['ga4_tables']
   /**
    * GA4-INTEGRATION-001 — the client's OWN SITE, measured by their own Analytics.
    *
@@ -661,7 +831,8 @@ export interface LivePayload {
    * this link. Those are different, and merging them would tell a reader the site has no ecommerce.
    */
   site_measurement?: {
-    property: { id: string; name: string; timezone: string | null }
+    /** REPORT-WEBSITE-GAP-READING-001 — no property name or id on a report: only the calendar the days were measured on. */
+    property: { timezone: string | null }
     currency: string | null
     from: string
     to: string
@@ -714,7 +885,26 @@ export interface LivePayload {
     provider: string
     name?: string | null
     state: 'synced' | 'awaiting_credentials'
+    /** REPORT-FRESHNESS-STAMP-001 — completion time (UTC ISO) of the latest SUCCESSFUL sync; never a request/start time. */
+    last_success_at?: string | null
+    last_attempt_at?: string | null
+    last_attempt_status?: 'success' | 'failed' | 'running' | 'none'
+    age_minutes?: number | null
+    /** null for a source that is not an ad platform. */
+    data_status?: DataStatus | null
+    /** SPEND-RECONCILE-RECORD-001 — when the platform's own total was last CHECKED against the stored one (UTC ISO); never a sync time. */
+    last_reconciled_at?: string | null
+    /** `never` where no check was ever recorded for this project's bound accounts. */
+    reconcile_status?: ReconcileStatus
+    /** Stored minus provider, as a share of the provider total; carried only with the status. */
+    reconcile_diff_pct?: number | null
   }>
+  freshness_summary?: {
+    oldest_success_at: string | null
+    worst_status: DataStatus
+    timezone: string
+    generated_at: string
+  }
   available: {
     providers: string[]
     /** Empty on a client payload — the picker it filled offered «كل الحملات» over internal names. */
@@ -746,7 +936,7 @@ export async function fetchLiveShared(
   opts.providers.forEach((p) => qs.append('providers[]', p))
   opts.campaigns.forEach((c) => qs.append('campaigns[]', c))
 
-  const res = await fetch(`/api/v1/reports/shared/${token}/live?${qs.toString()}`, {
+  const res = await fetch(`${sharedBase(token)}/live?${qs.toString()}`, {
     headers: {
       Accept: 'application/json',
       ...(opts.password ? { 'X-Report-Password': opts.password } : {}),
@@ -773,7 +963,7 @@ export async function fetchLiveContent(
   opts: { from: string; to: string; password?: string },
 ) {
   const qs = new URLSearchParams({ from: opts.from, to: opts.to })
-  const res = await fetch(`/api/v1/reports/shared/${token}/live/content/${encodeURIComponent(key)}?${qs.toString()}`, {
+  const res = await fetch(`${sharedBase(token)}/live/content/${encodeURIComponent(key)}?${qs.toString()}`, {
     headers: {
       Accept: 'application/json',
       ...(opts.password ? { 'X-Report-Password': opts.password } : {}),
@@ -820,7 +1010,7 @@ export async function fetchLivePlatform(
   opts: { from: string; to: string; password?: string },
 ) {
   const qs = new URLSearchParams({ from: opts.from, to: opts.to })
-  const res = await fetch(`/api/v1/reports/shared/${token}/live/platform/${encodeURIComponent(provider)}?${qs.toString()}`, {
+  const res = await fetch(`${sharedBase(token)}/live/platform/${encodeURIComponent(provider)}?${qs.toString()}`, {
     headers: {
       Accept: 'application/json',
       ...(opts.password ? { 'X-Report-Password': opts.password } : {}),
@@ -864,14 +1054,20 @@ export interface ReportScheduleRow {
   cron: string | null
   report_id: string | null
   active: boolean
+  /** CONS-SCHEDULE-ONE — `duplicate_schedule` on a copy switched off because another schedule builds the same report. */
+  disabled_reason?: string | null
+  disabled_at?: string | null
+  duplicate_of?: string | null
   is_demo: boolean
   last_run_at: string | null
   next_run_at: string | null
   /** status → count, exactly as recorded. `sent` only ever appears after a provider acknowledgement. */
   deliveries: Record<string, number>
+  /** Why rows were held back, by reason: `outside_recipient_off`, `schedule_mail_off` and so on. */
+  delivery_reasons?: Record<string, number>
 }
 
-export type ReportScheduleInput = Partial<Omit<ReportScheduleRow, 'id' | 'deliveries' | 'is_demo' | 'last_run_at' | 'next_run_at'>>
+export type ReportScheduleInput = Partial<Omit<ReportScheduleRow, 'id' | 'deliveries' | 'is_demo' | 'last_run_at' | 'next_run_at' | 'disabled_reason' | 'disabled_at' | 'duplicate_of'>>
 
 const schedulesBase = (projectId: string) => `/projects/${projectId}/reports/schedules`
 
@@ -1084,6 +1280,10 @@ export interface ReportSectionsState {
   views?: string[] | null
   /** Whether this is the multi-view detailed product (summary and standard are one composition). */
   offers_views?: boolean
+  /** REPORT-GENERIC-LABELS-001 — the names this report replaces with generic labels, on every surface and link. */
+  generic_names?: GenericNameKind[]
+  /** GA4-VISIBILITY-001 — the store / GA4 elements this report hides; nothing by default. */
+  ga4_hidden?: string[]
   effective: Record<string, boolean>
   resolved: ResolvedSectionRow[]
   visible: string[]
@@ -1101,7 +1301,7 @@ export interface BusinessStreamDefinition {
   account_ids: string[]
 }
 
-export const updateReportSections = (p: string, id: string, body: { sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[]; views?: string[] | null }) =>
+export const updateReportSections = (p: string, id: string, body: { generic_names?: GenericNameKind[]; ga4_hidden?: string[]; sections?: Record<string, boolean>; template_id?: string; streams?: BusinessStreamDefinition[]; views?: string[] | null }) =>
   putData<ReportSectionsState>(`${base(p)}/${id}/sections`, body)
 
 export const updateTemplateSections = (p: string, templateId: string, sections: Record<string, boolean>) =>
@@ -1121,6 +1321,11 @@ export interface ShareSectionsState {
   views?: string[] | null
   effective_views?: string[]
   offers_views?: boolean
+  /** REPORT-GENERIC-LABELS-001 — the link's own name switches, and the ones its report already holds, which it cannot undo. */
+  generic_names?: GenericNameKind[]
+  generic_names_of_report?: GenericNameKind[]
+  ga4_hidden?: string[]
+  ga4_hidden_of_report?: string[]
   resolved: ResolvedSectionRow[]
   visible: string[]
   availability_judged: boolean
@@ -1150,7 +1355,37 @@ export const updateShareSections = (
   sections: Record<string, boolean>,
   money: { hide_spend?: boolean; hide_revenue?: boolean } = {},
   views?: string[] | null,
-) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }) })
+  genericNames?: GenericNameKind[],
+  ga4Hidden?: string[],
+) => putData<ShareSectionsState>(`${base(p)}/${reportId}/shares/${shareId}/sections`, { sections, ...money, ...(views === undefined ? {} : { views }), ...(genericNames === undefined ? {} : { generic_names: genericNames }), ...(ga4Hidden === undefined ? {} : { ga4_hidden: ga4Hidden }) })
+
+/** REPORT-GENERIC-LABELS-001 — a kind of name that can be replaced by a generic label. */
+export type GenericNameKind = 'campaign' | 'ad_set' | 'account' | 'content'
+
+/** REPORT-AUTO-COMPOSE-001 — what automatic mode would do, for the report or one link. Reading it changes nothing. */
+export type AutoComposeDecision = 'show' | 'hide' | 'unavailable' | 'off'
+
+export interface AutoComposeProposal {
+  level: 'report' | 'link'
+  share_id: string | null
+  objective: string
+  objective_source: 'report' | 'scope' | 'data' | 'mixed'
+  availability_judged: boolean
+  sections: Array<{ key: string; title_ar: string; title_en: string; decision: AutoComposeDecision; reason: 'objective' | 'no_data' | 'unsupported' | 'turned_off' | null }>
+  metrics: string[]
+  metrics_left_out: Array<{ key: string; reason: 'not_reported' | 'hidden_by_link' | 'hidden_by_report' }>
+  metrics_apply: boolean
+  applied: boolean
+  applied_at: string | null
+}
+
+const autoComposeUrl = (p: string, reportId: string, shareId?: string) =>
+  `${base(p)}/${reportId}/auto-compose${shareId === undefined ? '' : `?share_id=${encodeURIComponent(shareId)}`}`
+
+export const getAutoCompose = (p: string, reportId: string, shareId?: string) => getData<AutoComposeProposal>(autoComposeUrl(p, reportId, shareId))
+export const applyAutoCompose = (p: string, reportId: string, shareId?: string) => postData<AutoComposeProposal>(autoComposeUrl(p, reportId, shareId))
+export const revertAutoCompose = (p: string, reportId: string, shareId?: string) =>
+  api.delete<{ data: AutoComposeProposal }>(autoComposeUrl(p, reportId, shareId)).then((r) => r.data.data)
 
 /** RESULT-EVENTS-001 — which reported metric is a project's «Result», per platform and acquisition path. */
 export type ResultEventsMap = Record<string, Record<string, string>>

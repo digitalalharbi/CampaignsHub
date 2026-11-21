@@ -10,6 +10,7 @@ use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Support\Frontend;
 use Illuminate\Support\Carbon;
 
 /**
@@ -68,7 +69,8 @@ final class DigestCreatives
          * list — three shapes because three questions, and flattening them at the source would cost
          * the dashboard the context it renders.
          */
-        $best = $this->line($this->firstOf($pulse['best_by_objective'] ?? []));
+        $top = $this->topLines($pulse['best_by_objective'] ?? []);
+        $best = $top[0] ?? null;
         $declining = $this->lines(array_map(
             static fn (array $move): array => (array) ($move['creative'] ?? []),
             (array) (($pulse['declining'] ?? [])['items'] ?? []),
@@ -80,6 +82,8 @@ final class DigestCreatives
         }
 
         return [
+            // EMAIL-DIGESTS-OPERATIONAL-001 — up to three winners, each with the reason it won and (our own copy of) its cover.
+            'top' => $top,
             'best' => $best,
             'declining' => $declining,
             'fatigued' => $fatigued,
@@ -96,26 +100,43 @@ final class DigestCreatives
      *
      * @param  array<string,mixed>  $byObjective
      */
-    private function firstOf(array $byObjective): ?array
+    /**
+     * The winners of every group that produced one, biggest spend first, each stitched with its reason.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function topLines(array $byObjective): array
     {
-        // Only groups that actually produced a winner — a group with enough spend to be listed and
-        // not enough evidence to name one is a real state, and it is not an answer.
         $groups = array_values(array_filter(
             $byObjective,
             static fn ($g): bool => is_array($g) && is_array($g['creative'] ?? null),
         ));
         usort($groups, static fn (array $a, array $b): int => (float) ($b['spend'] ?? 0) <=> (float) ($a['spend'] ?? 0));
 
-        if ($groups === []) {
-            return null;
+        $out = [];
+        foreach (array_slice($groups, 0, self::LIMIT) as $group) {
+            $row = (array) $group['creative'];
+            $row['reason'] = $this->reason($group);
+            $line = $this->line($row);
+            if ($line !== null) {
+                $out[] = $line;
+            }
         }
 
-        // The group carries WHY it won — the metric and its value — and the creative carries the
-        // name. The email needs both, so they are stitched here rather than at the template.
-        $winner = (array) $groups[0]['creative'];
-        $winner['reason'] = $this->reason($groups[0]);
+        return $out;
+    }
 
-        return $winner;
+    /** An absolute URL on our own origin for the cached cover, or null. Anything else is not ours to hotlink. */
+    private static function cover(array $row): ?string
+    {
+        $preview = is_array($row['preview'] ?? null) ? $row['preview'] : [];
+        foreach ([$preview['thumbnail_url'] ?? null, $preview['image_url'] ?? null] as $url) {
+            if (is_string($url) && str_starts_with($url, '/media/covers/')) {
+                return Frontend::origin().$url;
+            }
+        }
+
+        return null;
     }
 
     /** «أعلى ROAS (8.42×)» — the metric the group was judged on, and what it scored. */
@@ -172,6 +193,8 @@ final class DigestCreatives
         return [
             'name' => (string) $name,
             'provider' => (string) ($row['provider'] ?? ''),
+            // EMAIL-DIGESTS-OPERATIONAL-001 — a still from OUR domain only (`/media/covers/…`, made absolute); a platform's own CDN link is never put in an email.
+            'cover' => self::cover($row),
             // The reason the ranking service produced, carried verbatim: an email that says «best»
             // without saying on what is a claim the reader cannot check.
             'reason' => isset($row['reason']) ? (string) $row['reason'] : null,

@@ -1,5 +1,7 @@
+import type { FxCoverage, SpendReading } from '@/lib/money/fx'
+import type { ObjectivePathsBlock } from './ObjectivePathCards'
 import type { BudgetExplanationPayload } from './BudgetReading'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query'
 import { getEnvelope, getData, putData } from '@/lib/api/client'
 import type { FilterScope } from './filterScope'
 
@@ -121,6 +123,10 @@ export interface MoneyProvenance {
 export interface Summary {
   current: MetricTotals
   previous: MetricTotals
+  /** FX-APPLY-001 — what these totals were converted from («يشمل عملات محوّلة»), stale rates and withheld rows. */
+  fx?: FxCoverage
+  /** PROJECT-LIFECYCLE-001 §7 — the project's spend from the ONE shared aggregation (null under a platform/campaign filter). */
+  spend_reading?: SpendReading | null
   delta: Partial<Record<keyof MetricTotals, number | null>>
   /**
    * UX-METRICS-001 — which of `current`'s zeros are measurements.
@@ -361,6 +367,12 @@ export interface FreshnessRow {
   /** With `partial`: which grain the last sync did not deliver. */
   missing_grain?: 'campaign' | 'ad_set' | 'ad' | null
   last_sync_at: string | null
+  /**
+   * ANALYTICS-SYNC-TRUTH-001 — the latest SUCCESSFUL sync (a run that reached the provider counts even when it
+   * stored nothing). Absent on an install answering from before this shipped; the reader falls back to
+   * `data_freshness_at` then.
+   */
+  last_success_at?: string | null
   last_sync_error: string | null
 }
 
@@ -580,7 +592,26 @@ export interface AttributionDisagreement {
   platforms: { provider: string; claimed: number; confirmed: number; widest_gap: DisagreementPoint | null; points: DisagreementPoint[] }[]
 }
 
+/** ATTRIB-CAMPAIGN-001 — one campaign: what the platform claimed beside what the store matched to it. */
+export interface CampaignAttribution {
+  id: string
+  name: string | null
+  provider: string | null
+  spend: number
+  platform_orders: number
+  platform_revenue: number
+  platform_roas: number | null
+  store_orders: number | null
+  store_revenue: number | null
+  store_refunds: number | null
+  store_roas: number | null
+  store_cpa: number | null
+  profit: number | null
+  verdict: 'over' | 'under' | 'match' | null
+}
+
 export interface Attribution {
+  campaigns?: CampaignAttribution[]
   /** CROSS-PLATFORM-ATTRIBUTION-DEPTH-001 — the claim-versus-store pair, split across the window. */
   disagreement?: AttributionDisagreement
   /** ATTRIBUTION-MODELS-001 — first touch, last touch, assists and paths on the store's evidence. */
@@ -944,6 +975,25 @@ export const useDrivers = (
 export const useSummary = (p: string | null, r: Range, f?: MetricFilters) => useMetric<Summary>('summary', p, r, 'summary', f)
 export const useTimeseries = (p: string | null, r: Range, f?: MetricFilters) => useMetric<TimePoint[]>('timeseries', p, r, 'timeseries', f)
 export const usePlatforms = (p: string | null, r: Range, f?: MetricFilters) => useMetric<PlatformRow[]>('platforms', p, r, 'platforms', f)
+
+/**
+ * ANALYTICS-DAILY-MEASURE-001 — one daily line per platform, for the stacked «القياس اليومي» chart. The same
+ * timeseries endpoint and the same cache key `useTimeseries` writes, narrowed to one platform each, so a platform's
+ * line here and its line anywhere else are one request.
+ */
+export function usePlatformTimeseries(p: string | null, r: Range, providers: string[], f?: MetricFilters) {
+  return useQueries({
+    queries: providers.map((provider) => {
+      const narrowed: MetricFilters = { ...f, provider: [provider] }
+
+      return {
+        queryKey: ['metrics', 'timeseries', p, r.from, r.to, ...filterKeyParts(narrowed)],
+        queryFn: () => getData<TimePoint[]>(`${base(p!)}/timeseries?${q(r)}${qf(narrowed)}`),
+        enabled: Boolean(p),
+      }
+    }),
+  })
+}
 export interface AccountRow extends MetricTotals {
   account_id: string | null
   provider: string
@@ -954,6 +1004,32 @@ export interface AccountRow extends MetricTotals {
 /** ANALYTICS-DRILLDOWN-001 — the ad accounts beneath a platform. */
 export const useAccounts = (p: string | null, r: Range, f?: MetricFilters) =>
   useMetric<AccountRow[]>('accounts', p, r, 'accounts', f)
+
+/** ACCOUNTS-PULSE-001 — the state the server decided, by priority: a broken connection first, never hidden. */
+export type AccountState = 'error' | 'disabled' | 'running' | 'stopped'
+
+export interface AccountPulse {
+  account_id: string | null
+  provider: string
+  state: AccountState
+  /** One point per reported day inside the window — the SHAPE of the account's days; the money is `AccountRow`'s. */
+  daily: Array<{ date: string; spend: number; clicks: number; impressions: number }>
+  last_spend_date: string | null
+  active_campaigns: number
+  paused_campaigns: number
+  ended_campaigns: number
+  platform_status: string | null
+  external_id: string | null
+  account_currency: string | null
+  timezone: string | null
+  last_synced_at: string | null
+  last_sync_attempt_at: string | null
+  sync_error: string | null
+}
+
+/** ACCOUNTS-PULSE-001 — running or stopped, per ad account, over the same scope as `useAccounts`. */
+export const useAccountPulse = (p: string | null, r: Range) =>
+  useMetric<AccountPulse[]>('account-pulse', p, r, 'accounts/pulse')
 
 export const useCampaigns = (p: string | null, r: Range, f?: MetricFilters) => useMetric<CampaignRow[]>('campaigns', p, r, 'campaigns', f)
 /**
@@ -1224,6 +1300,10 @@ export interface PathTrend {
  */
 export const useObjectiveTrend = (p: string | null, r: Range, f?: MetricFilters) =>
   useScopedMetric<{ paths: PathTrend[] }>('objective-trend', p, r, 'objective-trend', f)
+
+/** OBJECTIVE-PATHS-001 — one total spend, its split by objective path, one card per objective. */
+export const useObjectivePaths = (p: string | null, r: Range, f?: MetricFilters) =>
+  useScopedMetric<ObjectivePathsBlock>('objective-paths', p, r, 'objective-paths', f)
 
 export const useObjectiveExplanations = (p: string | null, r: Range, f?: MetricFilters) =>
   useScopedMetric<{ paths: PathExplanation[] }>('objective-explanations', p, r, 'objective-explanations', f)

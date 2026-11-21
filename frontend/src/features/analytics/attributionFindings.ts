@@ -148,7 +148,7 @@ export function attributionFindings(data: Attribution | undefined): AttributionF
         en: `${countedEn(unattributed.orders ?? 0, 'order', 'orders')} the shop recorded that no platform claimed${share ? ` (${share} of orders)` : ''}.`,
       },
       affects: {
-        ar: 'العائد على الإنفاق المحسوب من مطالبات المنصات أقل من الحقيقة بمقدار هذه الطلبات.',
+        ar: 'معدل العائد المحسوب من مطالبات المنصات أقل من الحقيقة بمقدار هذه الطلبات.',
         en: 'A return computed from platform claims alone is lower than the truth by these orders.',
       },
       check: {

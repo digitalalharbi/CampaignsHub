@@ -18,6 +18,7 @@ import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
 import { fieldDef } from './paidMediaFields'
 import { QueryFailure } from '@/components/ui/QueryFailure'
+import { withMark } from '@/lib/money/mark'
 
 const STATUS_OPTIONS = ['under_review', 'waiting_client', 'qualified', 'approved', 'in_progress', 'completed', 'rejected', 'cancelled']
 const PRIORITY_OPTIONS = ['critical', 'high', 'medium', 'low']
@@ -79,19 +80,19 @@ export function RequestDetailPage() {
 
         {/* Actions */}
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
-          <select aria-label={t('change_status')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} defaultValue="" onChange={(e) => { if (e.target.value) changeStatus.mutate(e.target.value) }}>
+          <select aria-label={t('change_status')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} defaultValue="" disabled={changeStatus.isPending} onChange={(e) => { if (e.target.value) changeStatus.mutate(e.target.value) }}>
             <option value="">{t('change_status')}</option>
             {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{statusLabel(s, lang)}</option>)}
           </select>
-          <select aria-label={t('col_priority')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} value={d.priority} onChange={(e) => changePriority.mutate(e.target.value)}>
+          <select aria-label={t('col_priority')} className={`${controlClass} h-10 min-h-0 w-auto py-0`} value={d.priority} disabled={changePriority.isPending} onChange={(e) => changePriority.mutate(e.target.value)}>
             {PRIORITY_OPTIONS.map((p) => <option key={p} value={p}>{priorityLabel(p, lang)}</option>)}
           </select>
           {user?.id && (d.assigned_to ? (
-            <Button variant="secondary" size="sm" onClick={() => assign.mutate(null)}>{t('unassign')}</Button>
+            <Button variant="secondary" size="sm" disabled={assign.isPending} onClick={() => assign.mutate(null)}>{t('unassign')}</Button>
           ) : (
-            <Button variant="secondary" size="sm" onClick={() => assign.mutate(Number(user.id))}>{t('assign_to_me')}</Button>
+            <Button variant="secondary" size="sm" disabled={assign.isPending} onClick={() => assign.mutate(Number(user.id))}>{t('assign_to_me')}</Button>
           ))}
-          {!d.archived_at && <Button variant="ghost" size="sm" onClick={() => archiveMut.mutate()}>{t('archive')}</Button>}
+          {!d.archived_at && <Button variant="ghost" size="sm" disabled={archiveMut.isPending} onClick={() => archiveMut.mutate()}>{t('archive')}</Button>}
           {!d.conversion && !d.archived_at && (
             <Button size="sm" onClick={() => convertMut.mutate()} loading={convertMut.isPending}>{t('convert')}</Button>
           )}
@@ -213,7 +214,7 @@ export function RequestDetailPage() {
                   <li key={b.quote_id} className="rounded-xl border border-border p-2.5">
                     <Link to="/app/billing" className="flex items-center justify-between gap-2 hover:text-brand-600">
                       <span className="font-mono text-xs font-semibold text-brand-600" dir="ltr">{b.number}</span>
-                      <span className="tnum text-xs font-bold" dir="ltr">{Number(b.total).toLocaleString('en-US')} {b.currency}</span>
+                      <span className="tnum text-xs font-bold" dir="ltr">{withMark(Number(b.total).toLocaleString('en-US'), b.currency)}</span>
                     </Link>
                     {b.invoice && (
                       <Link to="/app/billing/invoices" className="mt-1 flex items-center justify-between gap-2 border-t border-border pt-1 text-text-secondary hover:text-brand-600">

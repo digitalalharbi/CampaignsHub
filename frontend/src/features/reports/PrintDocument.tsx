@@ -1,4 +1,5 @@
-import { REPORT_NOTE, reportFooterItems } from './reportFooter'
+import { REPORT_NOTE, REPORT_NOTE_MORE, reportFooterItems } from './reportFooter'
+import { carries } from './chosenFigures'
 import { selectColumns } from './reportColumns'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
@@ -6,6 +7,7 @@ import { hasPlatformMark } from '@/components/brand/PlatformMark'
 import { ProviderName } from '@/components/ProviderMark'
 import { useEffect, type ReactNode } from 'react'
 import type { ReportData } from './InteractiveReport'
+import type { ObjectivePathsBlock } from '@/features/analytics/ObjectivePathCards'
 import { moneyExact } from '@/features/analytics/format'
 import { mixedResultsNote, type ResultPart } from './reportMetrics'
 import { brand } from '@/lib/brand'
@@ -18,7 +20,9 @@ import { clientAbsence, posterSource, readPreview } from '@/features/content/adP
 import { metricState } from '@/features/content/metrics'
 import type { CreativeMetrics, CreativePreview } from '@/features/content/api'
 import { PrintPlatformDrilldowns } from './PrintPlatformDrilldowns'
+import { PrintFilmFrame, printChatText, printFilm, settlePrintFilms } from './printCover'
 import { reportPageTitle } from './sharedBranding'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * English, LTR, A4-portrait DOCUMENT rendering of a report (distinct from the RTL 16:9 slide
@@ -93,9 +97,6 @@ const nfmt = (n: number | null | undefined, opts?: Intl.NumberFormatOptions) =>
  * read once and kept: the precise figure is what somebody checks against an invoice.
  */
 const money = (n: number | null | undefined, currency: string) => moneyExact(n, currency || null)
-
-const dateFmt = (s?: string) =>
-  s ? new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(s)) : '—'
 
 // RESULT-EVENTS-001 — the platform's generic conversion and its cost carry their own names; «Results» is the link's defined event only.
 const KPI_LABELS: Record<string, string> = {
@@ -259,7 +260,8 @@ export function PrintDocument({
       __REPORT_IMAGES_READY__?: boolean; __REPORT_LAYOUT__?: unknown
     }
     // No live charts in the document layout; data is inline. Signal readiness after fonts settle.
-    void document.fonts.ready.then(() => {
+    // CREATIVE-VIEWER-FORMATS-001 — printed films paint (or become their sentence) before the file is cut.
+    void document.fonts.ready.then(() => settlePrintFilms()).then(() => {
       w.__REPORT_DATA_READY__ = true
       w.__REPORT_CHARTS_READY__ = true
       w.__REPORT_IMAGES_READY__ = true
@@ -291,7 +293,7 @@ export function PrintDocument({
   // The platform's DEFINED result from the resolver; no Results column at all where the link defines none (never generic conversions).
   const definedFor = (p: Row) => (data.results as { by_platform?: Record<string, { results?: number | null }> } | undefined)?.by_platform?.[String(p.provider ?? p.platform ?? '').toLowerCase()]?.results
   const platformRows = (data.platforms ?? []).map((p: Row) => [
-    platformCell(p.platform ?? p.name ?? '—'),
+    platformCell(p.platform ?? p.provider ?? p.name ?? '—'),
     money(Number(p.spend ?? 0), currency),
     money(Number(p.revenue ?? 0), currency),
     ...(resultsDefined ? [definedFor(p) === null || definedFor(p) === undefined ? '—' : nfmt(Number(definedFor(p)))] : []),
@@ -311,6 +313,7 @@ export function PrintDocument({
    * per result is stated only where the path was bought for a result — an awareness path prints «—»
    * rather than being ranked on a sales metric it was never asked about.
    */
+  const pathBlock = (data.objective_performance as { objective_paths?: ObjectivePathsBlock } | undefined)?.objective_paths
   const objectiveRows = ((data.objective_performance as { paths?: Row[] } | undefined)?.paths ?? [])
     .filter((p) => Number(p.spend ?? 0) > 0)
     .map((p: Row) => [
@@ -348,6 +351,8 @@ export function PrintDocument({
   */
   const linkRows = ((data.links ?? []) as LinkRow[]).slice(0, 20)
 
+  // REPORT-FILTERS-FUNCTIONAL-001 — a spend column only where the ads carry spend; a link that did not choose it sends no key.
+  const adSpend = ((data.ads ?? []) as AdRow[]).length === 0 || ((data.ads ?? []) as AdRow[]).some((ad) => carries(ad, 'spend'))
   const adRows = ((data.ads ?? []) as AdRow[]).slice(0, 12).map((ad) => {
     /*
       CONTENT-PREVIEW-FIT-001 §14 — the SAME resolver the library asks, not a second chain.
@@ -364,6 +369,9 @@ export function PrintDocument({
 
     return {
       thumb: posterSource(reading),
+      // CREATIVE-VIEWER-FORMATS-001 — a film with no still prints its first frame; a chat card its own words.
+      film: printFilm(reading),
+      chat: printChatText(ad.preview as CreativePreview | null | undefined),
       /*
        * CLIENT-DIAGNOSTIC-SEPARATION-001 — the forwarded file says a missing picture in the client's
        * words, as every other client surface does: never the server's operator note, and never how
@@ -575,7 +583,7 @@ export function PrintDocument({
           {clientName === undefined ? 'Client Report' : `Prepared for ${clientName}`}
         </div>
         <dl className="doc-facts">
-          <div><dt>Period</dt><dd>{dateFmt(data.period?.from)} → {dateFmt(data.period?.to)}</dd></div>
+          <div><dt>Period</dt><dd>{data.period?.from && data.period?.to ? formatPeriodRange(data.period.from, data.period.to, 'en') : '—'}</dd></div>
           <div><dt>Currency</dt><dd>{currency}</dd></div>
           <div><dt>Objective</dt><dd>{data.objective ?? '—'}</dd></div>
           <div><dt>Platforms</dt><dd>{(data.platforms ?? []).map((p: Row) => String(p.provider ?? p.platform ?? p.name ?? '')).filter(Boolean).join(', ') || '—'}</dd></div>
@@ -605,6 +613,35 @@ export function PrintDocument({
             head={['Objective', 'Spend', 'Impressions', 'Clicks', 'Results', 'Cost per result']}
             rows={objectiveRows}
           />
+          {/*
+            OBJECTIVE-PATHS-001 — where ad sets bought different things (a store and branches): the one
+            total spend, each objective's share of it and its own result. ROAS on the sales row only.
+          */}
+          {pathBlock?.mixed && (
+            <>
+              {/* A link that hides spend arrives with the money redacted (null): the results stay, no money is printed. */}
+              <h3>{typeof pathBlock.total_spend === 'number' ? `Spend by objective — total ${money(pathBlock.total_spend, currency)}` : 'Results by objective'}</h3>
+              <Table
+                head={typeof pathBlock.total_spend === 'number'
+                  ? ['Objective', 'Spend', 'Share', 'Result', 'Cost per result', 'ROAS']
+                  : ['Objective', 'Result']}
+                rows={pathBlock.paths.map((p) => {
+                  const result = p.result === null || p.result === undefined ? '—' : `${p.result_label?.en ?? ''} ${nfmt(p.result)}`
+
+                  return typeof pathBlock.total_spend === 'number'
+                    ? [
+                        p.label.en,
+                        p.spend === null ? '—' : money(p.spend, currency),
+                        p.spend_share === null ? '—' : `${nfmt(p.spend_share * 100, { maximumFractionDigits: 0 })}%`,
+                        result,
+                        p.cost_per_result === null ? '—' : money(p.cost_per_result, currency),
+                        p.family === 'sales' && p.roas !== null ? `${nfmt(p.roas, { maximumFractionDigits: 2 })}×` : '—',
+                      ]
+                    : [p.label.en, result]
+                })}
+              />
+            </>
+          )}
         </section>
       )}
       <Absent sectionKey="objectives" fallback="Nothing was spent on any objective in this window." />
@@ -757,7 +794,7 @@ export function PrintDocument({
           <table className="doc-table doc-ads">
             <thead>
               {/* No «Campaign» column — CLIENT-REPORT-ENTITY-BOUNDARY-001. */}
-              <tr><th>Preview</th><th>Ad</th><th>Platform</th><th>Spend</th></tr>
+              <tr><th>Preview</th><th>Ad</th><th>Platform</th>{adSpend && <th>Spend</th>}</tr>
             </thead>
             <tbody>
               {adRows.map((ad, i) => (
@@ -783,11 +820,20 @@ export function PrintDocument({
                           }}
                         />
                       )
-                      : <span className="doc-ad-absent">{ad.absence}</span>}
+                      : ad.film
+                        ? <PrintFilmFrame src={ad.film} absence={ad.absence} absentClass="doc-ad-absent" />
+                        : ad.chat
+                          ? (
+                            <span className="doc-ad-chat" data-cover="text-card">
+                              {ad.chat.headline && <b>{ad.chat.headline}</b>}
+                              {ad.chat.body && <span>{ad.chat.body}</span>}
+                            </span>
+                          )
+                          : <span className="doc-ad-absent">{ad.absence}</span>}
                   </td>
                   <td>{ad.name}</td>
                   <td>{platformCell(ad.provider)}</td>
-                  <td>{ad.spend}</td>
+                  {adSpend && <td>{ad.spend}</td>}
                 </tr>
               ))}
             </tbody>
@@ -941,7 +987,7 @@ export function PrintDocument({
               {e.image && e.url ? <img src={e.url} alt={`${providerLabel(e.provider, 'en')} screenshot`} style={{ maxWidth: '100%', maxHeight: '180mm', objectFit: 'contain' }} /> : <p>PDF attachment: {e.name ?? '—'}</p>}
               <figcaption>
                 {providerLabel(e.provider, 'en')}
-                {e.period_start && e.period_end ? ` · ${e.period_start} → ${e.period_end}` : ''}
+                {e.period_start && e.period_end ? ` · ${formatPeriodRange(e.period_start, e.period_end, 'en')}` : ''}
                 {e.note ? ` · ${e.note}` : ''}
               </figcaption>
             </figure>
@@ -951,6 +997,7 @@ export function PrintDocument({
 
       <footer className="doc-footnote" data-testid="print-document-footer">
         <p>{REPORT_NOTE.en}</p>
+        <p data-testid="print-document-note-full">{REPORT_NOTE_MORE.en}</p>
         <p>
           {reportFooterItems({
             updatedAt: typeof data.generated_at === 'string' ? data.generated_at : null,
@@ -1001,6 +1048,8 @@ const DOC_CSS = `
 .doc-table thead { display: table-header-group; }
 .doc-ads td.doc-ad-thumb { width: 84pt; }
 .doc-ads td.doc-ad-thumb img { width: 78pt; height: 44pt; object-fit: cover; border-radius: 3pt; }
+.doc-ads td.doc-ad-thumb video { width: 78pt; height: 44pt; object-fit: cover; border-radius: 3pt; background: #000; }
+.doc-ads td.doc-ad-thumb .doc-ad-chat { display: flex; flex-direction: column; gap: 1pt; width: 78pt; max-height: 44pt; overflow: hidden; font-size: 6.5pt; line-height: 1.25; }
 .doc-ad-absent { display: inline-block; max-width: 78pt; font-size: 7.5pt; line-height: 1.25; color: #6b7280; }  /* repeat header on every page */
 .doc-table tr { break-inside: avoid; }             /* never split a row across pages */
 .doc-table th { text-align: left; background: #f1f5f9; color: #334155; font-weight: 700; padding: 5pt 7pt; border-bottom: 1.5px solid #cbd5e1; }

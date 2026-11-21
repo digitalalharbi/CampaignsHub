@@ -101,7 +101,9 @@ describe('what a report builder may name, by audience', () => {
     render(audience)
 
     expect(await screen.findByText('Platforms')).toBeInTheDocument()
-    expect(screen.getByText('meta')).toBeInTheDocument()
+    // The platform chip carries the platform's NAME; the provider key is never shown to a reader.
+    expect(screen.getByText('Meta')).toBeInTheDocument()
+    expect(screen.queryByText('meta')).toBeNull()
     expect(screen.getByText('Sales')).toBeInTheDocument()
   })
 

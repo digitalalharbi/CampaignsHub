@@ -116,7 +116,7 @@ const DATA_SOURCES: PaidFieldOption[] = [
    * They stay a literal because they are not in the canonical list and must not be added to it:
    * that list answers «what can this product connect an ad account to».
    */
-  { value: 'ga4', ar: 'GA4', en: 'GA4' },
+  { value: 'ga4', ar: 'الموقع', en: 'Website' },
   { value: 'crm', ar: 'نظام CRM', en: 'CRM' },
   { value: 'salla', ar: 'سلة', en: 'Salla' },
   { value: 'zid', ar: 'زد', en: 'Zid' },
@@ -137,7 +137,7 @@ export const PAID_FIELD_DEFS: PaidFieldDef[] = [
   { token: 'audience', labelAr: 'الجمهور المستهدف', labelEn: 'Target audience', control: 'text', group: 'brief' },
   { token: 'store_or_app', labelAr: 'المتجر / التطبيق', labelEn: 'Store / app', control: 'select', group: 'brief', options: STORE_OR_APP },
   { token: 'language', labelAr: 'اللغة', labelEn: 'Language', control: 'select', group: 'brief', options: LANGUAGES },
-  { token: 'kpis', labelAr: 'مؤشرات الأداء', labelEn: 'KPIs', control: 'tags', group: 'brief' },
+  { token: 'kpis', labelAr: 'ملخص الأداء', labelEn: 'KPIs', control: 'tags', group: 'brief' },
 
   // ---- Tracking & integrations ----
   { token: 'site_url', labelAr: 'الموقع الإلكتروني', labelEn: 'Website URL', control: 'url', group: 'tracking' },
@@ -191,6 +191,8 @@ export const PAID_COPY = {
     stepTracking: 'التتبع والتكاملات',
     stepContent: 'المحتوى والملفات',
     stepReview: 'المراجعة',
+    progress: 'اكتمال الطلب',
+    autosaved: 'حُفظ تلقائيًا على هذا الجهاز',
     servicesTitle: 'الخدمات المطلوبة',
     servicesEmpty: 'لم تُحدَّد أي خدمة بعد — أضف خدمة للمتابعة.',
     selectedCount: 'الخدمات المختارة',
@@ -238,6 +240,8 @@ export const PAID_COPY = {
     stepTracking: 'Tracking & integrations',
     stepContent: 'Content & files',
     stepReview: 'Review',
+    progress: 'Request complete',
+    autosaved: 'Saved automatically on this device',
     servicesTitle: 'Requested services',
     servicesEmpty: 'No service selected yet — add a service to continue.',
     selectedCount: 'Selected services',

@@ -6,6 +6,8 @@ namespace App\Domains\Agency\Http\Controllers;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\ClientWorkspaces\Services\ClientAccess;
+use App\Domains\Funding\Services\FundingReach;
+use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Models\Project;
@@ -32,6 +34,8 @@ final class ClientBudgetController extends Controller
     public function __construct(
         private readonly ClientAccess $access,
         private readonly ClientBudgetRollup $rollup,
+        private readonly ProjectBudgetReader $budgets,
+        private readonly FundingReach $fundingReach,
     ) {}
 
     public function __invoke(Request $request): JsonResponse
@@ -41,7 +45,8 @@ final class ClientBudgetController extends Controller
 
         [$from, $to] = $this->range($request);
 
-        $clientQuery = ClientWorkspace::query()->whereNull('archived_at');
+        // PROJECT-LIFECYCLE-001 rule 4 — the client's own state never hides its live projects' figures (project state decides).
+        $clientQuery = ClientWorkspace::query();
         $this->access->restrictQuery($clientQuery, $user);
         $clients = $clientQuery->get(['id', 'name']);
 
@@ -55,6 +60,7 @@ final class ClientBudgetController extends Controller
          */
         $ceilings = $this->access->projectCeilings($user);
         $projects = Project::query()
+            ->live() // PROJECT-LIFECYCLE-001 — budgets of live projects only
             ->whereIn('client_workspace_id', $clients->pluck('id')->all())
             ->get(['id', 'client_workspace_id', 'name'])
             // SEC-3 — a team member confined to some of a client's projects reads only those.
@@ -77,6 +83,30 @@ final class ClientBudgetController extends Controller
                 ->groupBy(static fn (array $r): string => (string) ($r['project_id'] ?? ''));
 
         $projectsByClient = $projects->groupBy('client_workspace_id');
+
+        /*
+         * ONE-BUDGET-001 — the APPROVED budget of each project (/agency/budgets), over the budget's own period. It is the
+         * «budget» the home cards draw; the dashboard window (`from`/`to`) never touches it. The campaign roll-up above
+         * stays in the payload as `platform_campaign_budgets`, informational only. A project whose membership withholds
+         * money reads as having no figure, exactly as on the budgets page.
+         */
+        $approved = $this->budgets->forProjects($this->fundingReach->moneyVisible($user, $allProjectIds));
+
+        /*
+         * NAV-HOME-PLANS-001 — each client's last seven days of spend, for the home page's card line.
+         *
+         * ONE statement for every campaign on the screen (`timeseriesByCampaign`), folded into clients in memory —
+         * never a read per client, for the reason stated above. Same `value` the rows' `spent` is summed from, so a
+         * card's line and its figure cannot disagree; a client whose rollup mixes currencies gets no line, because a
+         * sum across two units is not a trend.
+         */
+        $seriesTo = $to->copy()->startOfDay();
+        $seriesFrom = $seriesTo->copy()->subDays(6);
+        $campaignIds = $pacingByProject->flatten(1)->pluck('campaign_id')->filter()->map(static fn (mixed $id): string => (string) $id)->unique()->values()->all();
+
+        $campaignSeries = $campaignIds === []
+            ? []
+            : app(MetricsAggregator::class)->forProjects($allProjectIds)->forCampaigns($campaignIds)->timeseriesByCampaign($seriesFrom, $seriesTo);
 
         $rows = [];
 
@@ -112,12 +142,37 @@ final class ClientBudgetController extends Controller
                 ->values()
                 ->all();
 
+            $rollup = $this->rollup->of($pacing);
+
+            $daily = array_fill(0, 7, 0.0);
+            foreach ($pacing as $pacingRow) {
+                foreach ($campaignSeries[(string) ($pacingRow['campaign_id'] ?? '')] ?? [] as $day) {
+                    $offset = (int) $seriesFrom->diffInDays(Carbon::parse((string) $day['date'])->startOfDay(), false);
+                    if ($offset >= 0 && $offset < 7) {
+                        $daily[$offset] += (float) ($day['spend'] ?? 0);
+                    }
+                }
+            }
+
+            $projectBudgets = $clientProjects
+                ->map(fn ($p): array => [
+                    'project_id' => (string) $p->id,
+                    'project_name' => $p->name,
+                    'budget' => $approved[(string) $p->id] ?? ProjectBudgetReader::none(),
+                ])
+                ->values()
+                ->all();
+
             $rows[] = [
                 'client_id' => (string) $client->id,
                 'client_name' => $client->name,
                 'projects' => $clientProjects->count(),
+                'project_budget' => ProjectBudgetReader::total(array_column($projectBudgets, 'budget')),
+                'project_budgets' => $projectBudgets,
+                'platform_campaign_budgets' => ['budget' => $rollup['budget'], 'spent' => $rollup['spent'], 'currency' => $rollup['currency'], 'campaigns' => $rollup['campaigns']],
                 'projects_breakdown' => $breakdown,
-            ] + $this->rollup->of($pacing);
+                'daily_spend_7d' => $rollup['currencies'] > 1 || $pacing === [] ? null : array_map(static fn (float $v): float => round($v, 2), $daily),
+            ] + $rollup;
         }
 
         /* Largest committed budget first — «where is the money» precedes every other question here. */

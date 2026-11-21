@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { withDailyRecordsSlides, withEvidenceSlides, withStreamsSlide } from './reportSections'
+import { frozenBeforeWebsiteTab, withDailyRecordsSlides, withEvidenceSlides, withAudienceSlides, withFormatComparisonSlides, withGa4Slides, withStreamsSlide } from './reportSections'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { ATTENTION_SLIDE, SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
 import { PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
+import { settlePrintFilms } from './printCover'
 import { coverMeta, headerIdentity, printTitle, type SharedBranding } from './sharedBranding'
 import { ReportWatermark } from './ReportWatermark'
-import { REPORT_NOTE, reportFooterItems } from './reportFooter'
+import { REPORT_NOTE, REPORT_NOTE_MORE, reportFooterItems } from './reportFooter'
 import { brand } from '@/lib/brand'
 
 const ATTENTION_PER_PAGE = 2
@@ -88,8 +89,21 @@ export function PrintReport() {
     for (let i = 0; i < (d.attention?.length ?? 0); i += ATTENTION_PER_PAGE) {
       visible.push({ ...ATTENTION_SLIDE, id: `${ATTENTION_SLIDE.id}-${i}`, range: [i, i + ATTENTION_PER_PAGE] })
     }
-    withDailyRecordsSlides(visible, d)
-    withStreamsSlide(visible, d)
+    if (frozenBeforeWebsiteTab(d)) {
+      // A snapshot frozen before the website tab prints in its frozen order: daily records, streams, then the store pages.
+      withDailyRecordsSlides(visible, d)
+      withStreamsSlide(visible, d)
+      withGa4Slides(visible, d, true)
+      withFormatComparisonSlides(visible, d, true)
+    } else {
+      withStreamsSlide(visible, d)
+      // REPORT-WEBSITE-TAB-001 — the website pages in the live tab's order, each table split into fixed pages of eight rows; then the tables view (daily records).
+      withGa4Slides(visible, d, true)
+      withFormatComparisonSlides(visible, d, true)
+      withDailyRecordsSlides(visible, d)
+    }
+    // AUDIENCE-001 — the audience pages the server left in, after the report proper.
+    withAudienceSlides(visible, d as never)
     // WD-EVIDENCE-001 — the platform screenshots close the deck, as its appendix.
     withEvidenceSlides(visible, d)
     // REPORT-FOOTER-001 — no methodology page: the footer of every page carries the one note.
@@ -148,6 +162,14 @@ export function PrintReport() {
         img.onload = img.onerror = () => res(null)
         setTimeout(() => res(null), 4000)
       }))))
+      /*
+        CREATIVE-VIEWER-FORMATS-001 — a film's first frame is a cover in the deck too: the slide's
+        content tiles (`AdPoster`) and the drilldowns draw one for every film with no still. Each is
+        given a bounded chance to paint; one that does not is replaced by its sentence, never printed
+        as a black box.
+      */
+      await settleSlideFilms()
+      await settlePrintFilms()
       if (cancelled) return
       w.__REPORT_CHARTS_READY__ = true
       fitSlides() // scale any slightly-too-tall slide to fit exactly one page (readable floor 0.82)
@@ -194,7 +216,8 @@ export function PrintReport() {
 
     return new Date().getFullYear()
   })()
-  const total = slides.length
+  const total = slides.length + 1 // + the closing notes page
+  const footerFacts = { updatedAt: d.generated_at ?? null, period: d.period ?? null, currency: payload.currency, timezone: d.timezone ?? 'Asia/Riyadh', objective: typeof d.objective === 'string' ? d.objective : null }
 
   return (
     <div className={`report-print ${type}`} data-theme={theme} dir="rtl" lang="ar">
@@ -273,6 +296,27 @@ export function PrintReport() {
           )}
         </section>
       ))}
+      {/*
+        DISCLAIMER-COPY-001 (Owner, 2026-11-08) — the full approved note, on the report's LAST page. Pages carry
+        the short note in their footer; the long explanation is printed once here, where it can be read in full
+        without shrinking any page of data. Same text as «معرفة المزيد» on the live link.
+      */}
+      <section className="report-slide" data-print-page={total} data-slide-type="notes">
+        <div className="report-slide-inner">
+          <div data-testid="print-notes-full" style={{ paddingTop: '6mm' }}>
+            <p style={{ fontSize: '0.8rem', fontWeight: 700, margin: '0 0 3mm' }}>{REPORT_NOTE.ar}</p>
+            <p style={{ fontSize: '0.8rem', lineHeight: 1.9, margin: 0 }}>{REPORT_NOTE_MORE.ar}</p>
+          </div>
+        </div>
+        <footer className="report-slide-footer">
+          <div className="report-footer-meta">
+            <span className="report-footer-brand">
+              {reportFooterItems(footerFacts, 'ar').map(([k, v]) => `${k}: ${v}`).join(' | ')}
+            </span>
+            <span className="report-footer-page"><bdi dir="ltr">{total} / {total}</bdi></span>
+          </div>
+        </footer>
+      </section>
     </div>
   )
 }
@@ -320,7 +364,7 @@ function measureLayout() {
     const isCover = !!el.querySelector('.report-cover')
     // Methodology is a legitimate text page; like the cover it is exempt from the "sparse" heuristic.
     // So is an attention page holding a single block: its content is complete, not missing.
-    const isTextPage = ['__attention'].includes(el.getAttribute('data-slide-type') ?? '')
+    const isTextPage = ['__attention', 'notes'].includes(el.getAttribute('data-slide-type') ?? '')
     const pr = el.getBoundingClientRect()
     const cs = getComputedStyle(el)
     const padT = parseFloat(cs.paddingTop) || 0
@@ -437,9 +481,18 @@ function largestEmptyRect(grid: Uint8Array, cols: number, rows: number): number 
   return best / (cols * rows)
 }
 
+/**
+ * REPORT-PDF-16-9-001 (master task 10) — a presentation page is a 16:9 slide, exactly the size of what is on it.
+ *
+ * It printed on A4 landscape (1.414) while `report-print.mjs` measures and fits every slide in Chromium's default 1280×720 viewport
+ * (16:9): the layout the gate approved was not the page that was printed, and the difference was blank space under every slide.
+ * 338.67mm × 190.5mm IS 1280×720 CSS px, so the printed page is the measured one, margin 0.
+ */
+export const SLIDE_PAGE = '338.67mm 190.5mm'
+
 function printCss(landscape: boolean): string {
   return `
-  @page { size: A4 ${landscape ? 'landscape' : 'portrait'}; margin: 0; }
+  @page { size: ${landscape ? SLIDE_PAGE : 'A4 portrait'}; margin: 0; }
   html, body { background: var(--surface); }
   .report-print { background: var(--surface); color: var(--text-primary); }
   .report-slide {
@@ -482,4 +535,22 @@ function printCss(landscape: boolean): string {
   /* Never split a chart, card, or table row across pages. */
   .recharts-wrapper, table, .rounded-2xl, .rounded-xl { break-inside: avoid; page-break-inside: avoid; }
   `
+}
+
+/**
+ * The deck's tile films (`AdPoster` → `VideoPoster`, `data-cover="video-first-frame"`), waited for with
+ * a budget just past `VideoPoster`'s own eight-second give-up, which swaps in the typed cover — so a
+ * tile is printed as a frame or as its cover, never cut mid-decode.
+ */
+async function settleSlideFilms(budgetMs = 8500): Promise<void> {
+  const films = Array.from(document.querySelectorAll<HTMLVideoElement>('video[data-cover="video-first-frame"]:not([data-print-film])'))
+  await Promise.all(films.map((video) => new Promise<void>((resolve) => {
+    if (video.error || video.readyState >= 2) { resolve(); return }
+    const timer = setTimeout(resolve, budgetMs)
+    const settle = () => { clearTimeout(timer); resolve() }
+    video.addEventListener('loadeddata', settle, { once: true })
+    video.addEventListener('error', settle, { once: true })
+  })))
+  // VideoPoster gives up at 8s and swaps in the typed cover; let that render land before the cut.
+  await new Promise((r) => setTimeout(r, 150))
 }

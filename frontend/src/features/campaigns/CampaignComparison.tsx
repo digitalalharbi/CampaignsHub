@@ -13,7 +13,9 @@ import { EmptyState, Skeleton } from '@/components/ui/States'
 import { ChartCard, MetricLineChart } from '@/features/analytics/charts'
 import { platformColor } from '@/features/analytics/components'
 import { compact, money } from '@/features/analytics/format'
+import { FxAmount, FxCoverageNote } from '@/components/money/FxAmount'
 import { mediaFitClass } from '@/features/content/adPreview'
+import { localStill } from '@/features/content/providerMedia'
 
 const MAX = 5
 
@@ -100,7 +102,8 @@ export function CampaignComparison({
             </div>
           )}
 
-          <ComparisonTable rows={rows} locale={locale} mixed={mixed} projectId={projectId} />
+          <ComparisonTable rows={rows} locale={locale} mixed={mixed} projectId={projectId} currency={q.data?.currency ?? null} />
+          <FxCoverageNote fx={q.data?.fx} ar={locale === 'ar'} />
           <TrendComparison rows={rows} />
           <div className="grid gap-4 lg:grid-cols-2">
             <PlatformSplit rows={rows} />
@@ -113,8 +116,8 @@ export function CampaignComparison({
 }
 
 /** Metric rows down the side, one column per campaign. Cost-per-result uses each campaign's own key. */
-function ComparisonTable({ rows, locale, mixed, projectId }: {
-  rows: CompareCampaign[]; locale: 'ar' | 'en'; mixed: boolean; projectId: string
+function ComparisonTable({ rows, locale, mixed, projectId, currency }: {
+  rows: CompareCampaign[]; locale: 'ar' | 'en'; mixed: boolean; projectId: string; currency: string | null
 }) {
   // Best value per numeric row, only when the campaigns share one objective.
   const best = (values: Array<number | null>, lowerIsBetter: boolean): number | null => {
@@ -191,10 +194,14 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
             key: 'cost',
             label: 'تكلفة النتيجة',
             kind: 'text' as const,
-            // Per-CAMPAIGN currency: each column is its own budget's unit, which one column kind cannot carry.
+            /*
+             * FX-APPLY-001 — a cost per result is spend over results, and spend is in the REPORTING currency (`currency`,
+             * the basis every row was converted into). It was labelled with each campaign's budget currency — a EUR plan's
+             * campaign printed its dollar cost with «€»: the «253 $ / 253 €» defect in a comparison.
+             */
             values: rows.map((r, i) =>
               resultModel(r.objective) && costs[i] !== null
-                ? <>{money(costs[i], r.budget_currency ?? 'SAR')}</>
+                ? <>{money(costs[i], currency)}</>
                 : null,
             ),
             notes: rows.map((r) => resultModel(r.objective)?.costLabelAr ?? null),
@@ -202,7 +209,7 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
           },
           {
             key: 'roas',
-            label: 'العائد على الإنفاق',
+            label: 'معدل العائد',
             kind: 'ratio' as const,
             values: roas,
             emphasis: roas.map((v) => v !== null && v === bestRoas),
@@ -231,7 +238,8 @@ function ComparisonTable({ rows, locale, mixed, projectId }: {
             key: 'budget',
             label: 'الميزانية المخططة',
             kind: 'text' as const,
-            values: rows.map((r) => (r.total_budget ? <>{money(r.total_budget, r.budget_currency ?? 'SAR')}</> : null)),
+            // FX-APPLY-001 — each plan in the display currency (converted by FxEngine), its own currency in the tooltip.
+            values: rows.map((r) => (r.total_budget ? <FxAmount c={r.budget_fx} ar={locale === 'ar'} /> : null)),
           },
         ]}
       />
@@ -376,9 +384,9 @@ function CreativeSplit({ rows }: { rows: CompareCampaign[] }) {
               <ul className="mt-1.5 space-y-1.5">
                 {r.creatives.map((cr) => (
                   <li key={cr.creative_id} className="flex items-center gap-2 rounded-lg bg-surface-secondary p-1.5">
-                    {cr.thumbnail_url
+                    {localStill(cr.thumbnail_url)
                       /* CONTENT-PREVIEW-FIT-001 — a 36px row tile with no reported shape contains. */
-                      ? <img src={cr.thumbnail_url} alt="" className={`h-9 w-9 shrink-0 rounded ${mediaFitClass(null, 'square', 'thumb')}`} />
+                      ? <img src={localStill(cr.thumbnail_url) ?? undefined} alt="" className={`h-9 w-9 shrink-0 rounded ${mediaFitClass(null, 'square', 'thumb')}`} />
                       : <span title="المنصة لم توفر معاينة" className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-surface text-text-muted"><ImageOff size={14} /></span>}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs font-semibold text-text-primary">{cr.name}</span>

@@ -7,6 +7,9 @@ namespace App\Domains\Reports\Analytics;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Support\ReportReadMemo;
+use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Support\Carbon;
 
 /**
@@ -67,7 +70,14 @@ final class ObjectiveAnalyticsReader
          * DEMO-LIVE-AGGREGATION-ISOLATION-001 — the same rule the aggregator applies: once a scope
          * holds any real row, seeded rows leave its totals.
          */
-        if ((clone $query)->where('daily_metrics.is_demo', false)->exists()) {
+        // PERF-RECOVERY-001 — the demo question is about the scope and window, not the grouping; both groupings of one build share it.
+        $hasLive = ReportReadMemo::remember(
+            'objective-analytics-live|'.app(TenantContext::class)->tenantId().'|'.app(ProjectContext::class)->projectId()
+                .'|'.json_encode([$this->projectIds, $this->campaignIds, $this->providers, $this->accountIds]).'|'.$from->toDateString().'|'.$to->toDateString(),
+            fn (): bool => (clone $query)->where('daily_metrics.is_demo', false)->exists(),
+        );
+
+        if ($hasLive) {
             $query->where('daily_metrics.is_demo', false);
         }
 

@@ -7,6 +7,7 @@ namespace App\Domains\Commerce\Services;
 use App\Domains\Commerce\ValueObjects\MoneyConversion;
 use App\Domains\Metrics\Services\CurrencyConverter;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Metrics\Services\SourceCurrency;
 use Illuminate\Support\Carbon;
 
 /**
@@ -38,21 +39,21 @@ final class CommerceCurrency
      * The conversion that applies to one store row.
      *
      * The source currency falls back the way the ad pipeline's does: the row's own label, then the
-     * store account's, then the reporting currency. That last step is an assumption — an unlabelled
-     * figure treated as already converted — and it is RECORDED as `original_currency` rather than
-     * left implicit, which is the difference between this and the code it replaces.
+     * store account's — and then nothing.
+     *
+     * MONEY-CURRENCY-NEVER-ASSUMED-001 — the third step used to be the reporting currency: an
+     * unlabelled order was treated as already converted and recorded as such. That is the assumption
+     * that stored riyal ad spend as dollars. A row whose currency nobody stated now has no rate, so
+     * its amounts are WITHHELD (`total` null, `original_total` kept, `original_currency` null) through
+     * the same path a missing rate takes, and the funnel already counts it as withheld.
      */
     public function for(string $projectId, ?string $sourceCurrency, ?Carbon $on): MoneyConversion
     {
         $to = $this->reporting->forProject($projectId);
-        $from = strtoupper(trim((string) $sourceCurrency));
-
-        if ($from === '') {
-            $from = $to;
-        }
+        $from = SourceCurrency::clean($sourceCurrency);
 
         $date = $on ?? Carbon::now();
-        $resolved = $this->rates->resolve($from, $to, $date);
+        $resolved = $from === null ? null : $this->rates->resolve($from, $to, $date);
 
         return new MoneyConversion(
             originalCurrency: $from,

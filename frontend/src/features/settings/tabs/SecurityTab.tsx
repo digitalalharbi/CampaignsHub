@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { KeyRound, ShieldCheck, Smartphone } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
+import { TwoStepCard } from '@/features/account/TwoStepCard'
 import { useSecurityActions, useSecurityActivity, useSecurityPolicy, type SecurityPolicy } from '../api'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
@@ -18,9 +19,6 @@ export function SecurityTab() {
   const a = useSecurityActions()
   const [pw, setPw] = useState({ current_password: '', password: '', password_confirmation: '' })
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const [mfa, setMfa] = useState<{ secret: string; otpauth_uri: string } | null>(null)
-  const [code, setCode] = useState('')
-  const [mfaMsg, setMfaMsg] = useState('')
   const [policy, setPolicy] = useState<SecurityPolicy | null>(null)
 
   useEffect(() => { if (policyQ.data) setPolicy(policyQ.data.policy) }, [policyQ.data])
@@ -31,14 +29,6 @@ export function SecurityTab() {
     try { await a.changePassword.mutateAsync(pw); setPwMsg({ ok: true, text: ar ? 'تم تحديث كلمة المرور.' : 'Your password has been updated.' }); setPw({ current_password: '', password: '', password_confirmation: '' }) }
     catch (e2) { setPwMsg({ ok: false, text: toApiError(e2).message }) }
   }
-  const startMfa = async () => { setMfaMsg(''); setMfa(await a.mfaSetup.mutateAsync()) }
-  const confirmMfa = async () => {
-    setMfaMsg('')
-    try { await a.mfaConfirm.mutateAsync(code); setMfa(null); setCode(''); activity.refetch() }
-    catch (e2) { setMfaMsg(toApiError(e2).message) }
-  }
-
-  const enabled = activity.data?.two_factor_enabled
 
   return (
     <div className="space-y-4">
@@ -54,26 +44,13 @@ export function SecurityTab() {
         <div className="mt-4 flex justify-end"><Button type="submit" disabled={a.changePassword.isPending}>{ar ? 'تحديث' : 'Update'}</Button></div>
       </form>
 
-      {/* MFA */}
-      <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
-        <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-text-primary"><Smartphone size={18} /> {ar ? 'المصادقة الثنائية (2FA)' : 'Two-factor authentication (2FA)'}</h2>
-        <p className="mb-3 text-sm text-text-secondary">{ar ? 'حماية إضافية عبر تطبيق مصادقة (TOTP). ' : 'Extra protection through an authenticator app (TOTP). '}{enabled ? <span className="font-semibold text-success"><ShieldCheck size={14} className="inline" /> {ar ? 'مُفعّلة' : 'Enabled'}</span> : <span className="text-text-muted">{ar ? 'غير مُفعّلة' : 'Not enabled'}</span>}</p>
-        {!enabled && !mfa && <Button variant="secondary" onClick={startMfa} disabled={a.mfaSetup.isPending}>{ar ? 'بدء التفعيل' : 'Start setup'}</Button>}
-        {!enabled && mfa && (
-          <div className="rounded-xl border border-border bg-surface-secondary p-4">
-            <p className="text-sm text-text-secondary">{ar ? 'أضف هذا المفتاح في تطبيق المصادقة ثم أدخل الرمز:' : 'Add this key to your authenticator app, then enter the code:'}</p>
-            <code className="my-2 block break-all rounded bg-surface px-2 py-1 text-sm tnum">{mfa.secret}</code>
-            {mfaMsg && <p className="mb-2 text-xs text-danger">{mfaMsg}</p>}
-            <div className="flex gap-2"><Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="000000" maxLength={6} className="max-w-[140px] tnum" /><Button onClick={confirmMfa} disabled={a.mfaConfirm.isPending}>{ar ? 'تأكيد' : 'Confirm'}</Button></div>
-          </div>
-        )}
-        {enabled && <MfaDisable onDone={() => activity.refetch()} />}
-      </div>
+      {/* TWO-STEP-001 — the second step: three methods, enforced at every sign-in. */}
+      <TwoStepCard />
 
       {/* Org policy */}
       {policy && (
         <div className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
-          <h2 className="mb-3 text-lg font-bold text-text-primary">{ar ? 'سياسة الأمان للمؤسسة' : 'Organisation security policy'}</h2>
+          <h2 className="mb-3 text-lg font-bold text-text-primary">{ar ? 'سياسة الأمان لمساحة العمل' : 'Workspace security policy'}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={ar ? 'مهلة الجلسة (دقائق)' : 'Session timeout (minutes)'} htmlFor="sto"><Input id="sto" type="number" min={5} value={policy.session_timeout_minutes} onChange={(e) => setPolicy({ ...policy, session_timeout_minutes: Number(e.target.value) })} /></Field>
             <div className="flex flex-col justify-end gap-2">
@@ -102,20 +79,6 @@ export function SecurityTab() {
           </table></div>
         )}
       </div>
-    </div>
-  )
-}
-
-function MfaDisable({ onDone }: { onDone: () => void }) {
-  const ar = useUi((u) => u.locale) === 'ar'
-  const { mfaDisable } = useSecurityActions()
-  const [pw, setPw] = useState('')
-  const [msg, setMsg] = useState('')
-  return (
-    <div className="flex flex-wrap items-end gap-2">
-      <Field label={ar ? 'كلمة المرور لإيقاف 2FA' : 'Password, to turn 2FA off'} htmlFor="dmfa"><Input id="dmfa" type="password" value={pw} onChange={(e) => setPw(e.target.value)} className="max-w-[220px]" /></Field>
-      <Button variant="danger" onClick={async () => { try { await mfaDisable.mutateAsync(pw); onDone() } catch (e) { setMsg(toApiError(e).message) } }} disabled={mfaDisable.isPending}>{ar ? 'إيقاف 2FA' : 'Turn 2FA off'}</Button>
-      {msg && <span className="text-xs text-danger">{msg}</span>}
     </div>
   )
 }

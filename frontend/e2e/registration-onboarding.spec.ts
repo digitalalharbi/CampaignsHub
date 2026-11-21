@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { aFreshSaudiNumber, signIn, switchToEnglish } from './helpers'
+import { aFreshSaudiNumber, signIn, switchToEnglish, openRail } from './helpers'
 
 /**
  * Full registration → onboarding acceptance: register → verify email → account type → service → workspace →
@@ -46,7 +46,7 @@ async function registerAndVerify(
 ) {
   await page.goto('/register')
   await switchToEnglish(page)
-  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(workspace)
+  await page.getByLabel(/Workspace name|Organization name|اسم مساحة العمل|اسم المؤسسة/).fill(workspace)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('New Owner')
   await page.getByLabel(/Email|البريد/).fill(email)
   // Required since PHONE-VERIFY-001 — no account activates without a verified number.
@@ -72,7 +72,26 @@ async function registerAndVerify(
     await page.getByLabel(/Account type|نوع الحساب/).selectOption(opts.selfType)
   }
   await page.getByTestId(`plan-${opts.plan}`).click()
-  await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
+  /*
+   * The server's answer first, then the navigation — two separate facts.
+   *
+   * This was a bare `toHaveURL(/signup/status)` on the default five seconds, straight after the
+   * click. Applying hashes a password and writes several rows; on a slow runner that round trip
+   * alone outlasted the window, and the walk failed still standing on `/register` with nothing to
+   * say whether the server had refused or merely not answered yet (webkit, 2026-11-06, a 1.1 h
+   * gate). Waiting on the application's own response makes a refusal fail at once, WITH its body,
+   * and leaves the URL assertion measuring only the navigation. A 419 the client heals itself
+   * (CSRF-SELF-HEAL-001) is not the deciding answer, so it is not the one waited on.
+   */
+  const [applied] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes('/api/v1/auth/register') && r.request().method() === 'POST' && r.status() !== 419,
+      { timeout: 45_000 },
+    ),
+    page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click(),
+  ])
+  const appliedBody = await applied.text().catch(() => '<unreadable>')
+  expect(applied.status(), `the application for ${email} was refused: ${appliedBody.slice(0, 400)}`).toBeLessThan(300)
 
   /*
    * Applying lands on the registration STATUS page, not in the app (SIGNUP-002).
@@ -80,7 +99,7 @@ async function registerAndVerify(
    * The state is read from the page's own attribute rather than from a translated string, so this
    * assertion is about the application's actual state and not about the wording of a label.
    */
-  await expect(page).toHaveURL(/\/signup\/status/)
+  await expect(page).toHaveURL(/\/signup\/status/, { timeout: 30_000 })
   await expect(page.getByTestId('registration-status')).toHaveAttribute('data-state', 'email_verification_required', STATE_ARRIVES)
 
   // No mail provider is configured, so the dev link is what stands in for the message.
@@ -241,6 +260,25 @@ async function registerAndVerify(
   })
 
   await signIn(page, email, 'secret1234')
+
+  /*
+   * PROBE-CLOBBER-001 — the diagnostic below must not run while the sign-in is still in flight.
+   *
+   * Its `fetch('/api/v1/auth/me')` used to fire on the first `toPass` attempt, the instant the submit was clicked —
+   * while `/auth/login` was still being answered. That probe carried the GUEST session cookie. `regenerate()` keeps
+   * the guest id alive, so the probe got a guest answer, and its `Set-Cookie` wrote the guest id back into the jar.
+   * When that answer landed after the login's, it replaced the signed-in cookie: `/auth/memberships` → 401 twice, the
+   * app went to `/login?reason=session&redirect=/switch`, and the message blamed the product. The server log shows it
+   * every time: `/auth/login`, then an `/auth/me` that FINISHED after it, then the 401s. It failed on webkit because
+   * webkit's timing let the probe's answer arrive last. A different spec failed each time because the race moved.
+   *
+   * So first wait for the app to leave the sign-in form (polled on the URL, GATE-WK-NAV-001). It either reaches the wizard or settles somewhere else,
+   * including the `?reason=session` page a real failure lands on. Only then probe. A timeout here is not a verdict:
+   * the assertion below still runs and reports what it finds.
+   */
+  await expect(page)
+    .toHaveURL((u) => u.pathname !== '/login' || u.searchParams.has('reason'), { timeout: 20_000 })
+    .catch(() => undefined)
 
   /*
    * When this lands anywhere but the wizard, say WHAT the application thought instead.
@@ -436,19 +474,20 @@ test('personal (agency) account: register → onboard → full menu', async ({ p
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
   await page.getByLabel(/Project name|اسم المشروع/).fill('First Project')
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
-  await page.getByRole('button', { name: /Go to dashboard|لوحة التحكم/ }).click()
+  await page.getByRole('button', { name: /Go to dashboard|الرئيسية/ }).click()
 
   /*
    * The AGENCY portal, not merely «a dashboard» — that binding is the whole point of the signup
    * question (LAUNCH-PRICING-001): «لعملائي» → `/agency`, «لحملاتي وأعمالي» → `/app`. A walk that
-   * asserted `/dashboard` alone passed for either portal and so proved neither.
+   * asserted `/home` alone passed for either portal and so proved neither.
    */
   await expect(page).toHaveURL(/\/agency\/dashboard/)
   // Personal full menu: Clients is present.
   await switchToEnglish(page)
+  await openRail(page)
   await expect(page.getByRole('link', { name: /Clients|العملاء/ }).first()).toBeVisible()
 
-  // Persistence across reload — stays onboarded on the dashboard.
+  // Persistence across reload — stays onboarded on the role home.
   await page.reload()
   await expect(page).toHaveURL(/\/agency\/dashboard/)
 })
@@ -468,7 +507,7 @@ test('company (brand) account: register → onboard → simplified menu, no agen
   // Company skips the client step → straight to first project.
   await page.getByLabel(/Project name|اسم المشروع/).fill('Brand Project')
   await page.getByRole('button', { name: /Continue|متابعة/ }).click()
-  await page.getByRole('button', { name: /Go to dashboard|لوحة التحكم/ }).click()
+  await page.getByRole('button', { name: /Go to dashboard|الرئيسية/ }).click()
 
   // The SELF-managed path is sold `/app`, and this is where the walk proves it landed there.
   await expect(page).toHaveURL(/\/app\/dashboard/)
@@ -492,7 +531,7 @@ test('the plan step reads the catalogue and quotes both terms before payment', a
 
   await page.goto('/register')
   await switchToEnglish(page)
-  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(`Plans ${tag}`)
+  await page.getByLabel(/Workspace name|Organization name|اسم مساحة العمل|اسم المؤسسة/).fill(`Plans ${tag}`)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('Plan Picker')
   await page.getByLabel(/Email|البريد/).fill(`plans.${tag}@example.com`.toLowerCase())
   await page.getByTestId('phone').fill(aFreshSaudiNumber())
@@ -530,7 +569,7 @@ test('the plan step reads the catalogue and quotes both terms before payment', a
   await page.getByTestId('plan-team').click()
   await expect(page.getByTestId('plan-team')).toHaveAttribute('data-selected', 'true')
   await page.getByRole('button', { name: /Create account|إنشاء حساب/ }).click()
-  await expect(page).toHaveURL(/\/signup\/status/)
+  await expect(page).toHaveURL(/\/signup\/status/, { timeout: 30_000 })
 })
 
 /**
@@ -544,7 +583,7 @@ test('an invalid password is caught on the account step, not beside the price li
 
   await page.goto('/register')
   await switchToEnglish(page)
-  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(`Weak ${tag}`)
+  await page.getByLabel(/Workspace name|Organization name|اسم مساحة العمل|اسم المؤسسة/).fill(`Weak ${tag}`)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('Weak Password')
   await page.getByLabel(/Email|البريد/).fill(`weak.${tag}@example.com`.toLowerCase())
   await page.getByTestId('phone').fill(aFreshSaudiNumber())
@@ -589,7 +628,7 @@ test('the signup path decides which plans exist, and every price is USD', async 
 
   await page.goto('/register')
   await switchToEnglish(page)
-  await page.getByLabel(/Organization name|اسم المؤسسة/).fill(`Paths ${tag}`)
+  await page.getByLabel(/Workspace name|Organization name|اسم مساحة العمل|اسم المؤسسة/).fill(`Paths ${tag}`)
   await page.getByLabel(/Full name|الاسم الكامل/).fill('Path Picker')
   await page.getByLabel(/Email|البريد/).fill(`paths.${tag}@example.com`.toLowerCase())
   await page.getByTestId('phone').fill(aFreshSaudiNumber())

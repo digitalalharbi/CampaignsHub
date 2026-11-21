@@ -1,4 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { roomBelow, useFitLocked } from '@/components/fit/useFitRows'
 import { readMetricValue } from '@/lib/metricValue'
 import { orderRows } from '@/lib/tableSort'
 
@@ -184,9 +186,19 @@ export function MetricTable({
   values,
   exact,
   initialSort,
+  footer,
+  pageSize,
+  testId,
 }: {
   head: string[]
   rows: ReactNode[][]
+  /**
+   * REPORT-WEBSITE-TAB-001 (Owner, permanent: «جزء بسيط الجداول لكن ليست طويلة») — a fixed-size page of rows. The table keeps the
+   * same height on every page (the last page is padded with empty rows) and the reader pages with Next / Previous; sorting
+   * sorts the whole table, not the page. Absent, the table shows every row as before.
+   */
+  pageSize?: number
+  testId?: string
   values?: SortValues[]
   /**
    * NUMBER-PRESENTATION-001 — the exact figure behind an abbreviated one, per cell.
@@ -204,6 +216,12 @@ export function MetricTable({
   exact?: (string | null)[][]
   /** Column index to sort by on first render, and its direction. */
   initialSort?: { column: number; dir: 'asc' | 'desc' }
+  /**
+   * CAMPAIGN-LEVELS-003 — one totals row under the columns it totals, as every ads manager draws it. Positional like
+   * `rows`; a cell the caller cannot total honestly is passed as `—`, never as a sum of what happened to be readable.
+   * It never sorts and is never counted as a row.
+   */
+  footer?: ReactNode[]
 }) {
   const [sort, setSort] = useState<{ column: number; dir: 'asc' | 'desc' } | null>(initialSort ?? null)
 
@@ -212,7 +230,59 @@ export function MetricTable({
     [rows, values, sort],
   )
 
+  const [page, setPage] = useState(0)
+  /*
+   * AF2 — on a fitted `/agency` page a table that was given no page size takes the one the screen allows: the rows
+   * that fit between its own top and the bottom of the `.fit-panel` it sits in, with the pager's line kept back.
+   * Locked only; unlocked (a phone, a short window) every row is drawn as before and the page flows.
+   */
+  const fitCompact = useFitCompact()
+  const locked = useFitLocked()
+  const wrap = useRef<HTMLDivElement>(null)
+  const [fitSize, setFitSize] = useState<number | undefined>(undefined)
+  const seen = useRef(0)
+  const auto = fitCompact && locked && pageSize === undefined
+  useEffect(() => {
+    const el = wrap.current
+    const panel = el?.closest<HTMLElement>('.fit-panel')
+    if (!auto || !el || !panel) { setFitSize(undefined); return }
+    let frame = 0
+    seen.current = 0
+    const measure = () => {
+      const rowEls = [...el.querySelectorAll<HTMLElement>('tbody tr:not([aria-hidden])')]
+      const head = el.querySelector<HTMLElement>('thead')?.offsetHeight ?? 36
+      /* The tallest row seen, not the first: a wrapped name makes one row taller, and the page must hold the worst case. */
+      /* Never smaller than the tallest row seen so far: with fewer rows drawn the columns re-flow (WebKit most), and a page sized from the first reading would then overhang. */
+      seen.current = Math.max(seen.current, 40, ...rowEls.slice(0, 12).map((r) => r.offsetHeight))
+      const rowH = seen.current
+      /*
+        The room the rows may use: down to the panel's bottom, less the head and less whatever the panel draws below this
+        table (the card's padding and border, a note) — `roomBelow`. The pager lives inside `wrap`, so its line is kept
+        back separately: as drawn when it is drawn, at least 34px.
+      */
+      const wrapRect = el.getBoundingClientRect()
+      const tableBottom = el.querySelector('table')?.getBoundingClientRect().bottom ?? wrapRect.bottom
+      const pagerH = Math.max(34, Math.ceil(wrapRect.bottom - tableBottom))
+      const avail = panel.getBoundingClientRect().bottom - wrapRect.top - head - roomBelow(el, panel)
+      const all = Math.max(1, Math.floor(avail / rowH))
+      const next = rows.length <= all ? undefined : Math.max(1, Math.floor((avail - pagerH) / rowH))
+      setFitSize((cur) => (cur === next ? cur : next))
+    }
+    const ro = new ResizeObserver(() => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure) })
+    ro.observe(panel)
+    ro.observe(el)
+    measure()
+
+    return () => { ro.disconnect(); cancelAnimationFrame(frame) }
+  }, [auto, rows.length, head.length])
+  const size = pageSize ?? fitSize
+  const pages = size ? Math.max(1, Math.ceil(order.length / size)) : 1
+  const current = Math.min(page, pages - 1)
+  const shown = size ? order.slice(current * size, current * size + size) : order
+  const padding = size && pages > 1 ? size - shown.length : 0
+
   const toggle = (i: number) => {
+    setPage(0)
     if (!values) return
     setSort((prev) => (prev?.column === i ? { column: i, dir: prev.dir === 'desc' ? 'asc' : 'desc' } : { column: i, dir: 'desc' }))
   }
@@ -227,16 +297,16 @@ export function MetricTable({
    * and the gate caught every one of them.
    */
   return (
-    <div className="min-w-0 max-w-full overflow-x-auto">
+    <div ref={wrap} className="min-w-0 max-w-full overflow-x-auto">
       <table className="w-full min-w-[640px] text-sm">
         <thead>
-          <tr className="border-b border-border text-text-muted">
+          <tr className="border-b border-border bg-surface-secondary/60 text-xs text-text-muted">
             {head.map((h, i) => {
               const align = i === 0 ? 'text-start' : 'text-center'
               const active = sort?.column === i
 
               return (
-                <th key={i} className={`py-2 font-semibold ${align}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                <th key={i} className={`px-2 py-2.5 font-semibold first:rounded-s-lg last:rounded-e-lg ${align}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
                   {values ? (
                     <button
                       type="button"
@@ -258,55 +328,91 @@ export function MetricTable({
           </tr>
         </thead>
         <tbody>
-          {order.map((rowIndex) => (
-            <tr key={rowIndex} className="border-b border-border last:border-0 hover:bg-surface-secondary">
-              {rows[rowIndex].map((cell, j) => {
-                const full = exact?.[rowIndex]?.[j] ?? null
-                /*
-                 * The first column LABELS its row, and a screen reader needs to be told so.
-                 *
-                 * Every hand-rolled table this primitive replaces wrote `<th scope="row">` for the
-                 * name — the platform, the campaign, the ad set — and rendering it as a plain cell
-                 * takes that away: a reader moving down a column hears the figures with nothing
-                 * saying which row they belong to. Caught by a migration whose own test asked for the
-                 * `rowheader` role and did not find one, which is the only way this surfaces — it
-                 * looks identical on screen.
-                 *
-                 * The first column only, because that is what «labels the row» means here: the
-                 * upright tables all put the name first, and a second header cell would make the row
-                 * ambiguous rather than clearer. And only when the row HAS other cells — a
-                 * single-column table has nothing for its one cell to label, and marking it a header
-                 * would announce a relationship that does not exist.
-                 */
-                const Cell = j === 0 && rows[rowIndex].length > 1 ? 'th' : 'td'
-
-                return (
-                  <Cell
-                    key={j}
-                    scope={j === 0 ? 'row' : undefined}
-                    /*
-                     * `title`, and a dotted underline so it is discoverable.
-                     *
-                     * An affordance nobody can see is not an affordance: a reader who does not know
-                     * the figure can be revealed will never hover, and the abbreviation stays the
-                     * only number they ever have. `decoration-dotted` is the quietest mark that
-                     * still reads as «there is more here».
-                     */
-                    title={full ?? undefined}
-                    className={`py-2.5 ${j === 0 ? 'text-start font-normal' : 'tnum text-center'}`
-                      + (full === null ? '' : ' cursor-help underline decoration-dotted underline-offset-4')}
-                  >
-                    {cell}
-                  </Cell>
-                )
-              })}
-            </tr>
+          {shown.map((rowIndex) => (
+            <MetricRow key={rowIndex} cells={rows[rowIndex]} exact={exact?.[rowIndex]} />
+          ))}
+          {Array.from({ length: padding }, (_, i) => (
+            <tr key={`pad-${i}`} aria-hidden className="border-b border-border last:border-0"><td colSpan={head.length} className="py-2.5">&nbsp;</td></tr>
           ))}
         </tbody>
+        {footer && (
+          <tfoot data-testid={testId ? `${testId}-total` : undefined}>
+            <tr className="border-t-2 border-border font-bold text-text-primary">
+              {footer.map((cell, j) => (j === 0
+                ? <th key={j} scope="row" className="py-2.5 text-start">{cell}</th>
+                : <td key={j} className="tnum py-2.5 text-center">{cell}</td>))}
+            </tr>
+          </tfoot>
+        )}
       </table>
+      {size !== undefined && pages > 1 && (
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-text-muted" data-testid={testId ? `${testId}-pager` : 'metric-table-pager'}>
+          <span className="tnum" dir="ltr">{`${current * size + 1}–${Math.min(order.length, (current + 1) * size)} / ${order.length}`}</span>
+          <span className="inline-flex items-center gap-1">
+            <button type="button" aria-label="Previous" disabled={current === 0} onClick={() => setPage(current - 1)} data-testid={testId ? `${testId}-prev` : undefined} className="rounded-lg border border-border px-2 py-1 font-semibold text-text-secondary disabled:opacity-40">‹</button>
+            <span className="tnum font-semibold text-text-secondary" dir="ltr">{`${current + 1} / ${pages}`}</span>
+            <button type="button" aria-label="Next" disabled={current >= pages - 1} onClick={() => setPage(current + 1)} data-testid={testId ? `${testId}-next` : undefined} className="rounded-lg border border-border px-2 py-1 font-semibold text-text-secondary disabled:opacity-40">›</button>
+          </span>
+        </div>
+      )}
     </div>
   )
 }
+
+/**
+ * One row, re-rendered only when ITS cells change — PERF-RENDER-001.
+ *
+ * A sort reorders rows; a parent re-render (a dialog opening over the report, the refresh dimming)
+ * changes none of them. Without this the table rebuilt three hundred rows of cells for either. The
+ * cells array keeps its identity between renders wherever the caller memoises its rows, which
+ * `DataMetricTable` does and the hand-built tables are asked to.
+ */
+const MetricRow = memo(function MetricRow({ cells, exact }: { cells: ReactNode[]; exact: (string | null)[] | undefined }) {
+  return (
+    <tr className="border-b border-border last:border-0 even:bg-surface-secondary/30 hover:bg-surface-secondary">
+      {cells.map((cell, j) => {
+        const full = exact?.[j] ?? null
+        /*
+         * The first column LABELS its row, and a screen reader needs to be told so.
+         *
+         * Every hand-rolled table this primitive replaces wrote `<th scope="row">` for the
+         * name — the platform, the campaign, the ad set — and rendering it as a plain cell
+         * takes that away: a reader moving down a column hears the figures with nothing
+         * saying which row they belong to. Caught by a migration whose own test asked for the
+         * `rowheader` role and did not find one, which is the only way this surfaces — it
+         * looks identical on screen.
+         *
+         * The first column only, because that is what «labels the row» means here: the
+         * upright tables all put the name first, and a second header cell would make the row
+         * ambiguous rather than clearer. And only when the row HAS other cells — a
+         * single-column table has nothing for its one cell to label, and marking it a header
+         * would announce a relationship that does not exist.
+         */
+        const Cell = j === 0 && cells.length > 1 ? 'th' : 'td'
+
+        return (
+          <Cell
+            key={j}
+            scope={j === 0 ? 'row' : undefined}
+            /*
+             * `title`, and a dotted underline so it is discoverable.
+             *
+             * An affordance nobody can see is not an affordance: a reader who does not know
+             * the figure can be revealed will never hover, and the abbreviation stays the
+             * only number they ever have. `decoration-dotted` is the quietest mark that
+             * still reads as «there is more here».
+             */
+            title={full ?? undefined}
+            className={`px-2 py-2.5 ${j === 0 ? 'text-start font-normal' : 'tnum text-center'}`
+              + (full === null ? '' : ' cursor-help underline decoration-dotted underline-offset-4')}
+          >
+            {cell}
+          </Cell>
+        )
+      })}
+    </tr>
+  )
+})
 
 /**
  * The TRANSPOSED shape — metrics down the side, subjects across the top.

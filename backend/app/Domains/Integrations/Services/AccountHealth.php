@@ -62,6 +62,16 @@ final class AccountHealth
      */
     public const INSIGHTS_NOT_AUTHORISED = 'insights_not_authorised';
 
+    /**
+     * MONEY-CURRENCY-NEVER-ASSUMED-001 — the sync ran and the account's money is WITHHELD because nobody
+     * states its currency: not the report rows, not the account, not the provider when asked.
+     *
+     * Its own word for the same reason `insights_not_authorised` has one: «فشلت آخر محاولة» sends a reader
+     * to the logs, while «العملة غير معروفة» names the one fact that is missing. Counts are flowing; the
+     * money is not shown as a number in any currency until the currency is known.
+     */
+    public const CURRENCY_UNKNOWN = 'currency_unknown';
+
     public const PENDING_FIRST_SYNC = 'pending_first_sync';
 
     public const DELAYED = 'delayed';
@@ -86,7 +96,7 @@ final class AccountHealth
     public const HEALTHY = 'healthy';
 
     /** The states that mean somebody has to do something. */
-    public const NEEDS_ATTENTION = [self::REVOKED, self::ACCESS_LOST, self::FAILED, self::DELAYED, self::INSIGHTS_NOT_AUTHORISED];
+    public const NEEDS_ATTENTION = [self::REVOKED, self::ACCESS_LOST, self::FAILED, self::DELAYED, self::INSIGHTS_NOT_AUTHORISED, self::CURRENCY_UNKNOWN];
 
     public function __construct(private readonly AccountAssignment $assignment) {}
 
@@ -123,6 +133,10 @@ final class AccountHealth
          */
         if ($account->last_sync_error_category === self::INSIGHTS_NOT_AUTHORISED) {
             return self::INSIGHTS_NOT_AUTHORISED;
+        }
+
+        if ($account->last_sync_error_category === self::CURRENCY_UNKNOWN) {
+            return self::CURRENCY_UNKNOWN;
         }
 
         if ($account->last_sync_error_category !== null) {

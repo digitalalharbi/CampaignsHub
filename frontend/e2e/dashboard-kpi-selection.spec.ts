@@ -34,7 +34,7 @@ test.describe('the dashboard KPI cards', () => {
    */
   async function openDashboard(page: Page, request: APIRequestContext) {
     await selectProject(page, await seededProject(request, 'Growth — Acquisition'))
-    await page.goto('/app/dashboard')
+    await page.goto('/app/analytics')
     await expect(page.getByTestId('kpi-picker-0')).toBeVisible({ timeout: 60000 })
   }
 
@@ -56,7 +56,7 @@ test.describe('the dashboard KPI cards', () => {
     await page.getByTestId('kpi-picker-0').click()
 
     /*
-      «roas», not «Return». The catalogue's own name for this metric is «العائد على الإنفاق» in Arabic
+      «roas», not «Return». The catalogue's own name for this metric is «معدل العائد» in Arabic
       and «Return on ad spend» in English — neither contains the term an ads operator actually types,
       which is why the search matches the metric KEY as well as its label. Typing the abbreviation is
       the case that was broken.
@@ -67,7 +67,7 @@ test.describe('the dashboard KPI cards', () => {
     await page.getByTestId('kpi-option-roas').click()
 
     /* The card now carries that metric — its name is on the control that changes it. */
-    await expect(page.getByTestId('kpi-picker-0')).toHaveAttribute('aria-label', /roas|العائد على الإنفاق|Return on ad spend/i)
+    await expect(page.getByTestId('kpi-picker-0')).toHaveAttribute('aria-label', /roas|معدل العائد|Return on ad spend/i)
   })
 
   /**
@@ -112,9 +112,9 @@ test.describe('the dashboard KPI cards', () => {
 
     await openDashboard(page, request)
 
-    const overview = page.getByTestId('dashboard-overview')
+    const overview = page.getByTestId('analytics-overview')
 
-    await expect(overview).toContainText(/Spend, results and revenue|الإنفاق والنتائج والإيرادات/i, { timeout: 60000 })
+    await expect(overview).toContainText(/Spend, platform conversions and revenue|الإنفاق وتحويلات المنصة والإيرادات/i, { timeout: 60000 })
     /* CTR appears here only as a rate-trend panel, so its presence is the claim. */
     await expect(overview).toContainText(/CTR/)
   })
@@ -132,9 +132,17 @@ test.describe('the dashboard KPI cards', () => {
 
     await openDashboard(page, request)
 
-    await page.getByTestId('dashboard-objective').selectOption('awareness_engagement')
+    /*
+     * OBJECTIVE-FILTERS-INCLUSIVE-001 — an objective no longer empties a scope: it picks the KPIs and keeps every campaign, so the
+     * cards stay. A scope that really holds nothing comes from a PLATFORM the seed never ran on.
+     */
+    await page.getByTestId('analytics-objective').locator(`[data-value="awareness_engagement"]`).click()
+    await expect(page.getByTestId('kpi-picker-0')).toBeVisible({ timeout: 30000 })
+    await expect(page.getByTestId('analytics-metrics-empty-scope')).toHaveCount(0)
 
-    await expect(page.getByTestId('dashboard-metrics-empty-scope')).toBeVisible({ timeout: 30000 })
+    await page.getByTestId('analytics-platform-linkedin').click()
+
+    await expect(page.getByTestId('analytics-metrics-empty-scope')).toBeVisible({ timeout: 30000 })
     await expect(page.getByTestId('kpi-picker-0')).toHaveCount(0)
   })
 })

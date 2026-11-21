@@ -32,13 +32,36 @@ describe('the approvals queue', () => {
   })
   afterEach(() => signOut())
 
+  /** CONS-I-APPROVAL — «ميزانية يومية 36 €» was raw: the request leads with the display currency and keeps the platform figure beside it. */
+  it('shows a budget request in the display currency after conversion, the platform figure beside it', async () => {
+    const eur = proposal({ payload: { daily_budget: 36 }, currency: 'EUR', display: { currency: 'USD', daily_budget: 39.6, current_daily_budget: 33, converted: true, source_currency: 'EUR', reason: null } })
+    vi.mocked(listProposals).mockResolvedValue({ proposals: [eur], limits: LIMITS })
+
+    renderWithProviders(<ApprovalsPage />, { locale: 'ar' })
+
+    const row = await screen.findByTestId('proposal-p1')
+    expect(row).toHaveTextContent('ميزانية يومية 39.6 $ (36 €)')
+  })
+
+  // FX-APPLY-001 — a withheld figure is «—» + ⚠ + «بانتظار سعر صرف (EUR)», never the raw «36 €» standing as the budget.
+  it('shows the figure as withheld, never the raw platform number, when no rate exists to convert it', async () => {
+    const eur = proposal({ payload: { daily_budget: 36 }, currency: 'EUR', display: { currency: 'USD', daily_budget: null, current_daily_budget: null, converted: false, source_currency: 'EUR', reason: 'no_rate' } })
+    vi.mocked(listProposals).mockResolvedValue({ proposals: [eur], limits: LIMITS })
+
+    renderWithProviders(<ApprovalsPage />, { locale: 'ar' })
+
+    const row = await screen.findByTestId('proposal-p1')
+    expect(row).toHaveTextContent('ميزانية يومية — ⚠ بانتظار سعر صرف (EUR)')
+    expect(row).not.toHaveTextContent('36 €')
+  })
+
   it('shows the request, its reason and the standing limits, and asks the server to approve', async () => {
     vi.mocked(listProposals).mockResolvedValue({ proposals: [proposal()], limits: LIMITS })
     vi.mocked(decideProposal).mockResolvedValue(proposal({ status: 'blocked', violations: ['execution_not_enabled_for_provider'] }))
 
     renderWithProviders(<ApprovalsPage />, { locale: 'en' })
 
-    expect(await screen.findByTestId('proposal-p1')).toHaveTextContent('Daily budget 110 USD')
+    expect(await screen.findByTestId('proposal-p1')).toHaveTextContent('Daily budget 110 $')
     expect(screen.getByTestId('proposal-p1')).toHaveTextContent('ROAS is twice the target')
     expect(screen.getByTestId('approvals-limits')).toHaveTextContent('capped at 20%')
     expect(screen.getByTestId('approvals-limits')).toHaveTextContent('never a delete')

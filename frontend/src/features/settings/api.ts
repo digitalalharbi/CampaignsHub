@@ -119,9 +119,60 @@ export function useTeamActions() {
   }
 }
 
+// ---- Roles & permissions (TEAM-ROLE-PRESETS-001) -------------------------------------------------
+
+export interface RoleSection {
+  key: string
+  ar: string
+  en: string
+  /** The key that makes the page appear. */
+  page: string
+  actions: { key: string; ar: string; en: string }[]
+}
+
+export interface PresetRole {
+  slug: string
+  name_ar: string
+  name_en: string
+  /** The workspace manager: every key, never editable. */
+  locked: boolean
+  /** The ticked boxes — only keys that appear on the screen. */
+  permissions: string[]
+  members: number
+}
+
+export interface RolesData {
+  sections: RoleSection[]
+  roles: PresetRole[]
+  /** What the reader may switch ON — they cannot grant what they do not hold. */
+  grantable: string[]
+}
+
+/** What a save or a reset answers: the boxes now ticked, as committed. */
+export interface SavedRole { slug: string; permissions: string[] }
+
+export function useRoles() {
+  return useQuery({ queryKey: ['settings', 'roles'], queryFn: () => getData<RolesData>('/settings/roles') })
+}
+
+export function useRoleActions() {
+  const qc = useQueryClient()
+  const inv = () => {
+    void qc.invalidateQueries({ queryKey: ['settings', 'roles'] })
+    void qc.invalidateQueries({ queryKey: ['settings', 'team'] })
+  }
+  return {
+    save: useMutation({ mutationFn: (b: { slug: string; permissions: string[] }) => putData<SavedRole>(`/settings/roles/${b.slug}`, { permissions: b.permissions }), onSuccess: inv }),
+    reset: useMutation({ mutationFn: (slug: string) => postData<SavedRole>(`/settings/roles/${slug}/reset`), onSuccess: inv }),
+  }
+}
+
 // ---- Notification preferences --------------------------------------------------------------------
 
 export type Rhythm = 'immediate' | 'daily' | 'weekly' | 'monthly'
+
+/** The least severe finding somebody wants of a type — §17.4.1. Absent means every level. */
+export type Importance = 'warning' | 'critical'
 
 /** One message this product can send, as the server describes it — MAIL-011. */
 export interface CatalogueType {
@@ -138,6 +189,12 @@ export interface CatalogueType {
    */
   digest_switch: 'daily' | 'weekly' | 'monthly' | null
   sent_by: string
+  /**
+   * NOTIFICATION-CHANNELS-001 — what the PRODUCT does with this type, from the server's one policy:
+   * whether there is a bell item at all, whether the email is a switch, a digest or a lock, and whether
+   * WhatsApp is planned for it. Optional so an older payload still renders as before.
+   */
+  channels?: { in_app: boolean; email: 'immediate' | 'digest' | 'mandatory' | 'off'; whatsapp: 'planned' | 'never' }
 }
 
 export interface NotifPrefs {
@@ -149,7 +206,11 @@ export interface NotifPrefs {
    * screen renders these directly rather than re-deriving them, so there is one resolution order in
    * the product and it lives in PHP.
    */
-  types: Record<string, { email: boolean; in_app: boolean; rhythm: Rhythm }>
+  types: Record<string, { email: boolean; in_app: boolean; rhythm: Rhythm; min_severity?: Importance | null; whatsapp?: boolean }>
+  /** Whether WhatsApp can be switched on by THIS person today. The number is only ever a hint (last four). */
+  whatsapp?: { provider_configured: boolean; opted_in: boolean; opted_out: boolean; number_hint: string | null }
+  /** What this install has. SMS is listed and unavailable until an adapter is wired. */
+  available_channels?: { key: string; available: boolean }[]
   catalogue: { key: string; types: CatalogueType[] }[]
   quiet_hours: { enabled: boolean; start: string; end: string }
   frequency: 'realtime' | 'hourly' | 'daily'
@@ -161,7 +222,22 @@ export interface NotifPrefs {
    * The API defaults it to `false`: an absent preference is not consent to put a colleague's approved
    * judgement into somebody's inbox.
    */
-  digests: { daily: boolean; weekly: boolean; monthly: boolean; alerts: boolean; recommendations: boolean }
+  digests: {
+    daily: boolean
+    weekly: boolean
+    monthly: boolean
+    alerts: boolean
+    recommendations: boolean
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — the report PER PROJECT, on each rhythm. `per_project` is the daily one; the weekly and
+     * monthly follow it until set, which the server states (it always returns all three).
+     */
+    per_project?: boolean
+    per_project_weekly?: boolean
+    per_project_monthly?: boolean
+    /** SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — the weekly «ملخص الإنفاق». Off unless chosen. */
+    spend_summary?: boolean
+  }
   available_digests: string[]
   timezone: string
   locale: 'ar' | 'en'
@@ -192,12 +268,85 @@ export type NotifPrefsInput = Partial<
 export function useNotifPrefs() {
   return useQuery({ queryKey: ['settings', 'notifications'], queryFn: () => getData<NotifPrefs>('/settings/notifications') })
 }
+export type TestChannel = 'in_app' | 'email' | 'whatsapp'
+export function useTestChannel() {
+  return useMutation({ meta: { feedback: 'none' },
+    mutationFn: (channel: TestChannel) => postData<{ channel: TestChannel; state: string }>('/settings/notifications/channel-test', { channel }),
+  })
+}
+/** NOTIFICATION-ENROLMENT-001 — one real digest, or one marked sample alert, to the signed-in person's own address only. */
+export type DigestKind = 'daily' | 'weekly' | 'monthly'
+export function useSendDigestNow() {
+  return useMutation({
+    mutationFn: (kind: DigestKind) => postData<{ kind: DigestKind; state: string; reason: string | null }>(`/settings/notifications/digest-now/${kind}`),
+  })
+}
+export function useSendSampleAlert() {
+  return useMutation({ meta: { feedback: 'none' }, mutationFn: () => postData<{ state: string }>('/settings/notifications/sample-alert') })
+}
+export function useWhatsAppOptIn() {
+  const qc = useQueryClient()
+  const refresh = () => { qc.invalidateQueries({ queryKey: ['settings', 'notifications'] }) }
+  return {
+    start: useMutation({
+      mutationFn: (b: { phone: string; consent: boolean }) =>
+        postData<{ verification_id: string; delivery_status: string; resend_after: number; dev_code: string | null }>('/settings/notifications/whatsapp/start', b),
+    }),
+    confirm: useMutation({
+      mutationFn: (b: { verification_id: string; code: string; consent: boolean }) => postData('/settings/notifications/whatsapp/confirm', b),
+      onSuccess: refresh,
+    }),
+    withdraw: useMutation({ mutationFn: () => deleteData('/settings/notifications/whatsapp'), onSuccess: refresh }),
+  }
+}
 export function useSaveNotifPrefs() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (b: NotifPrefsInput) => putData<NotifPrefs>('/settings/notifications', b),
     onSuccess: (d) => qc.setQueryData(['settings', 'notifications'], d),
   })
+}
+
+// ---- Recipients outside the platform (SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001) ------------------------
+
+export type ExternalCadence = 'daily' | 'weekly' | 'monthly'
+export interface ExternalRecipient {
+  id: string
+  email: string
+  name: string | null
+  cadence: ExternalCadence
+  active: boolean
+  project_ids: string[]
+}
+export interface ExternalRecipientInput {
+  email?: string
+  name?: string | null
+  cadence?: ExternalCadence
+  active?: boolean
+  project_ids?: string[]
+}
+
+const EXTERNAL = '/settings/notifications/external-recipients'
+
+export function useExternalRecipients() {
+  return useQuery({ queryKey: ['settings', 'external-recipients'], queryFn: () => getData<ExternalRecipient[]>(EXTERNAL) })
+}
+
+/** The projects this member may bind (open AND see the money of) — the server's answer, not the member's own digest choice. */
+export function useExternalBindableProjects() {
+  return useQuery({ queryKey: ['settings', 'external-recipients', 'projects'], queryFn: () => getData<{ id: string; name: string }[]>(`${EXTERNAL}/projects`) })
+}
+
+export function useExternalRecipientActions() {
+  const qc = useQueryClient()
+  const inv = () => qc.invalidateQueries({ queryKey: ['settings', 'external-recipients'] })
+  return {
+    add: useMutation({ mutationFn: (b: ExternalRecipientInput) => postData<ExternalRecipient>(EXTERNAL, b), onSuccess: inv }),
+    update: useMutation({ mutationFn: (b: { id: string } & ExternalRecipientInput) => putData<ExternalRecipient>(`${EXTERNAL}/${b.id}`, b), onSuccess: inv }),
+    remove: useMutation({ mutationFn: (id: string) => deleteData(`${EXTERNAL}/${id}`), onSuccess: inv }),
+    // «أرسل تجربة لي» — to the signed-in member's own address only.
+    test: useMutation({ mutationFn: (b: { cadence: ExternalCadence; project_ids?: string[] }) => postData<{ state: string; projects: number }>(`${EXTERNAL}/test`, b) }),
+  }
 }
 
 // ---- Security ------------------------------------------------------------------------------------
@@ -218,11 +367,8 @@ export function useSecurityActions() {
   const qc = useQueryClient()
   const inv = () => { qc.invalidateQueries({ queryKey: ['settings', 'security'] }) }
   return {
-    changePassword: useMutation({ mutationFn: (b: { current_password: string; password: string; password_confirmation: string }) => postData('/settings/security/password', b) }),
+    changePassword: useMutation({ meta: { feedback: 'none' }, mutationFn: (b: { current_password: string; password: string; password_confirmation: string }) => postData('/settings/security/password', b) }),
     savePolicy: useMutation({ mutationFn: (policy: SecurityPolicy) => putData('/settings/security/policy', { policy }), onSuccess: inv }),
-    mfaSetup: useMutation({ mutationFn: () => postData<{ secret: string; otpauth_uri: string }>('/settings/security/mfa/setup') }),
-    mfaConfirm: useMutation({ mutationFn: (code: string) => postData('/settings/security/mfa/confirm', { code }), onSuccess: inv }),
-    mfaDisable: useMutation({ mutationFn: (password: string) => postData('/settings/security/mfa/disable', { password }), onSuccess: inv }),
   }
 }
 
@@ -257,7 +403,7 @@ export function useClientActions() {
   const qc = useQueryClient()
   const inv = () => qc.invalidateQueries({ queryKey: ['settings', 'clients'] })
   return {
-    create: useMutation({ mutationFn: (b: { name: string; mode: string }) => postData('/client-workspaces', b), onSuccess: inv }),
+    create: useMutation({ mutationFn: (b: { name: string; mode: string }) => postData('/client-workspaces', { ...b, create_project: true }), onSuccess: inv }),
     update: useMutation({ mutationFn: (b: { id: string; name?: string; mode?: string }) => putData(`/client-workspaces/${b.id}`, b), onSuccess: inv }),
     archive: useMutation({ mutationFn: (id: string) => deleteData(`/client-workspaces/${id}`), onSuccess: inv }),
   }
@@ -358,6 +504,11 @@ export function useDeliveryLog() {
     queryFn: () => getData<DeliveryRow[]>('/settings/notifications/deliveries'),
   })
 }
+
+export const fetchMailPreviews = () => getData<{ keys: string[]; locales: string[] }>('/settings/notifications/previews')
+
+export const fetchMailPreview = (key: string, locale: string) =>
+  getData<{ key: string; locale: string; html: string }>(`/settings/notifications/previews/${key}?locale=${locale}`)
 
 export function useTeamNotifications() {
   return useQuery({

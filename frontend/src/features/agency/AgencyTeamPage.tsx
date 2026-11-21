@@ -1,19 +1,27 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plus, ShieldCheck, X } from 'lucide-react'
+import { AlertTriangle, Loader2, PanelRightOpen, Plus, ShieldCheck, UserCheck, UserCog, Users, X } from 'lucide-react'
 import {
   fetchAgencyTeam,
   grantClientScopes,
   withdrawClientScope,
+  type AgencyClientCoverage,
   type AgencyTeamMember,
 } from './api'
 import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { SearchableSelect } from '@/components/forms'
 import { toApiError } from '@/lib/api/client'
-import { PageIntro } from '@/components/ui/PageIntro'
-import { StatCard } from '@/components/ui/StatCard'
+import { FitPage } from '@/components/fit/FitPage'
+import { KpiMini, KpiStrip } from '@/components/fit/KpiMini'
+import { TabStrip } from '@/components/fit/TabStrip'
+import { Pager } from '@/components/fit/Pager'
+import { ResponsiveList, type ListColumn } from '@/components/fit/ResponsiveList'
+import { DetailPanel } from '@/components/fit/DetailPanel'
+import { useFitRows } from '@/components/fit/useFitRows'
 import { useUi } from '@/stores/ui'
+import { useAuth } from '@/stores/auth'
+import { AccessCenter } from '@/features/settings/access/AccessCenter'
 
 /**
  * `/agency/team` — who is on the team, and which clients each of them may reach (AGENCY-004).
@@ -52,10 +60,17 @@ export function membershipRoleLabel(role: string, ar: boolean): string {
   return label ? (ar ? label.ar : label.en) : role
 }
 
+type TeamTab = 'members' | 'coverage' | 'access'
+
 export function AgencyTeamPage() {
   const ar = useUi((s) => s.locale) === 'ar'
+  const canRunTeam = useAuth((s) => s.hasPermission('settings.manage'))
   const qc = useQueryClient()
   const team = useQuery({ queryKey: ['agency', 'team'], queryFn: fetchAgencyTeam })
+  const [tab, setTab] = useState<TeamTab>('members')
+  const [page, setPage] = useState(1)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const fit = useFitRows({ min: 3, max: 30, fallback: 10 })
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['agency', 'team'] })
 
@@ -63,6 +78,13 @@ export function AgencyTeamPage() {
   const withdraw = useMutation({ mutationFn: ({ id, clientId }: { id: string; clientId: string }) => withdrawClientScope(id, clientId), onSuccess: invalidate })
 
   const error = grant.isError ? toApiError(grant.error) : withdraw.isError ? toApiError(withdraw.error) : null
+
+  // Fewer rows fit after a resize, or a tab changes: stand on a page that exists.
+  const perPage = fit.rows
+  const total = tab === 'coverage' ? (team.data?.coverage?.length ?? 0) : (team.data?.members.length ?? 0)
+  const pages = Math.max(1, Math.ceil(total / perPage))
+  useEffect(() => { if (page > pages) setPage(pages) }, [page, pages])
+  useEffect(() => setPage(1), [tab])
 
   /*
    * The head survives loading and failure — it is the answer to «where am I».
@@ -72,127 +94,249 @@ export function AgencyTeamPage() {
    * That is precisely the moment the question is being asked. Caught by the cross-product walk,
    * which found `/agency/team` drawing no head at all on a run where the request had not settled.
    */
-  const head = (
-    <PageIntro
-      testid="team-intro"
+  const frame = (kpis: React.ReactNode, children: React.ReactNode, fitted = true) => (
+    <FitPage
+      testid="team-page"
+      introTestid="team-intro"
+      fit={fitted}
       title={ar ? 'الفريق والنطاقات' : 'Team & scopes'}
-      purpose={ar
-        ? 'كل عضو يصل إلى العملاء المذكورين باسمهم هنا — لا أكثر.'
-        : 'Each member reaches the clients named here — and no others.'}
-      kpis={team.data === undefined || team.data.members.length === 0 ? undefined : (
-        <>
-          <StatCard
-            label={ar ? 'الأعضاء' : 'Members'}
-            value={team.data.members.length.toLocaleString('en-US')}
-            tone="brand"
-            dot
-            testid="team-kpi-members"
-          />
-          <StatCard
-            label={ar ? 'مقيَّدون بعملاء' : 'Scoped to clients'}
-            value={team.data.members.filter((m) => m.is_client_scoped).length.toLocaleString('en-US')}
-            tone="info"
-            dot
-            testid="team-kpi-scoped"
-          />
-          {/*
-            Unrestricted is counted from `has_unrestricted_permission` and never inferred from an
-            empty scope list. That inference is the exact mistake the banner below warns about, and
-            a card making it would state the opposite of the warning beside it.
-          */}
-          <StatCard
-            label={ar ? 'وصول غير مقيّد' : 'Unrestricted'}
-            value={team.data.members.filter((m) => m.has_unrestricted_permission).length.toLocaleString('en-US')}
-            tone="neutral"
-            dot
-            testid="team-kpi-unrestricted"
-          />
-        </>
-      )}
-    />
+      info={ar ? 'كل عضو يصل إلى العملاء المذكورين باسمهم هنا — لا أكثر.' : 'Each member reaches the clients named here — and no others.'}
+      kpis={kpis}
+    >
+      {children}
+    </FitPage>
   )
 
   if (team.isLoading) {
-    return (
-      <div className="w-full">
-        {head}
-        <div className="mt-4 grid gap-3">
-          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-28" />)}
-        </div>
-      </div>
-    )
+    return frame(undefined, <div className="grid gap-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16" />)}</div>)
   }
 
   if (team.isError || !team.data) {
-    return (
-      <div className="w-full">
-        {head}
-        <div className="mt-4">
-          <ErrorState
-            error={team.error}
-            title={ar ? 'تعذّر تحميل فريق الوكالة.' : 'The agency team could not be loaded.'}
-            onRetry={() => void team.refetch()}
-          />
-        </div>
-      </div>
-    )
+    return frame(undefined, (
+      <ErrorState
+        error={team.error}
+        title={ar ? 'تعذّر تحميل فريق الوكالة.' : 'The agency team could not be loaded.'}
+        onRetry={() => void team.refetch()}
+      />
+    ))
   }
 
   const { members, can_manage: canManage, assignable_clients: assignable } = team.data
+  const coverage = team.data.coverage ?? []
+  const missing = coverage.filter((r) => !r.has_manager).length
+  const open = members.find((m) => m.id === openId) ?? null
 
-  return (
-    <div className="w-full">
-      {head}
+  const kpis = members.length === 0 ? undefined : (
+    <KpiStrip testid="team-intro-kpis" cols={3}>
+      <KpiMini label={ar ? 'الأعضاء' : 'Members'} value={members.length.toLocaleString('en-US')} tone="brand" icon={Users} testid="team-kpi-members" />
+      <KpiMini label={ar ? 'مقيَّدون بعملاء' : 'Scoped to clients'} value={members.filter((m) => m.is_client_scoped).length.toLocaleString('en-US')} tone="info" icon={UserCog} testid="team-kpi-scoped" />
+      {/*
+        Unrestricted is counted from `has_unrestricted_permission` and never inferred from an
+        empty scope list. That inference is the exact mistake the banner below warns about, and
+        a card making it would state the opposite of the warning beside it.
+      */}
+      <KpiMini label={ar ? 'وصول غير مقيّد' : 'Unrestricted'} value={members.filter((m) => m.has_unrestricted_permission).length.toLocaleString('en-US')} tone="neutral" icon={ShieldCheck} testid="team-kpi-unrestricted" />
+    </KpiStrip>
+  )
 
-      <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-border bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
-        <ShieldCheck size={17} className="mt-0.5 shrink-0 text-info" aria-hidden />
-        <span>
-          {ar
-            ? 'عدم وجود عملاء محدّدين لا يعني الوصول إلى الجميع. الوصول غير المقيّد صلاحية صريحة يحملها العضو أو لا يحملها.'
-            : 'No named clients does not mean access to all of them. Unrestricted access is an explicit permission a member either holds or does not.'}
-        </span>
+  const tabs = [
+    { key: 'members', label: ar ? 'الأعضاء' : 'Members', icon: Users, count: members.length },
+    ...(coverage.length > 0 ? [{ key: 'coverage', label: ar ? 'متابعة العملاء' : 'Client coverage', icon: UserCheck, count: missing > 0 ? `⚠ ${missing}` : coverage.length }] : []),
+    ...(canRunTeam ? [{ key: 'access', label: ar ? 'الصلاحيات' : 'Permissions', icon: ShieldCheck }] : []),
+  ]
+  const active = tabs.some((t) => t.key === tab) ? tab : 'members'
+  const from = (page - 1) * perPage
+
+  return frame(kpis, (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <TabStrip testid="team-tabs" label={ar ? 'أقسام الفريق' : 'Team sections'} items={tabs} active={active} onChange={(k) => setTab(k as TeamTab)} />
+        {/* One line, always visible: the rule the whole page turns on is a safety statement, not decoration. */}
+        <p className="flex min-w-0 items-center gap-1.5 text-sm text-text-secondary">
+          <ShieldCheck size={16} className="shrink-0 text-info" aria-hidden />
+          <span>
+            {ar
+              ? 'عدم وجود عملاء محدّدين لا يعني الوصول إلى الجميع. الوصول غير المقيّد صلاحية صريحة يحملها العضو أو لا يحملها.'
+              : 'No named clients does not mean access to all of them. Unrestricted access is an explicit permission a member either holds or does not.'}
+          </span>
+        </p>
       </div>
 
       {!canManage && (
-        <p className="mb-4 rounded-xl border border-border px-4 py-3 text-sm text-text-muted">
+        <p className="mt-2 rounded-xl border border-border px-3 py-2 text-sm text-text-muted">
           {ar ? 'لديك صلاحية العرض فقط.' : 'You have view-only access here.'}
         </p>
       )}
 
       {error && (
-        <p role="alert" className="mb-4 rounded-xl bg-[var(--negative-background)] px-4 py-3 text-sm text-danger">
+        <p role="alert" className="mt-2 rounded-xl bg-[var(--negative-background)] px-3 py-2 text-sm text-danger">
           {error.message}
         </p>
       )}
 
-      {members.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-text-muted">
-          {ar ? 'لا أعضاء في بوابة الوكالة بعد.' : 'No members in the agency portal yet.'}
-        </p>
+      {active === 'access' ? (
+        /*
+          ACCESS-CENTER-001 — invitations, categories and per-person areas, for whoever runs the team. It is a
+          long form of its own, so this tab lets the page flow instead of locking it (see `fit` above).
+        */
+        <div className="mt-3"><AccessCenter /></div>
       ) : (
-        <ul data-testid="agency-team" className="grid gap-3">
-          {members.map((m) => (
-            <MemberRow
-              key={m.id}
-              member={m}
+        <div ref={fit.ref} className="mt-2 flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1">
+            {active === 'coverage' ? (
+              <CoverageList rows={sortCoverage(coverage).slice(from, from + perPage)} ar={ar} />
+            ) : members.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-text-muted">
+                {ar ? 'لا أعضاء في بوابة الوكالة بعد.' : 'No members in the agency portal yet.'}
+              </p>
+            ) : (
+              <MembersList rows={members.slice(from, from + perPage)} ar={ar} onOpen={(m) => setOpenId(m.id)} />
+            )}
+          </div>
+          <Pager testid="team-pager" ar={ar} page={page} pages={pages} total={total} onPage={setPage} />
+        </div>
+      )}
+
+      <DetailPanel
+        open={open !== null}
+        onClose={() => setOpenId(null)}
+        title={open?.user.name ?? open?.user.email ?? '—'}
+        closeLabel={ar ? 'إغلاق' : 'Close'}
+        testid="team-member-detail"
+      >
+        {open && (
+          <>
+            <p className="mb-3 truncate text-xs text-text-muted" dir="ltr">{open.user.email}</p>
+            <MemberAccess
+              member={open}
               ar={ar}
               canManage={canManage}
               assignable={assignable}
               busy={
-                (grant.isPending && grant.variables?.id === m.id) ||
-                (withdraw.isPending && withdraw.variables?.id === m.id)
+                (grant.isPending && grant.variables?.id === open.id) ||
+                (withdraw.isPending && withdraw.variables?.id === open.id)
               }
-              onGrant={(clientId) => grant.mutate({ id: m.id, clientIds: [clientId] })}
-              onWithdraw={(clientId) => withdraw.mutate({ id: m.id, clientId })}
+              onGrant={(clientId) => grant.mutate({ id: open.id, clientIds: [clientId] })}
+              onWithdraw={(clientId) => withdraw.mutate({ id: open.id, clientId })}
             />
-          ))}
-        </ul>
-      )}
+          </>
+        )}
+      </DetailPanel>
+    </>
+  ), active !== 'access')
+}
+
+/** What a member reaches, in one chip — the full list and its controls are in the member's panel. */
+function AccessChip({ member, ar }: { member: AgencyTeamMember; ar: boolean }) {
+  if (member.has_unrestricted_permission) {
+    return (
+      <span data-testid="scope-unrestricted" className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary-soft px-2.5 py-1 text-xs font-semibold text-brand-700">
+        <ShieldCheck size={13} aria-hidden />
+        {ar ? 'وصول غير مقيّد (صلاحية صريحة)' : 'Unrestricted (explicit permission)'}
+      </span>
+    )
+  }
+  if (member.clients.length === 0) {
+    return <span data-testid="scope-none" className="text-xs text-text-muted">{ar ? 'لا يصل إلى أي عميل' : 'Reaches no clients'}</span>
+  }
+  const names = member.clients.map((c) => c.name ?? (ar ? 'عميل خارج نطاقك' : 'A client outside your access')).join('، ')
+
+  return (
+    <span title={names} className="inline-flex items-center gap-1.5 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-text-primary">
+      <Users size={13} aria-hidden />
+      <span className="tnum">{member.clients.length}</span>
+      <span className="truncate">{names}</span>
+    </span>
+  )
+}
+
+function MembersList({ rows, ar, onOpen }: { rows: AgencyTeamMember[]; ar: boolean; onOpen: (m: AgencyTeamMember) => void }) {
+  const columns: ListColumn<AgencyTeamMember>[] = [
+    {
+      key: 'member',
+      header: ar ? 'العضو' : 'Member',
+      cell: (m) => (
+        <div data-testid={`team-member-${m.user.email ?? m.id}`} className="min-w-0 leading-tight">
+          <p className="truncate font-heading text-sm font-bold text-text-primary">{m.user.name ?? '—'}</p>
+          <p className="truncate text-xs text-text-muted" dir="ltr">{m.user.email}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'role',
+      header: ar ? 'الدور' : 'Role',
+      width: '18%',
+      cell: (m) => (
+        /*
+          The role as a name, not as the column's value.
+
+          This printed `member.role` raw, so an otherwise Arabic page showed «member» three times
+          and «account_manager» once — identifiers where every neighbouring word is a sentence.
+
+          A lookup against the `roles` table would not have helped: a membership stores
+          `account_manager` while the Access role carrying that meaning is slugged
+          `account-manager`, so the two do not meet. These five are the whole vocabulary written
+          anywhere in the product, and none is customer-named — nothing validates or accepts a
+          custom one — so they can be written properly. An unknown value still shows as itself, on
+          purpose: a role the product does not recognise is worth seeing rather than hiding.
+        */
+        <span data-testid={`team-member-role-${m.id}`} className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-text-secondary">
+          {membershipRoleLabel(m.role, ar)}
+        </span>
+      ),
+    },
+    { key: 'access', header: ar ? 'الوصول إلى العملاء' : 'Client access', width: '42%', cell: (m) => <AccessChip member={m} ar={ar} /> },
+    {
+      key: 'open',
+      header: '',
+      width: '8%',
+      align: 'end',
+      cell: (m) => (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onOpen(m) }}
+          aria-label={`${ar ? 'الوصول' : 'Access'}: ${m.user.name ?? m.user.email ?? ''}`}
+          title={ar ? 'الوصول' : 'Access'}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover hover:text-text-primary"
+        >
+          <PanelRightOpen size={17} aria-hidden />
+        </button>
+      ),
+    },
+  ]
+
+  return (
+    <div data-testid="agency-team">
+      <ResponsiveList
+        testid="team-list"
+        rows={rows}
+        rowKey={(m) => m.id}
+        columns={columns}
+        onOpen={onOpen}
+        renderCard={(m) => (
+          <button
+            type="button"
+            onClick={() => onOpen(m)}
+            data-testid={`team-member-${m.user.email ?? m.id}`}
+            aria-label={`${ar ? 'الوصول' : 'Access'}: ${m.user.name ?? m.user.email ?? ''}`}
+            className="flex w-full min-w-0 flex-col gap-2 rounded-xl border border-border bg-surface p-3 text-start"
+          >
+            <span className="flex items-start justify-between gap-2">
+              <span className="min-w-0">
+                <span className="block truncate font-heading text-sm font-bold text-text-primary">{m.user.name ?? '—'}</span>
+                <span className="block truncate text-xs text-text-muted" dir="ltr">{m.user.email}</span>
+              </span>
+              <span data-testid={`team-member-role-${m.id}`} className="shrink-0 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-semibold text-text-secondary">{membershipRoleLabel(m.role, ar)}</span>
+            </span>
+            <AccessChip member={m} ar={ar} />
+          </button>
+        )}
+      />
     </div>
   )
 }
 
-function MemberRow({
+function MemberAccess({
   member,
   ar,
   canManage,
@@ -218,51 +362,17 @@ function MemberRow({
     .map((c) => ({ value: c.id, label: c.name }))
 
   return (
-    <li
-      data-testid={`team-member-${member.user.email ?? member.id}`}
-      /* Identity beside access, not above it: at 1366×768 four stacked cards of 165–213 px showed
-         two and a half members. The left column holds who they are; the right holds what they
-         reach. Below `sm` the two stack again. */
-      className="rounded-lg border border-border bg-surface p-4 sm:grid sm:grid-cols-[minmax(14rem,18rem)_1fr] sm:gap-6"
-    >
-      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2 sm:flex-col sm:justify-start">
-        <div className="min-w-0">
-          <p className="font-heading text-[15px] font-bold text-text-primary">{member.user.name ?? '—'}</p>
-          <p className="mt-0.5 truncate text-[13px] text-text-muted" dir="ltr">{member.user.email}</p>
-        </div>
-        {/*
-          The role as a name, not as the column's value.
-
-          This printed `member.role` raw, so an otherwise Arabic page showed «member» three times
-          and «account_manager» once — identifiers where every neighbouring word is a sentence.
-
-          A lookup against the `roles` table would not have helped: a membership stores
-          `account_manager` while the Access role carrying that meaning is slugged
-          `account-manager`, so the two do not meet. These five are the whole vocabulary written
-          anywhere in the product, and none is customer-named — nothing validates or accepts a
-          custom one — so they can be written properly. An unknown value still shows as itself, on
-          purpose: a role the product does not recognise is worth seeing rather than hiding.
-        */}
-        <span
-          data-testid={`team-member-role-${member.id}`}
-          className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary"
-        >
-          {membershipRoleLabel(member.role, ar)}
-        </span>
-      </div>
-
-      <div className="mt-3 min-w-0 sm:mt-0">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">
+    <div className="min-w-0">
+        <p className="text-xs font-semibold text-text-muted">
           {ar ? 'الوصول إلى العملاء' : 'Client access'}
         </p>
-
         {member.has_unrestricted_permission ? (
-          <p data-testid="scope-unrestricted" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-primary-soft px-3 py-1.5 text-[13px] font-semibold text-brand-700">
+          <p data-testid="scope-unrestricted" className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-primary-soft px-3 py-1.5 text-xs font-semibold text-brand-700">
             <ShieldCheck size={14} aria-hidden />
             {ar ? 'وصول غير مقيّد (صلاحية صريحة)' : 'Unrestricted (explicit permission)'}
           </p>
         ) : member.clients.length === 0 ? (
-          <p data-testid="scope-none" className="mt-2 text-[13px] text-text-muted">
+          <p data-testid="scope-none" className="mt-2 text-xs text-text-muted">
             {ar
               ? 'لا يصل إلى أي عميل. أضف عميلًا ليبدأ العمل.'
               : 'Reaches no clients. Add one to give them work.'}
@@ -271,7 +381,7 @@ function MemberRow({
           <ul className="mt-2 flex flex-wrap gap-2">
             {member.clients.map((c) => (
               <li key={c.id}>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-secondary py-1.5 ps-3 pe-1.5 text-[13px] font-semibold text-text-primary">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-secondary py-1.5 ps-3 pe-1.5 text-xs font-semibold text-text-primary">
                   {/* A client outside the reader's own access is counted but not named. */}
                   {c.name ?? (ar ? 'عميل خارج نطاقك' : 'A client outside your access')}
                   {canManage && !member.is_self && c.name !== null && (
@@ -292,7 +402,7 @@ function MemberRow({
         )}
 
         {member.is_self && !member.has_unrestricted_permission && (
-          <p data-testid="scope-self" className="mt-3 text-[12px] text-text-muted">
+          <p data-testid="scope-self" className="mt-3 text-xs text-text-muted">
             {ar
               ? 'هذه عضويتك. لا يمكنك توسيع وصولك بنفسك — اطلب ذلك من زميل يملك صلاحية أوسع.'
               : 'This is your own membership. You cannot widen your own access — ask a colleague with wider access.'}
@@ -338,7 +448,64 @@ function MemberRow({
             )}
           </div>
         )}
-      </div>
-    </li>
+    </div>
+  )
+}
+
+function sortCoverage(rows: AgencyClientCoverage[]): AgencyClientCoverage[] {
+  // Clients without a manager first, because they are the ones to act on.
+  return [...rows].sort((a, b) => Number(a.has_manager) - Number(b.has_manager))
+}
+
+/**
+ * TEAM-CLIENT-COVERAGE-001 — «من يتابع كل عميل، والعميل بلا مدير مشروع يظهر بعلامة» (Owner,
+ * MASTER_FINAL Appendix A task 7). Clients without a manager first, because they are the ones to act on.
+ */
+function CoverageList({ rows, ar }: { rows: AgencyClientCoverage[]; ar: boolean }) {
+  const people = (c: AgencyClientCoverage) => [...new Set([...c.managers, ...c.followers])]
+  const columns: ListColumn<AgencyClientCoverage>[] = [
+    {
+      key: 'client',
+      header: ar ? 'العميل' : 'Client',
+      width: '34%',
+      cell: (c) => <span data-testid={`coverage-${c.id}`} title={c.name} className="block truncate font-semibold text-text-primary">{c.name}</span>,
+    },
+    {
+      key: 'manager',
+      header: ar ? 'مدير المشروع' : 'Project manager',
+      width: '22%',
+      cell: (c) => c.has_manager
+        ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700"><UserCheck size={14} aria-hidden />{ar ? 'موجود' : 'Assigned'}</span>
+        : (
+          <span data-testid={`coverage-flag-${c.id}`} title={ar ? 'لا يوجد مدير مشروع لهذا العميل' : 'No project manager for this client'} className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning">
+            <AlertTriangle size={12} aria-hidden /> {ar ? 'بدون مدير' : 'No manager'}
+          </span>
+        ),
+    },
+    {
+      key: 'people',
+      header: ar ? 'من يتابعه' : 'Followed by',
+      cell: (c) => <span title={people(c).join('، ')} className="block truncate text-xs text-text-secondary">{people(c).length === 0 ? (ar ? 'لا أحد' : 'Nobody') : people(c).join('، ')}</span>,
+    },
+  ]
+
+  return (
+    <section data-testid="team-coverage" aria-label={ar ? 'متابعة العملاء' : 'Client coverage'}>
+      <ResponsiveList
+        testid="coverage-list"
+        rows={rows}
+        rowKey={(c) => c.id}
+        columns={columns}
+        renderCard={(c) => (
+          <div data-testid={`coverage-card-${c.id}`} className={`min-w-0 rounded-xl border px-3 py-2.5 ${c.has_manager ? 'border-border bg-surface' : 'border-warning/50 bg-warning/5'}`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-sm font-semibold text-text-primary">{c.name}</span>
+              {!c.has_manager && <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-warning"><AlertTriangle size={12} aria-hidden /> {ar ? 'بدون مدير' : 'No manager'}</span>}
+            </div>
+            <p className="mt-1 truncate text-xs text-text-secondary">{people(c).length === 0 ? (ar ? 'لا أحد' : 'Nobody') : people(c).join('، ')}</p>
+          </div>
+        )}
+      />
+    </section>
   )
 }

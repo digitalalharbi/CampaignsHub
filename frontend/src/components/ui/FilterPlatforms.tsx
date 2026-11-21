@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react'
-import { platformColor } from '@/features/analytics/components'
+import { platformColor } from '@/features/analytics/platformColor'
 import { PlatformMark, hasPlatformMark } from '@/components/brand/PlatformMark'
 
 /**

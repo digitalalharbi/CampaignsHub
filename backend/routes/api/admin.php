@@ -2,15 +2,22 @@
 
 declare(strict_types=1);
 
+use App\Domains\Integrations\Http\Controllers\PlatformWebhookEventController;
 use App\Domains\Integrations\Review\ReviewChecklistController;
 use App\Domains\Legal\Http\Controllers\LegalInboxController;
 use App\Domains\Legal\Http\Controllers\PlatformSettingsController;
 use App\Domains\Metrics\Http\Controllers\PlatformCurrencyRateController;
+use App\Domains\Notifications\Engine\Http\Controllers\AdminNotificationsController;
 use App\Domains\Ops\Http\Controllers\ScheduledWorkController;
 use App\Domains\Platform\Http\Controllers\MetaCandidateAppController;
+use App\Domains\Platform\Http\Controllers\MetaDiagnosisController;
 use App\Domains\Platform\Http\Controllers\MetaSaasAppController;
 use App\Domains\Platform\Http\Controllers\OperationalStatusController;
 use App\Domains\Platform\Http\Controllers\PlatformAccessController;
+use App\Domains\Platform\Http\Controllers\PlatformAddonController;
+use App\Domains\Platform\Http\Controllers\PlatformAiKeyController;
+use App\Domains\Platform\Http\Controllers\PlatformAlertController;
+use App\Domains\Platform\Http\Controllers\PlatformAuthCodeSwitchesController;
 use App\Domains\Platform\Http\Controllers\PlatformBillingController;
 use App\Domains\Platform\Http\Controllers\PlatformCapabilityController;
 use App\Domains\Platform\Http\Controllers\PlatformEmailController;
@@ -19,14 +26,21 @@ use App\Domains\Platform\Http\Controllers\PlatformLimitController;
 use App\Domains\Platform\Http\Controllers\PlatformMembershipController;
 use App\Domains\Platform\Http\Controllers\PlatformOverviewController;
 use App\Domains\Platform\Http\Controllers\PlatformPaymentSettingsController;
+use App\Domains\Platform\Http\Controllers\PlatformPlanMigrationController;
 use App\Domains\Platform\Http\Controllers\PlatformProviderSettingsController;
 use App\Domains\Platform\Http\Controllers\PlatformRegistrationController;
+use App\Domains\Platform\Http\Controllers\PlatformRegistrationPolicyController;
 use App\Domains\Platform\Http\Controllers\PlatformReviewAccountController;
+use App\Domains\Platform\Http\Controllers\PlatformServiceRequestController;
 use App\Domains\Platform\Http\Controllers\PlatformSupportSessionController;
+use App\Domains\Platform\Http\Controllers\PlatformTaxController;
 use App\Domains\Platform\Http\Controllers\PlatformTenantController;
+use App\Domains\Platform\Http\Controllers\PlatformTenantSubscriptionController;
+use App\Domains\Platform\Http\Controllers\PlatformUsageController;
 use App\Domains\Platform\Http\Controllers\PlatformUserAccessController;
 use App\Domains\Platform\Http\Controllers\PlatformWorkspaceProvisioningController;
 use App\Domains\Platform\Http\Controllers\PortalConflictController;
+use App\Domains\Platform\Http\Controllers\SyncDeadLetterController;
 use App\Domains\Settings\Http\Controllers\PublicPageSettingsController;
 use App\Http\Controllers\Dev\DevStatusController;
 use Illuminate\Support\Facades\Route;
@@ -50,6 +64,34 @@ Route::middleware(['auth:sanctum', 'platform'])
     ->group(function (): void {
         Route::get('/overview', PlatformOverviewController::class)->name('overview');
 
+        // NOTIF-V2-SETTINGS-UI-001 — the notifications console: event catalog, plan features, platform texts, statistics (counts only).
+        Route::get('/notifications-v2', [AdminNotificationsController::class, 'show'])->name('notifications-v2.show');
+        Route::get('/notifications-v2/stats', [AdminNotificationsController::class, 'stats'])->name('notifications-v2.stats');
+        Route::put('/notifications-v2/events/{eventKey}', [AdminNotificationsController::class, 'updateEvent'])->middleware('throttle:60,1')->name('notifications-v2.events.update');
+        Route::put('/notifications-v2/plan-features', [AdminNotificationsController::class, 'upsertPlanFeature'])->middleware('throttle:60,1')->name('notifications-v2.plan-features.upsert');
+        Route::delete('/notifications-v2/plan-features/{id}', [AdminNotificationsController::class, 'deletePlanFeature'])->whereUuid('id')->middleware('throttle:60,1')->name('notifications-v2.plan-features.delete');
+        Route::put('/notifications-v2/texts/{key}', [AdminNotificationsController::class, 'updateText'])->where('key', '[a-z_.]+')->middleware('throttle:60,1')->name('notifications-v2.texts.update');
+
+        /*
+         * PLATFORM-SERVICE-INBOX-001 — «الطلبات»: services ordered from the official CampaignsHub site.
+         *
+         * Platform-owned rows only (`owner_scope = platform`, no tenant). A subscriber's own requests are not
+         * reachable here under any filter, and these are not reachable from any tenant route.
+         */
+        Route::get('/service-requests', [PlatformServiceRequestController::class, 'index'])->name('service-requests.index');
+        Route::get('/service-requests/{id}', [PlatformServiceRequestController::class, 'show'])->name('service-requests.show');
+        Route::get('/service-requests/{id}/files/{file}', [PlatformServiceRequestController::class, 'file'])
+            ->whereNumber('file')->middleware('throttle:60,1')->name('service-requests.file');
+        Route::patch('/service-requests/{id}', [PlatformServiceRequestController::class, 'update'])
+            ->middleware('throttle:60,1')->name('service-requests.update');
+        // PLATFORM-INBOX-ATTENTION-001 — answer the visitor: a client-visible reply on their tracking page, and an email.
+        Route::post('/service-requests/{id}/reply', [PlatformServiceRequestController::class, 'reply'])
+            ->middleware('throttle:20,1')->name('service-requests.reply');
+        // PLATFORM-PAYMENT-ALERTS-001 — customers stuck at payment or sign-up, for the platform owner only.
+        Route::get('/platform-alerts', [PlatformAlertController::class, 'index'])->name('platform-alerts.index');
+        Route::patch('/platform-alerts/{id}', [PlatformAlertController::class, 'update'])
+            ->whereUuid('id')->middleware('throttle:60,1')->name('platform-alerts.update');
+
         /*
          * MAIL-014 — what this installation's mail has actually done.
          *
@@ -58,8 +100,8 @@ Route::middleware(['auth:sanctum', 'platform'])
          * to mail thousands of people by mis-click.
          */
         Route::get('/email/deliveries', [PlatformEmailController::class, 'index'])->name('email.deliveries');
-        // EMAIL-SETTINGS-PAGE-001 — one message to the signed-in operator, never to an address in the request.
-        Route::post('/email/test', [PlatformEmailController::class, 'test'])->middleware('throttle:3,1')->name('email.test');
+        // EMAIL-TEST-SEND-001 — one message to the signed-in admin's proven address, never to an address in the request.
+        Route::post('/email/test', [PlatformEmailController::class, 'test'])->middleware('throttle:mail-test-send')->name('email.test');
         Route::get('/email/previews', [PlatformEmailController::class, 'previews'])->name('email.previews');
         Route::get('/email/previews/{key}', [PlatformEmailController::class, 'preview'])->name('email.preview');
 
@@ -71,6 +113,11 @@ Route::middleware(['auth:sanctum', 'platform'])
          * would reintroduce exactly what it removes.
          */
         Route::get('/scheduled-work', ScheduledWorkController::class)->name('scheduled-work');
+
+        // INTEG-SYNC-ENGINE-001 — metrics syncs that exhausted their retries. API only for now; a re-drive re-proves the binding.
+        Route::get('/sync-dead-letters', [SyncDeadLetterController::class, 'index'])->middleware('throttle:60,1')->name('sync-dead-letters.index');
+        Route::post('/sync-dead-letters/{run}/redrive', [SyncDeadLetterController::class, 'redrive'])
+            ->whereUuid('run')->middleware('throttle:30,1')->name('sync-dead-letters.redrive');
 
         // SALLA-REVIEW-001 — one-click revoke and extend for the app-store review workspace.
         Route::get('/review-accounts', [PlatformReviewAccountController::class, 'index'])->name('review-accounts.index');
@@ -98,6 +145,11 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::post('/users/{user}/access', [PlatformUserAccessController::class, 'act'])->middleware('throttle:20,1')->name('users.access');
         // SUPERADMIN-MEMBERS-001 — one person's role and membership in one workspace.
         Route::post('/tenants/{tenant}/members/{user}', [PlatformMembershipController::class, 'act'])->middleware('throttle:20,1')->name('tenants.members');
+        // ADMIN-FULL-CONTROL-001 — add a person with a role; a fresh link for an invitation that went nowhere; the subscription with no money moving.
+        Route::post('/tenants/{tenant}/members', [PlatformMembershipController::class, 'add'])->middleware('throttle:20,1')->name('tenants.members.add');
+        Route::post('/tenants/{tenant}/invitations/{invitation}/reissue', [PlatformMembershipController::class, 'reissue'])->middleware('throttle:20,1')->name('tenants.invitations.reissue');
+        Route::get('/tenants/{tenant}/subscription', [PlatformTenantSubscriptionController::class, 'show'])->name('tenants.subscription');
+        Route::post('/tenants/{tenant}/subscription', [PlatformTenantSubscriptionController::class, 'act'])->middleware('throttle:30,1')->name('tenants.subscription.act');
 
         /*
          * GRANT-001 — one account's administrative exceptions.
@@ -109,6 +161,30 @@ Route::middleware(['auth:sanctum', 'platform'])
         // SUPERADMIN-LIMITS-001 — one workspace's own plan-limit caps.
         Route::get('/tenants/{tenant}/limits', [PlatformLimitController::class, 'index'])->name('tenants.limits');
         Route::put('/tenants/{tenant}/limits/{metric}', [PlatformLimitController::class, 'set'])->middleware('throttle:30,1')->name('tenants.limits.set');
+        // PRICING-ADDONS-001 — the add-ons catalogue, and each workspace's add-ons (grant, approve, decline, cancel).
+        Route::get('/addons', [PlatformAddonController::class, 'index'])->name('addons.index');
+        Route::patch('/addons/{addon}', [PlatformAddonController::class, 'update'])->middleware('throttle:30,1')->name('addons.update');
+        Route::get('/tenants/{tenant}/addons', [PlatformAddonController::class, 'tenant'])->name('tenants.addons');
+        Route::post('/tenants/{tenant}/addons', [PlatformAddonController::class, 'grant'])->middleware('throttle:30,1')->name('tenants.addons.grant');
+        Route::patch('/tenant-addons/{id}', [PlatformAddonController::class, 'decide'])->middleware('throttle:30,1')->name('tenant-addons.decide');
+
+        // PRICING-VAT-002 — VAT treatment and price basis per catalogue edition (new sales only), and the read-only invoice review.
+        Route::get('/tax', [PlatformTaxController::class, 'index'])->name('tax.index');
+        Route::patch('/tax/editions/{edition}', [PlatformTaxController::class, 'update'])->middleware('throttle:30,1')->name('tax.editions.update');
+        Route::get('/tax/invoice-review', [PlatformTaxController::class, 'review'])->name('tax.review');
+
+        // PRICING-USAGE-CREDITS-001 — meters (actual unit cost, credit charging, allowances per plan) and each workspace's credits.
+        Route::get('/usage/meters', [PlatformUsageController::class, 'meters'])->name('usage.meters');
+        Route::patch('/usage/meters/{code}', [PlatformUsageController::class, 'update'])->middleware('throttle:30,1')->name('usage.meters.update');
+        Route::get('/tenants/{tenant}/credits', [PlatformUsageController::class, 'tenant'])->name('tenants.credits');
+        Route::post('/tenants/{tenant}/credits', [PlatformUsageController::class, 'adjust'])->middleware('throttle:30,1')->name('tenants.credits.adjust');
+
+        // PRICING-MIGRATION-001 — launch-catalogue subscribers onto the current catalogue: previewed, typed, audited, at period end.
+        Route::get('/plan-migration', [PlatformPlanMigrationController::class, 'index'])->name('plan-migration.index');
+        Route::post('/plan-migration/bulk', [PlatformPlanMigrationController::class, 'bulk'])->middleware('throttle:10,1')->name('plan-migration.bulk');
+        Route::get('/tenants/{tenant}/plan-migration', [PlatformPlanMigrationController::class, 'show'])->name('tenants.plan-migration.show');
+        Route::post('/tenants/{tenant}/plan-migration', [PlatformPlanMigrationController::class, 'store'])->middleware('throttle:30,1')->name('tenants.plan-migration.store');
+        Route::delete('/tenants/{tenant}/plan-migration', [PlatformPlanMigrationController::class, 'destroy'])->middleware('throttle:30,1')->name('tenants.plan-migration.destroy');
         Route::get('/tenants/{tenant}/grants', [PlatformGrantController::class, 'index'])->name('grants.index');
         Route::post('/tenants/{tenant}/grants', [PlatformGrantController::class, 'store'])
             ->middleware('throttle:30,1')->name('grants.store');
@@ -127,6 +203,30 @@ Route::middleware(['auth:sanctum', 'platform'])
             ->name('registrations.show');
         Route::patch('/registrations/{registration}', [PlatformRegistrationController::class, 'updateTerms'])
             ->name('registrations.terms');
+        Route::post('/registrations/{registration}/reevaluate-verification', [PlatformRegistrationController::class, 'reevaluateVerification'])
+            ->middleware('throttle:30,1')->name('registrations.reevaluate-verification');
+        // PLATFORM-INBOX-ATTENTION-001 — a fresh challenge for an applicant stuck at a verification step. It sends; it
+        // never verifies, and the code is not shown to the administrator.
+        Route::post('/registrations/{registration}/resend-verification', [PlatformRegistrationController::class, 'resendVerification'])
+            ->middleware('throttle:10,1')->name('registrations.resend-verification');
+        // SIGNUP-VERIFY-POLICY-001 — the platform's two verification switches, limits and cost picture.
+        Route::get('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'show'])
+            ->name('registration-verification-policy.show');
+        Route::put('/registration-verification-policy', [PlatformRegistrationPolicyController::class, 'update'])
+            ->middleware('throttle:30,1')->name('registration-verification-policy.update');
+        // AUTH-CODE-SWITCHES-001 — one-time codes at sign-in and recovery. Password, Google and the reset link are not on it.
+        Route::get('/auth-code-switches', [PlatformAuthCodeSwitchesController::class, 'show'])->name('auth-code-switches.show');
+        Route::put('/auth-code-switches', [PlatformAuthCodeSwitchesController::class, 'update'])
+            ->middleware('throttle:30,1')->name('auth-code-switches.update');
+        // SIGNUP-DECISION-001 — one form, one service: commercial treatment and access scope, previewed before they are taken.
+        Route::get('/tenants/{tenant}/decision-targets', [PlatformRegistrationController::class, 'decisionTargets'])
+            ->name('tenants.decision-targets');
+        Route::post('/registrations/{registration}/decision/preview', [PlatformRegistrationController::class, 'previewDecision'])
+            ->middleware('throttle:60,1')->name('registrations.decision.preview');
+        Route::post('/registrations/{registration}/decision', [PlatformRegistrationController::class, 'decide'])
+            ->middleware('throttle:30,1')->name('registrations.decision');
+        Route::post('/registrations/{registration}/decisions/{decision}/verify-settlement', [PlatformRegistrationController::class, 'verifySettlement'])
+            ->whereUuid('decision')->middleware('throttle:30,1')->name('registrations.decision.verify-settlement');
         Route::post('/registrations/{registration}/approve', [PlatformRegistrationController::class, 'approve'])
             ->name('registrations.approve');
         Route::post('/registrations/{registration}/reject', [PlatformRegistrationController::class, 'reject'])
@@ -148,6 +248,13 @@ Route::middleware(['auth:sanctum', 'platform'])
          * Since PAY-GATEWAY-CONSOLE-001 (Owner decision, 2026-10-31) keys are stored here, encrypted and write-only;
          * nothing returns a secret. Saving keys, enabling and choosing the primary are separate audited acts.
          */
+        // AI-PLATFORM-KEY-001 — the platform's AI key (write-only, encrypted) and the per-person monthly allowance by plan.
+        Route::prefix('/settings/ai')->name('ai.')->group(function (): void {
+            Route::get('/', [PlatformAiKeyController::class, 'index'])->name('index');
+            Route::put('/allowance', [PlatformAiKeyController::class, 'allowance'])->middleware('throttle:20,1')->name('allowance');
+            Route::put('/{provider}', [PlatformAiKeyController::class, 'save'])->middleware('throttle:20,1')->name('save');
+        });
+
         Route::prefix('/settings/integrations/payments')->name('payments.')->group(function (): void {
             Route::get('/', [PlatformPaymentSettingsController::class, 'index'])->name('index');
             // PAY-GATEWAY-CONSOLE-001 — keys, activation and the primary gateway, each its own audited act.
@@ -232,12 +339,21 @@ Route::middleware(['auth:sanctum', 'platform'])
         Route::get('/fx/rates', [PlatformCurrencyRateController::class, 'index'])->name('fx.rates.index');
         Route::post('/fx/rates', [PlatformCurrencyRateController::class, 'store'])
             ->middleware('throttle:30,1')->name('fx.rates.store');
+        // FX-ENGINE-001 — history, preview, recompute (bounded, dry run first), display currency and the free auto source.
+        Route::get('/fx/rates/history', [PlatformCurrencyRateController::class, 'history'])->name('fx.rates.history');
+        Route::post('/fx/preview', [PlatformCurrencyRateController::class, 'preview'])->middleware('throttle:120,1')->name('fx.preview');
+        Route::post('/fx/recompute', [PlatformCurrencyRateController::class, 'recompute'])->middleware('throttle:10,1')->name('fx.recompute');
+        Route::put('/fx/policy', [PlatformCurrencyRateController::class, 'policy'])->middleware('throttle:30,1')->name('fx.policy');
+        Route::put('/fx/workspaces/{tenant}/display-currency', [PlatformCurrencyRateController::class, 'workspaceDisplay'])
+            ->whereUuid('tenant')->middleware('throttle:60,1')->name('fx.workspace-display');
 
         // ADMIN-003 — read surfaces. The permission catalogue is code (PermissionSeeder), the
         // integration view counts what tenants have connected, and the status check is the SAME one
         // `/dev/status` runs rather than a second implementation.
         Route::get('/permissions', [PlatformAccessController::class, 'permissions'])->name('permissions.index');
         Route::get('/integrations', [PlatformAccessController::class, 'integrations'])->name('integrations.index');
+        // META-DIAGNOSIS-001 — each Meta connection from what the sync recorded. Reads only; calls nothing.
+        Route::get('/integrations/meta/diagnosis', MetaDiagnosisController::class)->name('integrations.meta.diagnosis');
         Route::get('/status', [DevStatusController::class, 'platform'])->name('status');
 
         /*
@@ -264,10 +380,26 @@ Route::middleware(['auth:sanctum', 'platform'])
          * products individually, X gates on a paid tier, and Salla and Zid each need a partner app.
          * A generic list would be wrong in both directions at once.
          */
+        // INTEG-WEBHOOK-ENGINE-001 — the webhook inbox: every delivery with its verdict and state, and a replay for a failed one.
+        Route::get('/webhook-events', [PlatformWebhookEventController::class, 'index'])->name('webhook-events.index');
+        Route::post('/webhook-events/{event}/replay', [PlatformWebhookEventController::class, 'replay'])
+            ->middleware('throttle:30,1')->name('webhook-events.replay');
+
         Route::get('/integrations/review', [ReviewChecklistController::class, 'index'])->name('integrations.review.index');
         Route::get('/integrations/review/{provider}', [ReviewChecklistController::class, 'show'])->name('integrations.review.show');
         Route::patch('/integrations/review/{provider}/{requirement}', [ReviewChecklistController::class, 'update'])
             ->name('integrations.review.update');
+
+        // PLATFORM-INBOX-ATTENTION-001 — the console screen for the three queues: counters, opening a row marks it
+        // read, and a reply goes by email to the address on the record (never one typed here), rate limited twice.
+        Route::get('/inbox/summary', [LegalInboxController::class, 'summary'])->name('inbox.summary');
+        Route::get('/legal/contact-messages/{message}', [LegalInboxController::class, 'showContactMessage'])->whereUuid('message')->name('legal.contact.show');
+        Route::post('/legal/contact-messages/{message}/reply', [LegalInboxController::class, 'replyContactMessage'])
+            ->whereUuid('message')->middleware('throttle:20,1')->name('legal.contact.reply');
+        Route::get('/legal/support-tickets/{ticket}', [LegalInboxController::class, 'showSupportTicket'])->whereUuid('ticket')->name('legal.tickets.show');
+        Route::post('/legal/support-tickets/{ticket}/reply', [LegalInboxController::class, 'replySupportTicket'])
+            ->whereUuid('ticket')->middleware('throttle:20,1')->name('legal.tickets.reply');
+        Route::get('/legal/data-requests/{dataRequest}', [LegalInboxController::class, 'showDataRequest'])->whereUuid('dataRequest')->name('legal.data-requests.show');
 
         Route::get('/legal/contact-messages', [LegalInboxController::class, 'contactMessages'])->name('legal.contact.index');
         Route::patch('/legal/contact-messages/{message}', [LegalInboxController::class, 'updateContactMessage'])->name('legal.contact.update');

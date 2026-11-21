@@ -241,6 +241,28 @@ final class AdPlatformSyncSweepTest extends TestCase
         $this->assertSame(10, $kept->first()['day']);
     }
 
+    public function test_the_default_retention_is_thirty_days(): void
+    {
+        $account = $this->account('snapchat');
+
+        foreach ([45, 31, 29, 1] as $daysAgo) {
+            IntegrationRawPayload::withoutGlobalScopes()->create([
+                'tenant_id' => $this->tenant->id,
+                'external_account_id' => $account->id,
+                'provider' => 'snapchat',
+                'resource' => 'stats',
+                'payload' => ['day' => $daysAgo],
+                'fetched_at' => Carbon::now()->subDays($daysAgo),
+            ]);
+        }
+
+        // The scheduled run passes no option, so the default IS the retention.
+        $this->artisan('integrations:prune-raw')->assertSuccessful();
+
+        $kept = IntegrationRawPayload::withoutGlobalScopes()->pluck('payload')->map(fn ($p) => $p['day'])->sort()->values()->all();
+        $this->assertSame([1, 29], $kept);
+    }
+
     // ── Token refresh, ahead of need ──────────────────────────────────────────────────────────
 
     public function test_the_refresh_command_renews_a_token_before_it_expires(): void

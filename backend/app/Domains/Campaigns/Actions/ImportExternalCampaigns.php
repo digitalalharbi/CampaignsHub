@@ -13,6 +13,9 @@ use App\Domains\Campaigns\Services\PlatformObjectiveMap;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Metrics\Services\SourceCurrency;
+use App\Domains\Projects\Concerns\ProjectScope;
+use App\Domains\Tenancy\Scopes\TenantScope;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -34,6 +37,9 @@ use Illuminate\Support\Facades\DB;
  */
 final class ImportExternalCampaigns
 {
+    /** Adopted without a person: by this sync, or by the scope cleanup re-filing a campaign. Their status is the platform's. */
+    private const FOLLOWS_PLATFORM = ['sync', 'scope-cleanup'];
+
     /**
      * @param  string|null  $projectId  file rows under this project explicitly (queue workers have no
      *                                  request to inherit one from); null keeps the request-scoped behaviour
@@ -98,10 +104,18 @@ final class ImportExternalCampaigns
                     'provider' => $account->provider,
                     'name' => (string) ($row['name'] ?? $externalId),
                     'status' => CampaignStatus::fromProvider($row['status'] ?? null)->value,
-                    'objective' => $row['objective'] ?? null,
+                    /*
+                     * OBJECTIVE-GAPS-001 — X's campaign object carries no objective; it is lifted from
+                     * the line items by `ImportExternalStructure`. A campaign sweep answering null must
+                     * not wipe that between two structure sweeps.
+                     */
+                    'objective' => $row['objective']
+                        ?? (in_array(strtolower((string) $account->provider), ['x', 'twitter'], true) ? $campaign->objective : null),
                     'daily_budget' => $row['daily_budget'] ?? null,
                     'lifetime_budget' => $row['lifetime_budget'] ?? null,
                     'currency' => $row['currency'] ?? $account->currency,
+                    // CONS-I-AGE — the platform's own creation time; a sweep that does not carry it never wipes a known one.
+                    'platform_created_at' => $row['platform_created_at'] ?? $campaign->platform_created_at,
                     'raw' => $row,
                     'last_synced_at' => now(),
                 ])->save();
@@ -141,6 +155,9 @@ final class ImportExternalCampaigns
                 if ($campaign->unified_campaign_id === null && $campaign->unlinked_at === null) {
                     $campaign->unified_campaign_id = $this->adopt($campaign, $account)->getKey();
                     $campaign->save();
+                } elseif ($campaign->unified_campaign_id !== null) {
+                    $this->releaseWithheldBudget($campaign, $account);
+                    $this->followPlatformStatus($campaign);
                 }
 
                 /*
@@ -174,6 +191,8 @@ final class ImportExternalCampaigns
      */
     private function adopt(ExternalCampaign $campaign, ExternalAccount $account): UnifiedCampaign
     {
+        $currency = SourceCurrency::clean($campaign->currency) ?? SourceCurrency::clean($account->currency);
+
         /*
          * ONE visible campaign per platform campaign — never a merge across platforms.
          *
@@ -200,16 +219,22 @@ final class ImportExternalCampaigns
              */
             'objective' => $this->seedObjective($campaign),
             'status' => $campaign->status,
-            'total_budget' => $campaign->lifetime_budget,
             /*
-             * The PLATFORM's currency, kept as the platform stated it.
+             * The PLATFORM's budget in the PLATFORM's currency, kept as the platform stated it.
              *
              * Not converted here: conversion belongs to the reporting layer, where the rate, its date
-             * and its source are recorded beside the figure. The column is NOT NULL, so an account
-             * whose provider reported no currency falls back to the reporting default rather than
-             * blocking the import — a budget with no currency is not a number anybody can read.
+             * and its source are recorded beside the figure.
+             *
+             * MONEY-CURRENCY-NEVER-ASSUMED-001 — a budget whose currency nobody stated is WITHHELD.
+             * This used to end `?? ReportingCurrency::DEFAULT`, so 5,000 of an unknown unit was adopted
+             * as «5,000 USD». `budget_currency` is NOT NULL, so it still has to hold something: it
+             * holds the reporting default beside a NULL amount, which claims nothing, and
+             * `meta.budget_currency_unknown` says why the amount is absent. The provider's own figure
+             * stays on `external_campaigns.lifetime_budget`, and `releaseWithheldBudget()` adopts it
+             * the first sync after the currency becomes known.
              */
-            'budget_currency' => $campaign->currency ?? $account->currency ?? ReportingCurrency::DEFAULT,
+            'total_budget' => $currency === null ? null : $campaign->lifetime_budget,
+            'budget_currency' => $currency ?? ReportingCurrency::DEFAULT,
             'platforms' => [$campaign->provider],
             /*
              * Marked as adopted rather than authored, and carrying what it was adopted FROM.
@@ -224,8 +249,74 @@ final class ImportExternalCampaigns
                 'provider' => $campaign->provider,
                 'external_account_id' => (string) $account->getKey(),
                 'external_campaign_id' => (string) $campaign->external_id,
+                ...($currency === null && $campaign->lifetime_budget !== null ? ['budget_currency_unknown' => true] : []),
             ],
         ]);
+    }
+
+    /**
+     * TIKTOK-CAMPAIGN-STATUS-001 — a campaign the sync adopted keeps saying what its platform says.
+     *
+     * Its status was written once, at adoption, and never again: a campaign paused, ended or resumed on the platform kept the
+     * word it was adopted with, and every TikTok campaign adopted while `ENABLE` was not understood kept `unknown`. A status is
+     * the platform's fact (see `adopt()`), so the visible campaign follows it — but only one this action ADOPTED and that stands
+     * for this one platform campaign alone. A campaign somebody authored, or several platform campaigns grouped under one,
+     * carry a person's decision and are not rewritten.
+     */
+    private function followPlatformStatus(ExternalCampaign $campaign): void
+    {
+        // An answer that is not a state (undocumented, missing) never overwrites one that is.
+        if ($campaign->status === null || $campaign->status === CampaignStatus::Unknown->value) {
+            return;
+        }
+
+        // Tenant and project scopes lifted for a queue worker with no request; soft deletes kept — a deleted campaign is not followed.
+        $unified = UnifiedCampaign::withoutGlobalScopes([TenantScope::class, ProjectScope::class])->find($campaign->unified_campaign_id);
+        if ($unified === null
+            || ! in_array($unified->meta['adopted_from'] ?? null, self::FOLLOWS_PLATFORM, true)
+            // A status a person set (pause, activate, edit) is theirs until they hand it back.
+            || ($unified->meta['status_source'] ?? null) === 'manual'
+            || $unified->status === $campaign->status) {
+            return;
+        }
+
+        $linked = ExternalCampaign::withoutGlobalScopes([TenantScope::class, ProjectScope::class])->where('unified_campaign_id', $unified->getKey())->count();
+        if ($linked !== 1) {
+            return;
+        }
+
+        $unified->forceFill(['status' => $campaign->status])->save();
+    }
+
+    /**
+     * MONEY-CURRENCY-NEVER-ASSUMED-001 — adopt a budget that was withheld for want of a currency, once there is one.
+     *
+     * Only a campaign this action adopted AND marked is touched: a budget somebody typed, or one adopted
+     * with a known currency, is never rewritten by a sync.
+     */
+    private function releaseWithheldBudget(ExternalCampaign $campaign, ExternalAccount $account): void
+    {
+        $currency = SourceCurrency::clean($campaign->currency) ?? SourceCurrency::clean($account->currency);
+        if ($currency === null) {
+            return;
+        }
+
+        $unified = UnifiedCampaign::withoutGlobalScopes()->find($campaign->unified_campaign_id);
+        if ($unified === null) {
+            return;
+        }
+
+        $meta = (array) ($unified->meta ?? []);
+        if (($meta['budget_currency_unknown'] ?? false) !== true || $unified->total_budget !== null) {
+            return;
+        }
+
+        unset($meta['budget_currency_unknown']);
+        $unified->forceFill([
+            'total_budget' => $campaign->lifetime_budget,
+            'budget_currency' => $currency,
+            'meta' => $meta,
+        ])->save();
     }
 
     /**

@@ -1,5 +1,6 @@
 import type { CreativeMetrics } from './api'
 import type { Locale } from '@/stores/ui'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * §15.15 — showing a figure, or saying honestly why there isn't one.
@@ -124,13 +125,14 @@ const LABELS: Record<string, { ar: string; en: string }> = {
   spend: { ar: 'الإنفاق', en: 'Spend' },
   impressions: { ar: 'الظهور', en: 'Impressions' },
   clicks: { ar: 'النقرات', en: 'Clicks' },
-  conversions: { ar: 'النتائج', en: 'Results' },
+  // OBJECTIVE-RESULT-001 — an ad's summed conversions, not its objective's result.
+  conversions: { ar: 'تحويلات المنصة', en: 'Platform conversions' },
   revenue: { ar: 'الإيراد', en: 'Revenue' },
-  ctr: { ar: 'نسبة النقر', en: 'CTR' },
+  ctr: { ar: 'معدل النقر', en: 'CTR' },
   cpc: { ar: 'تكلفة النقرة', en: 'CPC' },
   cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM' },
-  cpa: { ar: 'تكلفة النتيجة', en: 'Cost per result' },
-  roas: { ar: 'العائد على الإنفاق', en: 'ROAS' },
+  cpa: { ar: 'تكلفة التحويل', en: 'Cost per conversion' },
+  roas: { ar: 'معدل العائد', en: 'ROAS' },
   conversion_rate: { ar: 'معدل التحويل', en: 'Conversion rate' },
   frequency: { ar: 'التكرار', en: 'Frequency' },
   reach: { ar: 'الوصول', en: 'Reach' },
@@ -298,7 +300,7 @@ export function formatMetric(state: MetricState, key: string, locale: Locale, cu
     // bare invites the reader to assume the one they expect.
     if (currency === null) return ar ? 'العملة غير محددة' : 'Currency not stated'
 
-    return `${value.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${currency}`
+    return withMark(value.toLocaleString('en-US', { maximumFractionDigits: 2 }), currency)
   }
 
   return value.toLocaleString('en-US', { maximumFractionDigits: value % 1 === 0 ? 0 : 2 })

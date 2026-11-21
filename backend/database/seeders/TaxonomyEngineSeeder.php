@@ -170,7 +170,7 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'existing_management', 'label_ar' => 'إدارة حملات قائمة', 'label_en' => 'Manage existing campaigns', 'description' => 'تولّي إدارة حملات إعلانية قائمة وتشغيلها ومتابعتها.', 'description_en' => 'Take over and run your existing live campaigns.', 'icon' => 'settings'],
                     ['key' => 'full_monthly_management', 'label_ar' => 'الإدارة الشهرية الكاملة', 'label_en' => 'Full monthly management', 'description' => 'إدارة شهرية شاملة لجميع الحملات والمنصات.', 'description_en' => 'Full monthly management across all campaigns and platforms.', 'icon' => 'calendar-check'],
                     ['key' => 'multi_platform_management', 'label_ar' => 'إدارة متعددة المنصات', 'label_en' => 'Multi-platform management', 'description' => 'إدارة موحّدة للحملات عبر عدة منصات إعلانية.', 'description_en' => 'Unified campaign management across several ad platforms.', 'icon' => 'layers'],
-                    ['key' => 'ad_account_restructure', 'label_ar' => 'إعادة هيكلة الحساب الإعلاني', 'label_en' => 'Ad account restructure', 'description' => 'إعادة تنظيم بنية الحساب والحملات والمجموعات الإعلانية.', 'description_en' => 'Reorganize account, campaign and ad-set structure.', 'icon' => 'network'],
+                    ['key' => 'ad_account_restructure', 'label_ar' => 'إعادة هيكلة الحساب الإعلاني', 'label_en' => 'Ad account restructure', 'description' => 'إعادة تنظيم بنية الحساب والحملات والمجموعات.', 'description_en' => 'Reorganize account, campaign and ad-group structure.', 'icon' => 'network'],
                     ['key' => 'budget_pacing', 'label_ar' => 'ضبط وتيرة الإنفاق', 'label_en' => 'Budget pacing', 'description' => 'ضبط توزيع الميزانية ووتيرة الإنفاق خلال فترة الحملة.', 'description_en' => 'Control budget distribution and spend pacing over time.', 'icon' => 'gauge'],
                     ['key' => 'seasonal_campaigns', 'label_ar' => 'الحملات الموسمية', 'label_en' => 'Seasonal campaigns', 'description' => 'تجهيز وإدارة حملات المواسم والعروض والمناسبات.', 'description_en' => 'Prepare and run seasonal, sale and event campaigns.', 'icon' => 'calendar-heart'],
                     ['key' => 'product_launch_campaigns', 'label_ar' => 'حملات إطلاق المنتجات', 'label_en' => 'Product launch campaigns', 'description' => 'حملات مخصصة لإطلاق منتج أو خدمة جديدة.', 'description_en' => 'Dedicated campaigns for launching a new product.', 'icon' => 'package-plus'],
@@ -201,7 +201,7 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'raise_conversion_rate', 'label_ar' => 'رفع معدل التحويل', 'label_en' => 'Raise conversion rate', 'description' => 'تحسين معدل التحويل عبر الحملات والصفحات.', 'description_en' => 'Improve conversion rate across campaigns and pages.', 'icon' => 'percent'],
                     ['key' => 'audience_targeting', 'label_ar' => 'تحسين استهداف الجمهور', 'label_en' => 'Audience targeting', 'description' => 'تحسين شرائح الجمهور والاستهداف.', 'description_en' => 'Refine audience segments and targeting.', 'icon' => 'users'],
                     ['key' => 'budget_allocation', 'label_ar' => 'توزيع الميزانية', 'label_en' => 'Budget allocation', 'description' => 'إعادة توزيع الميزانية على الحملات الأعلى أداءً.', 'description_en' => 'Reallocate budget to the best-performing campaigns.', 'icon' => 'wallet'],
-                    ['key' => 'ad_creative_testing', 'label_ar' => 'اختبار الإبداعات', 'label_en' => 'Ad creative testing', 'description' => 'اختبار وتجربة الإبداعات الإعلانية.', 'description_en' => 'Test and experiment with ad creatives.', 'icon' => 'flask-conical'],
+                    ['key' => 'ad_creative_testing', 'label_ar' => 'اختبار المحتويات', 'label_en' => 'Ad creative testing', 'description' => 'اختبار وتجربة المحتويات الإعلانية.', 'description_en' => 'Test and experiment with ad creatives.', 'icon' => 'flask-conical'],
                     ['key' => 'weak_results_analysis', 'label_ar' => 'تحليل النتائج الضعيفة', 'label_en' => 'Weak results analysis', 'description' => 'تشخيص أسباب ضعف نتائج الحملات ومعالجتها.', 'description_en' => 'Diagnose and fix underperforming campaigns.', 'icon' => 'search-x'],
                     ['key' => 'sales_drop_recovery', 'label_ar' => 'معالجة تراجع المبيعات', 'label_en' => 'Sales drop recovery', 'description' => 'استعادة الأداء بعد تراجع المبيعات.', 'description_en' => 'Recover performance after a sales drop.', 'icon' => 'life-buoy'],
                 ],
@@ -215,7 +215,7 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'campaign_performance_analysis', 'label_ar' => 'تحليل أداء الحملات', 'label_en' => 'Campaign performance analysis', 'description' => 'تحليل معمّق لأداء الحملات ومؤشراتها.', 'description_en' => 'In-depth analysis of campaign performance and KPIs.', 'icon' => 'bar-chart-4'],
                     ['key' => 'customer_journey_analysis', 'label_ar' => 'تحليل رحلة العميل', 'label_en' => 'Customer journey analysis', 'description' => 'تحليل رحلة العميل عبر نقاط التواصل.', 'description_en' => 'Analyze the customer journey across touchpoints.', 'icon' => 'route'],
                     ['key' => 'funnel_analysis', 'label_ar' => 'تحليل القمع', 'label_en' => 'Funnel analysis', 'description' => 'تحليل قمع التحويل واكتشاف نقاط التسرّب.', 'description_en' => 'Analyze the conversion funnel and find drop-offs.', 'icon' => 'filter'],
-                    ['key' => 'creative_analysis', 'label_ar' => 'تحليل الإبداعات', 'label_en' => 'Creative analysis', 'description' => 'تحليل أداء الإبداعات الإعلانية.', 'description_en' => 'Analyze ad creative performance.', 'icon' => 'image'],
+                    ['key' => 'creative_analysis', 'label_ar' => 'تحليل المحتويات', 'label_en' => 'Creative analysis', 'description' => 'تحليل أداء المحتويات الإعلانية.', 'description_en' => 'Analyze ad creative performance.', 'icon' => 'image'],
                     ['key' => 'platform_comparison', 'label_ar' => 'مقارنة المنصات', 'label_en' => 'Platform comparison', 'description' => 'مقارنة أداء المنصات الإعلانية.', 'description_en' => 'Compare performance across ad platforms.', 'icon' => 'git-compare'],
                     ['key' => 'budget_spend_analysis', 'label_ar' => 'تحليل الإنفاق والميزانية', 'label_en' => 'Budget & spend analysis', 'description' => 'تحليل الإنفاق وكفاءة الميزانية.', 'description_en' => 'Analyze spend and budget efficiency.', 'icon' => 'coins'],
                     ['key' => 'tracking_attribution_analysis', 'label_ar' => 'تحليل التتبع والإسناد', 'label_en' => 'Tracking & attribution analysis', 'description' => 'تحليل دقة التتبع ونماذج الإسناد.', 'description_en' => 'Analyze tracking accuracy and attribution models.', 'icon' => 'crosshair'],
@@ -295,18 +295,18 @@ final class TaxonomyEngineSeeder extends Seeder
                 ],
             ],
             [
-                'key' => 'creatives', 'label_ar' => 'الإبداعات', 'label_en' => 'Creatives',
+                'key' => 'creatives', 'label_ar' => 'المحتويات', 'label_en' => 'Creatives',
                 'icon' => 'palette', 'color' => '#ec4899',
                 'required_field_rules' => ['platforms', 'assets', 'period'],
                 'services' => [
-                    ['key' => 'creative_audit', 'label_ar' => 'تدقيق الإبداعات', 'label_en' => 'Creative audit', 'description' => 'تدقيق الإبداعات الإعلانية وجودتها.', 'description_en' => 'Audit ad creatives and their quality.', 'icon' => 'palette'],
-                    ['key' => 'ad_performance_analysis', 'label_ar' => 'تحليل أداء الإعلانات', 'label_en' => 'Ad performance analysis', 'description' => 'تحليل أداء الإعلانات على مستوى الإبداع.', 'description_en' => 'Analyze ad performance at the creative level.', 'icon' => 'bar-chart-4'],
-                    ['key' => 'top_creatives', 'label_ar' => 'أفضل الإبداعات', 'label_en' => 'Top creatives', 'description' => 'تحديد أفضل الإبداعات أداءً.', 'description_en' => 'Identify the best-performing creatives.', 'icon' => 'award'],
+                    ['key' => 'creative_audit', 'label_ar' => 'تدقيق المحتويات', 'label_en' => 'Creative audit', 'description' => 'تدقيق المحتويات الإعلانية وجودتها.', 'description_en' => 'Audit ad creatives and their quality.', 'icon' => 'palette'],
+                    ['key' => 'ad_performance_analysis', 'label_ar' => 'تحليل أداء الإعلانات', 'label_en' => 'Ad performance analysis', 'description' => 'تحليل أداء الإعلانات على مستوى المحتوى.', 'description_en' => 'Analyze ad performance at the creative level.', 'icon' => 'bar-chart-4'],
+                    ['key' => 'top_creatives', 'label_ar' => 'أفضل المحتويات', 'label_en' => 'Top creatives', 'description' => 'تحديد أفضل المحتويات أداءً.', 'description_en' => 'Identify the best-performing creatives.', 'icon' => 'award'],
                     ['key' => 'angles_hooks', 'label_ar' => 'الزوايا والخطافات', 'label_en' => 'Angles & hooks', 'description' => 'اقتراح زوايا وخطافات إعلانية.', 'description_en' => 'Suggest ad angles and hooks.', 'icon' => 'sparkles'],
-                    ['key' => 'creative_testing_plan', 'label_ar' => 'خطة اختبار الإبداعات', 'label_en' => 'Creative testing plan', 'description' => 'وضع خطة اختبار للإبداعات.', 'description_en' => 'Build a creative testing plan.', 'icon' => 'flask-conical'],
+                    ['key' => 'creative_testing_plan', 'label_ar' => 'خطة اختبار المحتويات', 'label_en' => 'Creative testing plan', 'description' => 'وضع خطة اختبار للمحتويات.', 'description_en' => 'Build a creative testing plan.', 'icon' => 'flask-conical'],
                     ['key' => 'ugc_suggestions', 'label_ar' => 'اقتراحات محتوى UGC', 'label_en' => 'UGC suggestions', 'description' => 'اقتراح أفكار محتوى من صناعة المستخدم.', 'description_en' => 'Suggest user-generated content ideas.', 'icon' => 'video'],
-                    ['key' => 'creative_performance_link', 'label_ar' => 'ربط أداء الإبداع', 'label_en' => 'Creative performance link', 'description' => 'ربط أداء الحملة بالإبداعات المستخدمة.', 'description_en' => 'Link campaign performance to the creatives used.', 'icon' => 'link-2'],
-                    ['key' => 'creative_fatigue', 'label_ar' => 'إجهاد الإبداع', 'label_en' => 'Creative fatigue', 'description' => 'رصد إجهاد الإبداعات واقتراح التجديد.', 'description_en' => 'Detect creative fatigue and suggest refreshes.', 'icon' => 'battery-low'],
+                    ['key' => 'creative_performance_link', 'label_ar' => 'ربط أداء المحتوى', 'label_en' => 'Creative performance link', 'description' => 'ربط أداء الحملة بالمحتويات المستخدمة.', 'description_en' => 'Link campaign performance to the creatives used.', 'icon' => 'link-2'],
+                    ['key' => 'creative_fatigue', 'label_ar' => 'إجهاد المحتوى', 'label_en' => 'Creative fatigue', 'description' => 'رصد إجهاد المحتويات واقتراح التجديد.', 'description_en' => 'Detect creative fatigue and suggest refreshes.', 'icon' => 'battery-low'],
                 ],
             ],
             [
@@ -326,17 +326,41 @@ final class TaxonomyEngineSeeder extends Seeder
                 ],
             ],
             [
+                /*
+                 * CONSULTING-COPY-001 — Owner 2026-11-21: «استشارة شراء إعلامي — جلسة استشارية في الشراء الإعلامي» said nothing a
+                 * client could act on. Each service now says what the session covers and what the client leaves with.
+                 */
                 'key' => 'consulting_training', 'label_ar' => 'الاستشارات والتدريب', 'label_en' => 'Consulting & Training',
                 'icon' => 'graduation-cap', 'color' => '#f97316',
                 'required_field_rules' => ['topic', 'challenges', 'schedule', 'files'],
                 'services' => [
-                    ['key' => 'media_buying_consult', 'label_ar' => 'استشارة شراء إعلامي', 'label_en' => 'Media buying consult', 'description' => 'جلسة استشارية في الشراء الإعلامي.', 'description_en' => 'A consulting session on media buying.', 'icon' => 'message-circle'],
-                    ['key' => 'performance_review_session', 'label_ar' => 'جلسة مراجعة الأداء', 'label_en' => 'Performance review session', 'description' => 'جلسة لمراجعة الأداء ووضع التوصيات.', 'description_en' => 'A session to review performance and recommend actions.', 'icon' => 'clipboard-check'],
-                    ['key' => 'platform_selection_consult', 'label_ar' => 'استشارة اختيار المنصات', 'label_en' => 'Platform selection consult', 'description' => 'استشارة لاختيار المنصات المناسبة.', 'description_en' => 'Consulting on choosing the right platforms.', 'icon' => 'list-checks'],
-                    ['key' => 'tracking_consult', 'label_ar' => 'استشارة التتبع', 'label_en' => 'Tracking consult', 'description' => 'استشارة في إعداد التتبع والقياس.', 'description_en' => 'Consulting on tracking and measurement setup.', 'icon' => 'crosshair'],
-                    ['key' => 'team_training', 'label_ar' => 'تدريب الفريق', 'label_en' => 'Team training', 'description' => 'تدريب الفريق على إدارة الحملات المدفوعة.', 'description_en' => 'Train your team on paid campaign management.', 'icon' => 'graduation-cap'],
-                    ['key' => 'pre_launch_review', 'label_ar' => 'مراجعة ما قبل الإطلاق', 'label_en' => 'Pre-launch review', 'description' => 'مراجعة الجاهزية قبل إطلاق الحملة.', 'description_en' => 'Review readiness before launching a campaign.', 'icon' => 'shield-check'],
-                    ['key' => 'custom_request', 'label_ar' => 'طلب مخصص', 'label_en' => 'Custom request', 'description' => 'طلب خدمة مخصصة غير مدرجة.', 'description_en' => 'Request a custom service not listed here.', 'icon' => 'plus'],
+                    ['key' => 'media_buying_consult', 'label_ar' => 'استشارة إعلانية', 'label_en' => 'Advertising consultation', 'description' => 'جلسة مع مختص نراجع فيها حملاتك وميزانيتك ونحدد أين تصرف وكيف ترفع نتائجك، وتطلع بخطة واضحة.', 'description_en' => 'A session with a specialist on your campaigns and budget: where to spend and how to improve results, ending with a clear plan.', 'icon' => 'message-circle'],
+                    ['key' => 'performance_review_session', 'label_ar' => 'جلسة مراجعة الأداء', 'label_en' => 'Performance review session', 'description' => 'نراجع معك أرقام حملاتك الحالية، ونوضح وش ينجح ووش يحتاج تعديل، مع توصيات تنفذها مباشرة.', 'description_en' => 'We go through your current numbers with you: what works, what needs changing, and recommendations you can apply right away.', 'icon' => 'clipboard-check'],
+                    ['key' => 'platform_selection_consult', 'label_ar' => 'اختيار المنصات المناسبة', 'label_en' => 'Choosing the right platforms', 'description' => 'نحدد لك المنصات الأنسب لنشاطك وجمهورك (سناب، تيك توك، ميتا، جوجل وغيرها) وكيف توزع الميزانية بينها.', 'description_en' => 'Which platforms fit your business and audience (Snapchat, TikTok, Meta, Google and more) and how to split the budget.', 'icon' => 'list-checks'],
+                    ['key' => 'tracking_consult', 'label_ar' => 'استشارة التتبع والقياس', 'label_en' => 'Tracking and measurement consultation', 'description' => 'نراجع البكسل والأحداث وربط المتجر، ونتأكد أن كل طلب أو عميل محتمل يُقاس بدقة.', 'description_en' => 'We review your pixels, events and store connection so every order or lead is measured correctly.', 'icon' => 'crosshair'],
+                    ['key' => 'team_training', 'label_ar' => 'تدريب فريقك', 'label_en' => 'Training your team', 'description' => 'ورشة عملية لفريقك على إطلاق الحملات وقراءة الأرقام وتحسين الأداء على المنصات الإعلانية.', 'description_en' => 'A hands-on workshop for your team on launching campaigns, reading the numbers and improving results.', 'icon' => 'graduation-cap'],
+                    ['key' => 'pre_launch_review', 'label_ar' => 'مراجعة قبل الإطلاق', 'label_en' => 'Pre-launch review', 'description' => 'نراجع الحملة قبل تشغيلها: الاستهداف، المحتوى، الرابط والتتبع والميزانية، حتى لا تخسر من أول يوم.', 'description_en' => 'We check the campaign before it runs — targeting, content, link, tracking and budget — so you do not lose money on day one.', 'icon' => 'shield-check'],
+                    ['key' => 'custom_request', 'label_ar' => 'طلب مخصص', 'label_en' => 'Custom request', 'description' => 'احتياجك غير موجود في القائمة؟ اكتب لنا وش تحتاج ونرجع لك بالحل المناسب.', 'description_en' => 'Need something not listed? Tell us what you need and we will come back with the right solution.', 'icon' => 'plus'],
+                ],
+            ],
+            [
+                /*
+                 * SOFTWARE-SERVICES-001 — Owner 2026-11-21: «اضيف خدمات البرمجية». What an advertiser most often needs built around
+                 * the ads: a site or landing page that converts, a store, an app, the systems the leads land in, and the
+                 * automation and integrations between them. Keys are new (`dev_*`), so nothing already requested changes.
+                 */
+                'key' => 'software_services', 'label_ar' => 'الخدمات البرمجية', 'label_en' => 'Software services',
+                'icon' => 'code', 'color' => '#6366f1',
+                'required_field_rules' => ['topic', 'challenges', 'files'],
+                'services' => [
+                    ['key' => 'dev_website', 'label_ar' => 'تصميم وتطوير المواقع', 'label_en' => 'Website design and development', 'description' => 'موقع لنشاطك سريع ومتوافق مع الجوال، جاهز للإعلانات والتتبع من أول يوم.', 'description_en' => 'A fast, mobile-ready website for your business, ready for ads and tracking from day one.', 'icon' => 'globe'],
+                    ['key' => 'dev_landing_pages', 'label_ar' => 'صفحات الهبوط', 'label_en' => 'Landing pages', 'description' => 'صفحة هبوط لكل حملة مصممة لرفع التحويل، مع نموذج تسجيل وتتبع جاهز.', 'description_en' => 'A landing page per campaign built to convert, with a sign-up form and tracking ready.', 'icon' => 'layout-template'],
+                    ['key' => 'dev_ecommerce', 'label_ar' => 'إنشاء المتاجر الإلكترونية', 'label_en' => 'Online store build', 'description' => 'إنشاء وتطوير متجرك على سلة أو زد أو Shopify، وربطه بالمنصات الإعلانية.', 'description_en' => 'Build and develop your store on Salla, Zid or Shopify, connected to the ad platforms.', 'icon' => 'shopping-cart'],
+                    ['key' => 'dev_mobile_app', 'label_ar' => 'تطبيقات الجوال', 'label_en' => 'Mobile apps', 'description' => 'تطوير تطبيق iOS وAndroid مع قياس التثبيتات والأحداث داخل التطبيق.', 'description_en' => 'iOS and Android app development, with installs and in-app events measured.', 'icon' => 'smartphone'],
+                    ['key' => 'dev_custom_system', 'label_ar' => 'أنظمة وبرامج مخصصة', 'label_en' => 'Custom systems', 'description' => 'لوحات تحكم وأنظمة إدارة مبنية على طريقة عمل فريقك.', 'description_en' => 'Dashboards and management systems built around how your team works.', 'icon' => 'layout-dashboard'],
+                    ['key' => 'dev_leads_system', 'label_ar' => 'نظام إدارة العملاء المحتملين', 'label_en' => 'Leads management system', 'description' => 'يستقبل العملاء المحتملين من الإعلانات ويوزعهم على فريق المبيعات ويتابع حالتهم.', 'description_en' => 'Receives leads from your ads, assigns them to your sales team and tracks their status.', 'icon' => 'users'],
+                    ['key' => 'dev_automation', 'label_ar' => 'أتمتة العمليات', 'label_en' => 'Process automation', 'description' => 'أتمتة المهام المتكررة: إرسال العملاء المحتملين لواتساب أو جوجل شيت، والتقارير والتنبيهات.', 'description_en' => 'Automate repetitive work: leads to WhatsApp or Google Sheets, reports and alerts.', 'icon' => 'workflow'],
+                    ['key' => 'dev_api_integration', 'label_ar' => 'الربط البرمجي (API)', 'label_en' => 'API integration', 'description' => 'ربط أنظمتك ببعضها وبالمنصات الإعلانية والمتاجر عبر الواجهات البرمجية.', 'description_en' => 'Connect your systems to each other, to the ad platforms and to stores through APIs.', 'icon' => 'plug'],
                 ],
             ],
         ];
@@ -534,7 +558,7 @@ final class TaxonomyEngineSeeder extends Seeder
             ],
             [
                 'key' => 'campaign.creative_types', 'module' => 'campaigns', 'field_type' => 'multi', 'is_system' => false,
-                'label_ar' => 'أنواع الإبداع', 'label_en' => 'Creative types',
+                'label_ar' => 'أنواع المحتوى', 'label_en' => 'Creative types',
                 'options' => [
                     ['key' => 'image', 'label_ar' => 'صورة', 'label_en' => 'Image', 'icon' => 'image'],
                     ['key' => 'video', 'label_ar' => 'فيديو', 'label_en' => 'Video', 'icon' => 'video'],
@@ -613,7 +637,7 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'cpa_increase', 'label_ar' => 'ارتفاع CPA', 'label_en' => 'CPA increase', 'color' => '#ef4444', 'icon' => 'trending-up'],
                     ['key' => 'cpl_increase', 'label_ar' => 'ارتفاع CPL', 'label_en' => 'CPL increase', 'color' => '#ef4444', 'icon' => 'trending-up'],
                     ['key' => 'roas_drop', 'label_ar' => 'انخفاض ROAS', 'label_en' => 'ROAS drop', 'color' => '#ef4444', 'icon' => 'trending-down'],
-                    ['key' => 'no_results', 'label_ar' => 'إنفاق بلا نتائج', 'label_en' => 'No results', 'color' => '#f59e0b', 'icon' => 'circle-slash'],
+                    ['key' => 'no_results', 'label_ar' => 'صرف بدون نتائج', 'label_en' => 'No results', 'color' => '#f59e0b', 'icon' => 'circle-slash'],
                     ['key' => 'sync_failure', 'label_ar' => 'فشل المزامنة', 'label_en' => 'Sync failure', 'color' => '#dc2626', 'icon' => 'refresh-cw-off'],
                     ['key' => 'token_expiry', 'label_ar' => 'انتهاء التوكن', 'label_en' => 'Token expiry', 'color' => '#f59e0b', 'icon' => 'key-round'],
                     ['key' => 'report_failed', 'label_ar' => 'فشل التقرير', 'label_en' => 'Report failed', 'color' => '#dc2626', 'icon' => 'file-x'],
@@ -629,11 +653,19 @@ final class TaxonomyEngineSeeder extends Seeder
                     ['key' => 'metric_anomaly', 'label_ar' => 'يوم غير معتاد', 'label_en' => 'Unusual day', 'color' => '#8b5cf6', 'icon' => 'activity'],
                     // EMAIL-ALERT-SYNC-OUTAGE-001 / EMAIL-ALERT-MEASUREMENT-OUTAGE-001 — the feed's own alerts.
                     ['key' => 'sync_outage', 'label_ar' => 'انقطاع المزامنة', 'label_en' => 'Sync outage', 'color' => '#f97316', 'icon' => 'cloud-off'],
-                    ['key' => 'measurement_outage', 'label_ar' => 'انقطاع القياس (GA4)', 'label_en' => 'Measurement outage (GA4)', 'color' => '#f97316', 'icon' => 'bar-chart-off'],
+                    ['key' => 'measurement_outage', 'label_ar' => 'توقف قياس الموقع (GA4)', 'label_en' => 'Measurement outage (GA4)', 'color' => '#f97316', 'icon' => 'bar-chart-off'],
                     // TRACKING-HEALTH-001 — a broken form, a failing conversion delivery, a platform that reports more than the Leads Centre holds.
-                    ['key' => 'tracking_health', 'label_ar' => 'سلامة التتبع', 'label_en' => 'Tracking health', 'color' => '#f97316', 'icon' => 'radar'],
+                    ['key' => 'tracking_health', 'label_ar' => 'حالة التتبع', 'label_en' => 'Tracking health', 'color' => '#f97316', 'icon' => 'radar'],
                     // LAUNCH-ADVANCE-001 — a launched account that now earns a better stage; an opportunity, never an automatic change.
                     ['key' => 'launch_advance', 'label_ar' => 'مرحلة إطلاق أفضل متاحة', 'label_en' => 'Better launch stage available', 'color' => '#10b981', 'icon' => 'trending-up'],
+                    // GA4-ALERTS-001 — the store as GA4 measured it; rules are created by people, so none exist until somebody makes one.
+                    ['key' => 'ga4_sales_drop', 'label_ar' => 'انخفاض مبيعات المتجر (GA4)', 'label_en' => 'Store sales drop (GA4)', 'color' => '#ef4444', 'icon' => 'trending-down'],
+                    ['key' => 'ga4_bounce_spike', 'label_ar' => 'ارتفاع الارتداد (GA4)', 'label_en' => 'Bounce spike (GA4)', 'color' => '#f59e0b', 'icon' => 'activity'],
+                    ['key' => 'ga4_cvr_drop', 'label_ar' => 'انخفاض التحويل (GA4)', 'label_en' => 'Conversion drop (GA4)', 'color' => '#ef4444', 'icon' => 'trending-down'],
+                    ['key' => 'ga4_aov_shift', 'label_ar' => 'تغيّر متوسط السلة (GA4)', 'label_en' => 'Basket shift (GA4)', 'color' => '#f59e0b', 'icon' => 'shopping-cart'],
+                    ['key' => 'ga4_attribution_gap', 'label_ar' => 'فرق الإسناد (GA4)', 'label_en' => 'Attribution gap (GA4)', 'color' => '#f97316', 'icon' => 'git-compare'],
+                    ['key' => 'ga4_tracking_loss', 'label_ar' => 'فقدان التتبع (GA4)', 'label_en' => 'Tracking loss (GA4)', 'color' => '#dc2626', 'icon' => 'radar'],
+                    ['key' => 'ga4_unmatched_spend', 'label_ar' => 'إنفاق بلا أثر (GA4)', 'label_en' => 'Unmatched spend (GA4)', 'color' => '#f97316', 'icon' => 'circle-slash'],
                 ],
             ],
             [

@@ -55,7 +55,7 @@ describe('the tasks page', () => {
       «this number appears exactly once», which stopped being true the moment the page drew the same
       counts as a shape.
     */
-    const kpis = within(await screen.findByTestId('tasks-intro'))
+    const kpis = within(await screen.findByTestId('tasks-intro-kpis'))
     /* `findByText`, because the head renders before the counts arrive. */
     expect(await kpis.findByText('97')).toBeInTheDocument()
     expect(kpis.getByText('120')).toBeInTheDocument()
@@ -67,8 +67,9 @@ describe('the tasks page', () => {
     renderWithProviders(<TasksPage />, { locale: 'en' })
 
     const pager = await screen.findByTestId('tasks-pager')
-    expect(pager.textContent).toContain('of 120')
-    expect(pager.textContent).toMatch(/page 1 of 5/i)
+    // The pager says where you are and the total behind it: «120» tasks, page «1 / 5».
+    expect(pager.textContent).toContain('120')
+    expect(pager.textContent).toContain('1 / 5')
   })
 
   it('asks the server for the next page rather than slicing what it holds', async () => {

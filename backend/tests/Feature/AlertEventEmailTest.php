@@ -10,8 +10,13 @@ use App\Domains\Alerts\Models\AlertRule;
 use App\Domains\Alerts\Services\AlertEvaluator;
 use App\Domains\Alerts\Services\AlertEventMailer;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Models\IntegrationCredential;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
+use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\MessageProvider;
+use App\Domains\Notifications\Support\MailDeliveryState;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -68,12 +73,34 @@ final class AlertEventEmailTest extends TestCase
         ]);
     }
 
+    /** @var array<string, string> connection id → its bound ad account (LIFECYCLE-6 judges a live project's bound account) */
+    private array $accounts = [];
+
+    private function accountFor(string $connId): string
+    {
+        if (! isset($this->accounts[$connId])) {
+            $credential = new IntegrationCredential(['provider' => 'meta', 'credential_scope' => 'project_only', 'credential_type' => 'oauth', 'status' => 'active']);
+            $credential->setPayload('token');
+            $credential->save();
+            $connection = new ProviderConnection;
+            $connection->forceFill(['id' => $connId, 'tenant_id' => $this->tenant->id, 'credential_id' => $credential->id, 'provider' => 'meta',
+                'connection_name' => 'meta', 'scope' => 'project_only', 'status' => 'connected'])->save();
+            $account = ExternalAccount::withoutGlobalScopes()->create(['tenant_id' => $this->tenant->id, 'provider_connection_id' => $connId, 'provider' => 'meta',
+                'account_type' => 'ad_account', 'external_id' => 'act-'.uniqid(), 'name' => 'A', 'status' => 'active']);
+            ProjectIntegrationBinding::create(['tenant_id' => $this->tenant->id, 'project_id' => $this->project->id, 'external_account_id' => $account->id,
+                'provider' => 'meta', 'purpose' => 'ads', 'is_active' => true]);
+            $this->accounts[$connId] = (string) $account->id;
+        }
+
+        return $this->accounts[$connId];
+    }
+
     private function syncRun(string $connId, string $status, Carbon $at): void
     {
         DB::table('metric_sync_runs')->insert([
             'id' => (string) Str::uuid(), 'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
-            'connection_id' => $connId, 'provider' => 'meta', 'status' => $status,
-            'window_start' => $at->copy()->subDay()->toDateString(), 'window_end' => $at->toDateString(),
+            'connection_id' => $connId, 'external_account_id' => $this->accountFor($connId), 'provider' => 'meta', 'status' => $status,
+            'window_start' => $at->copy()->subDays(3)->toDateString(), 'window_end' => $at->toDateString(),
             'error' => $status === 'failed' ? 'token expired' : null, 'started_at' => $at, 'finished_at' => $at->copy()->addMinute(),
             'created_at' => $at, 'updated_at' => $at,
         ]);
@@ -113,8 +140,9 @@ final class AlertEventEmailTest extends TestCase
                 && count($m->items) === 2
                 && $m->lang === 'ar'
                 && $m->items[0]['severity'] === 'warning'
-                && str_contains((string) $m->items[0]['title'], 'Data sync failed')
-                && $m->items[0]['context'] === 'Ramadan Push';
+                // LINK-HEALTH-YESTERDAY-001 — the one link text: yesterday's data did not arrive.
+                && str_contains((string) $m->items[0]['title'], 'بيانات أمس ما وصلت')
+                && str_starts_with((string) $m->items[0]['context'], 'Ramadan Push');
         });
         $this->assertSame(2, DB::table('digest_sends')->where('kind', AlertEventMailer::KIND)->where('status', 'sent')->count());
 
@@ -123,7 +151,23 @@ final class AlertEventEmailTest extends TestCase
         Mail::assertSent(AlertBundleMail::class, 1);
     }
 
-    public function test_a_recovery_is_mailed_as_an_info_item_and_the_person_s_choices_are_honoured(): void
+    /** EMAIL-GAPS — this sender goes around `TransactionalMailer` too. Same gate, same recorded refusal. */
+    public function test_an_unsubscribed_person_gets_no_event_mail_and_the_ledger_says_why(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        DB::table('mail_unsubscribes')->insert(['id' => (string) Str::uuid(), 'tenant_id' => (string) $this->tenant->id, 'recipient_hash' => hash('sha256', (string) $this->user->email), 'scope' => 'alerts']);
+        $this->rule('sync_failure');
+        $this->syncRun((string) Str::uuid(), 'failed', now()->subMinutes(10));
+
+        app(AlertEvaluator::class)->evaluateAll();
+
+        Mail::assertNothingSent();
+        $this->assertDatabaseHas('digest_sends', ['user_id' => $this->user->id, 'kind' => AlertEventMailer::KIND, 'status' => 'unsubscribed', 'reason' => 'unsubscribed']);
+    }
+
+    /** LINK-HEALTH-YESTERDAY-001 (§7أ) — a link that delivered yesterday again closes WITHOUT a mail; the person's choices still hold. */
+    public function test_a_link_recovery_is_silent_and_the_person_s_choices_are_honoured(): void
     {
         Mail::fake();
         $this->withConfiguredEmail();
@@ -137,10 +181,7 @@ final class AlertEventEmailTest extends TestCase
         $this->syncRun($connId, 'success', now()->subMinutes(5));
         $evaluator->evaluateAll();
 
-        Mail::assertSent(AlertBundleMail::class, 2);
-        Mail::assertSent(AlertBundleMail::class, function (AlertBundleMail $m): bool {
-            return count($m->items) === 1 && $m->items[0]['severity'] === 'info' && str_starts_with((string) $m->items[0]['title'], 'تعافى:');
-        });
+        Mail::assertSent(AlertBundleMail::class, 1);
 
         // Switched off for email: a new failure raises an event and an in-app notification, but no mail.
         DB::table('notification_preferences')->where('user_id', $this->user->id)
@@ -149,11 +190,77 @@ final class AlertEventEmailTest extends TestCase
         // A fresh evaluator, as a real sweep is: the choices are memoised per instance.
         $counts = app(AlertEvaluator::class)->evaluateAll() > 0 ? 'raised' : 'none';
         $this->assertSame('raised', $counts);
-        Mail::assertSent(AlertBundleMail::class, 2);
+        Mail::assertSent(AlertBundleMail::class, 1);
+    }
+
+    /**
+     * EMAIL-TEST-SEND-001 (§17.4.5) — a rule's cooldown can be five minutes, so one open problem could
+     * otherwise mail one person all day. Past the ceiling it is held and recorded, its recovery still goes,
+     * and a new day starts again.
+     */
+    public function test_one_alert_reaches_one_person_a_limited_number_of_times_a_day(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        config(['mail.alert_repeats_per_day' => 3]);
+        $mailer = app(AlertEventMailer::class);
+        $tenant = (string) $this->tenant->id;
+        $item = fn (string $severity, Carbon $at, string $event = 'event-one'): array => [
+            'event_id' => $event, 'notification_type' => 'sync_failed', 'severity' => $severity, 'title' => 'T', 'detail' => 'D',
+            'project_id' => (string) $this->project->id, 'project_name' => 'P', 'triggered_at' => $at->toIso8601String(),
+        ];
+        $start = Carbon::parse('2026-11-04 06:00:00');
+
+        for ($i = 0; $i < 5; $i++) {
+            $at = $start->copy()->addMinutes($i * 10);
+            $counts = $mailer->sweep($tenant, [$item('warning', $at)], $at);
+        }
+
+        Mail::assertSent(AlertBundleMail::class, 3);
+        $this->assertSame(1, $counts['repeat_limit']);
+        $this->assertSame(3, DB::table('digest_sends')->where('kind', AlertEventMailer::KIND)->where('status', 'sent')->count());
+        $this->assertSame(2, DB::table('digest_sends')->where('kind', AlertEventMailer::KIND)->where('status', 'repeat_limit')->count());
+        $this->assertSame('repeat_limit', MailDeliveryState::suppressionReason('repeat_limit'));
+
+        // Another alert has its own count, and being told it is over is never held.
+        $later = $start->copy()->addHours(2);
+        $mailer->sweep($tenant, [$item('warning', $later, 'event-two')], $later);
+        Mail::assertSent(AlertBundleMail::class, 4);
+        $recovered = $start->copy()->addHours(3);
+        $mailer->sweep($tenant, [$item('info', $recovered)], $recovered);
+        Mail::assertSent(AlertBundleMail::class, 5);
+
+        // A rolling 24 hours later the same alert may be said again.
+        $tomorrow = $start->copy()->addHours(25);
+        $mailer->sweep($tenant, [$item('warning', $tomorrow)], $tomorrow);
+        Mail::assertSent(AlertBundleMail::class, 6);
+    }
+
+    /** `0` is the documented way off, and is also what the behaviour was before the ceiling. */
+    public function test_a_zero_ceiling_holds_nothing(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        config(['mail.alert_repeats_per_day' => 0]);
+        $mailer = app(AlertEventMailer::class);
+        $start = Carbon::parse('2026-11-04 06:00:00');
+
+        for ($i = 0; $i < 5; $i++) {
+            $at = $start->copy()->addMinutes($i * 10);
+            $mailer->sweep((string) $this->tenant->id, [[
+                'event_id' => 'event-one', 'notification_type' => 'sync_failed', 'severity' => 'warning', 'title' => 'T', 'detail' => 'D',
+                'project_id' => (string) $this->project->id, 'project_name' => 'P', 'triggered_at' => $at->toIso8601String(),
+            ]], $at);
+        }
+
+        Mail::assertSent(AlertBundleMail::class, 5);
     }
 
     public function test_quiet_hours_hold_the_bundle(): void
     {
+        // The window is 00:00–23:59 Riyadh: a run at 23:59 fell outside it (seen when a run crossed midnight).
+        // Freeze at Riyadh midday so the test never depends on the wall clock.
+        $this->travelTo(Carbon::now('Asia/Riyadh')->setTime(12, 0)->utc());
         Mail::fake();
         $this->withConfiguredEmail();
         DB::table('notification_preferences')->where('user_id', $this->user->id)

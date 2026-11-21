@@ -46,6 +46,8 @@ final class AutomationAgentToolsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Noon in Riyadh: seeded days are "today" and back, and one test travels five minutes, which failed it when the suite reached 23:59.
+        $this->travelTo(Carbon::parse('2026-11-03 09:00:00', 'UTC'));
         $this->seed(PermissionSeeder::class);
         $this->tenant = Tenant::create(['name' => 'A', 'slug' => 'a-'.uniqid(), 'status' => 'active']);
         $this->holdingTenant((string) $this->tenant->id);
@@ -133,7 +135,8 @@ final class AutomationAgentToolsTest extends TestCase
             $this->assertContains('list_automation_rules', AgentRoles::get($agent)['tools']);
             $this->assertContains('explain_rule_run', AgentRoles::get($agent)['tools']);
         }
-        $this->assertSame(['campaign'], array_keys(array_filter(AgentRoles::all(), static fn (array $r): bool => in_array('draft_automation_rule', $r['tools'], true))));
+        // AGENTS-ASSISTANT-001 — the Builder («المنشئ») drafts rules too; both save switched-off drafts only.
+        $this->assertSame(['campaign', 'builder'], array_keys(array_filter(AgentRoles::all(), static fn (array $r): bool => in_array('draft_automation_rule', $r['tools'], true))));
     }
 
     public function test_listing_and_explaining_stay_inside_the_project(): void

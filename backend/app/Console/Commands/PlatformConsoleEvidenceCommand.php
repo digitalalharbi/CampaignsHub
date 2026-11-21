@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Domains\Billing\Gateways\PaymentGatewayCatalogue;
 use App\Domains\Billing\Gateways\PaymentGatewaySettings;
+use App\Domains\Subscriptions\Services\VatInvoiceReview;
 use Illuminate\Console\Command;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +35,10 @@ final class PlatformConsoleEvidenceCommand extends Command
         'SUPERADMIN-LIMITS-001' => [['GET', 'api/v1/admin/tenants/{tenant}/limits'], ['PUT', 'api/v1/admin/tenants/{tenant}/limits/{metric}']],
         'SUPERADMIN-CONSOLE-HOME-001' => [['GET', 'api/v1/admin/overview']],
         'PAY-GATEWAY-CONSOLE-001' => [['GET', 'api/v1/admin/settings/integrations/payments']],
+        'PRICING-ADDONS-001' => [['GET', 'api/v1/admin/addons'], ['GET', 'api/v1/subscriptions/addons']],
+        'PRICING-MIGRATION-001' => [['GET', 'api/v1/admin/plan-migration'], ['POST', 'api/v1/admin/tenants/{tenant}/plan-migration']],
+        'PRICING-USAGE-CREDITS-001' => [['GET', 'api/v1/admin/usage/meters'], ['POST', 'api/v1/admin/tenants/{tenant}/credits'], ['GET', 'api/v1/subscriptions/usage']],
+        'PRICING-VAT-002' => [['GET', 'api/v1/admin/tax'], ['GET', 'api/v1/admin/tax/invoice-review']],
     ];
 
     /** requirement => [table, column|null] */
@@ -43,6 +48,12 @@ final class PlatformConsoleEvidenceCommand extends Command
         'SUPERADMIN-FEATURES-001' => [['platform_settings', 'disabled_capabilities'], ['capability_switches', null]],
         'SUPERADMIN-LIMITS-001' => [['tenant_limit_overrides', null]],
         'PAY-GATEWAY-CONSOLE-001' => [['provider_configurations', 'tested_fingerprint'], ['platform_settings', 'payment_primary_gateway']],
+        'PRICING-CATALOGUE-001' => [['plan_catalogue_versions', null], ['subscription_plans', 'catalogue_version_id']],
+        'PRICING-SEATS-001' => [['ad_account_seats', null], ['ad_account_seat_events', null]],
+        'PRICING-ADDONS-001' => [['addons', null], ['tenant_addons', null]],
+        'PRICING-USAGE-CREDITS-001' => [['usage_meters', null], ['usage_events', null], ['credit_transactions', null], ['usage_alerts', null]],
+        'PRICING-VAT-001' => [['subscription_payments', 'net_amount'], ['plan_catalogue_versions', 'prices_include_vat']],
+        'PRICING-VAT-002' => [['subscriptions', 'tax_treatment'], ['plan_catalogue_versions', 'tax_treatment']],
     ];
 
     public function handle(Router $router, PaymentGatewaySettings $gateways): int
@@ -74,6 +85,15 @@ final class PlatformConsoleEvidenceCommand extends Command
                 'limit_overrides' => Schema::hasTable('tenant_limit_overrides') ? DB::table('tenant_limit_overrides')->count() : null,
                 'connections_needing_reconnect' => DB::table('provider_connections')->where('status', 'error')->count(),
                 'payment_gateways' => $this->gateways($gateways),
+                // Pricing, read-only: what is on sale and what the ledgers hold — counts only, no customer data.
+                'pricing' => [
+                    'editions' => Schema::hasColumn('plan_catalogue_versions', 'tax_treatment')
+                        ? DB::table('plan_catalogue_versions')->orderBy('number')->get(['number', 'currency', 'status', 'prices_include_vat', 'tax_treatment'])->all() : null,
+                    'scheduled_plan_moves' => DB::table('subscriptions')->whereNotNull('scheduled_plan_id')->count(),
+                    'usage_events_30d' => Schema::hasTable('usage_events') ? DB::table('usage_events')->where('occurred_at', '>=', now()->subDays(30))->count() : null,
+                    'credit_accounts' => Schema::hasTable('credit_accounts') ? DB::table('credit_accounts')->count() : null,
+                    'vat_review' => Schema::hasColumn('subscriptions', 'tax_treatment') ? collect(app(VatInvoiceReview::class)->run(0))->except('rows')->all() : null,
+                ],
                 'console_actions_30d' => DB::table('audit_logs')->where('created_at', '>=', now()->subDays(30))
                     ->where(fn ($q) => $q->where('action', 'like', 'platform.%')->orWhere('action', 'like', 'support.%'))
                     ->selectRaw('action, count(*) as n')->groupBy('action')->orderBy('action')->pluck('n', 'action')->map(fn ($n) => (int) $n)->all(),

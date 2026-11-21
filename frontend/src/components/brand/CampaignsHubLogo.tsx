@@ -132,7 +132,7 @@ export function CampaignsHubLogo({
 }
 
 const SIZES = {
-  sm: { mark: 28, title: "text-[17px]", line: "text-[9px]" },
+  sm: { mark: 28, title: "text-lg", line: "text-[9px]" },
   md: { mark: 36, title: "text-[22px]", line: "text-[10px]" },
-  lg: { mark: 48, title: "text-[30px]", line: "text-[12px]" },
+  lg: { mark: 48, title: "text-3xl", line: "text-xs" },
 } as const;

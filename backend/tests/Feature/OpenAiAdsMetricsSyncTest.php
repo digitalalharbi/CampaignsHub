@@ -241,7 +241,7 @@ final class OpenAiAdsMetricsSyncTest extends TestCase
                 return Http::response(['data' => [['id' => 'cmp_1', 'name' => 'Launch'], ['id' => 'cmp_2', 'name' => 'Retarget']], 'has_more' => false]);
             }
 
-            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'USD']);
+            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency_code' => 'USD']);
         });
 
         $this->runStructureSync();
@@ -286,7 +286,7 @@ final class OpenAiAdsMetricsSyncTest extends TestCase
                 return Http::response(['data' => [['id' => 'cmp_1', 'name' => 'Launch']], 'has_more' => false]);
             }
 
-            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'USD']);
+            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency_code' => 'USD']);
         });
 
         $this->runStructureSync();
@@ -317,7 +317,7 @@ final class OpenAiAdsMetricsSyncTest extends TestCase
                 return Http::response(['data' => [['id' => 'cmp_1', 'name' => 'Launch']], 'has_more' => false]);
             }
 
-            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'USD']);
+            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency_code' => 'USD']);
         });
 
         $this->runStructureSync();
@@ -368,7 +368,7 @@ final class OpenAiAdsMetricsSyncTest extends TestCase
                 return Http::response(['data' => [['id' => 'cmp_1', 'name' => 'Launch']], 'has_more' => false]);
             }
 
-            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'SAR']);
+            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency_code' => 'SAR']);
         });
 
         $this->runStructureSync();
@@ -445,7 +445,7 @@ final class OpenAiAdsMetricsSyncTest extends TestCase
                 return Http::response(['data' => [['id' => 'cmp_1', 'name' => 'Launch']], 'has_more' => false]);
             }
 
-            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency' => 'SAR']);
+            return Http::response(['id' => 'acct_live_1', 'name' => 'Acme Riyadh', 'currency_code' => 'SAR']);
         });
     }
 }

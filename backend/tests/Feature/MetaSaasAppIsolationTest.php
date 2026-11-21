@@ -54,6 +54,8 @@ final class MetaSaasAppIsolationTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected bool $selectsSeededAccounts = false;
+
     private const LIVE_ID = 'live-app-111111';
 
     private const LIVE_SECRET = 'live-secret-AAAAAAAAAAAA';

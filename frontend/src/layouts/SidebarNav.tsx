@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -60,8 +60,8 @@ export function navLeaves(groups: readonly NavGroup[]): NavLeaf[] {
 }
 
 function leafClass(collapsed: boolean | undefined, isActive: boolean, nested: boolean): string {
-  const base = 'group relative flex items-center rounded-xl text-sm font-semibold transition-all duration-150'
-  const spacing = collapsed ? 'justify-center p-2.5' : `gap-3 px-3 py-2.5 ${nested ? 'ms-3' : ''}`
+  const base = 'group relative flex items-center rounded-xl text-sm font-semibold transition'
+  const spacing = collapsed ? 'h-11 w-11 justify-center' : `gap-3 px-3 py-2.5 ${nested ? 'ms-3' : ''}`
   const tone = isActive
     ? 'bg-[var(--brand-background)] text-brand-600'
     : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
@@ -121,7 +121,7 @@ export function SidebarNav({
 /**
  * NAV-TAXONOMY-001 — which leaf is the current page, when two leaves share a path.
  *
- * «المجموعات» and «الإعلانات» are the Analytics page opened on a tab (`/analytics?tab=ad_sets`), and «إطلاق الحملات»
+ * «المجموعات» and «الإعلانات» are the Analytics page opened on a tab (`/analytics?tab=ad_sets`), and «حملة جديدة»
  * is the Campaigns page with its builder open. Router matching reads the path only, so all three would light up
  * together with their parent. A leaf with a query is current when the address carries those parameters; a plain leaf
  * on the same path steps aside for it, so exactly one leaf is current.
@@ -148,25 +148,41 @@ function Leaf({
   const text = ar ? leaf.ar : leaf.en
   const location = useLocation()
   const isActive = leafActive(leaf, all, location.pathname, location.search)
+  const pop = useRailPop()
 
   return (
-    <NavLink
-      to={leaf.to}
-      end={leaf.end}
-      onClick={onNavigate}
-      title={collapsed ? text : undefined}
-      // NavLink sets aria-current from its own path match; on a shared path only the leaf chosen above is the page.
-      aria-current={isActive ? 'page' : 'false'}
-      className={() => leafClass(collapsed, isActive, nested)}
-    >
-      {() => (
-        <>
-          {isActive && <span className="absolute inset-y-2 start-0 w-[3px] rounded-full bg-brand-600" aria-hidden />}
-          <leaf.icon size={nested ? 17 : 19} strokeWidth={isActive ? 2.4 : 2} aria-hidden />
-          {!collapsed && <span>{text}</span>}
-        </>
+    <div ref={pop.wrapRef} className={collapsed ? 'flex justify-center' : undefined} {...(collapsed ? pop.hover : {})}>
+      <NavLink
+        ref={pop.triggerRef}
+        to={leaf.to}
+        end={leaf.end}
+        onClick={onNavigate}
+        // The name is the tooltip on the 64px strip — shown by the layer below, read by assistive tech from here.
+        aria-label={collapsed ? text : undefined}
+        // NavLink sets aria-current from its own path match; on a shared path only the leaf chosen above is the page.
+        aria-current={isActive ? 'page' : 'false'}
+        className={() => leafClass(collapsed, isActive, nested)}
+        {...(collapsed ? pop.focus : {})}
+      >
+        {() => (
+          <>
+            {isActive && <span className="absolute inset-y-2 start-0 w-[3px] rounded-full bg-brand-600" aria-hidden />}
+            <leaf.icon size={nested ? 17 : 19} strokeWidth={isActive ? 2.4 : 2} aria-hidden />
+            {!collapsed && <span>{text}</span>}
+          </>
+        )}
+      </NavLink>
+      {collapsed && (
+        <div
+          ref={pop.panelRef}
+          role="tooltip"
+          style={pop.style}
+          className={`${pop.open ? 'block' : 'hidden'} pointer-events-none fixed z-[70] whitespace-nowrap rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm font-semibold text-text-primary shadow-[var(--shadow-medium)]`}
+        >
+          {text}
+        </div>
       )}
-    </NavLink>
+    </div>
   )
 }
 
@@ -191,16 +207,10 @@ function Group({
     rememberCollapsed(storageKey, group.key, !next)
   }
 
-  // Collapsed rail: no room for a disclosure, so the sections show directly as icons. Hiding them
-  // behind a popover would make the collapsed rail strictly worse than the expanded one.
+  // The 64px strip has no room for a disclosure, and drawing every section as its own icon made it twenty tall.
+  // A group is ONE icon; its sections open beside it as a flyout (NOV-SIDEBAR-001).
   if (collapsed) {
-    return (
-      <>
-        {group.leaves.map((l) => (
-          <Leaf key={l.to} leaf={l} ar={ar} collapsed onNavigate={onNavigate} nested={false} all={all} />
-        ))}
-      </>
-    )
+    return <RailGroup group={group} ar={ar} all={all} holdsCurrent={holdsCurrent} onNavigate={onNavigate} />
   }
 
   return (
@@ -226,6 +236,177 @@ function Group({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * NOV-SIDEBAR-001 — the position and the open/close rules shared by the strip's tooltip and its flyout.
+ *
+ * The layer is `position: fixed`, measured from its trigger when it opens: the strip scrolls on its own
+ * (`overflow-y: auto`), and an absolutely positioned child of a scroller is clipped by it. Fixed is not.
+ * Opening follows the mouse only for a MOUSE — a finger has no hover, so a touch opens on tap and the
+ * second tap on the icon closes it. Escape and a press outside close it, and so does arriving on another page.
+ */
+function useRailPop() {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ top: number; inline: number; rtl: boolean } | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLAnchorElement & HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Escape hands focus back to the trigger, which must not read as «focused, so open» and undo the close. */
+  const skipFocus = useRef(false)
+  /** A mouse already opened it on hover, so its click must not close it again; a finger or a key toggles. */
+  const pointer = useRef<string>('mouse')
+  const { pathname, search } = useLocation()
+
+  const cancel = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null } }
+
+  useEffect(() => { cancel(); setOpen(false) }, [pathname, search])
+  useEffect(() => cancel, [])
+
+  useLayoutEffect(() => {
+    const trigger = triggerRef.current
+    if (!open || !trigger) return
+    const rect = trigger.getBoundingClientRect()
+    const rtl = getComputedStyle(trigger).direction === 'rtl'
+    const height = panelRef.current?.offsetHeight ?? 0
+    setPos({
+      top: Math.max(8, Math.min(rect.top, window.innerHeight - height - 8)),
+      inline: rtl ? document.documentElement.clientWidth - rect.left + 6 : rect.right + 6,
+      rtl,
+    })
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); skipFocus.current = true; triggerRef.current?.focus() } }
+    const onPress = (e: PointerEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('pointerdown', onPress)
+
+    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('pointerdown', onPress) }
+  }, [open])
+
+  const press = (e: React.PointerEvent) => { pointer.current = e.pointerType }
+  const toggleFromClick = () => setOpen(pointer.current === 'mouse' ? true : !open)
+  const hover = {
+    onPointerDown: press,
+    onPointerEnter: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') { cancel(); setOpen(true) } },
+    onPointerLeave: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') { cancel(); timer.current = setTimeout(() => setOpen(false), 140) } },
+  }
+  const focus = {
+    onFocus: () => { cancel(); if (skipFocus.current) { skipFocus.current = false; return } setOpen(true) },
+    onBlur: (e: React.FocusEvent) => { if (!wrapRef.current?.contains(e.relatedTarget as Node | null)) setOpen(false) },
+  }
+  const style: React.CSSProperties = pos
+    ? { top: pos.top, ...(pos.rtl ? { right: pos.inline } : { left: pos.inline }) }
+    : { top: 0, visibility: 'hidden' }
+
+  return { open, setOpen, toggleFromClick, wrapRef, triggerRef, panelRef, hover, focus, style }
+}
+
+/**
+ * NOV-SIDEBAR-001 — a control the 64px strip has no room for, opened beside its icon.
+ *
+ * The strip used to drop the agency's client → project switcher entirely («steps aside»), which was harmless while the
+ * rail opened wide by default and is not now that it starts as a strip: the one control every section is read through
+ * would have been unreachable. It opens on PRESS (a form is not a tooltip, so no hover-open), its body is mounted only
+ * while open (no hidden duplicate of the real control in the document), and Escape or a press outside closes it.
+ */
+export function RailPopover({
+  icon: Icon, label, children, testid,
+}: { icon: LucideIcon; label: string; children: React.ReactNode; testid?: string }) {
+  const pop = useRailPop()
+  const panelId = useId()
+
+  return (
+    <div ref={pop.wrapRef} className="flex justify-center">
+      <button
+        ref={pop.triggerRef}
+        type="button"
+        data-testid={testid}
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={pop.open}
+        aria-controls={panelId}
+        title={label}
+        onClick={() => pop.setOpen(!pop.open)}
+        className="flex h-11 w-11 items-center justify-center rounded-xl text-text-secondary transition hover:bg-surface-hover hover:text-text-primary"
+      >
+        <Icon size={20} aria-hidden />
+      </button>
+      <div
+        id={panelId}
+        ref={pop.panelRef}
+        role="dialog"
+        aria-label={label}
+        style={pop.style}
+        className={`${pop.open ? 'block' : 'hidden'} fixed z-[70] w-72 max-w-[90vw] rounded-xl border border-border bg-surface-elevated p-3 shadow-[var(--shadow-large)]`}
+      >
+        {pop.open && children}
+      </div>
+    </div>
+  )
+}
+
+/** One icon for a whole group on the strip; its sections open beside it. Every link stays in the document. */
+function RailGroup({
+  group, ar, all, holdsCurrent, onNavigate,
+}: { group: NavGroup; ar: boolean; all: readonly NavLeaf[]; holdsCurrent: boolean; onNavigate?: () => void }) {
+  const pop = useRailPop()
+  const panelId = useId()
+  const text = ar ? group.ar : group.en
+  const { pathname, search } = useLocation()
+
+  return (
+    <div ref={pop.wrapRef} className="flex justify-center" {...pop.hover}>
+      <button
+        ref={pop.triggerRef}
+        type="button"
+        data-testid={`nav-group-${group.key}`}
+        aria-label={text}
+        aria-haspopup="true"
+        aria-expanded={pop.open}
+        aria-controls={panelId}
+        onClick={pop.toggleFromClick}
+        className={`group relative flex h-11 w-11 items-center justify-center rounded-xl transition ${
+          holdsCurrent ? 'bg-[var(--brand-background)] text-brand-600' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+        }`}
+        {...pop.focus}
+      >
+        {holdsCurrent && <span className="absolute inset-y-2 start-0 w-[3px] rounded-full bg-brand-600" aria-hidden />}
+        <group.icon size={20} strokeWidth={holdsCurrent ? 2.4 : 2} aria-hidden />
+      </button>
+      <div
+        id={panelId}
+        ref={pop.panelRef}
+        role="group"
+        aria-label={text}
+        style={pop.style}
+        className={`${pop.open ? 'flex' : 'hidden'} fixed z-[70] min-w-[200px] flex-col gap-0.5 rounded-xl border border-border bg-surface-elevated p-1.5 shadow-[var(--shadow-large)]`}
+      >
+        <p className="px-2.5 pb-1 pt-1 text-xs font-bold text-text-muted">{text}</p>
+        {group.leaves.map((l) => {
+          const active = leafActive(l, all, pathname, search)
+
+          return (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.end}
+              onClick={onNavigate}
+              aria-current={active ? 'page' : 'false'}
+              className={() => `flex h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-semibold transition-colors ${
+                active ? 'bg-[var(--brand-background)] text-brand-600' : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+              }`}
+            >
+              {() => (<><l.icon size={17} strokeWidth={active ? 2.4 : 2} aria-hidden /><span>{ar ? l.ar : l.en}</span></>)}
+            </NavLink>
+          )
+        })}
+      </div>
     </div>
   )
 }

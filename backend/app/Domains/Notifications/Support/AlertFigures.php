@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Domains\Funding\Support\FundingMoney;
+
 /**
  * EMAIL-PERF-DASHBOARDS-001 — the figures an alert carries, as one lead and a compact strip.
  *
@@ -27,7 +29,7 @@ final class AlertFigures
             return [
                 'lead' => ['label' => $ar ? 'من الإنفاق المتوقع حتى الآن' : 'of the spend expected by now', 'value' => self::percent((float) $context['ratio'])],
                 'strip' => array_values(array_filter([
-                    isset($context['spend']) ? ['label' => $ar ? 'المصروف' : 'Spent', 'value' => self::amount($context['spend'], $currency)] : null,
+                    isset($context['spend']) ? ['label' => $ar ? 'الإنفاق' : 'Spent', 'value' => self::amount($context['spend'], $currency)] : null,
                     isset($context['budget']) ? ['label' => $ar ? 'الميزانية' : 'Budget', 'value' => self::amount($context['budget'], $currency)] : null,
                 ])),
             ];
@@ -38,10 +40,10 @@ final class AlertFigures
             $currency = isset($context['currency']) ? (string) $context['currency'] : null;
 
             return [
-                'lead' => ['label' => $ar ? 'المستهلك من الحدّ' : 'Consumed of the limit', 'value' => self::amount($context['consumed'], $currency)],
+                'lead' => ['label' => $ar ? 'الإنفاق من الحد' : 'Spent of the limit', 'value' => self::amount($context['consumed'], $currency)],
                 'strip' => array_values(array_filter([
-                    ['label' => $ar ? 'الحدّ' : 'Limit', 'value' => self::amount($context['limit'], $currency)],
-                    isset($context['threshold']) && is_numeric($context['threshold']) ? ['label' => $ar ? 'العتبة' : 'Threshold', 'value' => self::percent((float) $context['threshold'] > 1 ? (float) $context['threshold'] / 100 : (float) $context['threshold'])] : null,
+                    ['label' => $ar ? 'الحد' : 'Limit', 'value' => self::amount($context['limit'], $currency)],
+                    isset($context['threshold']) && is_numeric($context['threshold']) ? ['label' => $ar ? 'حد التنبيه' : 'Alert at', 'value' => self::percent((float) $context['threshold'] > 1 ? (float) $context['threshold'] / 100 : (float) $context['threshold'])] : null,
                 ])),
             ];
         }
@@ -54,8 +56,10 @@ final class AlertFigures
             $metric = substr($key, 0, -8);
             $previous = $context[$metric.'_previous'] ?? null;
             $strip = [];
+            // ALERT-MAIL-DATED-BARS-001 — the figures line names its days too, never a bare «قبل / الآن».
+            $when = AlertMailItem::when($context, $ar);
             if (is_numeric($previous)) {
-                $strip[] = ['label' => $ar ? 'قبل' : 'Before', 'value' => self::metric($metric, (float) $previous)];
+                $strip[] = ['label' => $when['before_when'] ?? ($ar ? 'قبل' : 'Before'), 'value' => self::metric($metric, (float) $previous)];
                 if ((float) $previous != 0.0) {
                     $change = ((float) $value - (float) $previous) / abs((float) $previous);
                     $strip[] = ['label' => $ar ? 'التغيّر' : 'Change', 'value' => ($change > 0 ? '+' : '').self::percent($change)];
@@ -65,7 +69,9 @@ final class AlertFigures
                 $strip[] = ['label' => $ar ? 'النافذة' : 'Window', 'value' => (int) $context['window_days'].' '.($ar ? 'يوم' : 'days')];
             }
 
-            return ['lead' => ['label' => self::metricLabel($metric, $ar), 'value' => self::metric($metric, (float) $value)], 'strip' => $strip];
+            $lead = isset($when['now_when']) ? trim(preg_replace('/\s*(الآن|now)$/u', '', self::metricLabel($metric, $ar)) ?? '').' · '.$when['now_when'] : self::metricLabel($metric, $ar);
+
+            return ['lead' => ['label' => $lead, 'value' => self::metric($metric, (float) $value)], 'strip' => $strip];
         }
 
         // Spend with no results — the count that is zero, beside the money it cost.
@@ -73,7 +79,7 @@ final class AlertFigures
             return [
                 'lead' => ['label' => $ar ? 'النتائج' : 'Results', 'value' => number_format((float) ($context['conversions'] ?? 0))],
                 'strip' => array_values(array_filter([
-                    ['label' => $ar ? 'المصروف' : 'Spent', 'value' => self::amount($context['spend'], null)],
+                    ['label' => $ar ? 'الإنفاق' : 'Spent', 'value' => self::amount($context['spend'], null)],
                     isset($context['days']) && is_numeric($context['days']) ? ['label' => $ar ? 'الأيام' : 'Days', 'value' => (string) (int) $context['days']] : null,
                 ])),
             ];
@@ -91,7 +97,7 @@ final class AlertFigures
     {
         $n = number_format((float) $value, 2);
 
-        return $currency === null || $currency === '' ? $n : $n.' '.$currency;
+        return FundingMoney::withMark($n, $currency);
     }
 
     private static function metric(string $metric, float $value): string
@@ -106,8 +112,8 @@ final class AlertFigures
     private static function metricLabel(string $metric, bool $ar): string
     {
         $labels = [
-            'roas' => ['العائد على الإنفاق الآن', 'Return on ad spend now'],
-            'ctr' => ['نسبة النقر الآن', 'Click-through rate now'],
+            'roas' => ['معدل العائد الآن', 'Return on ad spend now'],
+            'ctr' => ['معدل النقر الآن', 'Click-through rate now'],
             'cpa' => ['تكلفة النتيجة الآن', 'Cost per result now'],
             'cpl' => ['تكلفة العميل المحتمل الآن', 'Cost per lead now'],
             'cpc' => ['تكلفة النقرة الآن', 'Cost per click now'],

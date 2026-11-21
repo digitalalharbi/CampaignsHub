@@ -21,6 +21,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -36,6 +37,7 @@ use Tests\TestCase;
  */
 final class HierarchyCountsTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -429,6 +431,7 @@ final class HierarchyCountsTest extends TestCase
     public function test_the_dashboard_block_reads_through_the_tenant_scope(): void
     {
         $campaign = $this->campaign('cmp-1');
+        $this->bindSeededAccount($this->project->id, $this->account->getKey());
 
         $unified = UnifiedCampaign::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id,
@@ -776,6 +779,27 @@ final class HierarchyCountsTest extends TestCase
             ->expectsOutputToContain('CREATIVE SHAPES')
             ->expectsOutputToContain('collection            :     1   hero 0 · card media only 0 · nothing to draw 1')
             ->expectsOutputToContain('image                 :     1   hero 1 · card media only 0 · nothing to draw 0')
+            ->assertSuccessful();
+    }
+
+    /** CONTENT-PREVIEW-COVERAGE-001 — the census reads per provider and format: drawable, playable, expired, no expiry, not https, no size, and the stored reason. */
+    public function test_the_preview_coverage_reads_expiry_scheme_size_and_the_stored_reason(): void
+    {
+        $campaign = $this->campaign('cmp-1');
+
+        $ok = $this->creativeWith($campaign, 'cr-ok', 'https://cdn.example/still.jpg');
+        $ok->forceFill(['format' => 'image', 'asset_expires_at' => now()->subHour(), 'width' => 100, 'height' => 100])->save();
+
+        $plain = $this->creativeWith($campaign, 'cr-plain', 'http://cdn.example/other.jpg');
+        $plain->forceFill(['format' => 'image'])->save();
+
+        $blank = $this->creativeWith($campaign, 'cr-blank', null);
+        $blank->forceFill(['format' => 'video', 'raw' => ['media_reason' => 'video_info_missing']])->save();
+
+        $this->artisan('integrations:diagnose', ['--provider' => 'snapchat', '--hierarchy' => true])
+            ->expectsOutputToContain('PREVIEW COVERAGE')
+            ->expectsOutputToContain('image               : 2/2 · 0 · 1 · 1 · 1 · 1')
+            ->expectsOutputToContain('video_info_missing')
             ->assertSuccessful();
     }
 

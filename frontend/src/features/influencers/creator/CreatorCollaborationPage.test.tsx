@@ -56,7 +56,7 @@ describe('CreatorCollaborationPage', () => {
 
     renderWithProviders(<CreatorCollaborationPage />)
 
-    await waitFor(() => expect(screen.getByText('18,000 SAR')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('18,000 ر.س')).toBeInTheDocument())
     expect(screen.getByText(/Your fee/i)).toBeInTheDocument()
     expect(screen.queryByText(/25,000/)).not.toBeInTheDocument()
     expect(screen.queryByText(/margin/i)).not.toBeInTheDocument()

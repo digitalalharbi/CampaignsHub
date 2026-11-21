@@ -121,7 +121,7 @@ export function NominationsPage() {
               type="button"
               data-testid={`nomination-filter-${value || 'all'}`}
               onClick={() => setFilter(value as '' | Nomination['status'])}
-              className={`rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                 filter === value ? 'border-brand-500 bg-brand-primary-soft text-brand-700' : 'border-border text-text-secondary hover:bg-surface-hover'
               }`}
             >
@@ -257,14 +257,14 @@ function NominationCard({
         <span className={`ms-auto rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_TONE[n.status]}`}>{statusLabel}</span>
       </div>
 
-      {n.rationale && <p className="text-[13px] leading-relaxed text-text-secondary">{n.rationale}</p>}
+      {n.rationale && <p className="text-xs leading-relaxed text-text-secondary">{n.rationale}</p>}
       {n.proposed_fee && (
         <p className="tnum text-sm font-semibold text-text-primary"><Num>{n.proposed_fee} {n.currency ?? ''}</Num></p>
       )}
 
       {/* A rejection is shown WITH its reason. Hiding it is what makes the same creator come back. */}
       {n.decision_note && (
-        <p data-testid="decision-note" className="rounded-xl bg-surface-secondary p-3 text-[13px] text-text-secondary">
+        <p data-testid="decision-note" className="rounded-xl bg-surface-secondary p-3 text-xs text-text-secondary">
           <span className="font-semibold text-text-primary">{c.decided}: </span>{n.decision_note}
         </p>
       )}

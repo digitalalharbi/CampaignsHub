@@ -8,6 +8,8 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Subscriptions\Addons\Addon;
+use App\Domains\Subscriptions\Addons\TenantAddon;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
 use App\Domains\Subscriptions\Services\SubscriptionService;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -112,6 +114,22 @@ final class PlatformLimitOverrideTest extends TestCase
         for ($i = 2; $i <= 5; $i++) {
             $this->createProject("P{$i}")->assertCreated();
         }
+    }
+
+    /** A paid capacity add-on keeps adding on top of an operator's cap — an override never takes away what was bought. */
+    public function test_a_capacity_add_on_still_adds_on_top_of_an_override(): void
+    {
+        $addon = Addon::query()->create([
+            'code' => 'test_projects_2', 'kind' => 'capacity', 'name' => '2 projects', 'name_ar' => 'مشروعان', 'price_monthly' => 10,
+            'currency' => 'SAR', 'grants' => ['limits' => ['projects' => 2]], 'readiness' => 'available', 'is_active' => true,
+        ]);
+        TenantAddon::query()->create([
+            'tenant_id' => $this->tenant->id, 'addon_id' => $addon->id, 'quantity' => 1, 'status' => 'active', 'source' => 'console',
+        ]);
+
+        $limits = $this->setLimit(['mode' => 'cap', 'limit' => 1])->assertOk()->json('data.limits');
+
+        $this->assertSame(3, $this->row($limits)['effective_limit'], 'the operator cap of 1 plus the 2 the add-on bought');
     }
 
     public function test_a_temporary_raise_lapses_on_its_date(): void

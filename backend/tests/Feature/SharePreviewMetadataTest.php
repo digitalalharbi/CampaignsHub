@@ -124,7 +124,7 @@ final class SharePreviewMetadataTest extends TestCase
          * header: «بواسطة» is a byline, and this is a report somebody PREPARED for somebody else.
          */
         // No description was configured, so the card states the period — configured — and nothing composed.
-        $this->assertSame('2026-07-01 — 2026-07-31', $description);
+        $this->assertSame('1 يوليو – 31 يوليو 2026', $description);
         $this->assertStringNotContainsString('918273', $description);
     }
 
@@ -293,8 +293,8 @@ final class SharePreviewMetadataTest extends TestCase
 
         $html = $this->preview();
 
-        $this->assertSame('2026-07-01 — 2026-07-31', $this->meta($html, 'og:image:alt'));
-        $this->assertSame('2026-07-01 — 2026-07-31', $this->metaName($html, 'twitter:image:alt'));
+        $this->assertSame('1 يوليو – 31 يوليو 2026', $this->meta($html, 'og:image:alt'));
+        $this->assertSame('1 يوليو – 31 يوليو 2026', $this->metaName($html, 'twitter:image:alt'));
     }
 
     /**

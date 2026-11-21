@@ -1,3 +1,4 @@
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 /**
  * AGGREGATION-TRUTH-001 — the frontend reads coverage; it does not deduce it.
  *
@@ -175,7 +176,7 @@ export function windowsUnlikeNote(
   if (!summary || comparableWindows(summary)) return null
   if (summary.previous_rows_in_scope === false) {
     const r = summary.previous_range
-    const span = r ? `(${r.from} → ${r.to}) ` : ''
+    const span = r ? `(${formatPeriodRange(r.from, r.to, ar ? 'ar' : 'en')}) ` : ''
     return ar
       ? `الفترة السابقة ${span}لا تحتوي أي بيانات، فلا يوجد شيء تُقاس عليه هذه الفترة.`
       : `The previous period ${span}holds no data, so there is nothing for this one to be measured against.`

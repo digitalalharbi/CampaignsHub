@@ -280,7 +280,7 @@ function ControlRow({ children, width = '', boxRef }: {
   const dense = useContext(DensityContext) === 'dense'
 
   return (
-    <div ref={boxRef} className={dense ? `flex items-center gap-2 ${width}` : `flex flex-col gap-1 ${width}`}>
+    <div ref={boxRef} className={dense ? `flex min-w-0 max-w-full items-center gap-2 ${width}` : `flex min-w-0 max-w-full flex-col gap-1 ${width}`}>
       {children}
     </div>
   )
@@ -748,7 +748,7 @@ export function FilterChips({
 }: {
   label: string
   value: string
-  options: Array<{ value: string; label: string }>
+  options: Array<{ value: string; label: string; title?: string }>
   onChange: (value: string) => void
   testid?: string
 }) {
@@ -759,15 +759,19 @@ export function FilterChips({
         role="group"
         aria-label={label}
         data-testid={testid}
-        className="inline-flex h-12 items-center rounded-xl border border-border bg-surface-secondary p-0.5 sm:h-9"
+        // ANALYTICS-FILTERS-COMPACT-001 — six objective choices are wider than a phone: the group scrolls inside itself, never the page.
+        className="inline-flex h-12 max-w-full items-center overflow-x-auto rounded-xl border border-border bg-surface-secondary p-0.5 [scrollbar-width:none] sm:h-9"
       >
         {options.map((o) => (
           <button
             key={o.value}
             type="button"
             aria-pressed={value === o.value}
+            title={o.title}
+            data-value={o.value}
+            data-testid={testid ? `${testid}-${o.value}` : undefined}
             onClick={() => onChange(o.value)}
-            className={`h-11 rounded-lg px-2.5 text-sm font-semibold transition-colors sm:h-8 ${
+            className={`h-11 shrink-0 whitespace-nowrap rounded-lg px-2.5 text-sm font-semibold transition-colors sm:h-8 ${
               value === o.value
                 ? 'bg-brand-600 text-white shadow-[var(--shadow-small)]'
                 : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'

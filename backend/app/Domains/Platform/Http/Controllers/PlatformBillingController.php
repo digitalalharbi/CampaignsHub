@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Http\Controllers;
 
+use App\Domains\Accounts\Models\RegistrationDecision;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPlan;
@@ -237,6 +238,7 @@ final class PlatformBillingController extends Controller
                 'status' => $s->status,
                 'seats' => $s->seats,
                 'current_period_end' => $s->current_period_end?->toDateString(),
+                'commercial_basis' => $s->commercial_basis,
             ])->all(),
             'meta' => ['total' => $page->total(), 'page' => $page->currentPage(), 'per_page' => $page->perPage()],
         ], 'Subscriptions.');
@@ -258,7 +260,8 @@ final class PlatformBillingController extends Controller
     {
         $this->tenants->enterPlatformScope();
 
-        $active = Subscription::query()->where('status', 'active')->with('plan')->get();
+        // Complimentary access is owed by nobody, so it is not committed revenue.
+        $active = Subscription::query()->where('status', 'active')->with('plan')->get()->reject(fn (Subscription $s) => $s->isComplimentary());
 
         $committed = $active
             ->filter(fn (Subscription $s) => $s->plan !== null)
@@ -339,6 +342,7 @@ final class PlatformBillingController extends Controller
     {
         $rows = Subscription::query()
             ->whereIn('status', ['active', 'trialing'])
+            ->where(fn ($q) => $q->whereNull('commercial_basis')->orWhere('commercial_basis', '!=', RegistrationDecision::BASIS_COMPLIMENTARY))
             ->get(['status', 'billing_interval', 'currency', 'unit_amount']);
 
         $byCurrency = $rows

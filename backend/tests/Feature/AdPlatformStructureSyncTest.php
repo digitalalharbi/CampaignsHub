@@ -25,8 +25,10 @@ use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -52,9 +54,31 @@ final class AdPlatformStructureSyncTest extends TestCase
 
     private Project $project;
 
+    /** @var list<string> */
+    private array $strayRequests = [];
+
+    protected function assertPostConditions(): void
+    {
+        $this->assertSame([], $this->strayRequests, 'A test in this class asked for a URL its Http::fake does not answer.');
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        /*
+         * Hermetic by construction. `Http::fake([...])` lets an unmatched URL through to the real network,
+         * and a Meta per-node read (`v25.0/420?fields=thumbnail_url`) reached graph.facebook.com in a local
+         * run: a DNS stall then failed the suite on cURL 28. `MetaConnector::readEach()` catches what a
+         * refused node throws, so a stray request would be swallowed, and tearDown fails on the log line.
+         */
+        Http::preventStrayRequests();
+        $this->strayRequests = [];
+        Log::listen(function (MessageLogged $log): void {
+            if (str_contains(json_encode($log->context) ?: '', 'without a matching fake')) {
+                $this->strayRequests[] = (string) json_encode($log->context);
+            }
+        });
 
         $this->tenant = Tenant::create(['name' => 'Struct', 'slug' => 'struct-'.uniqid(), 'status' => 'active']);
         app(TenantContext::class)->setTenantId($this->tenant->id);
@@ -78,6 +102,7 @@ final class AdPlatformStructureSyncTest extends TestCase
         $account = $this->account('meta');
 
         Http::fake([
+            'graph.facebook.com/*/420?*' => Http::response(['id' => '420']),
             'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
                 ['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES', 'daily_budget' => '15000'],
             ]]),
@@ -375,6 +400,8 @@ final class AdPlatformStructureSyncTest extends TestCase
         $account = $this->account('meta');
 
         Http::fake([
+            'graph.facebook.com/*/9001?*' => Http::response(['id' => '9001']),
+            'graph.facebook.com/*/402?*' => Http::response(['id' => '402']),
             'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
                 ['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
             ]]),
@@ -489,6 +516,7 @@ final class AdPlatformStructureSyncTest extends TestCase
         $account = $this->account('meta');
 
         Http::fake([
+            'graph.facebook.com/*/404?*' => Http::response(['id' => '404']),
             'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
                 ['id' => '120', 'name' => 'Ramadan', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
             ]]),
@@ -522,6 +550,7 @@ final class AdPlatformStructureSyncTest extends TestCase
         $account = $this->account('meta');
 
         Http::fake([
+            'graph.facebook.com/*/405?*' => Http::response(['id' => '405']),
             'graph.facebook.com/*/campaigns*' => Http::response(['data' => [
                 ['id' => '120', 'name' => 'R', 'status' => 'ACTIVE', 'objective' => 'OUTCOME_SALES'],
             ]]),
@@ -720,6 +749,7 @@ final class AdPlatformStructureSyncTest extends TestCase
         $account = $this->account('tiktok');
 
         Http::fake([
+            'business-api.tiktok.com/*/file/video/ad/info/*' => Http::response(['code' => 0, 'message' => 'OK', 'data' => ['list' => []]]),
             'business-api.tiktok.com/*/campaign/get/*' => Http::response(['code' => 0, 'data' => ['list' => [
                 ['campaign_id' => 'c1', 'campaign_name' => 'TT', 'operation_status' => 'ENABLE'],
             ]]]),
@@ -750,6 +780,65 @@ final class AdPlatformStructureSyncTest extends TestCase
         $this->assertNull($withoutMedia->creative_id);
         $this->assertSame('pending', $withoutMedia->review_status);
         $this->assertSame(1, ExternalCreative::withoutGlobalScopes()->count());
+    }
+
+    /**
+     * TIKTOK-CAMPAIGN-STATUS-001 — TikTok says `ENABLE` / `DISABLE`, and the campaign follows it on every sync.
+     *
+     * The generic vocabulary only knew `enabled` / `disabled`, so every TikTok campaign landed `unknown` (11 on «حلويات برديسي»,
+     * one spending), and the visible campaign kept the status it was adopted with for ever. A campaign the sync adopted follows
+     * the platform; one somebody authored does not; a value TikTok has not documented stays `unknown` and is logged by name.
+     */
+    public function test_tiktok_campaign_status_maps_and_the_adopted_campaign_follows_it(): void
+    {
+        $this->configure('tiktok');
+        $account = $this->account('tiktok');
+        Log::spy();
+        // ONE fake reading a variable: `Http::fake` merges stubs and the first match wins, so a second fake would be ignored.
+        $list = [];
+        Http::fake([
+            'business-api.tiktok.com/*/campaign/get/*' => function () use (&$list) {
+                return Http::response(['code' => 0, 'data' => ['list' => $list]]);
+            },
+            'business-api.tiktok.com/*' => Http::response(['code' => 0, 'data' => ['list' => []]]),
+        ]);
+        $fake = function (array $campaigns) use (&$list): void {
+            $list = $campaigns;
+        };
+
+        $fake([
+            ['campaign_id' => 'run', 'campaign_name' => 'Running', 'operation_status' => 'ENABLE', 'secondary_status' => 'CAMPAIGN_STATUS_ENABLE'],
+            ['campaign_id' => 'off', 'campaign_name' => 'Off', 'operation_status' => 'DISABLE', 'secondary_status' => 'CAMPAIGN_STATUS_DISABLE'],
+            ['campaign_id' => 'odd', 'campaign_name' => 'Odd', 'operation_status' => 'FROZEN_NEW'],
+        ]);
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $unified = fn (string $id): UnifiedCampaign => UnifiedCampaign::withoutGlobalScopes()->findOrFail(
+            ExternalCampaign::withoutGlobalScopes()->where('external_id', $id)->value('unified_campaign_id'));
+        $this->assertSame('active', ExternalCampaign::withoutGlobalScopes()->where('external_id', 'run')->value('status'));
+        $this->assertSame('active', $unified('run')->status);
+        $this->assertSame('paused', $unified('off')->status);
+        $this->assertSame('unknown', $unified('odd')->status);
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $m, array $c = []) => str_contains($m, 'TikTok campaign status')
+            && ($c['unmapped'] ?? null) === ['operation_status' => 'FROZEN_NEW'] && ($c['campaign_id'] ?? null) === 'odd');
+
+        // Somebody authored a status on a campaign the sync did NOT adopt: the platform does not overwrite it.
+        $authored = $unified('off');
+        $authored->forceFill(['meta' => ['authored' => true], 'status' => 'completed'])->save();
+        // A campaign adopted while the mapping was broken is backfilled on the next sync.
+        $unified('run')->forceFill(['status' => 'unknown'])->save();
+
+        $fake([
+            ['campaign_id' => 'run', 'campaign_name' => 'Running', 'operation_status' => 'DISABLE', 'secondary_status' => 'CAMPAIGN_STATUS_DISABLE'],
+            ['campaign_id' => 'off', 'campaign_name' => 'Off', 'operation_status' => 'ENABLE', 'secondary_status' => 'CAMPAIGN_STATUS_ENABLE'],
+            ['campaign_id' => 'odd', 'campaign_name' => 'Odd', 'operation_status' => 'ENABLE', 'secondary_status' => 'CAMPAIGN_STATUS_BUDGET_EXCEED'],
+        ]);
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $this->assertSame('paused', $unified('run')->status, 'the adopted campaign follows the platform');
+        $this->assertSame('completed', $unified('off')->status, 'an authored status is not overwritten');
+        $this->assertSame('active', $unified('odd')->status, 'a daily budget spent is still a running campaign');
+        $this->assertSame('budget_exhausted', ExternalCampaign::withoutGlobalScopes()->where('external_id', 'odd')->value('raw')['delivery_signal'] ?? null);
     }
 
     /**
@@ -834,6 +923,88 @@ final class AdPlatformStructureSyncTest extends TestCase
         );
         $this->assertSame('approved', $ad->review_status);
         $this->assertSame('text', ExternalCreative::withoutGlobalScopes()->value('format'));
+    }
+
+    /**
+     * OBJECTIVE-GAPS-001 — X states the objective on the LINE ITEM, never on the campaign.
+     *
+     * docs.x.com/x-ads-api/campaign-management («Objective Based Campaigns»): «The parameter used on
+     * the line item write endpoints and returned on the read endpoints, is `objective`», and «Line
+     * items with different objectives are not allowed under the same campaign». Production: 66 X
+     * campaigns, none with an objective, all in the Unknown family.
+     */
+    public function test_x_takes_the_campaign_objective_from_its_line_items_when_they_agree(): void
+    {
+        $this->configure('x');
+        $account = $this->account('x');
+        $this->fakeX([
+            ['id' => 'li-1', 'campaign_id' => 'cmp-x', 'objective' => 'WEBSITE_CLICKS', 'entity_status' => 'ACTIVE'],
+            ['id' => 'li-2', 'campaign_id' => 'cmp-x', 'objective' => 'WEBSITE_CLICKS', 'entity_status' => 'ACTIVE'],
+        ]);
+
+        $run = app(AccountStructureSyncer::class)->sync($account);
+
+        $this->assertSame('success', $run->status, (string) $run->error);
+        $external = ExternalCampaign::withoutGlobalScopes()->where('external_id', 'cmp-x')->firstOrFail();
+        $this->assertSame('WEBSITE_CLICKS', $external->objective);
+        $unified = UnifiedCampaign::withoutGlobalScopes()->findOrFail($external->unified_campaign_id);
+        $this->assertSame('traffic', $unified->objective);
+        $this->assertSame('platform', $unified->objective_source);
+
+        // A second sweep — the campaigns endpoint again answers no objective — does not undo it.
+        app(AccountStructureSyncer::class)->sync($account);
+        $this->assertSame('WEBSITE_CLICKS', $external->fresh()->objective);
+        $this->assertSame('traffic', $unified->fresh()->objective);
+    }
+
+    /** Line items that disagree leave the campaign for a person, and the disagreement is written down. */
+    public function test_x_line_items_that_disagree_leave_the_campaign_unclassified_and_recorded(): void
+    {
+        $this->configure('x');
+        $account = $this->account('x');
+        $this->fakeX([
+            ['id' => 'li-1', 'campaign_id' => 'cmp-x', 'objective' => 'WEBSITE_CLICKS', 'entity_status' => 'ACTIVE'],
+            ['id' => 'li-2', 'campaign_id' => 'cmp-x', 'objective' => 'REACH', 'entity_status' => 'ACTIVE'],
+        ]);
+
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->where('external_id', 'cmp-x')->firstOrFail();
+        $this->assertNull($external->objective);
+        $unified = UnifiedCampaign::withoutGlobalScopes()->findOrFail($external->unified_campaign_id);
+        $this->assertSame('unset', $unified->objective_source);
+        $this->assertNotSame('traffic', $unified->objective);
+        $this->assertSame('REACH · WEBSITE_CLICKS', $unified->objective_platform_value);
+    }
+
+    /** A person's objective survives the line items' answer. */
+    public function test_x_line_items_never_overwrite_a_manual_objective(): void
+    {
+        $this->configure('x');
+        $account = $this->account('x');
+        $this->fakeX([['id' => 'li-1', 'campaign_id' => 'cmp-x', 'objective' => 'WEBSITE_CLICKS', 'entity_status' => 'ACTIVE']]);
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $external = ExternalCampaign::withoutGlobalScopes()->where('external_id', 'cmp-x')->firstOrFail();
+        $unified = UnifiedCampaign::withoutGlobalScopes()->findOrFail($external->unified_campaign_id);
+        $unified->forceFill(['objective' => 'sales', 'objective_source' => 'manual'])->save();
+
+        app(AccountStructureSyncer::class)->sync($account);
+
+        $this->assertSame('sales', $unified->fresh()->objective);
+        $this->assertSame('manual', $unified->fresh()->objective_source);
+    }
+
+    /** @param list<array<string, mixed>> $lineItems */
+    private function fakeX(array $lineItems): void
+    {
+        Http::fake([
+            'ads-api.x.com/*/campaigns*' => Http::response(['data' => [
+                ['id' => 'cmp-x', 'name' => 'X Launch', 'entity_status' => 'ACTIVE'],
+            ]]),
+            'ads-api.x.com/*/line_items*' => Http::response(['data' => $lineItems]),
+            'ads-api.x.com/*/promoted_tweets*' => Http::response(['data' => []]),
+        ]);
     }
 
     // ── Honest refusals ───────────────────────────────────────────────────────────────────────

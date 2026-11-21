@@ -27,14 +27,20 @@ final class PublicSurfaceInventoryTest extends TestCase
 
     /** @var list<string> */
     private const PUBLIC = [
+        // LOGIN-004 — linking a Google account in place: the proof is the password or the mailed link, so the routes are public.
+        'DELETE api/v1/auth/oauth/pending-link',
         'DELETE api/v1/client/team/{membership}',
         'DELETE api/v1/requests/uploads/{file}',
         // AUTH-LOGIN-UX-002 — which ways in the sign-in page may offer; booleans only.
-        'GET api/v1/auth/methods',
+        'GET api/v1/auth/oauth/pending-link',
         'GET api/v1/auth/oauth/providers',
         'GET api/v1/auth/oauth/{provider}/callback',
         'GET api/v1/auth/registration/{registration}',
+        // SIGNUP-VERIFY-POLICY-001 — which proofs the sign-up form must ask for; two booleans, no application data.
+        'GET api/v1/auth/registration-policy',
         'GET api/v1/brand',
+        'GET api/v1/client/approvals',
+        'GET api/v1/client/audience',
         'GET api/v1/client/branding',
         'GET api/v1/client/branding/logo',
         'GET api/v1/client/campaigns',
@@ -45,9 +51,14 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/client/messages',
         'GET api/v1/client/messages/{thread}',
         'GET api/v1/client/overview',
+        // CLIENT-DASHBOARD-PARITY-001 — the agency dashboard's answers for the client's own project; the portal session is checked in the controller.
+        'GET api/v1/client/projects/{project}/content',
+        'GET api/v1/client/projects/{project}/metrics/{name}',
         'GET api/v1/client/quotes',
         'GET api/v1/client/quotes/{quote}',
         'GET api/v1/client/reports',
+        // PORTAL-FULL-REPORTS-001 — the client's own report, whole; the portal session is checked in the controller like every /client route.
+        'GET api/v1/client/reports/{report}/view/{path?}',
         'GET api/v1/client/requests',
         'GET api/v1/client/requests/{reference}',
         'GET api/v1/client/requests/{reference}/files/{file}',
@@ -97,16 +108,27 @@ final class PublicSurfaceInventoryTest extends TestCase
         'GET api/v1/requests/track/{token}/files/{file}',
         'GET api/v1/salla/enter',
         'GET api/v1/salla/open',
+        // MCP-OAUTH-001 — «Add custom connector» in Claude or ChatGPT: discovery, self-registration, the hand-off to the
+        // consent page and the code/refresh exchange ARE the sign-in, so they answer before anyone is signed in. The one
+        // step that grants anything, «سماح» (POST mcp/oauth/approve), stays behind auth:sanctum + tenant.
+        'GET api/v1/mcp/oauth/authorize',
+        'GET api/v1/mcp/oauth/clients/{clientId}',
+        'GET api/v1/mcp/oauth/metadata',
+        'GET api/v1/mcp/oauth/protected-resource',
+        'POST api/v1/mcp/oauth/register',
+        'POST api/v1/mcp/oauth/token',
         'GET api/v1/subscriptions/invoices/shared/{token}',
         // The SaaS Meta app's own webhook endpoint: bound to that app's secret only, so each app has its own callback URL.
         'GET api/v1/webhooks/ads/meta/saas',
         'GET api/v1/webhooks/{kind}/{provider}',
-        'POST api/v1/auth/email-code/start',
-        'POST api/v1/auth/email-code/verify',
+        'GET api/v1/auth/two-factor',
+        'DELETE api/v1/auth/two-factor',
         'POST api/v1/auth/email/verify',
         'POST api/v1/auth/forgot-password',
         'POST api/v1/auth/login',
-        'POST api/v1/auth/method',
+        'POST api/v1/auth/oauth/pending-link/confirm-email',
+        'POST api/v1/auth/oauth/pending-link/email',
+        'POST api/v1/auth/oauth/pending-link/password',
         'POST api/v1/auth/oauth/{provider}/callback',
         'POST api/v1/auth/oauth/{provider}/start',
         'POST api/v1/auth/phone/start',
@@ -118,8 +140,13 @@ final class PublicSurfaceInventoryTest extends TestCase
         'POST api/v1/auth/registration/{registration}/verify-mobile',
         'POST api/v1/auth/reset-password',
         'POST api/v1/auth/tokens',
+        // TWO-STEP-001 — answering the second step: the person is not signed in yet; the pending state in the session is the authorisation.
+        'POST api/v1/auth/two-factor/send',
+        'POST api/v1/auth/two-factor/verify',
         'POST api/v1/billing/webhook/{provider}',
         'POST api/v1/client/invoices/{invoice}/pay',
+        'POST api/v1/client/approvals/{approval}/approve',
+        'POST api/v1/client/approvals/{approval}/request-changes',
         'POST api/v1/client/login/start',
         'POST api/v1/client/login/verify',
         'POST api/v1/client/logout',

@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Domains\Access\Support\MemberOverrideMemo;
 use App\Domains\Accounts\Services\AccountGrants;
+use App\Domains\Accounts\Services\RegistrationVerificationSettings;
 use App\Domains\Audit\Listeners\RecordAuthAudit;
+use App\Domains\Bootstrap\Support\WorkspaceCacheInvalidator;
+use App\Domains\Campaigns\Services\CreativeResultAvailability;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Campaigns\Support\PresentationAudience;
 use App\Domains\Campaigns\Support\RefusedCreativeAccess;
@@ -13,19 +17,35 @@ use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Company;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Models\Opportunity;
+use App\Domains\Identity\Services\NewSignInAlert;
 use App\Domains\Identity\Support\UserSessions;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\MetaCandidate\MetaCandidateCredentials;
+use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
+use App\Domains\Integrations\Support\ProviderRateBudget;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
+use App\Domains\Metrics\Fx\FxMonitor;
+use App\Domains\Metrics\Fx\FxPolicy;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
+use App\Domains\Metrics\Rates\EcbReferenceRates;
 use App\Domains\Metrics\Services\PeriodReachReader;
+use App\Domains\Notifications\Push\MinishlinkTransport;
+use App\Domains\Notifications\Push\PushDispatcher;
+use App\Domains\Notifications\Push\PushTransport;
 use App\Domains\Notifications\Support\PlainText;
 use App\Domains\Ops\Listeners\RecordScheduledRun;
+use App\Domains\Ops\Performance\PerformanceRecorder;
 use App\Domains\Ops\Services\ScheduledRunRows;
+use App\Domains\Platform\Alerts\MoyasarSettlementSource;
+use App\Domains\Platform\Alerts\SettlementSource;
+use App\Domains\Platform\Alerts\UnavailableSettlementSource;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Lifecycle\ProjectLifecycle;
+use App\Domains\Projects\Lifecycle\ProjectStateMachine;
 use App\Domains\Reports\Sections\ReportSectionRegistry;
+use App\Domains\Reports\Support\ReportReadMemo;
 use App\Domains\Subscriptions\Models\Subscription;
 use App\Domains\Subscriptions\Models\SubscriptionPayment;
 use App\Domains\Subscriptions\Observers\SubscriptionAuditObserver;
@@ -41,17 +61,23 @@ use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
 use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Throwable;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // PROJECT-LIFECYCLE-001 — the one lifecycle contract (docs/rules/project-lifecycle.md).
+        $this->app->bind(ProjectLifecycle::class, ProjectStateMachine::class);
+
         /*
          * One demo-policy answer per REQUEST — CONTENT-SPEND-ALWAYS-001.
          *
@@ -61,9 +87,29 @@ class AppServiceProvider extends ServiceProvider
          * letting whichever scenario ran first pay for a check the second then read for free.
          */
         $this->app->scoped(CreativeDemoPolicy::class);
+        /*
+         * PLATFORM-PAYMENT-ALERTS-SETTLEMENT-001 — Moyasar's Settlement API, read with the stored gateway secret key
+         * (Owner decision 2026-11-13). `none` switches the check off; without a key the source reports itself blocked.
+         */
+        $this->app->bind(SettlementSource::class, fn ($app) => config('platform_alerts.settlement_source') === 'moyasar'
+            ? $app->make(MoyasarSettlementSource::class)
+            : new UnavailableSettlementSource);
+        // PERF-RECOVERY-001 — whole-history availability is asked once per account per request.
+        $this->app->scoped(CreativeResultAvailability::class);
+        // PERF-RECOVERY-001 — the query count belongs to one request or one job.
+        $this->app->scoped(PerformanceRecorder::class);
         // CAMPAIGN-INTELLIGENCE-HUB — the reach reader memoises per (account, window) for one request.
         $this->app->scoped(PeriodReachReader::class);
+        // PERF-RECOVERY-001 — a read repeated inside one report build is answered once; discarded when the build ends.
+        $this->app->scoped(ReportReadMemo::class);
+        // ACCESS-CENTER-001 — member override rows, once per request; forgotten on every write.
+        $this->app->scoped(MemberOverrideMemo::class);
+        // NOTIF-PUSH-001 — the push service seam, and one dispatcher per request or job (it remembers whether any device exists).
+        $this->app->bind(PushTransport::class, MinishlinkTransport::class);
+        $this->app->scoped(PushDispatcher::class);
         $this->app->scoped(PresentationAudience::class);
+        // INTEG-SYNC-ENGINE-001 — what the last request on a connection came to belongs to one job.
+        $this->app->scoped(ProviderRateBudget::class);
         $this->app->scoped(RefusedCreativeAccess::class);
 
         /*
@@ -154,12 +200,50 @@ class AppServiceProvider extends ServiceProvider
                 $source = $resolved instanceof CurrencyRateSource ? $resolved : null;
             }
 
+            // FX-ENGINE-001 — the FREE daily ECB reference rates, switched on by the platform admin from the rates page
+            // (default OFF). Public, no key, no account; each rate is recorded under the source name `ecb_reference`.
+            if ($source === null && $this->app->make(FxPolicy::class)->autoSourceEnabled()) {
+                $source = $this->app->make(EcbReferenceRates::class);
+            }
+
             return new CurrencyRateFeed($source);
         });
     }
 
     public function boot(): void
     {
+        /*
+         * FX-ENGINE-001 — an ad account linked (or re-read) in a currency with no exchange rate alerts the platform admin in
+         * the app at once, not at the next daily sweep. One rate lookup; never allowed to break a sync.
+         */
+        ExternalAccount::saved(static function (ExternalAccount $account): void {
+            if (! config('fx.alert_on_link', true) || (! $account->wasChanged('currency') && ! $account->wasRecentlyCreated)) {
+                return;
+            }
+            if ($account->account_type !== 'ad_account' || ! is_string($account->currency) || $account->currency === '') {
+                return;
+            }
+            $currency = $account->currency;
+            $provider = (string) $account->provider;
+            $tenant = (string) $account->tenant_id;
+            // After the sync's own transaction commits, so an alert write can never touch the figures being stored.
+            DB::afterCommit(static function () use ($currency, $provider, $tenant): void {
+                try {
+                    app(FxMonitor::class)->accountLinked($currency, $provider, $tenant);
+                } catch (Throwable $e) {
+                    report($e);
+                }
+            });
+        });
+
+        // PERF-BOOTSTRAP-001 — a write to a table the workspace read cache is derived from abandons its entries (every write path).
+        WorkspaceCacheInvalidator::listen();
+
+        // PERF-RECOVERY-001 — every query counted, the slow ones filed by their placeholdered SQL.
+        DB::listen(static function (QueryExecuted $query): void {
+            app(PerformanceRecorder::class)->noteQuery($query->sql, (float) $query->time, app()->runningInConsole() ? 'job' : 'http');
+        });
+
         // Stable, short morph aliases stored in polymorphic columns (non-enforcing, so framework
         // morphs like Sanctum's tokenable keep working).
         Relation::morphMap([
@@ -210,6 +294,8 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(ScheduledTaskSkipped::class, [RecordScheduledRun::class, 'skipped']);
 
         Event::listen(Login::class, [RecordAuthAudit::class, 'handleLogin']);
+        // EMAIL-GAPS — recognises a new device. Queues its mail and swallows its own failures: see the class.
+        Event::listen(Login::class, [NewSignInAlert::class, 'handle']);
         Event::listen(Logout::class, [RecordAuthAudit::class, 'handleLogout']);
 
         /*
@@ -244,6 +330,17 @@ class AppServiceProvider extends ServiceProvider
          * is exactly where that happens). Off-production the allowance is large for the same reason
          * `auth-login`'s is: the acceptance suite submits back to back from one address.
          */
+        /*
+         * EMAIL-TEST-SEND-001 — named, because an unnamed `throttle:3,1` shares its counter with every
+         * other route written the same way. Strict in every environment: it can only ever be a person
+         * reviewing templates, and it spends the provider's sending reputation.
+         */
+        RateLimiter::for('mail-test-send', static function (Request $request): array {
+            $who = (string) $request->user()?->getAuthIdentifier();
+
+            return [Limit::perMinute(3)->by('m:'.$who), Limit::perDay(20)->by('d:'.$who)];
+        });
+
         RateLimiter::for('public-form', function (Request $request): Limit {
             $perMinute = $this->app->environment('production') ? 40 : 600;
 
@@ -272,12 +369,22 @@ class AppServiceProvider extends ServiceProvider
          * Raising the production limit or retrying the test would both have been wrong: the first
          * weakens a real control, the second hides it.
          */
-        RateLimiter::for('registration', function (Request $request): Limit {
-            $perMinute = $this->app->environment('production')
-                ? (int) config('accounts.registration_throttle', 6)
-                : 60;
+        RateLimiter::for('registration', function (Request $request): array {
+            $production = $this->app->environment('production');
+            $perMinute = $production ? (int) config('accounts.registration_throttle', 6) : 60;
 
-            return Limit::perMinute($perMinute)->by((string) $request->ip());
+            $limits = [Limit::perMinute($perMinute)->by((string) $request->ip())];
+
+            // SIGNUP-VERIFY-POLICY-001 — with the email gate off an application costs nothing to open, so one address
+            // also gets an hourly ceiling. It does not exist while the gate is on.
+            if (! app(RegistrationVerificationSettings::class)->emailEnabled()) {
+                $limits[] = Limit::perHour($production
+                    ? (int) config('accounts.unverified_registration_per_hour', 20)
+                    : (int) config('accounts.unverified_registration_per_hour_local', 1000)
+                )->by('registration-unverified:'.$request->ip());
+            }
+
+            return $limits;
         });
 
         /*

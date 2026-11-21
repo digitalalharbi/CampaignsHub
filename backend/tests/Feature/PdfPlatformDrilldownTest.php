@@ -27,6 +27,9 @@ use Tests\TestCase;
 final class PdfPlatformDrilldownTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected bool $selectsSeededAccounts = false;
+
     use SeedsDrilldownFixture;
 
     protected function setUp(): void

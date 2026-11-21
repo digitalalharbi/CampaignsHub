@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Tests\Concerns\WithoutMigratedSarPeg;
 use Tests\TestCase;
 
 /**
@@ -32,6 +33,7 @@ use Tests\TestCase;
 final class EntityDailyMetricsTest extends TestCase
 {
     use RefreshDatabase;
+    use WithoutMigratedSarPeg;
 
     private Tenant $tenant;
 
@@ -108,7 +110,7 @@ final class EntityDailyMetricsTest extends TestCase
             $this->known('sq-1'),
         );
 
-        $this->assertSame(['upserted' => 1, 'skipped' => 0, 'unkeyed' => 0], $result);
+        $this->assertSame(['upserted' => 1, 'skipped' => 0, 'unkeyed' => 0, 'currency_unknown' => 0], $result);
 
         $row = DB::table('entity_daily_metrics')->where('external_entity_id', 'sq-1')->first();
 
@@ -150,7 +152,7 @@ final class EntityDailyMetricsTest extends TestCase
             $this->known('sq-1'),
         );
 
-        $this->assertSame(['upserted' => 0, 'skipped' => 1, 'unkeyed' => 0], $result);
+        $this->assertSame(['upserted' => 0, 'skipped' => 1, 'unkeyed' => 0, 'currency_unknown' => 0], $result);
         $this->assertSame(0, DB::table('entity_daily_metrics')->count());
     }
 
@@ -171,7 +173,7 @@ final class EntityDailyMetricsTest extends TestCase
             $this->known('sq-1'),
         );
 
-        $this->assertSame(['upserted' => 0, 'skipped' => 2, 'unkeyed' => 1], $result);
+        $this->assertSame(['upserted' => 0, 'skipped' => 2, 'unkeyed' => 1, 'currency_unknown' => 0], $result);
         $this->assertSame(0, DB::table('entity_daily_metrics')->count());
     }
 

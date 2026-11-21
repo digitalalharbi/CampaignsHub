@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Domains\Platform\Services\ProductionReadiness;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
@@ -16,6 +17,10 @@ use Tests\TestCase;
  */
 final class ProductionReadinessTest extends TestCase
 {
+    // Reads tables (platform settings, provider configurations, currency rates): it must migrate its own database rather
+    // than rely on an earlier class having done so — under ParaTest each worker starts on an empty one.
+    use RefreshDatabase;
+
     /** A production install with everything right — the baseline every case below deviates from. */
     private function productionConfig(array $over = []): void
     {

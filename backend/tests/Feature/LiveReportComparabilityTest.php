@@ -18,6 +18,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -29,6 +30,7 @@ use Tests\TestCase;
  */
 class LiveReportComparabilityTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -66,6 +68,7 @@ class LiveReportComparabilityTest extends TestCase
             'account_type' => 'ad_account', 'external_id' => 'act_1', 'name' => 'Ad account', 'status' => 'active',
         ]);
         $this->accountId = (string) $account->id;
+        $this->bindSeededAccount($this->project->getKey(), $this->accountId);
         // Meta is EXPECTED because the project holds an active Meta campaign across both windows.
         ExternalCampaign::create([
             'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->getKey(),

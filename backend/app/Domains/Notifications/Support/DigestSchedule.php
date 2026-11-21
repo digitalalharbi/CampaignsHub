@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Support;
 
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 
 /**
@@ -21,12 +22,130 @@ use Illuminate\Support\Carbon;
  */
 final class DigestSchedule
 {
-    /** ISO-8601 weekday, Monday when unset or out of range. */
+    /**
+     * ISO-8601 weekday, SUNDAY when unset or out of range — DIGESTS-CADENCE-BUDGETS-001.
+     *
+     * The Owner's weekly lands on Sunday at 08:00 Riyadh: the working week here runs Sunday to Thursday, so a
+     * Monday summary arrives after the week it is meant to open. A stored, chosen day is never moved; only the
+     * fallback for a missing or broken value (and the column default for new rows) changed.
+     */
+    public const DEFAULT_WEEKDAY = 7;
+
     public static function weekday(mixed $value): int
     {
-        $day = (int) ($value ?? 1);
+        $day = (int) ($value ?? self::DEFAULT_WEEKDAY);
 
-        return $day >= 1 && $day <= 7 ? $day : 1;
+        return $day >= 1 && $day <= 7 ? $day : self::DEFAULT_WEEKDAY;
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — which rhythms of the PER-PROJECT report this person asked for.
+     *
+     * `per_project` is the daily one (DIGESTS-VISUAL-V2-001); `per_project_weekly` and `per_project_monthly` are new and each is
+     * its own opt-in. Absent means OFF: a reader who already takes the daily report per project must not wake up to thirty
+     * weekly and thirty monthly mails because a deploy added a rhythm they never chose.
+     *
+     * @param  array<string,mixed>  $digests  the stored `notification_preferences.digests` map
+     * @return list<string> a subset of daily, weekly, monthly
+     */
+    public static function perProjectKinds(array $digests): array
+    {
+        $out = [];
+        foreach (self::PER_PROJECT as $kind => $key) {
+            if (($digests[$key] ?? false) === true) {
+                $out[] = $kind;
+            }
+        }
+
+        return $out;
+    }
+
+    /** The `digests` key that switches the per-project report on each rhythm. */
+    public const PER_PROJECT = ['daily' => 'per_project', 'weekly' => 'per_project_weekly', 'monthly' => 'per_project_monthly'];
+
+    /**
+     * The finished calendar month before `$sendDay`'s month, and the month before THAT — plain Gregorian months.
+     *
+     * Sent on the 1st, so the report is about a month that is over. No rolling «last 30 days» and no other calendar:
+     * November is 1–30 November, compared with 1–31 October, whatever their lengths.
+     *
+     * @return array{from: Carbon, to: Carbon, previous_from: Carbon, previous_to: Carbon}
+     */
+    public static function previousMonth(Carbon $sendDay): array
+    {
+        $from = $sendDay->copy()->startOfMonth()->subMonthNoOverflow()->startOfDay();
+        $prev = $from->copy()->subMonthNoOverflow();
+
+        return [
+            'from' => $from,
+            'to' => $from->copy()->endOfMonth(),
+            'previous_from' => $prev->copy()->startOfDay(),
+            'previous_to' => $prev->copy()->endOfMonth(),
+        ];
+    }
+
+    /**
+     * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the period word of each rhythm, in the same plain dialect everywhere:
+     * the daily mail is about YESTERDAY (one whole day), the weekly about the seven complete days that ended yesterday,
+     * the monthly about the last complete calendar month.
+     */
+    public static function periodWord(string $kind, bool $ar): string
+    {
+        return match ($kind) {
+            'monthly' => $ar ? 'الشهر الماضي' : 'Last month',
+            'weekly' => $ar ? 'الأسبوع الماضي' : 'Last week',
+            default => $ar ? 'أمس' : 'Yesterday',
+        };
+    }
+
+    /**
+     * The title of a digest: «ملخص المشاريع • أمس» across projects, «ملخص المشروع • أمس» for one project.
+     * Never the old «portfolio» word (style guide: it is «ملخص المشاريع»).
+     */
+    public static function title(string $scope, string $kind, bool $ar): string
+    {
+        $head = $scope === 'project' ? ($ar ? 'ملخص المشروع' : 'Project summary') : ($ar ? 'ملخص المشاريع' : 'Projects summary');
+
+        return $head.' • '.self::periodWord($kind, $ar);
+    }
+
+    /**
+     * The period, stated explicitly with its dates — «أمس الأربعاء 11 نوفمبر», «5–11 نوفمبر», «أكتوبر 2026».
+     * Dates are calendar dates in the recipient's timezone (the window the dispatcher built), Latin digits.
+     */
+    public static function periodLabel(string $kind, string $from, string $to, bool $ar): string
+    {
+        // PERIOD-LABEL-001 — the Owner's one period format; the name comes from the days themselves («أمس», «آخر 7 أيام»,
+        // «الشهر الماضي»), never from the rhythm, so a re-run or an older window names exactly the days it covers.
+        return PeriodLabel::inferred($from, $to, $ar ? 'ar' : 'en');
+    }
+
+    /** What the figures are compared with, for each rhythm. */
+    public static function comparedWith(string $kind, bool $ar): string
+    {
+        return match ($kind) {
+            'monthly' => $ar ? 'مقارنة بالشهر اللي قبله' : 'against the month before',
+            'weekly' => $ar ? 'مقارنة بالـ 7 أيام اللي قبلها' : 'against the 7 days before',
+            default => $ar ? 'مقارنة باليوم اللي قبله' : 'against the day before',
+        };
+    }
+
+    /** Budget pace above this is «ahead of plan» — the same band the report's pacing column colours by. */
+    public const PACE_AHEAD = 1.1;
+
+    /** Budget pace below this is «behind plan». */
+    public const PACE_BEHIND = 0.9;
+
+    /**
+     * on_track / ahead / behind for a pace ratio (projected spend ÷ budget), or null when no pace can be stated.
+     */
+    public static function paceBand(?float $pace): ?string
+    {
+        if ($pace === null) {
+            return null;
+        }
+
+        return $pace > self::PACE_AHEAD ? 'ahead' : ($pace < self::PACE_BEHIND ? 'behind' : 'on_track');
     }
 
     /**

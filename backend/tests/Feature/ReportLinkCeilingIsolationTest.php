@@ -30,6 +30,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Tests\Concerns\SeedsDrilldownFixture;
+use Tests\Support\SeededAccountBinder;
 use Tests\TestCase;
 use Throwable;
 
@@ -43,6 +44,9 @@ use Throwable;
 final class ReportLinkCeilingIsolationTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected bool $selectsSeededAccounts = false;
+
     use SeedsDrilldownFixture;
 
     protected function setUp(): void
@@ -138,6 +142,8 @@ final class ReportLinkCeilingIsolationTest extends TestCase
             'provider' => 'salla', 'account_type' => 'store', 'external_id' => 'store-1',
             'name' => 'Shop', 'currency' => 'SAR', 'status' => 'active',
         ]);
+        // The store is selected for the project, like any account it reads.
+        SeededAccountBinder::ensure((string) $this->project->id, (string) $store->getKey(), 'salla');
         CommerceOrder::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->getKey(), 'project_id' => $this->project->id,
             'external_account_id' => $store->getKey(), 'provider' => 'salla', 'external_id' => 'o-1', 'status' => 'completed',

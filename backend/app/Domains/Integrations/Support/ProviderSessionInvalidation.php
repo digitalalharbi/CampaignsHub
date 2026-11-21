@@ -27,7 +27,8 @@ final class ProviderSessionInvalidation
         }
 
         return match ($provider) {
-            'meta' => preg_match('/(?<![\w])code 190(?!\d)|\(#190\)/', $message) === 1,
+            // 102 «API session» carries the same action as 190 in Meta's table: obtain a new token.
+            'meta' => preg_match('/(?<![\w])code (190|102)(?!\d)|\(#(190|102)\)/', $message) === 1,
             // X's «This request is not properly authenticated»: the stored user token no longer authenticates. An ad-account grant
             // refusal (NOT_AUTHORIZED…) or a rate limit is not this.
             'x' => preg_match('/(?<![\w])code UNAUTHORIZED_ACCESS(?![\w])/', $message) === 1,

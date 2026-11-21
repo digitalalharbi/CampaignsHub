@@ -1,4 +1,4 @@
-import { compact, moneyExact, moneyFromTotals, percent, ratio } from '@/features/analytics/format'
+import { compact, liveMoneyFromTotals, moneyExact, moneyFromTotals, percent, ratio } from '@/features/analytics/format'
 import { formatMoneyReading, readCostPer, readMoney, readRoas, type MoneyTotals } from '@/lib/money/contract'
 import { TrendPill } from '@/features/analytics/components'
 import type { Locale } from '@/stores/ui'
@@ -50,7 +50,7 @@ export function ReportPlatformSummary({
   }
 
   const totals = platform as MoneyTotals
-  const spend = moneyFromTotals(totals, 'spend', ar, currency)
+  const spend = liveMoneyFromTotals(totals, 'spend', ar, currency)
   /*
    * Two readings of revenue, and the difference is the point.
    *
@@ -100,7 +100,7 @@ export function ReportPlatformSummary({
   add('impressions', ar ? 'الظهور' : 'Impressions', compact(num('impressions')), { delta: movement.impressions })
   add('reach', ar ? 'الوصول' : 'Reach', compact(num('reach')), { delta: movement.reach })
   add('clicks', ar ? 'النقرات' : 'Clicks', compact(num('clicks')), { delta: movement.clicks })
-  add('ctr', ar ? 'نسبة النقر' : 'CTR', percent(num('ctr'), 2), { delta: movement.ctr })
+  add('ctr', ar ? 'معدل النقر' : 'CTR', percent(num('ctr'), 2), { delta: movement.ctr })
 
   /*
    * Revenue and return ride on the REVENUE reading, not on a reported number.
@@ -115,7 +115,7 @@ export function ReportPlatformSummary({
     if (roas.value !== null) {
       cells.push({
         key: 'roas',
-        label: ar ? 'العائد على الإنفاق' : 'ROAS',
+        label: ar ? 'معدل العائد' : 'ROAS',
         /*
          * Through `ratio()`, because a multiplier is «×» and comes from one function.
          *

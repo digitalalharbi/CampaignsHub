@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Reports\Services;
 
+use App\Domains\Funding\Support\FundingMoney;
 use App\Domains\Integrations\Catalogue\ProviderDisplayName;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Support\AdPlatforms;
@@ -174,15 +175,15 @@ final class ReportObservations
                 'scope' => ['type' => 'period', 'name' => null],
                 'metric' => $key,
                 'reveals' => ['spend'],
-                'value' => number_format((float) $value, 2).' '.$currency,
+                'value' => FundingMoney::withMark(number_format((float) $value, 2), $currency),
                 'change' => round((float) $change, 4),
                 'title' => sprintf('ارتفاع %s', $label),
                 'detail' => sprintf(
-                    'ارتفعت %s %s لتصل إلى %s %s، وقد يعود ذلك إلى منافسة أعلى أو ضعف في أداء المحتوى.',
+                    // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the measured fact only; a cause is never guessed (no data here proves one).
+                    'ارتفعت %s %s إلى %s.',
                     $label,
                     self::percent((float) $change),
-                    number_format((float) $value, 2),
-                    $currency,
+                    FundingMoney::withMark(number_format((float) $value, 2), $currency),
                 ),
             ];
         }
@@ -218,7 +219,7 @@ final class ReportObservations
                 'change' => round((float) $change, 4),
                 'title' => sprintf('تراجع %s', $label),
                 'detail' => sprintf(
-                    'تراجع %s %s ليصل إلى %s، وقد يشير ذلك إلى بداية ضعف في أداء المحتوى.',
+                    'تراجع %s %s إلى %s.',
                     $label,
                     self::percent(abs((float) $change)),
                     self::percent((float) $value, 2),
@@ -257,7 +258,7 @@ final class ReportObservations
             'change' => isset($data['delta']['frequency']) ? round((float) $data['delta']['frequency'], 4) : null,
             'title' => 'ارتفاع معدل التكرار',
             'detail' => sprintf(
-                'يشاهد الشخص الواحد الإعلان %s في المتوسط، ونوصي بتوسيع الجمهور أو تحديث المحتوى.',
+                'يشاهد الشخص الإعلان %s في المتوسط؛ نوصي بتوسيع الجمهور أو تحديث المحتوى.',
                 self::times((float) $frequency),
             ),
         ]];
@@ -323,11 +324,9 @@ final class ReportObservations
                  * it for them keeps spending.
                  */
                 'detail' => sprintf(
-                    'صُرف %s %s من حدّ داخلي قدره %s %s. لا يوقف كامبينز هب العرض — أوقف الحملة على المنصة إن كان هذا المقصود.',
-                    number_format((float) ($limit['consumed'] ?? 0), 2),
-                    $currency,
-                    number_format((float) ($limit['amount'] ?? 0), 2),
-                    $currency,
+                    'صُرف %s من حدّ داخلي قدره %s. لا يوقف كامبينز هب العرض؛ لإيقافه، أوقف الحملة على المنصة.',
+                    FundingMoney::withMark(number_format((float) ($limit['consumed'] ?? 0), 2), $currency),
+                    FundingMoney::withMark(number_format((float) ($limit['amount'] ?? 0), 2), $currency),
                 ),
             ];
         }
@@ -374,11 +373,9 @@ final class ReportObservations
                 'change' => null,
                 'title' => sprintf('الإنفاق على %s يستهلك الميزانية %s الخطة', $platform, $fast ? 'أسرع من' : 'أبطأ من'),
                 'detail' => sprintf(
-                    'صُرف %s %s من أصل %s %s، أي %s من الإنفاق المتوقع حتى الآن.',
-                    number_format((float) $row['spent'], 2),
-                    $currency,
-                    number_format((float) $row['budget'], 2),
-                    $currency,
+                    'صُرف %s من أصل %s، أي %s من الإنفاق المتوقع حتى الآن.',
+                    FundingMoney::withMark(number_format((float) $row['spent'], 2), $currency),
+                    FundingMoney::withMark(number_format((float) $row['budget'], 2), $currency),
                     self::percent((float) $pace),
                 ),
             ];
@@ -433,7 +430,7 @@ final class ReportObservations
             'change' => round($gap, 4),
             'title' => sprintf('فرصة لإعادة توزيع الميزانية نحو %s', AdPlatforms::name((string) $best['provider'])),
             'detail' => sprintf(
-                '%s على %s هو %s، مقابل %s على %s — بفارق %s لصالح الأولى.',
+                '%s على %s %s مقابل %s على %s، بفارق %s لصالح الأولى.',
                 $metric['label_ar'],
                 AdPlatforms::name((string) $best['provider']),
                 $lens->formatRanking($bv, $currency),
@@ -455,7 +452,7 @@ final class ReportObservations
         $labels = [
             'reach' => 'الوصول', 'frequency' => 'التكرار', 'video_views' => 'مشاهدات الفيديو',
             'landing_page_views' => 'زيارات صفحة الهبوط', 'engagements' => 'التفاعلات',
-            'purchases' => 'المشتريات', 'revenue' => 'الإيرادات',
+            'purchases' => 'الطلبات', 'revenue' => 'الإيرادات',
         ];
 
         $missing = [];
@@ -491,7 +488,7 @@ final class ReportObservations
              */
             'title' => 'مؤشرات لم تصل لهذه الفترة',
             'detail' => sprintf(
-                'لم تصل بيانات %s خلال هذه الفترة، ولذلك تظهر بلا قيمة بدلًا من صفر — «لم يُبلَّغ عنه» و«صفر» ليسا الشيء نفسه.',
+                'لم تصل بيانات %s لهذه الفترة، فتظهر بلا قيمة بدلًا من صفر؛ غياب القيمة لا يعني صفرًا.',
                 $this->arabicList($missing),
             ),
         ]];
@@ -523,8 +520,8 @@ final class ReportObservations
             'change' => null,
             'title' => $state === 'failed' ? 'تعذّرت آخر مزامنة للبيانات' : 'بيانات لم تتحدث مؤخرًا',
             'detail' => $failing === []
-                ? 'لم تتحدث بيانات هذه الفترة مؤخرًا، لذلك قد تكون بعض المؤشرات غير مكتملة.'
-                : sprintf('لم تتحدث بيانات %s مؤخرًا، لذلك قد تكون بعض المؤشرات غير مكتملة.', $this->arabicList($failing)),
+                ? 'لم تتحدث بيانات هذه الفترة مؤخرًا، فقد تكون بعض المؤشرات غير مكتملة.'
+                : sprintf('لم تتحدث بيانات %s مؤخرًا، فقد تكون بعض المؤشرات غير مكتملة.', $this->arabicList($failing)),
         ]];
     }
 

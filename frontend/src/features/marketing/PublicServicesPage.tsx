@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { brand, productName } from '@/lib/brand'
-import * as LucideIcons from 'lucide-react'
 import { ArrowLeft, ArrowRight, RotateCcw, Search } from 'lucide-react'
+import { LucideByName } from '@/components/icons/LucideByName'
 import { FooterContact } from './FooterContact'
 import { HOME_COPY, type Locale } from './homeCopy'
 import { CONTACT_EMAIL } from './legalContent'
@@ -25,13 +25,8 @@ import { useUi } from '@/stores/ui'
 
 function CategoryIcon({ name, size = 16 }: { name?: string | null; size?: number }) {
   if (!name) return null
-  const pascal = name.split(/[-_ ]/).filter(Boolean).map((p) => p[0].toUpperCase() + p.slice(1)).join('')
-  const Resolved = (LucideIcons as unknown as Record<string, unknown>)[pascal]
-  const isComponent =
-    typeof Resolved === 'function' || (typeof Resolved === 'object' && Resolved !== null && '$$typeof' in (Resolved as object))
-  if (!isComponent) return null
-  const Icon = Resolved as React.ComponentType<{ size?: number }>
-  return <Icon size={size} />
+
+  return <LucideByName name={name} render={(Icon) => <Icon size={size} />} />
 }
 
 export function PublicServicesPage() {

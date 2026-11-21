@@ -145,7 +145,7 @@ describe('the roster of everything that ran', () => {
     )
 
     const cells = screen.getByTestId('report-roster-row').closest('tr')!.querySelectorAll('td, th')
-    expect(cells[2]).toHaveTextContent('500 USD')
+    expect(cells[2]).toHaveTextContent('500 $')
     expect(cells[3]).toHaveTextContent('—')
     expect(cells[4]).toHaveTextContent('—')
     expect(cells[6]).toHaveTextContent('—')
@@ -173,7 +173,7 @@ describe('the roster of everything that ran', () => {
 
     const cells = screen.getByTestId('report-roster-row').closest('tr')!.querySelectorAll('td, th')
     expect(cells[2]).toHaveTextContent('500')
-    expect(cells[2]).not.toHaveTextContent('USD')
+    expect(cells[2]).not.toHaveTextContent(/USD|\$/)
   })
 
   /**

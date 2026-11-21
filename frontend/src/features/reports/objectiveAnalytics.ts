@@ -72,15 +72,15 @@ export interface ObjectiveAnalytics {
 /** The metrics a ranking may rest on — the server's `MINIMUM_VOLUME` keys — with their names and kinds. */
 export const RANKING_METRICS: Record<string, { ar: string; en: string; kind: ObjectiveKpi['kind'] }> = {
   cpm: { ar: 'تكلفة الألف ظهور', en: 'CPM', kind: 'money' },
-  ctr: { ar: 'نسبة النقر', en: 'CTR', kind: 'rate' },
+  ctr: { ar: 'معدل النقر', en: 'CTR', kind: 'rate' },
   cpc: { ar: 'تكلفة النقرة', en: 'CPC', kind: 'money' },
   engagement_rate: { ar: 'معدل التفاعل', en: 'Engagement rate', kind: 'rate' },
   cpe: { ar: 'تكلفة التفاعل', en: 'CPE', kind: 'money' },
   cost_per_view: { ar: 'تكلفة المشاهدة', en: 'Cost per view', kind: 'money' },
   cpl: { ar: 'تكلفة العميل المحتمل', en: 'CPL', kind: 'money' },
-  cpa: { ar: 'تكلفة الشراء', en: 'CPA', kind: 'money' },
+  cpa: { ar: 'تكلفة الطلب', en: 'CPA', kind: 'money' },
   cost_per_conversion: { ar: 'تكلفة التحويل', en: 'Cost per conversion', kind: 'money' },
-  roas: { ar: 'العائد على الإنفاق', en: 'ROAS', kind: 'multiplier' },
+  roas: { ar: 'معدل العائد', en: 'ROAS', kind: 'multiplier' },
   cpi: { ar: 'تكلفة التثبيت', en: 'CPI', kind: 'money' },
 }
 

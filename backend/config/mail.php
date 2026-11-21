@@ -110,6 +110,50 @@ return [
     |
     */
 
+    /*
+    | EMAIL-GAPS — how many optional messages one workspace may send in a day (UTC). Per tenant, so one
+    | workspace cannot spend another's allowance. Account and security mail and billing notices are never
+    | counted or refused. 0 switches the limit off. A refusal is written to the ledger as `limit_reached`.
+    */
+    'daily_limit_per_tenant' => (int) env('MAIL_DAILY_LIMIT_PER_TENANT', 1000),
+
+    // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — how many recipients OUTSIDE the platform one workspace may add (each is also charged to the daily allowance above).
+    'external_recipients_per_tenant' => 25,
+
+    /*
+    | DIGESTS-CADENCE-BUDGETS-001 — the part of that daily allowance digests may NOT spend, kept for alerts. Thirty projects ×
+    | three rhythms × several readers is a morning of mail; an alert raised that afternoon must still be able to leave.
+    */
+    'alert_reserve_per_tenant' => (int) env('MAIL_ALERT_RESERVE_PER_TENANT', 200),
+
+    /*
+    | EMAIL-TEST-SEND-001 (§17.4.5) — how many times one alert may reach one person in 24 hours. A rule's
+    | cooldown can be as short as five minutes, and a problem that stays open would otherwise mail each
+    | time it passes. Its recovery is never held. 0 switches the limit off. A held message is written to the
+    | ledger as `repeat_limit`; the alert itself stays open in the product.
+    */
+    'alert_repeats_per_day' => (int) env('MAIL_ALERT_REPEATS_PER_DAY', 3),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Operational digests (EMAIL-DIGESTS-OPERATIONAL-001)
+    |--------------------------------------------------------------------------
+    |
+    | When on, a recipient who has ALREADY enabled a daily, weekly or monthly digest receives the
+    | operational digest — one project, or all their projects, with a block per platform — instead of
+    | the older decision-report layout. It changes what the scheduled send CONTAINS, never who receives
+    | one: `notification_preferences` and the digest ledger decide that exactly as before. Off by
+    | default so merging changes nothing in an inbox until the Owner turns it on.
+    */
+    'operational_digests' => (bool) env('MAIL_OPERATIONAL_DIGESTS', true),
+
+    /*
+    | NOTIF-V2-ENGINE-001 — when the SMTP username is an address and From differs, every message carries a Sender header
+    | with the authenticated mailbox, so the SMTP envelope is the address the provider verified (Hostinger refuses any other
+    | with «553 Sender address rejected: not owned by user»). See App\Domains\Notifications\Engine\Mail\AlignEnvelopeSender.
+    */
+    'align_envelope_sender' => true,
+
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),

@@ -15,10 +15,14 @@ use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Campaigns\Support\CreativeDemoPolicy;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
+use App\Domains\Reports\Support\ChosenFigures;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\GenericNames;
+use App\Domains\Reports\Support\PreviousComparison;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
@@ -93,11 +97,22 @@ final class SharedCreativeView
         $page = max((int) ($requested['page'] ?? 1), 1);
         $total = (clone $query)->count();
 
-        $creatives = $this->rows->applySort($query, (string) ($applied['sort'] ?? ''), $from, $to)
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — a list cannot be ordered by a figure the link withholds.
+         *
+         * `sort=spend` on a link that hides spend returned the creatives in order of their spend: the amounts were gone and their
+         * ranking was not. A sort the reader may not see the figure of falls back to the default order.
+         */
+        $sort = (string) ($applied['sort'] ?? '');
+        if ($visibility->hides($sort) || $this->chosenHides($share, $sort)) {
+            $sort = '';
+        }
+
+        $creatives = $this->rows->applySort($query, $sort, $from, $to)
             ->forPage($page, $perPage)
             ->get();
 
-        $rows = $this->rows->present($creatives, $from, $to, withFatigue: true, withPrevious: true);
+        $rows = $this->withoutComparison($share, $this->rows->present($creatives, $from, $to, withFatigue: true, withPrevious: true));
 
         return [
             'creatives' => array_map(fn (array $row): array => $this->redactRow($row, $visibility), $rows),
@@ -128,13 +143,17 @@ final class SharedCreativeView
 
         [$from, $to] = [Carbon::parse($applied['from']), Carbon::parse($applied['to'])];
 
-        $rows = $this->rows->present(
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — the pulse and the findings read each row's `previous`. With the comparison off the rows carry none,
+         * so «fastest growing», «declining» and every against-itself finding are empty by construction, not by filtering their result.
+         */
+        $rows = $this->withoutComparison($share, $this->rows->present(
             $this->bounded($share, $applied)->get(),
             $from,
             $to,
             withFatigue: true,
             withPrevious: true,
-        );
+        ));
 
         $payload = $this->pulse->build($rows, $from, $to);
 
@@ -142,7 +161,20 @@ final class SharedCreativeView
             $payload['insights'] = $this->redactInsights($this->insights->build($rows, $from, $to), $visibility);
         }
 
-        return $this->redactSummary($payload, $visibility) + [
+        if (! $share->sectionVisibility()->previous_comparison) {
+            unset($payload['previous_period']);
+            if (is_array($payload['insights'] ?? null)) {
+                unset($payload['insights']['previous_period']);
+                $payload['insights']['items'] = array_map(static function ($item) {
+                    unset($item['previous_period']);
+
+                    return $item;
+                }, (array) ($payload['insights']['items'] ?? []));
+            }
+        }
+
+        // SHARE-COPY-LEAK-001 review — the summary's money companions at every depth, not only where a section was named.
+        return self::withoutMoneyCompanions($this->redactSummary($payload, $visibility), $visibility) + [
             'applied' => self::clientApplied($applied),
             'available' => $this->available($share),
             'permissions' => $visibility->toArray(),
@@ -209,11 +241,15 @@ final class SharedCreativeView
         $detail['metrics'] = $current;
         $detail['previous'] = $previous;
         $detail['fatigue'] = $this->fatigue->assess($current ?? ['active_days' => 0], $previous);
+        $comparing = $share->sectionVisibility()->previous_comparison;
+        if (! $comparing) {
+            $detail = PreviousComparison::stripCreativeRow($detail);
+        }
 
-        return [
+        return self::withoutMoneyCompanions([
             'creative' => $this->redactRow($detail, $visibility),
             'period' => ['from' => $applied['from'], 'to' => $applied['to'], 'days' => $days],
-            'previous_period' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()],
+            ...($comparing ? ['previous_period' => ['from' => $prevFrom->toDateString(), 'to' => $prevTo->toDateString()]] : []),
             // The same reshaping of the same figures the operator's page shows — with the per-stage
             // cost removed when the link withholds spend, since a cost per step IS spend divided.
             'funnel' => $this->redactFunnel($this->funnel->build($current), $visibility),
@@ -243,7 +279,7 @@ final class SharedCreativeView
                 'note_en' => 'Figures as the ad platform reported them, inside its own attribution window.',
             ],
             'permissions' => $visibility->toArray(),
-        ];
+        ], $visibility);
     }
 
     /**
@@ -272,7 +308,7 @@ final class SharedCreativeView
             return null;
         }
 
-        $rows = $this->rows->present($creatives, $from, $to, withFatigue: false, withPrevious: true);
+        $rows = $this->withoutComparison($share, $this->rows->present($creatives, $from, $to, withFatigue: false, withPrevious: true));
 
         $objectives = array_values(array_unique(array_map(
             static fn (array $r): ?string => $r['objective'],
@@ -291,6 +327,23 @@ final class SharedCreativeView
             'reason_ar' => $verdict['reason_ar'],
             'permissions' => $visibility->toArray(),
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return list<array<string, mixed>>
+     */
+    private function withoutComparison(ReportShare $share, array $rows): array
+    {
+        return $share->sectionVisibility()->previous_comparison ? $rows : array_map(PreviousComparison::stripCreativeRow(...), $rows);
+    }
+
+    /** An order by a KPI the link did not choose ranks by a figure it does not carry. */
+    private function chosenHides(ReportShare $share, string $sort): bool
+    {
+        $report = $sort === '' ? null : Report::withoutGlobalScopes()->find($share->report_id);
+
+        return $report !== null && ChosenFigures::for($report, $share)->hidesMetric($sort);
     }
 
     // ---- the ceiling --------------------------------------------------------------------------
@@ -343,6 +396,7 @@ final class SharedCreativeView
             'campaign_ids' => AccountCampaignCeiling::campaigns(
                 $this->narrow($requested['campaign_ids'] ?? null, $ceiling['campaign_ids']),
                 $ceiling['account_ids'],
+                $ceiling['project_id'],
             ),
             'objectives' => $this->narrow($requested['objectives'] ?? null, $ceiling['objectives']),
             'paths' => $this->narrow($requested['paths'] ?? null, $ceiling['paths']),
@@ -389,19 +443,71 @@ final class SharedCreativeView
             $this->rows->applyPeriodActivity($query, $window[0], $window[1]);
         }
 
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — the campaign bound is the ceiling's whenever the caller brings none, and never «no bound».
+         *
+         * `available()` builds its filter options with an empty campaign list, which read as «every campaign of the project»: a link
+         * over two campaigns offered the platforms and objectives of all of them. And a ceiling that names no campaign and no
+         * account — what a report with nothing in its period leaves behind — listed the whole project's content. Both resolve here,
+         * to the ceiling's campaigns inside its accounts, or to the impossible id.
+         */
+        $campaigns = $applied['campaign_ids'] !== []
+            ? $applied['campaign_ids']
+            : AccountCampaignCeiling::campaigns($ceiling['campaign_ids'], $ceiling['account_ids'], $ceiling['project_id']);
+
         $this->rows->applyFilters($query, [
             'providers' => $applied['providers'],
-            'campaign_ids' => $applied['campaign_ids'],
+            'campaign_ids' => $campaigns === [] ? [ReportScope::IMPOSSIBLE] : $campaigns,
+            // The account axis itself, as the live lists of the same link apply it (REPORT-SOURCE-ISOLATION-001): one link, one set.
+            'account_ids' => $ceiling['account_ids'],
             'objectives' => $applied['objectives'],
             'paths' => $applied['paths'],
             'kinds' => $applied['kinds'],
-            'search' => $applied['search'],
+            // Applied below, over what this link may show (see `searchWithin()`).
+            'search' => '',
             'creative_ids' => $ceiling['creative_ids'],
             'creative_group_ids' => $ceiling['creative_group_ids'],
             'excluded_creative_ids' => $ignoreExclusions ? [] : $ceiling['excluded_creative_ids'],
         ]);
 
+        $this->searchWithin($query, $share, (string) ($applied['search'] ?? ''));
+
         return $query;
+    }
+
+    /**
+     * REPORT-FILTERS-FUNCTIONAL-001 — a reader searches what the link shows them, and nothing it withholds.
+     *
+     * The library's search matched the name, the headline and the ad copy, whatever the link showed. On a link that withholds
+     * the headline or the copy, a search that finds a creative says the withheld text contains the word, one guess at a time;
+     * on a link that shows content under generic labels, the same is true of the name. Each column is searched only while the
+     * link shows it, and a search with nothing left to look in finds nothing.
+     */
+    private function searchWithin(Builder $query, ReportShare $share, string $search): void
+    {
+        $search = trim($search);
+        if ($search === '') {
+            return;
+        }
+
+        $visibility = $share->creativeVisibility();
+        $columns = array_keys(array_filter([
+            'name' => ! GenericNames::for(null, $share)->chose('content'),
+            'headline' => $visibility->headline,
+            'body' => $visibility->adCopy,
+        ]));
+
+        if ($columns === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where(function ($q) use ($columns, $search): void {
+            foreach ($columns as $column) {
+                $q->orWhere('external_creatives.'.$column, 'ilike', "%{$search}%");
+            }
+        });
     }
 
     /**
@@ -598,6 +704,15 @@ final class SharedCreativeView
          */
         unset($row['campaign_name'], $row['campaign_id'], $row['ad_set_name'], $row['ad_set_id']);
 
+        /*
+         * REPORT-FILTERS-FUNCTIONAL-001 — which of the agency's ad accounts carried a creative is not a client's business.
+         *
+         * Every row arrived with `ad_account: {id, name}` — the operator library's column — so a link that withholds account names
+         * on its accounts table published them, with the internal id, on every content card, in the summary, in the PDF document
+         * and in the files. No client surface draws it. Removed, not nulled: there is no column to leave empty.
+         */
+        unset($row['ad_account']);
+
         foreach ($visibility->hiddenMetrics() as $metric) {
             /*
              * `availability` goes with the figure and its `reported` flag — CONTENT-RESULT-AVAILABILITY-001.
@@ -624,13 +739,6 @@ final class SharedCreativeView
          * leaves the halves, and a signal on a hidden metric keeps its direction and loses its values —
          * «CPM rose» is delivery context the client may see; «13.00 against 10.00» is the spend.
          */
-        $signalMetric = static fn (string $key): string => match (true) {
-            // Its two values are the spend of each period.
-            $key === 'spend_without_results' => 'spend',
-            str_ends_with($key, '_decay') => substr($key, 0, -6),
-            default => $key,
-        };
-
         foreach ($visibility->hiddenMetrics() as $metric) {
             foreach (['metrics', 'previous'] as $bag) {
                 foreach (['early', 'late'] as $half) {
@@ -642,14 +750,7 @@ final class SharedCreativeView
         }
 
         if (isset($row['fatigue']['signals']) && is_array($row['fatigue']['signals'])) {
-            $row['fatigue']['signals'] = array_map(static function ($signal) use ($visibility, $signalMetric) {
-                if (is_array($signal) && $visibility->hides($signalMetric((string) ($signal['key'] ?? '')))) {
-                    $signal['current'] = null;
-                    $signal['previous'] = null;
-                }
-
-                return $signal;
-            }, $row['fatigue']['signals']);
+            $row['fatigue']['signals'] = self::redactSignals($row['fatigue']['signals'], $visibility);
         }
 
         /*
@@ -741,9 +842,79 @@ final class SharedCreativeView
             $row['preview']['can_download'] = $visibility->download;
 
             $row['preview'] = $this->redactCards($row['preview'], $visibility);
+            // SHARE-COPY-LEAK-001 — the envelope's own words (`text`) and every card's copy, through the one rule.
+            $row['preview'] = ContentCopy::preview($row['preview'], $visibility);
         }
 
         return $row;
+    }
+
+    /**
+     * A fatigue signal on a hidden metric keeps its direction and loses its two values — FATIGUE-REAL-SIGNALS-001.
+     *
+     * One definition for the row's own signals and the copy an alert carries beside it.
+     *
+     * @param  array<int|string, mixed>  $signals
+     * @return array<int|string, mixed>
+     */
+    private static function redactSignals(array $signals, CreativeVisibility $visibility): array
+    {
+        $signalMetric = static fn (string $key): string => match (true) {
+            // Its two values are the spend of each period.
+            $key === 'spend_without_results' => 'spend',
+            str_ends_with($key, '_decay') => substr($key, 0, -6),
+            default => $key,
+        };
+
+        return array_map(static function ($signal) use ($visibility, $signalMetric) {
+            if (is_array($signal) && $visibility->hides($signalMetric((string) ($signal['key'] ?? '')))) {
+                $signal['current'] = null;
+                $signal['previous'] = null;
+            }
+
+            return $signal;
+        }, $signals);
+    }
+
+    /**
+     * SHARE-COPY-LEAK-001 review — CLIENT-REPORT-MONEY-REDACTION-001 at every depth of a payload.
+     *
+     * `redactRow` removes a hidden figure's ORIGINAL (`spend_original`, its withheld-row count and the currency name) from a row's
+     * own bags. The summary and the detail also carry money beside sections that are not rows — each fatigue alert's provenance,
+     * the spend split by kind, the image-against-video aggregates, the per-platform siblings — and on Production those originals
+     * are where the money IS (USD accounts with no USD→SAR rate). Every key here is money and nothing else, so it is removed
+     * wherever it appears rather than section by section.
+     *
+     * @param  array<int|string, mixed>  $node
+     * @return array<int|string, mixed>
+     */
+    private static function withoutMoneyCompanions(array $node, CreativeVisibility $visibility): array
+    {
+        $keys = array_merge(
+            $visibility->spend ? [] : CreativeVisibility::MONEY_COMPANIONS['spend'],
+            $visibility->revenue ? [] : CreativeVisibility::MONEY_COMPANIONS['revenue'],
+            ! $visibility->spend && ! $visibility->revenue ? CreativeVisibility::MONEY_CURRENCY_KEYS : [],
+        );
+        if ($keys === []) {
+            return $node;
+        }
+
+        $walk = static function (array $node) use (&$walk, $keys): array {
+            foreach ($node as $key => $value) {
+                if (is_string($key) && in_array($key, $keys, true)) {
+                    unset($node[$key]);
+
+                    continue;
+                }
+                if (is_array($value)) {
+                    $node[$key] = $walk($value);
+                }
+            }
+
+            return $node;
+        };
+
+        return $walk($node);
     }
 
     /**
@@ -768,8 +939,6 @@ final class SharedCreativeView
         }
 
         $preview['cards'] = array_map(static function (array $card) use ($visibility): array {
-            $card = ContentCopy::card($card, $visibility);
-
             if (! $visibility->video) {
                 $card['video_url'] = null;
             }
@@ -842,6 +1011,10 @@ final class SharedCreativeView
                 $alert['creative'] = $this->redactRow($alert['creative'], $visibility);
                 if (! $visibility->spend) {
                     $alert['spend'] = null;
+                }
+                // SHARE-COPY-LEAK-001 review — the alert carries its own copy of the signals; a spend signal's two values are the spend.
+                if (is_array($alert['signals'] ?? null)) {
+                    $alert['signals'] = self::redactSignals($alert['signals'], $visibility);
                 }
 
                 return $alert;
@@ -934,6 +1107,12 @@ final class SharedCreativeView
             if (! $visibility->spend) {
                 $item['spend'] = null;
             }
+            /*
+             * SHARE-COPY-LEAK-001 review — CLIENT-REPORT-ENTITY-BOUNDARY-001 on the findings too. `CreativeInsights::subject()` names the
+             * campaign (internal id and name) on every finding; the rows reach the builder before any boundary, and no client surface
+             * draws either. Removed, not relabelled: a client link names content and platforms, never campaigns.
+             */
+            unset($item['campaign_id'], $item['campaign_name']);
 
             $items[] = $item;
         }
@@ -1081,7 +1260,8 @@ final class SharedCreativeView
 
             if (is_array($metrics)) {
                 foreach ($visibility->hiddenMetrics() as $metric) {
-                    unset($metrics[$metric], $metrics['reported'][$metric]);
+                    // The availability map and the window's halves go with the figure, as on the row (`redactRow`).
+                    unset($metrics[$metric], $metrics['reported'][$metric], $metrics['availability'][$metric], $metrics['decay']['early'][$metric], $metrics['decay']['late'][$metric]);
                 }
             }
 

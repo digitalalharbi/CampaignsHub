@@ -20,9 +20,11 @@ import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
 import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, useLaunchStrategy, type AccountReadiness, type BudgetAllocation, type BudgetMode, type BusinessGoal, type EventStatus, type StrategyAccount, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
+import { localStill } from '@/features/content/providerMedia'
+import { withMark } from '@/lib/money/mark'
 
 /**
- * LAUNCH-001 — «إطلاق الحملات»: a real launch on the platforms' own APIs, not an internal draft.
+ * LAUNCH-001 — «حملة جديدة»: a real launch on the platforms' own APIs, not an internal draft.
  *
  * Project → accounts → objective and budget → ad group → ad → tracking → review → publish. Every step the
  * builder offers is one the server's write services perform; every refusal the review shows is the one the
@@ -77,7 +79,7 @@ export function LaunchPage() {
   const [spendOk, setSpendOk] = useState(false)
   const [errors, setErrors] = useState<FieldError[]>([])
 
-  const title = ar ? 'إطلاق الحملات' : 'Launch'
+  const title = ar ? 'حملة جديدة' : 'Launch'
   const purpose = ar
     ? 'أنشئ حملة على منصة أو أكثر من مكان واحد عبر واجهات المنصات الرسمية — تُنشأ موقوفة، ولا يُرسل شيء قبل تأكيدك.'
     : 'Create a campaign on one or more platforms from one place, through the platforms’ official APIs — created paused, and nothing is sent before you confirm.'
@@ -207,7 +209,7 @@ export function LaunchPage() {
 
           {step === 2 && (
             <div className="space-y-4">
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-brand-600" checked={spec.ad_set !== null} onChange={(e) => setSpec((s) => ({ ...s, ad_set: e.target.checked ? { name: '', countries: ['SA'], optimization_goal: {}, bid_amount: {} } : null, ad: e.target.checked ? s.ad : null }))} data-testid="launch-adset-on" /> {ar ? 'أنشئ مجموعة إعلانية مع الحملة' : 'Create an ad group with the campaign'}</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-brand-600" checked={spec.ad_set !== null} onChange={(e) => setSpec((s) => ({ ...s, ad_set: e.target.checked ? { name: '', countries: ['SA'], optimization_goal: {}, bid_amount: {} } : null, ad: e.target.checked ? s.ad : null }))} data-testid="launch-adset-on" /> {ar ? 'أنشئ مجموعة مع الحملة' : 'Create an ad group with the campaign'}</label>
               {spec.ad_set && (
                 <>
                   <Field label={ar ? 'اسم المجموعة' : 'Ad group name'}>
@@ -274,12 +276,12 @@ export function LaunchPage() {
                                   <button type="button" onClick={() => setSpec((s) => ({ ...s, ad: { ...s.ad!, creative_id: { ...(s.ad!.creative_id ?? {}), [p.provider]: c.id } } }))}
                                     className={`flex w-full flex-col gap-1 rounded-xl border p-2 text-start ${spec.ad!.creative_id?.[p.provider] === c.id ? 'border-brand-500 bg-brand-500/10' : 'border-border hover:border-brand-400'}`}
                                     data-testid={`launch-creative-${c.id}`}>
-                                    {c.thumbnail_url ? <img src={c.thumbnail_url} alt="" className="aspect-video w-full rounded-lg object-cover" /> : <div className="aspect-video w-full rounded-lg bg-surface-secondary" />}
+                                    {localStill(c.thumbnail_url) ? <img src={localStill(c.thumbnail_url) ?? undefined} alt="" className="aspect-video w-full rounded-lg object-cover" /> : <div className="aspect-video w-full rounded-lg bg-surface-secondary" />}
                                     <span className="truncate text-xs font-semibold text-text-primary">{c.name ?? c.id}</span>
                                   </button>
                                 </li>
                               ))}
-                              {(options.data?.creatives[p.provider] ?? []).length === 0 && <li className="col-span-full text-xs text-text-muted">{ar ? 'لا إبداعات مزامَنة لهذه المنصة — تُنشأ الإعلانات من إبداع سبق مزامنته.' : 'No synced creatives on this platform — ads are made from an already-synced creative.'}</li>}
+                              {(options.data?.creatives[p.provider] ?? []).length === 0 && <li className="col-span-full text-xs text-text-muted">{ar ? 'لا محتويات محدّثة لهذه المنصة — الإعلان يُنشأ من محتوى سبق تحديثه.' : 'No synced creatives on this platform — ads are made from an already-synced creative.'}</li>}
                             </ul>
                           )}
                           {p.ad_fields === 'tiktok_ad' && (
@@ -369,7 +371,7 @@ export function LaunchPage() {
                 <p className="font-semibold">{ar ? 'حدود الإنفاق اليومي التي ستُشغَّل' : 'The daily spend that will run'}</p>
                 <ul className="space-y-0.5 text-xs">
                   {plan.spend.lines.map((l) => (
-                    <li key={l.account_id} className="flex justify-between gap-2"><span>{accounts.find((a) => a.id === l.account_id)?.name ?? l.account_id}</span><span dir="ltr" className="font-mono">{l.daily_budget === null ? (ar ? 'بلا ميزانية محددة' : 'no budget set') : `${l.daily_budget} ${l.currency}`}</span></li>
+                    <li key={l.account_id} className="flex justify-between gap-2"><span>{accounts.find((a) => a.id === l.account_id)?.name ?? l.account_id}</span><span dir="ltr" className="font-mono">{l.daily_budget === null ? (ar ? 'بلا ميزانية محددة' : 'no budget set') : withMark(String(l.daily_budget), l.currency)}</span></li>
                   ))}
                 </ul>
                 {plan.spend.limit_checks.length > 0 && (
@@ -377,7 +379,7 @@ export function LaunchPage() {
                     {plan.spend.limit_checks.map((c) => (
                       <li key={c.limit_id} data-testid={`launch-limit-${c.status}`} className={c.status === 'exceeds' ? 'text-warning' : 'text-text-secondary'}>
                         {c.status === 'exceeds'
-                          ? (ar ? `يتجاوز حدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) بمقدار ${c.over_by} ${c.currency} حتى ${c.period_ends_on}.` : `Exceeds the ${LIMIT_SCOPE[c.scope].en} spend limit by ${c.over_by} ${c.currency} until ${c.period_ends_on}.`)
+                          ? (ar ? `يتجاوز حدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) بمقدار ${withMark(String(c.over_by), c.currency)} حتى ${c.period_ends_on}.` : `Exceeds the ${LIMIT_SCOPE[c.scope].en} spend limit by ${withMark(String(c.over_by), c.currency)} until ${c.period_ends_on}.`)
                           : c.status === 'within'
                             ? (ar ? `ضمن حدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) حتى ${c.period_ends_on}.` : `Within the ${LIMIT_SCOPE[c.scope].en} spend limit until ${c.period_ends_on}.`)
                             : (ar ? `لا يمكن مقارنته بحدّ الإنفاق (${LIMIT_SCOPE[c.scope].ar}) — عملة أو أرقام غير قابلة للمقارنة.` : `Cannot be compared with the ${LIMIT_SCOPE[c.scope].en} spend limit — different currency or no comparable spend yet.`)}
@@ -703,7 +705,7 @@ function BudgetPanel({ projectId, spec, accounts, ar, onChange, onApply }: {
               </Field>
               {slot && (
                 <p data-testid={`launch-split-${a.external_account_id}`} className="text-text-secondary">
-                  <span dir="ltr" className="font-mono">{slot.share_pct}%</span> · <span dir="ltr" className="font-mono">{slot.amount_in_account_currency ?? '—'} {slot.account_currency}</span>
+                  <span dir="ltr" className="font-mono">{slot.share_pct}%</span> · <span dir="ltr" className="font-mono">{slot.amount_in_account_currency === null || slot.amount_in_account_currency === undefined ? '—' : withMark(String(slot.amount_in_account_currency), slot.account_currency)}</span>
                 </p>
               )}
               {bad.map((v) => <p key={v.kind} className="text-warning">{(VIOLATION[v.kind] ?? VIOLATION.missing_rate!)[ar ? 'ar' : 'en']}</p>)}

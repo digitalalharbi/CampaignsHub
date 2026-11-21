@@ -48,7 +48,7 @@ final class ConversionTransport
             // GA4's debug endpoint answers 200 with the problems it found.
             $problems = $validate && $d->kind === ConversionKinds::GA4 ? (array) ($response->json('validationMessages') ?? []) : [];
             if ($problems !== []) {
-                return ['ok' => false, 'code' => $code, 'error' => $this->clean('Rejected by GA4: '.json_encode($problems), $secrets), 'retryable' => false];
+                return ['ok' => false, 'code' => $code, 'error' => $this->clean('Rejected by Google Analytics: '.json_encode($problems), $secrets), 'retryable' => false];
             }
 
             return ['ok' => true, 'code' => $code, 'error' => null, 'retryable' => false];

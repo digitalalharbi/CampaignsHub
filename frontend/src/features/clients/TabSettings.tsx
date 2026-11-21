@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Archive, RotateCcw } from 'lucide-react'
-import { archiveClient, restoreClient, updateSettings, type ClientDetail } from './api'
+import { restoreClient, updateSettings, type ClientDetail } from './api'
+import { ClientArchiveDialog } from '@/features/projects/lifecycle/ProjectLifecycleDialogs'
 import { LogoUploader } from '@/features/branding/LogoUploader'
 import { useT } from '@/lib/i18n'
 import { useUi } from '@/stores/ui'
@@ -39,10 +40,8 @@ export function TabSettings({ d }: { d: ClientDetail }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['app', 'client', d.id] }); setSaved(true); setTimeout(() => setSaved(false), 2500) },
   })
 
-  const archive = useMutation({
-    mutationFn: () => archiveClient(d.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['app', 'client', d.id] }),
-  })
+  // PROJECT-LIFECYCLE-001 §8 — «أرشفة العميل» opens the impact window (its projects archived with it, typed name).
+  const [archiving, setArchiving] = useState(false)
   const restore = useMutation({
     mutationFn: () => restoreClient(d.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['app', 'client', d.id] }),
@@ -108,9 +107,13 @@ export function TabSettings({ d }: { d: ClientDetail }) {
               <button onClick={() => restore.mutate()} disabled={restore.isPending} className="flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold text-text-primary"><RotateCcw size={15} /> {t('cc_restore')}</button>
             </div>
           ) : (
-            <button onClick={() => archive.mutate()} disabled={archive.isPending} className="flex items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm font-semibold text-warning"><Archive size={15} /> {t('cc_archive')}</button>
+            <button data-testid="client-archive-open" onClick={() => setArchiving(true)} className="flex items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm font-semibold text-warning"><Archive size={15} /> {t('cc_archive')}</button>
           )}
         </div>
+      )}
+      {archiving && (
+        <ClientArchiveDialog clientId={d.id} clientName={d.name} ar={ar} onClose={() => setArchiving(false)}
+          onDone={() => { setArchiving(false); qc.invalidateQueries({ queryKey: ['app', 'client', d.id] }) }} />
       )}
     </div>
   )

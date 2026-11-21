@@ -14,6 +14,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -54,6 +55,33 @@ final class AlertsIsolationTest extends TestCase
      * Newest first is what makes the cap safe rather than merely smaller: the rule somebody has just
      * created is the one at the top, so a bounded list never hides what they are looking for.
      */
+    /** TENANCY-UNIFY-001 — rules are scoped like events, and a rule can only name a project of this workspace. */
+    public function test_rules_are_scoped_to_a_project_like_events_and_a_foreign_project_is_refused(): void
+    {
+        [$tenant, $owner] = $this->tenantWithOwner('scoped');
+        [$other] = $this->tenantWithOwner('elsewhere');
+        $mk = function (string $tenantId): string {
+            $client = (string) Str::uuid();
+            DB::table('client_workspaces')->insert(['id' => $client, 'tenant_id' => $tenantId, 'name' => $client, 'slug' => $client, 'status' => 'active', 'created_at' => now(), 'updated_at' => now()]);
+            $project = (string) Str::uuid();
+            DB::table('projects')->insert(['id' => $project, 'tenant_id' => $tenantId, 'client_workspace_id' => $client, 'name' => 'P', 'status' => 'active', 'created_at' => now(), 'updated_at' => now()]);
+
+            return $project;
+        };
+        $mine = $mk((string) $tenant->id);
+        $theirs = $mk((string) $other->id);
+        $another = $mk((string) $tenant->id);
+        foreach ([[$mine, 'Mine'], [$another, 'Another'], [null, 'Workspace-wide']] as [$p, $name]) {
+            AlertRule::create(['tenant_id' => $tenant->id, 'project_id' => $p, 'type' => 'sync_failure', 'name' => $name, 'active' => true]);
+        }
+
+        $names = array_column((array) $this->actingAs($owner, 'sanctum')->getJson("/api/v1/alerts/rules?project={$mine}")->assertOk()->json('data'), 'name');
+        sort($names);
+        $this->assertSame(['Mine', 'Workspace-wide'], $names);
+
+        $this->actingAs($owner, 'sanctum')->postJson('/api/v1/alerts/rules', ['type' => 'sync_failure', 'name' => 'Foreign', 'project_id' => $theirs])->assertStatus(422);
+    }
+
     public function test_the_rules_list_is_bounded_and_leads_with_the_newest(): void
     {
         [$tenant, $owner] = $this->tenantWithOwner('bounded');

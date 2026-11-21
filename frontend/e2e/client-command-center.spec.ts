@@ -92,8 +92,9 @@ test('owner drives a converted client through every command-center tab', async (
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
-  // 6) Team tab → grant access to a same-tenant user, then remove.
-  await tab(page, /^Team$|^الفريق$/).click()
+  // 6) Agency-team tab (renamed from «الفريق» / Team in #1220-era copy: it is the agency's own people, not the client's) → grant
+  //    access to a same-tenant user, then remove.
+  await tab(page, /^Agency team$|^فريق الوكالة$/).click()
   await page.getByLabel(/^Member$|^العضو$/).selectOption({ index: 1 }) // first assignable user
   await page.getByRole('button', { name: /^Add$|^إضافة$/ }).click()
   await expect(page.getByLabel(/Remove|إزالة/).first()).toBeVisible()

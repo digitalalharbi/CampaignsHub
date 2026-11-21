@@ -9,6 +9,7 @@ use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\Providers\Snapchat\SnapchatVocabulary;
 use App\Domains\Integrations\Reporting\ReportingWindow;
 use App\Domains\Integrations\Support\AssetExpiry;
+use App\Domains\Integrations\Support\PlatformCreatedAt;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use Illuminate\Support\Carbon;
 
@@ -23,7 +24,7 @@ use Illuminate\Support\Carbon;
  *
  * Awaiting credentials on this install — no round trip has been made against a real organisation.
  */
-final class SnapchatConnector extends ApiAdvertisingConnector implements ReportsCreativeInsights, ReportsEntityGrains, ReportsPeriodReach
+final class SnapchatConnector extends ApiAdvertisingConnector implements ReportsAudienceBreakdowns, ReportsCreativeInsights, ReportsEntityGrains, ReportsPeriodReach
 {
     /** Snapchat states money in millionths. */
     private const MICRO = 1_000_000;
@@ -231,6 +232,10 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             $url = is_string($next) && $next !== '' ? $next : null;
         }
 
+        if ($url !== null) {
+            $this->noteTruncatedRead($what);
+        }
+
         return $items;
     }
 
@@ -302,6 +307,83 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         return $accounts;
     }
 
+    /**
+     * INTEG-ON-DEMAND-DISCOVERY-001 — the organisations alone, in ONE call: `me/organizations` WITHOUT
+     * `with_ad_accounts`, so no organisation's accounts are read until one is chosen.
+     */
+    protected function fetchOrganisations(OAuthTokens $tokens): array
+    {
+        $organisations = [];
+
+        foreach ($this->readAll($tokens, 'me/organizations', 'organizations', 'organisations') as $wrapper) {
+            /** @var array<string,mixed> $organization */
+            $organization = (array) ($wrapper['organization'] ?? []);
+
+            if (($organization['id'] ?? null) !== null) {
+                $organisations[] = [
+                    'external_id' => (string) $organization['id'],
+                    'name' => isset($organization['name']) ? (string) $organization['name'] : null,
+                ];
+            }
+        }
+
+        return $organisations;
+    }
+
+    /** INTEG-ON-DEMAND-DISCOVERY-001 — `organizations/{id}/adaccounts`: the CHOSEN organisation's accounts and no other's. */
+    protected function fetchAdAccountsOf(OAuthTokens $tokens, ?string $organisationId): array
+    {
+        if ($organisationId === null) {
+            return [];
+        }
+
+        $accounts = [];
+
+        foreach ($this->readAll($tokens, "organizations/{$organisationId}/adaccounts", 'adaccounts', 'ad accounts') as $wrapper) {
+            $row = $this->adAccountRow((array) ($wrapper['adaccount'] ?? []), $organisationId);
+            if ($row !== null) {
+                $accounts[] = $row;
+            }
+        }
+
+        return $accounts;
+    }
+
+    /** INTEG-ON-DEMAND-DISCOVERY-001 — `adaccounts/{id}`: the one linked account, asked by its own id. */
+    protected function fetchAdAccount(OAuthTokens $tokens, string $externalId): ?array
+    {
+        foreach ($this->readAll($tokens, "adaccounts/{$externalId}", 'adaccounts', 'ad account') as $wrapper) {
+            $a = (array) ($wrapper['adaccount'] ?? []);
+
+            return $this->adAccountRow($a, isset($a['organization_id']) ? (string) $a['organization_id'] : null);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string,mixed>  $a
+     * @return array<string,mixed>|null
+     */
+    private function adAccountRow(array $a, ?string $organisationId): ?array
+    {
+        if (($a['id'] ?? null) === null) {
+            return null;
+        }
+
+        return [
+            'external_id' => (string) $a['id'],
+            'name' => (string) ($a['name'] ?? $a['id']),
+            // Absent stays absent — never a guessed currency or timezone.
+            'currency' => isset($a['currency']) ? (string) $a['currency'] : null,
+            'timezone' => isset($a['timezone']) ? (string) $a['timezone'] : null,
+            'status' => strtolower((string) ($a['status'] ?? 'active')),
+            'parent_external_id' => $organisationId,
+            'parent_name' => null,
+            'raw' => $a,
+        ];
+    }
+
     protected function fetchCampaigns(OAuthTokens $tokens, string $adAccountId): array
     {
         $campaigns = [];
@@ -318,10 +400,14 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 'external_id' => (string) $c['id'],
                 'name' => (string) ($c['name'] ?? $c['id']),
                 'status' => strtolower((string) ($c['status'] ?? 'unknown')),
-                'objective' => isset($c['objective']) ? (string) $c['objective'] : null,
+                // OBJECTIVE-RESULT-001 — newer campaigns state it only under `objective_v2_properties`.
+                'objective' => isset($c['objective'])
+                    ? (string) $c['objective']
+                    : (isset($c['objective_v2_properties']['objective_v2_type']) ? (string) $c['objective_v2_properties']['objective_v2_type'] : null),
                 'daily_budget' => isset($c['daily_budget_micro']) ? (float) $c['daily_budget_micro'] / self::MICRO : null,
                 'lifetime_budget' => isset($c['lifetime_spend_cap_micro']) ? (float) $c['lifetime_spend_cap_micro'] / self::MICRO : null,
                 'currency' => null, // stated on the account, not the campaign
+                'platform_created_at' => PlatformCreatedAt::from($c['created_at'] ?? null), // CONS-I-AGE
                 'raw' => $c,
             ];
         }
@@ -352,7 +438,7 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 'lifetime_budget' => isset($s['lifetime_budget_micro']) ? (float) $s['lifetime_budget_micro'] / self::MICRO : null,
                 'currency' => null,
                 // SNAP-OCT26-CHAT-FEED — the placements ride with the targeting, tokens verbatim.
-                'targeting' => $this->withPlacements($this->readableTargeting($s['targeting'] ?? null), $s),
+                'targeting' => $this->withPlacements($this->readableTargeting($s['targeting'] ?? null, $tokens), $s),
                 'starts_at' => isset($s['start_time']) ? (string) $s['start_time'] : null,
                 'ends_at' => isset($s['end_time']) ? (string) $s['end_time'] : null,
                 'raw' => $s,
@@ -394,7 +480,8 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 'name' => (string) ($a['name'] ?? $a['id']),
                 'status' => strtolower((string) ($a['status'] ?? 'unknown')),
                 'review_status' => $this->reviewStatus($a['review_status'] ?? null),
-                'destination_url' => null,
+                // CONTENT-TEXT-CTA-001 — Snapchat states the destination on the creative, never on the ad; read from there.
+                'destination_url' => is_string($destination = $creatives[$creativeId ?? '']['destination_url'] ?? null) ? $destination : null,
                 'creative' => $creativeId === null ? null : ($creatives[$creativeId] ?? ['external_id' => $creativeId]),
                 'raw' => $a,
             ], static fn ($v) => $v !== null);
@@ -454,6 +541,81 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         }
 
         return [...($targeting ?? []), ...$placements];
+    }
+
+    /**
+     * CREATIVE-COVERS-COVERAGE-001 — one creative's still, for the cover copy.
+     *
+     * Production 2026-11-07: 3,031 of 5,489 Snapchat creatives held a film (`video_url`) and no still at all, so no
+     * cover could be copied and a report drew an empty frame where the ad belongs. The sweep reads media in one
+     * batched call (`get_media_by_ids`), which answers the file and never a still. Snapchat names a film's still
+     * separately: `GET /v1/media/{media_id}/thumbnail` answers `link` (VIDEO media only). An image's file IS its
+     * still: `GET /v1/media/{media_id}` answers `download_link`.
+     *
+     * Asked one creative at a time from the cover queue (spaced, and through the provider's rate budget), not in
+     * the sweep: three thousand extra calls inside a structure pass is what made it time out before. A creative row
+     * written before the media id was kept is read once (`GET /v1/creatives/{id}`) for its top snap — a composite's
+     * from its first child, which is the snap Snapchat shows as the tile. Nothing is composed or guessed: an answer
+     * without a link is «no still».
+     *
+     * @return array<string, string> `thumbnail_url` (and `asset_url` for an image), with `asset_expires_at` when stated
+     */
+    public function renewCreativeStill(string $adAccountId, string $creativeId, ?string $mediaId): array
+    {
+        $tokens = $this->tokens();
+        $mediaId ??= $this->topSnapMediaId($tokens, $creativeId);
+        if ($mediaId === null) {
+            return [];
+        }
+
+        $thumbnail = null;
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url("media/{$mediaId}/thumbnail")), 'media thumbnail');
+            $thumbnail = $this->safeAssetUrl($body['link'] ?? ($body['thumbnail']['link'] ?? null));
+        } catch (\Throwable) {
+            // An IMAGE has no thumbnail by Snapchat's own rule; its file is read below.
+        }
+        if ($thumbnail !== null) {
+            return array_filter([
+                'thumbnail_url' => $thumbnail,
+                'asset_expires_at' => AssetExpiry::fromUrl($thumbnail)?->toIso8601String(),
+            ], static fn ($v) => $v !== null);
+        }
+
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url("media/{$mediaId}")), 'media');
+        } catch (\Throwable) {
+            return [];
+        }
+        $m = (array) (((array) (((array) ($body['media'] ?? []))[0] ?? []))['media'] ?? []);
+        if (strtoupper((string) ($m['type'] ?? '')) !== 'IMAGE') {
+            return [];
+        }
+        $link = $this->safeAssetUrl($m['download_link'] ?? null);
+
+        return $link === null ? [] : array_filter([
+            'asset_url' => $link,
+            'thumbnail_url' => $link,
+            'asset_expires_at' => AssetExpiry::fromUrl($link)?->toIso8601String(),
+        ], static fn ($v) => $v !== null);
+    }
+
+    /** A creative's top snap media id, or its first composite child's — one or two reads, null when neither names one. */
+    private function topSnapMediaId(OAuthTokens $tokens, string $creativeId, int $depth = 0): ?string
+    {
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url("creatives/{$creativeId}")), 'creative');
+        } catch (\Throwable) {
+            return null;
+        }
+        $c = (array) (((array) (((array) ($body['creatives'] ?? []))[0] ?? []))['creative'] ?? []);
+        $media = $c['top_snap_media_id'] ?? null;
+        if (is_string($media) && trim($media) !== '') {
+            return $media;
+        }
+        $child = ((array) ($c['composite_properties']['creative_ids'] ?? []))[0] ?? null;
+
+        return $depth === 0 && is_string($child) && $child !== '' ? $this->topSnapMediaId($tokens, $child, 1) : null;
     }
 
     public function lastMediaOutcome(): array
@@ -565,6 +727,7 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
                 'zone_id' => isset($c['collection_properties']['interaction_zone_id'])
                     ? (string) $c['collection_properties']['interaction_zone_id']
                     : null,
+                ...$this->creativeCopy($c),
             ], static fn ($v) => $v !== null);
 
             /* Kept for the composite pass below, which needs the children the body names. */
@@ -843,6 +1006,52 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         return null;
     }
 
+    /**
+     * CONTENT-TEXT-CTA-001 — what a Snap ad says and where it sends the reader, from the creative itself.
+     *
+     * Production 2026-11-13: 0 of 6,201 Snapchat creatives carried a headline or a destination, and every ad's
+     * destination was hard-coded null — the copy was read only for a collection's tiles. Snap's Marketing API
+     * («Creatives») states them on the creative object:
+     *
+     *   * `headline` (≤ 34 characters) — the ad's headline. Snapchat has no separate body text field.
+     *   * `brand_name` (≤ 25) — the advertiser name drawn above the snap. Kept in `raw`, never passed off as copy.
+     *   * `call_to_action` — the attachment's button, a Snapchat token such as `SHOP_NOW` or `INSTALL_NOW`.
+     *   * the attachment: `web_view_properties.url` (WEB_VIEW), a deep link's `web_view_fallback_url` (the landing
+     *     page a reader can open), the same two under `collection_properties`, and only then the app's own
+     *     `deep_link_uri` — an app scheme is where the ad sends a phone, not a page a report reader can open.
+     *
+     * Every value is Snapchat's own; a creative without an attachment keeps no destination.
+     *
+     * @param  array<string,mixed>  $c
+     * @return array{headline?: string, cta?: string, destination_url?: string, raw?: array{brand_name: string}}
+     */
+    private function creativeCopy(array $c): array
+    {
+        $text = static fn (mixed $v): ?string => is_string($v) && trim($v) !== '' ? trim($v) : null;
+        $collection = (array) ($c['collection_properties'] ?? []);
+        $destination = null;
+        foreach ([
+            $c['web_view_properties']['url'] ?? null,
+            $c['deep_link_properties']['web_view_fallback_url'] ?? null,
+            $collection['web_view_properties']['url'] ?? null,
+            $collection['deep_link_properties']['web_view_fallback_url'] ?? null,
+            $c['deep_link_properties']['deep_link_uri'] ?? null,
+            $collection['deep_link_properties']['deep_link_uri'] ?? null,
+        ] as $candidate) {
+            if (($destination = $text($candidate)) !== null) {
+                break;
+            }
+        }
+        $brand = $text($c['brand_name'] ?? null);
+
+        return array_filter([
+            'headline' => $text($c['headline'] ?? null),
+            'cta' => $text($c['call_to_action'] ?? null),
+            'destination_url' => $destination,
+            'raw' => $brand === null ? null : ['brand_name' => $brand],
+        ], static fn ($v) => $v !== null);
+    }
+
     /** @param array<string,mixed> $element */
     private function elementText(array $element, string $key): ?string
     {
@@ -992,7 +1201,13 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             $creatives[$id] = array_filter([
                 ...$creative,
                 // SNAP-OCT26-AI-MEDIA-DECLARATION — the declaration rides on the creative's own record.
-                'raw' => $aiSource === null ? ($creative['raw'] ?? null) : [...(array) ($creative['raw'] ?? []), 'ai_content_source' => $aiSource],
+                // CREATIVE-COVERS-COVERAGE-001 — and the top snap's media id and type, so a film's still can be asked later.
+                'raw' => array_filter([
+                    ...(array) ($creative['raw'] ?? []),
+                    'ai_content_source' => $aiSource,
+                    'media_id' => (string) $creative['media_id'],
+                    'media_type' => isset($m['type']) ? strtoupper((string) $m['type']) : null,
+                ], static fn ($v) => $v !== null),
                 /*
                  * CONTENT-PREVIEW-SHAPES-001 — a shape the creative body did not state, answered by
                  * the media Snapchat resolved for it.
@@ -1059,7 +1274,7 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
     /**
      * @return array<string,mixed>|null
      */
-    private function readableTargeting(mixed $targeting): ?array
+    private function readableTargeting(mixed $targeting, ?OAuthTokens $tokens = null): ?array
     {
         if (! is_array($targeting)) {
             return null;
@@ -1068,11 +1283,60 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         /** @var array<string,mixed> $demographics */
         $demographics = (array) (($targeting['demographics'][0] ?? []));
 
+        /*
+         * AUDIENCE-001 slice 2 — the whole location spec, not the country alone (GEO-001: a Snapchat squad read «sa»
+         * whatever regions it named). Documented at developers.snap.com/api/marketing-api/Ads-API/targeting: `geos[]`
+         * carries `country_code`, `region_id[]`, `postal_code[]` and `operation` (INCLUDE / EXCLUDE, EXCLUDE applied
+         * last); `locations[].circles[]` carries `radius` (metres unless `unit` says otherwise). An excluded country
+         * was read as a targeted one before; it is now its own key. Circle centres are not kept — the radius is the
+         * setting a reader compares, and a coordinate is a place we have no reason to store.
+         */
+        $include = [];
+        $exclude = [];
+        foreach ((array) ($targeting['geos'] ?? []) as $g) {
+            if (! is_array($g)) {
+                continue;
+            }
+            strtoupper((string) ($g['operation'] ?? 'INCLUDE')) === 'EXCLUDE' ? $exclude[] = $g : $include[] = $g;
+        }
+        $countries = static fn (array $geos): array => array_values(array_unique(array_filter(array_map(static fn (array $g) => isset($g['country_code']) ? (string) $g['country_code'] : null, $geos))));
+        $regions = function (array $geos) use ($tokens): array {
+            $out = [];
+            foreach ($geos as $g) {
+                $ids = (array) ($g['region_id'] ?? []);
+                $names = $tokens === null || $ids === [] || ! isset($g['country_code']) ? [] : $this->regionNames($tokens, (string) $g['country_code']);
+                foreach ($ids as $id) {
+                    $out[] = $names[(string) $id] ?? (string) $id;
+                }
+            }
+
+            return array_values(array_unique($out));
+        };
+        $postal = 0;
+        foreach ($include as $g) {
+            $postal += count((array) ($g['postal_code'] ?? []));
+        }
+        $radii = [];
+        foreach ((array) ($targeting['locations'] ?? []) as $loc) {
+            foreach ((array) (((array) $loc)['circles'] ?? []) as $c) {
+                $c = (array) $c;
+                if (is_numeric($c['radius'] ?? null)) {
+                    $factor = match (strtoupper((string) ($c['unit'] ?? 'METERS'))) {
+                        'KILOMETERS' => 1000.0, 'MILES' => 1609.344, 'FEET' => 0.3048, default => 1.0,
+                    };
+                    $radii[] = (int) round((float) $c['radius'] * $factor);
+                }
+            }
+        }
+
         $readable = array_filter([
-            'countries' => array_values(array_filter(array_map(
-                static fn ($g) => is_array($g) ? ($g['country_code'] ?? null) : null,
-                (array) ($targeting['geos'] ?? []),
-            ))),
+            'countries' => $countries($include),
+            'regions' => $regions($include),
+            'postal_codes' => $postal > 0 ? $postal : null,
+            'radius_m' => $radii,
+            // A country is excluded whole only by an EXCLUDE geo that names no region and no postal code of it.
+            'excluded_countries' => $countries(array_values(array_filter($exclude, static fn (array $g): bool => ((array) ($g['region_id'] ?? [])) === [] && ((array) ($g['postal_code'] ?? [])) === []))),
+            'excluded_regions' => $regions($exclude),
             'age_min' => $demographics['min_age'] ?? null,
             'age_max' => $demographics['max_age'] ?? null,
             'gender' => isset($demographics['gender']) ? strtolower((string) $demographics['gender']) : null,
@@ -1080,6 +1344,161 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
         ], static fn ($v) => $v !== null && $v !== []);
 
         return $readable === [] ? null : $readable;
+    }
+
+    /** AUDIENCE-001 slice 2 — at most this many (ad squad, day) questions per sweep; the rest wait for the next one. */
+    private const AUDIENCE_MAX_CALLS = 60;
+
+    /**
+     * AUDIENCE-001 slice 2 — paid delivery by REGION, per ad squad and day.
+     *
+     * Documented at developers.snap.com/api/marketing-api/Ads-API/measurement: `report_dimension=region` is a
+     * DELIVERY-only dimension (no conversion metrics), insights can be pulled for an ad squad, DAY / TOTAL / LIFETIME
+     * granularities are supported, the figures are ESTIMATED to protect privacy and exist only on days with at least
+     * 30 impressions. The documented response of a TOTAL request is `total_stats[].total_stat.dimension_stats[]`, one
+     * object per region with `impressions`, `swipes`, `spend` (micro-currency). So one TOTAL request per (squad, day)
+     * on the account's own reporting day, asked only for squads that delivered that day, capped per sweep.
+     */
+    public function audienceDimensions(): array
+    {
+        return ['region'];
+    }
+
+    /** «Delivery Insights are only available on days when there are at least 30 impressions» (measurement docs). */
+    public function audienceMinimumImpressions(): int
+    {
+        return 30;
+    }
+
+    public function audienceSourceField(string $dimension): string
+    {
+        return 'snapchat:adsquads/{id}/stats granularity=TOTAL report_dimension='.$dimension.' (estimated, days ≥30 impressions)';
+    }
+
+    public function audienceBreakdown(string $adAccountId, string $dimension, string $from, string $to, array $delivering = []): SyncResult
+    {
+        if (! in_array($dimension, $this->audienceDimensions(), true)) {
+            return SyncResult::failed("Snapchat audience dimension «{$dimension}» is not asked for by this product.");
+        }
+
+        if ($delivering === []) {
+            return SyncResult::of([]);
+        }
+
+        try {
+            $tokens = $this->tokens();
+            $timezone = $this->accountTimezone($adAccountId);
+        } catch (\Throwable $e) {
+            return SyncResult::failed($e->getMessage());
+        }
+
+        $rows = [];
+        $calls = 0;
+        $skipped = 0;
+        $failed = 0;
+        $firstFailure = null;
+        foreach ($delivering as $squadId => $days) {
+            foreach (array_values(array_unique($days)) as $day) {
+                if ($calls >= self::AUDIENCE_MAX_CALLS) {
+                    $skipped++;
+
+                    continue;
+                }
+                $calls++;
+                // One refused question costs that question only; a rate limit stops the sweep and keeps what it read.
+                try {
+                    $window = ReportingWindow::localDays($timezone, $day, $day);
+                    $body = $this->read($this->api($tokens)->get($this->url("adsquads/{$squadId}/stats").'?'.http_build_query([
+                        'granularity' => 'TOTAL',
+                        'report_dimension' => $dimension,
+                        'fields' => 'impressions,swipes,spend',
+                        'start_time' => $window->startIso(),
+                        'end_time' => $window->endIso(),
+                    ])), "{$dimension} breakdown");
+                    $rows = [...$rows, ...self::mapAudienceStats($body, (string) $squadId, $day, $dimension)];
+                } catch (\Throwable $e) {
+                    $failed++;
+                    $firstFailure ??= $e->getMessage();
+                    if (preg_match('/\b429\b|rate limit|too many requests/i', $e->getMessage()) === 1) {
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        if ($failed > 0 && $rows === []) {
+            return SyncResult::failed((string) $firstFailure);
+        }
+        $notes = array_filter([
+            $skipped > 0 ? "{$skipped} (ad squad, day) question(s) left for the next sweep" : null,
+            $failed > 0 ? "{$failed} question(s) refused: ".$firstFailure : null,
+        ]);
+
+        return SyncResult::of($rows, $notes === [] ? null : implode('; ', $notes));
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     * @return list<array<string, mixed>>
+     */
+    public static function mapAudienceStats(array $body, string $squadId, string $day, string $dimension): array
+    {
+        $rows = [];
+        foreach ((array) ($body['total_stats'] ?? []) as $wrapper) {
+            $total = (array) (((array) $wrapper)['total_stat'] ?? []);
+            foreach ((array) ($total['dimension_stats'] ?? []) as $d) {
+                $d = (array) $d;
+                $value = trim((string) ($d[$dimension] ?? ''));
+                if ($value === '') {
+                    continue;
+                }
+                $row = ['entity_id' => $squadId, 'campaign_id' => null, 'date' => $day, 'value' => $value];
+                if (is_numeric($d['impressions'] ?? null)) {
+                    $row['impressions'] = (float) $d['impressions'];
+                }
+                if (is_numeric($d['swipes'] ?? null)) {
+                    $row['clicks'] = (float) $d['swipes'];
+                }
+                if (is_numeric($d['spend'] ?? null)) {
+                    $row['spend'] = (float) $d['spend'] / self::MICRO;
+                }
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    }
+
+    /** @var array<string, array<string, string>> region id → name, per country, for this connector instance */
+    private array $regionNameMemo = [];
+
+    /**
+     * `GET /v1/targeting/geo/{country_code}/region` — Snapchat's own names for its region ids (documented on the targeting
+     * page; the response's `targeting_dimensions[].region.region` holds `id`, `code`, `name`). Once per country per run;
+     * a refusal leaves the ids as they are rather than failing the structure sweep.
+     *
+     * @return array<string, string>
+     */
+    private function regionNames(OAuthTokens $tokens, string $countryCode): array
+    {
+        $cc = strtolower($countryCode);
+        if (isset($this->regionNameMemo[$cc])) {
+            return $this->regionNameMemo[$cc];
+        }
+        $names = [];
+        try {
+            $body = $this->read($this->api($tokens)->get($this->url("targeting/geo/{$cc}/region")), 'region names');
+            foreach ((array) ($body['targeting_dimensions'] ?? []) as $d) {
+                $r = (array) (((array) (((array) $d)['region'] ?? []))['region'] ?? []);
+                if (isset($r['id'], $r['name'])) {
+                    $names[(string) $r['id']] = (string) $r['name'];
+                }
+            }
+        } catch (\Throwable) {
+            $names = [];
+        }
+
+        return $this->regionNameMemo[$cc] = $names;
     }
 
     /**
@@ -1478,6 +1897,10 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
             $url = is_string($next) && $next !== '' ? $next : null;
         }
 
+        if ($url !== null) {
+            $this->noteTruncatedRead("{$breakdown} stats");
+        }
+
         return $rows;
     }
 
@@ -1600,6 +2023,10 @@ final class SnapchatConnector extends ApiAdvertisingConnector implements Reports
 
             $next = $body['paging']['next_link'] ?? null;
             $url = is_string($next) && $next !== '' ? $next : null;
+        }
+
+        if ($url !== null) {
+            $this->noteTruncatedRead('daily stats');
         }
 
         return $rows;

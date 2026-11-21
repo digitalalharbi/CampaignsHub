@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Platform\Services;
 
+use App\Domains\Notifications\Services\TransactionalMailer;
 use App\Http\Controllers\HealthController;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -147,11 +148,13 @@ final class OperationalReadiness
     private function mail(Carbon $now): array
     {
         $since = $now->copy()->subDays(14);
-        $latest = DB::table('mail_deliveries')->whereIn('status', ['sent', 'failed'])->where('created_at', '>=', $since)
+        // EMAIL-TEST-SEND-001 — an admin's test is not a real attempt: it must not hide or invent a customer's failure.
+        $real = fn () => DB::table('mail_deliveries')->where('kind', '!=', TransactionalMailer::TEST_KIND)->where('created_at', '>=', $since);
+        $latest = $real()->whereIn('status', ['sent', 'failed'])
             ->orderByDesc('created_at')->first(['status', 'created_at', 'error']);
-        $lastFailure = DB::table('mail_deliveries')->where('status', 'failed')->where('created_at', '>=', $since)
+        $lastFailure = $real()->where('status', 'failed')
             ->orderByDesc('created_at')->first(['created_at', 'error']);
-        $lastSent = DB::table('mail_deliveries')->where('status', 'sent')->where('created_at', '>=', $since)->max('created_at');
+        $lastSent = $real()->where('status', 'sent')->max('created_at');
 
         return [
             'state' => $latest === null ? 'unknown' : ($latest->status === 'failed' ? 'failing' : 'ok'),

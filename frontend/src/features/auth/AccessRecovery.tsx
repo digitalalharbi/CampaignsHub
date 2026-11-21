@@ -47,7 +47,7 @@ export function AccessRecovery({
   memberships?: Membership[]
   /** Show the «finish setting up / ask for an invite» line — true when there is no workspace at all. */
   onboarding?: boolean
-  /** Where signing in again should land. The client portal has its own door. */
+  /** Where signing in again should land. */
   loginPath?: string
 }) {
   const ar = useUi((s) => s.locale) === 'ar'

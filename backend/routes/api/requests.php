@@ -69,6 +69,10 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::get('/overview', [ClientPortalController::class, 'overview'])->name('overview.show')
         ->middleware('throttle:60,1');
 
+    // AUDIENCE-001 — the audience under the performance dashboard: no money, no campaign or ad-set names.
+    Route::get('/audience', [ClientPortalController::class, 'audience'])->name('audience.show')
+        ->middleware('throttle:60,1');
+
     // CP-VISIBILITY-001: what the agency lets this client see and do, per space.
     Route::get('/visibility', [ClientPortalController::class, 'visibility'])->name('visibility.show')
         ->middleware('throttle:120,1');
@@ -113,10 +117,18 @@ Route::prefix('client')->name('client.')->group(function (): void {
     // Client-facing content (read-only, client-safe, workspace-scoped to this client): files, campaigns, reports.
     Route::get('/files', [ClientPortalController::class, 'files'])->name('files.index')
         ->middleware('throttle:120,1');
+    // CLIENT-DASHBOARD-PARITY-001 — the agency dashboard's own answers for one of the client's projects.
+    Route::get('/projects/{project}/metrics/{name}', [ClientPortalController::class, 'projectMetrics'])->name('projects.metrics')
+        ->where('name', '[a-z-]+')->middleware('throttle:240,1');
+    // CLIENT-CONTENT-001 — the best and weakest content of one of the client's projects.
+    Route::get('/projects/{project}/content', [ClientPortalController::class, 'projectContent'])->name('projects.content')->middleware('throttle:120,1');
     Route::get('/campaigns', [ClientPortalController::class, 'campaigns'])->name('campaigns.index')
         ->middleware('throttle:120,1');
     Route::get('/reports', [ClientPortalController::class, 'reports'])->name('reports.index')
         ->middleware('throttle:120,1');
+    // PORTAL-FULL-REPORTS-001 — the whole report, inside the portal, through the same shared-report controller.
+    Route::get('/reports/{report}/view/{path?}', [ClientPortalController::class, 'reportView'])->name('reports.view')
+        ->where('report', '[0-9a-fA-F-]{36}')->where('path', '.*')->middleware('throttle:240,1');
 
     // Client-facing Billing (reuses the Billing domain; every read/write is workspace-scoped to this client).
     Route::get('/quotes', [ClientPortalController::class, 'quotes'])->name('quotes.index')
@@ -126,6 +138,13 @@ Route::prefix('client')->name('client.')->group(function (): void {
     Route::post('/quotes/{quote}/approve', [ClientPortalController::class, 'approveQuote'])->name('quotes.approve')
         ->middleware('throttle:30,1');
     Route::post('/quotes/{quote}/reject', [ClientPortalController::class, 'rejectQuote'])->name('quotes.reject')
+        ->middleware('throttle:30,1');
+    // CLIENT-CONTENT-APPROVAL-001 — «بانتظار اعتمادك».
+    Route::get('/approvals', [ClientPortalController::class, 'contentApprovals'])->name('approvals.index')
+        ->middleware('throttle:120,1');
+    Route::post('/approvals/{approval}/approve', [ClientPortalController::class, 'approveContent'])->name('approvals.approve')
+        ->middleware('throttle:30,1');
+    Route::post('/approvals/{approval}/request-changes', [ClientPortalController::class, 'requestContentChanges'])->name('approvals.changes')
         ->middleware('throttle:30,1');
     Route::get('/invoices', [ClientPortalController::class, 'invoices'])->name('invoices.index')
         ->middleware('throttle:120,1');

@@ -52,11 +52,10 @@ final class CommercialJourneyTest extends TestCase
      * 8.99 × 1.15 rounds to 10.34. A money literal in a test is a price somebody has to remember to
      * edit — and this is the third time in one day that a commercial decision broke one.
      */
-    private function introPlusVat(string $code = 'growth'): string
+    /** The launch introductory fee as charged — all-in, its VAT shown as included (PRICING-VAT-001). */
+    private function introCharged(string $code = 'growth'): string
     {
-        $fee = (float) SubscriptionPlan::query()->where('code', $code)->firstOrFail()->trial_fee;
-
-        return number_format(round($fee * 1.15, 2), 2, '.', '');
+        return number_format((float) SubscriptionPlan::query()->where('code', $code)->firstOrFail()->trial_fee, 2, '.', '');
     }
 
     use AppliesToRegister;
@@ -176,7 +175,7 @@ final class CommercialJourneyTest extends TestCase
             (string) $trialCharge->amount,
         );
         $this->assertSame('issued', $trialInvoice->status, 'the document exists before the money does');
-        $this->assertSame($this->introPlusVat(), $trialInvoice->outstanding(), 'the trial fee plus VAT');
+        $this->assertSame($this->introCharged(), $trialInvoice->outstanding(), 'the trial fee as charged, VAT included');
         $this->assertSame(0, Tenant::count());
 
         // A repeat press of "pay" resolves to the SAME charge — «منع تكرار الخصم».
@@ -240,10 +239,10 @@ final class CommercialJourneyTest extends TestCase
         // ── 8. The renewal invoice ────────────────────────────────────────────────────────────
         $renewalInvoice = SubscriptionInvoice::query()->where('subscription_payment_id', $renewal->getKey())->firstOrFail();
         $this->assertSame('issued', $renewalInvoice->status);
-        // The full monthly price plus 15% VAT, computed from the plan rather than written down: the
-        // price is an editable commercial term and the rate belongs to `TaxTreatment`.
+        // PRICING-VAT-001 — the invoice is for exactly what the renewal asks: a launch price is all-in, its VAT shown inside it.
         $monthly = (float) SubscriptionPlan::where('code', 'growth')->firstOrFail()->price_monthly;
-        $this->assertSame(number_format($monthly * 1.15, 2, '.', ''), (string) $renewalInvoice->total);
+        $this->assertSame(number_format($monthly, 2, '.', ''), (string) $renewal->amount);
+        $this->assertSame((string) $renewal->amount, (string) $renewalInvoice->total);
 
         // ── 9. The renewal FAILS ──────────────────────────────────────────────────────────────
         $this->webhook($renewal, 'failed', (int) round((float) $renewal->amount * 100));

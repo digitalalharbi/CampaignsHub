@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { promptDialog } from '@/stores/dialogs'
 
 /**
  * `/admin/features` — SUPERADMIN-FEATURES-001: a capability on or off for EVERY workspace.
@@ -22,9 +23,9 @@ export function PlatformFeaturesPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'capabilities'] }),
   })
 
-  const toggle = (module: string, disabled: boolean) => {
-    const reason = window.prompt(ar ? 'سبب التغيير (يُسجَّل في سجل التدقيق):' : 'Reason (recorded in the audit trail):')
-    if (reason && reason.trim().length >= 5) change.mutate({ module, disabled, reason: reason.trim() })
+  const toggle = async (module: string, disabled: boolean) => {
+    const reason = await promptDialog({ title: ar ? 'سبب التغيير' : 'Reason for the change', label: ar ? 'يُسجَّل في سجل التدقيق' : 'Recorded in the audit trail', minLength: 5 })
+    if (reason) change.mutate({ module, disabled, reason })
   }
 
   return (
@@ -78,11 +79,14 @@ function PlanModules({ ar }: { ar: boolean }) {
     onSuccess: (next) => qc.setQueryData(['admin', 'plan-capabilities'], next),
   })
 
-  const toggle = (plan: { id: string; name: string; workspaces: number }, module: string, enabled: boolean) => {
-    const reason = window.prompt(ar
-      ? `يؤثر على ${plan.workspaces} مساحة عمل على خطة ${plan.name}. سبب التغيير (يُسجَّل في سجل التدقيق):`
-      : `Affects ${plan.workspaces} workspaces on ${plan.name}. Reason (recorded in the audit trail):`)
-    if (reason && reason.trim().length >= 5) change.mutate({ plan: plan.id, module, enabled, reason: reason.trim() })
+  const toggle = async (plan: { id: string; name: string; workspaces: number }, module: string, enabled: boolean) => {
+    const reason = await promptDialog({
+      title: ar ? 'سبب التغيير' : 'Reason for the change',
+      body: ar ? `يؤثر على ${plan.workspaces} مساحة عمل على خطة ${plan.name}.` : `Affects ${plan.workspaces} workspaces on ${plan.name}.`,
+      label: ar ? 'يُسجَّل في سجل التدقيق' : 'Recorded in the audit trail',
+      minLength: 5,
+    })
+    if (reason) change.mutate({ plan: plan.id, module, enabled, reason })
   }
 
   return (
@@ -100,7 +104,7 @@ function PlanModules({ ar }: { ar: boolean }) {
           : (
             <div className="mt-3 overflow-x-auto rounded-xl border border-border">
               <table className="w-full min-w-[560px] text-sm">
-                <thead className="bg-surface-secondary text-[12px] text-text-muted">
+                <thead className="bg-surface-secondary text-xs text-text-muted">
                   <tr>
                     <th className="px-3 py-2 text-start font-semibold">{ar ? 'الخاصية' : 'Module'}</th>
                     {data.data.plans.map((p) => (
@@ -114,17 +118,17 @@ function PlanModules({ ar }: { ar: boolean }) {
                 <tbody>
                   {data.data.modules.map((m) => (
                     <tr key={m.module} className="border-t border-border">
-                      <td className="px-3 py-2 font-mono text-[13px] text-text-primary"><span dir="ltr">{m.module}</span></td>
+                      <td className="px-3 py-2 font-mono text-xs text-text-primary"><span dir="ltr">{m.module}</span></td>
                       {data.data!.plans.map((p) => {
                         const carried = p.modules[m.module] === true
                         return (
                           <td key={p.id} className="px-3 py-2">
                             {m.default_entitled
-                              ? <span className="text-[12px] text-text-muted">{ar ? 'متاحة للجميع' : 'Everyone has it'}</span>
+                              ? <span className="text-xs text-text-muted">{ar ? 'متاحة للجميع' : 'Everyone has it'}</span>
                               : (
                                 <button type="button" data-testid={`plan-module-${p.code}-${m.module}`} data-carried={carried}
                                   disabled={change.isPending} onClick={() => toggle(p, m.module, !carried)}
-                                  className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${carried ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}>
+                                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${carried ? 'bg-[var(--positive-background)] text-[var(--positive-foreground)]' : 'bg-surface-secondary text-text-muted'}`}>
                                   {carried ? (ar ? 'مشمولة' : 'Included') : (ar ? 'غير مشمولة' : 'Not included')}
                                 </button>
                               )}

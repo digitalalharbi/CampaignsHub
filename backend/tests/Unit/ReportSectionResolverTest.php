@@ -45,6 +45,24 @@ final class ReportSectionResolverTest extends TestCase
                predicate is «is there a measurement payload», and without one «everything on» cannot
                include it. */
             'site_measurement' => ['property' => ['id' => '111', 'name' => 'Site', 'timezone' => 'Asia/Riyadh'], 'days' => 2],
+            'store_analytics' => ['not_summed' => true, 'store' => null, 'site' => null],
+            // GA4-REPORT-SECTIONS-001 — each part is available where its payload is an array.
+            'ga4_overview' => ['kpis' => [], 'series' => []],
+            'ga4_acquisition' => ['channels' => null, 'devices' => null, 'funnel' => []],
+            'ga4_platform_gap' => ['summed' => false, 'rows' => []],
+            'ga4_tables' => ['tables' => []],
+            'ga4_attribution' => ['platforms' => []],
+            'ga4_pulse' => ['kpis' => [], 'funnel' => []],
+            'ga4_classification' => ['groups' => []],
+            'ga4_products' => ['table' => ['rows' => []]],
+            'ga4_gap_reasons' => ['reasons' => []],
+            // AUDIENCE-001 — each audience part is available where its payload is an array; the spend switch where a delivery part is.
+            'audience_targeting' => ['items' => []], 'audience_regions' => ['groups' => []], 'audience_cities' => ['groups' => []],
+            'audience_gender' => ['groups' => []], 'audience_age' => ['groups' => []], 'audience_devices' => ['groups' => []],
+            'audience_placements' => ['groups' => []], 'audience_interests' => ['groups' => []], 'audience_professional' => ['groups' => []],
+            'audience_site' => ['groups' => []],
+            // CONTENT-FORMAT-COMPARISON-001 — a comparison with one objective in it.
+            'content_format_comparison' => ['objectives' => [['family' => 'sales', 'formats' => []]]],
             'ads' => [['name' => 'Ad', 'spend' => 300.0]],
             'ads_roster' => [['name' => 'Ad']],
             'ads_absent_reason' => null,
@@ -67,8 +85,8 @@ final class ReportSectionResolverTest extends TestCase
     public function test_the_registry_covers_the_sections_in_reading_order(): void
     {
         $this->assertSame([
-            'kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance',
-            'site_measurement', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
+            'kpis', 'trends', 'platform_comparison', 'budget_pacing', 'funnel', 'content_performance', 'content_format_comparison',
+            'site_measurement', 'store_analytics', 'ga4_overview', 'ga4_acquisition', 'ga4_platform_gap', 'ga4_tables', 'ga4_attribution', 'ga4_pulse', 'ga4_classification', 'ga4_products', 'ga4_gap_reasons', 'audience_targeting', 'audience_regions', 'audience_cities', 'audience_gender', 'audience_age', 'audience_devices', 'audience_placements', 'audience_interests', 'audience_professional', 'audience_site', 'audience_spend', 'recommendations', 'detailed_tables', 'daily_records', 'account_breakdown', 'objective_breakdown', 'advanced_segmentation',
         ], $this->registry->keys());
     }
 

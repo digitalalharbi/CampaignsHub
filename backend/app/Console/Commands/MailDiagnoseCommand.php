@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Domains\Notifications\Charts\MailChart;
+use App\Domains\Notifications\Support\MailAddress;
+use App\Domains\Notifications\Support\MailFailure;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -37,6 +39,8 @@ final class MailDiagnoseCommand extends Command
         $this->line('username set   : '.(! empty($mailer['username']) ? 'yes' : 'no'));
         $this->line('password set   : '.(! empty($mailer['password']) ? 'yes' : 'no'));
         $this->line('from address   : '.(string) config('mail.from.address'));
+        // §17.5 — the name a reader sees beside the subject. It should say CampaignsHub.
+        $this->line('from name      : '.(string) config('mail.from.name'));
         // EMAIL-DECISION-REPORT-001 — whether this server can draw the email charts (GD); without it the mail embeds no image.
         $this->line('chart images   : '.(MailChart::available() ? 'gd available — charts embedded' : 'gd missing — charts omitted, text fallbacks only'));
 
@@ -45,9 +49,8 @@ final class MailDiagnoseCommand extends Command
 
         $this->line('recent deliveries: '.$rows->count());
         foreach ($rows as $r) {
-            $at = (string) $r->recipient;
-            $masked = str_contains($at, '@') ? mb_substr($at, 0, 1).'***@'.substr($at, (int) strrpos($at, '@') + 1) : '***';
-            $error = $r->error === null ? '' : ' — '.mb_substr(preg_replace('/\s+/', ' ', (string) $r->error) ?? '', 0, 240);
+            $masked = MailAddress::mask((string) $r->recipient);
+            $error = $r->error === null ? '' : ' — '.mb_substr(MailFailure::redact((string) $r->error), 0, 240);
             $this->line("  {$r->created_at}  {$r->kind}  {$masked}  {$r->status}{$error}");
         }
 

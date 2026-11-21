@@ -173,7 +173,7 @@ describe('what the result cost', () => {
 
 /**
  * CAMPAIGNS-MONEY-CURRENCY-001 — a money reading names its currency when the window names one.
- * The table printed «17.4K» beside a budget that said «16.7K SAR».
+ * The table printed «17.4K» beside a budget that said «16.7K ر.س».
  */
 describe('money on a campaign row', () => {
   const row = { spend: 17448.75, revenue: 237825, conversions: 151, cpa: 115.55, roas: 13.63, spend_withheld_rows: 0, spend_original: 0, revenue_withheld_rows: 0, revenue_original: 0, money_original_currencies: 0, reported: { spend: true, revenue: true, conversions: true, purchases: true } }
@@ -181,10 +181,10 @@ describe('money on a campaign row', () => {
   it('carries the reporting currency into spend and cost per result', () => {
     const spend = campaignSpendReading(row, false, 'SAR')
     expect(spend).toMatchObject({ kind: 'value' })
-    expect((spend as { text: string }).text).toContain('SAR')
+    expect((spend as { text: string }).text).toContain('ر.س')
     const cost = campaignEfficiency('sales', row, false, 'SAR')
     expect(cost?.reading).toMatchObject({ kind: 'value' })
-    expect((cost?.reading as { text: string }).text).toContain('SAR')
+    expect((cost?.reading as { text: string }).text).toContain('ر.س')
   })
 
   it('stays bare — never a guessed unit — when no currency can be named', () => {
@@ -192,3 +192,43 @@ describe('money on a campaign row', () => {
     expect((spend as { text: string }).text).not.toMatch(/[A-Z]{3}/)
   })
 })
+/*
+ * OBJECTIVE-RESULT-001 — a traffic row leads with its landing page views, and with clicks NAMED
+ * «النقرات» where the platform sent none. 1KCOFFEE: 2,881 visits, 18,464 clicks, 0 conversions.
+ */
+describe('the result a traffic campaign row leads with', () => {
+  const coffee = (o: Record<string, unknown> = {}) => ({
+    campaign_id: 'c1', spend: 1440.5, clicks: 18464, landing_page_views: 2881, conversions: 0, cpc: 0.078,
+    cost_per_result: 0.5,
+    reported: { spend: true, clicks: true, landing_page_views: true, conversions: true },
+    ...o,
+  })
+
+  it('leads with landing page views, called page visits', () => {
+    const h = campaignHeadline('traffic', coffee(), true)
+
+    expect(h?.key).toBe('landing_page_views')
+    expect(h?.reading.kind).toBe('value')
+    expect(h?.label).toContain('زيارات')
+  })
+
+  it('falls back to clicks, labelled «النقرات», when no visit was measured', () => {
+    for (const row of [coffee({ landing_page_views: 0 }), coffee({ reported: { spend: true, clicks: true, landing_page_views: false } })]) {
+      const h = campaignHeadline('traffic', row, true)
+
+      expect(h?.key).toBe('clicks')
+      expect(h?.label).toBe('النقرات')
+      expect(h?.label).not.toContain('زيارات')
+    }
+  })
+
+  it('states the cost of the result it names', () => {
+    expect(campaignEfficiency('traffic', coffee(), true)?.key).toBe('cost_per_lpv')
+    expect(campaignEfficiency('traffic', coffee({ landing_page_views: 0 }), true)?.key).toBe('cpc')
+  })
+
+  it('never offers a return to a traffic campaign', () => {
+    expect(campaignReturn('traffic', coffee(), true)).toBeNull()
+  })
+})
+

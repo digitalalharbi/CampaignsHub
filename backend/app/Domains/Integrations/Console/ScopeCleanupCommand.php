@@ -7,8 +7,11 @@ namespace App\Domains\Integrations\Console;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
 use App\Domains\Campaigns\Services\PlatformObjectiveMap;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Metrics\Services\SourceCurrency;
 use Illuminate\Console\Command;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -278,8 +281,11 @@ final class ScopeCleanupCommand extends Command
         $campaigns = $this->rowsOf('external_campaigns', $project, $account)
             ->get(['t.id', 't.name', 't.status', 't.objective', 't.lifetime_budget', 't.currency', 't.provider', 't.external_id']);
 
+        $accountCurrency = SourceCurrency::clean(DB::table('external_accounts')->where('id', $account)->value('currency'));
+
         foreach ($campaigns as $campaign) {
             $unified = null;
+            $budgetCurrency = SourceCurrency::clean($campaign->currency) ?? $accountCurrency;
 
             if (in_array('external_campaigns', $this->tables(), true)) {
                 $unified = (string) UnifiedCampaign::withoutGlobalScopes()->create([
@@ -290,14 +296,27 @@ final class ScopeCleanupCommand extends Command
                     // The provider's word resolved the same way the importer resolves it; unknown stays `other`.
                     'objective' => (app(PlatformObjectiveMap::class)->resolve((string) $campaign->provider, $campaign->objective) ?? CampaignObjective::Other)->value,
                     'status' => (string) $campaign->status,
-                    'total_budget' => $campaign->lifetime_budget,
-                    'budget_currency' => $campaign->currency ?: 'USD',
+                    // MONEY-CURRENCY-NEVER-ASSUMED-001 — campaign, else account, else the budget is withheld; never «USD» by default.
+                    'total_budget' => $budgetCurrency === null ? null : $campaign->lifetime_budget,
+                    'budget_currency' => $budgetCurrency ?? ReportingCurrency::DEFAULT,
                     'platforms' => [(string) $campaign->provider],
-                    'meta' => ['adopted_from' => 'scope-cleanup', 'external_account_id' => $account, 'external_campaign_id' => (string) $campaign->external_id],
+                    'meta' => ['adopted_from' => 'scope-cleanup', 'external_account_id' => $account, 'external_campaign_id' => (string) $campaign->external_id]
+                        + ($budgetCurrency === null && $campaign->lifetime_budget !== null ? ['budget_currency_unknown' => true] : []),
                 ])->getKey();
 
                 $done['external_campaigns'] += DB::table('external_campaigns')->where('id', $campaign->id)
                     ->update(['project_id' => $target, 'client_workspace_id' => $targetWorkspace, 'unified_campaign_id' => $unified, 'unlinked_at' => null]);
+
+                /*
+                 * OBJECTIVE-RESULT-001 — the same resolver the importer runs, so the adopted campaign
+                 * records WHERE its objective came from (`objective_source = platform`) and the
+                 * platform's own word. Seeding the objective alone left `objective_source = unset`
+                 * and `objective_platform_value` empty on a campaign whose platform had said TRAFFIC.
+                 */
+                $adopted = UnifiedCampaign::withoutGlobalScopes()->find($unified);
+                if ($adopted !== null) {
+                    app(CampaignObjectiveResolver::class)->sync($adopted);
+                }
             }
 
             foreach (['external_ad_sets', 'external_ads'] as $table) {

@@ -180,7 +180,8 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $plain = $this->createLink(['metrics' => ['impressions', 'clicks']])->assertCreated()->json('data.token');
         $payload = $this->live($plain)->assertOk()->json('data');
         $this->assertSame([], $payload['campaign_rows']);
-        $this->assertNull($payload['totals']['spend']);
+        // REPORT-FILTERS-FUNCTIONAL-001 (Owner 2026-11-05) — this link chose impressions and clicks: spend is not a null under its key, it is not in the answer.
+        $this->assertArrayNotHasKey('spend', $payload['totals']);
     }
 
     private function structureOnly(ExternalAccount $account, string $name): UnifiedCampaign
@@ -347,6 +348,44 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $this->assertStringNotContainsString('Riwaq — LeadForm', json_encode($payload['ads_roster'], JSON_UNESCAPED_UNICODE), 'the campaign name stays off the client link');
     }
 
+    /**
+     * RESULT-PARITY-001 — the content a client opens states the SAME «Results» as the card it was opened from.
+     *
+     * Owner incident 2026-11-02: the best-content card read 70 and its detail page read 1 for the same ad and period — the card
+     * carries the project's verified lead event, while the single-content read fell back to the generic conversion count.
+     */
+    public function test_an_opened_content_states_the_same_verified_result_as_its_card(): void
+    {
+        $this->project->forceFill(['meta' => ['lead_events' => ['tiktok' => ['lead_form' => 'form_leads']], 'result_events' => ['tiktok' => ['lead_form' => 'form_leads']], 'campaign_paths' => ['LeadForm' => 'lead_form']]])->save();
+        $this->campaign($this->account, 'Riwaq — LeadForm', 10.0);
+        $this->creative($this->account, 'C11 story', Carbon::now()->subDay()->toDateString());
+
+        $token = $this->createLink(['creatives' => ['creatives' => true]])->assertCreated()->json('data.token');
+        $card = collect($this->live($token)->assertOk()->json('data.ads_roster'))->firstWhere('name', 'C11 story');
+        $this->assertNotNull($card);
+        $this->assertArrayHasKey('verified_result', $card, 'the card states a verified result');
+
+        $opened = $this->getJson("/api/v1/reports/shared/{$token}/live/content/{$card['content_key']}")->assertOk()->json('data.content');
+
+        $this->assertArrayHasKey('verified_result', $opened, 'the opened content must state the verified result too, not fall back to generic conversions');
+        $this->assertSame($card['verified_result'], $opened['verified_result'], 'metric, path, value and label are the card\'s');
+    }
+
+    /** RESULT-PARITY-001 — a link with no defined Results marks the opened content `result_defined: false`, exactly as its card. */
+    public function test_an_opened_content_of_a_link_without_results_is_marked_like_its_card(): void
+    {
+        $this->project->forceFill(['meta' => ['lead_events' => ['tiktok' => ['lead_form' => 'form_leads']], 'result_events' => ['tiktok' => ['lead_form' => 'form_leads']], 'campaign_paths' => ['LeadForm' => 'lead_form']]])->save();
+        $this->campaign($this->account, 'Riwaq — LeadForm', 10.0);
+        $this->creative($this->account, 'C11 story', Carbon::now()->subDay()->toDateString());
+
+        $token = $this->createLink(['creatives' => ['creatives' => true], 'results_off' => true])->assertCreated()->json('data.token');
+        $card = collect($this->live($token)->assertOk()->json('data.ads_roster'))->firstWhere('name', 'C11 story');
+        $opened = $this->getJson("/api/v1/reports/shared/{$token}/live/content/{$card['content_key']}")->assertOk()->json('data.content');
+
+        $this->assertFalse($card['result_defined'] ?? true);
+        $this->assertSame($card['result_defined'] ?? null, $opened['result_defined'] ?? null);
+    }
+
     /** NASEL 2026-10-29 — a link with every Results path on «none»: no Results anywhere, content ranked by clicks, the project default cannot revive them. */
     public function test_a_link_without_results_says_nothing_about_results_and_ranks_content_by_clicks(): void
     {
@@ -388,5 +427,38 @@ final class LiveLinkBeforeCampaignsTest extends TestCase
         $this->createLink(['creative_display' => ['policy' => 'selected']])
             ->assertStatus(422)
             ->assertJsonFragment(['message' => 'Choose at least one creative, or pick another ad display policy.']);
+    }
+
+    /** PERF-RECOVERY-001 — the read-only profiler splits a live build into database, Redis, external, PHP and render time. */
+    public function test_the_live_report_profiler_splits_the_time_and_changes_nothing(): void
+    {
+        $this->campaign($this->account, 'Host', 10.0);
+        $this->createLink(['creatives' => ['creatives' => true]])->assertCreated();
+
+        $before = [DB::table('report_shares')->count(), DB::table('daily_metrics')->count()];
+        $this->artisan('ops:profile-live-report', ['--links' => 1, '--top' => 3])
+            ->expectsOutputToContain('BUILD')
+            ->expectsOutputToContain('SERIALIZE/RENDER')
+            ->assertSuccessful();
+
+        $this->assertSame($before, [DB::table('report_shares')->count(), DB::table('daily_metrics')->count()]);
+    }
+
+    /** The --http option runs the whole request path in-process, answers 200, and leaves the link and its log untouched. */
+    public function test_the_live_report_profiler_can_time_the_whole_http_path_without_writing(): void
+    {
+        $this->campaign($this->account, 'Host', 10.0);
+        $token = $this->createLink(['creatives' => ['creatives' => true]])->assertCreated()->json('data.token');
+
+        $hash = DB::table('report_shares')->value('token_hash');
+        $before = [DB::table('report_shares')->count(), DB::table('report_share_access_logs')->count(), DB::table('report_shares')->value('view_count')];
+        $this->artisan('ops:profile-live-report', ['--links' => 1, '--top' => 3, '--http' => true])
+            ->expectsOutputToContain('(status 200,')
+            ->expectsOutputToContain('view log not written')
+            ->assertSuccessful();
+
+        $this->assertSame($before, [DB::table('report_shares')->count(), DB::table('report_share_access_logs')->count(), DB::table('report_shares')->value('view_count')]);
+        $this->assertSame($hash, DB::table('report_shares')->value('token_hash'));
+        $this->getJson("/api/v1/reports/shared/{$token}/live")->assertOk();
     }
 }

@@ -30,7 +30,9 @@ export function OnboardingGate() {
 
   if (!user) return <Outlet /> // RequireAuth already handled the guest case
 
-  const verified = user.email_verified !== false // undefined (older payload) counts as verified
+  // undefined (older payload) counts as verified. A signup policy that never asked is not a screen to be sent to; it does
+  // not make the address proved either, which is what the server's `email_verified` keeps saying.
+  const verified = user.email_verified !== false || user.email_verification_not_required === true
 
   if (!verified && pathname !== '/verify-email') {
     return <Navigate to="/verify-email" replace />

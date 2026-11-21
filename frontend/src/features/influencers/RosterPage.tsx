@@ -101,9 +101,9 @@ function CreatorCard({ creator, ar }: { creator: Influencer; ar: boolean }) {
     <li data-testid={`creator-${creator.id}`} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-heading text-[15px] font-bold text-text-primary">{creator.name}</p>
+          <p className="truncate font-heading text-sm font-bold text-text-primary">{creator.name}</p>
           {creator.handle && (
-            <p className="mt-0.5 truncate text-[12px] text-text-muted" dir="ltr">@{creator.handle}</p>
+            <p className="mt-0.5 truncate text-xs text-text-muted" dir="ltr">@{creator.handle}</p>
           )}
         </div>
         {creator.primary_platform && (
@@ -113,7 +113,7 @@ function CreatorCard({ creator, ar }: { creator: Influencer; ar: boolean }) {
         )}
       </div>
 
-      <div className="flex flex-wrap gap-x-5 gap-y-2 text-[12px]">
+      <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
         <Stat
           label={ar ? 'المتابعون' : 'Followers'}
           value={followers(creator.followers, ar)}
@@ -142,7 +142,7 @@ function CreatorCard({ creator, ar }: { creator: Influencer; ar: boolean }) {
       )}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <span className="inline-flex items-center gap-1.5 text-[12px] text-text-muted">
+        <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
           <Users size={13} aria-hidden />
           {creator.status}
         </span>
@@ -151,7 +151,7 @@ function CreatorCard({ creator, ar }: { creator: Influencer; ar: boolean }) {
             href={creator.profile_url}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 text-[12px] font-semibold text-brand-600 hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline"
           >
             <ExternalLink size={12} aria-hidden />
             {ar ? 'الحساب' : 'Profile'}

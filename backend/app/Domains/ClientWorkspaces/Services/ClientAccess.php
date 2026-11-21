@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\ClientWorkspaces\Services;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -33,7 +34,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class ClientAccess
 {
-    public function __construct(private readonly ClientScopeResolver $scopes) {}
+    public function __construct(private readonly ClientScopeResolver $scopes, private readonly ProjectReach $projectReach) {}
 
     /** Resolve a client within the current tenant or 404 (global tenant scope makes cross-tenant a 404). */
     public function resolve(string $clientId): ClientWorkspace
@@ -118,6 +119,27 @@ final class ClientAccess
         }
 
         return $ids !== [] ? array_values(array_map('strval', $ids)) : null;
+    }
+
+    /**
+     * The projects of this client the reader may be answered about, or null when nothing narrows them.
+     *
+     * Two independent narrowings, and the narrower wins: the roster's allow-list ({@see self::projectRestriction()}) and
+     * the reader's project reach (PROJECTS-RBAC-CLOSURE-001 — a membership of ONE project of a client, or none, does not
+     * open the client's other projects through a route that carries no project).
+     *
+     * @return list<string>|null
+     */
+    public function reachableProjectIds(User $user, ClientWorkspace $client): ?array
+    {
+        $roster = $this->projectRestriction($user, $client);
+        $reach = $this->projectReach->confinedIdsFor($user);
+
+        if ($reach === null) {
+            return $roster;
+        }
+
+        return $roster === null ? $reach : array_values(array_intersect($roster, $reach));
     }
 
     /** Assert the user may SEE this client at all (membership-gated). Aborts 403 otherwise. */

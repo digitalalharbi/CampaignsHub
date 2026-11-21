@@ -85,7 +85,8 @@ test('after submit, the tracking link shows status and accepts a client reply', 
   await expect(submitReq).toBeEnabled({ timeout: 15000 })
   await submitReq.click()
 
-  await expect(page.getByText(/تم استلام طلبك|Request received/)).toBeVisible()
+  // `POST /requests` was logged at 4 s in CI; the submit button stays disabled until it answers.
+  await expect(page.getByText(/تم استلام طلبك|Request received/)).toBeVisible({ timeout: 30_000 })
   // Follow the tracking link from the success page.
   await page.getByRole('link', { name: /تتبع الطلب|Track request/ }).click()
   await expect(page).toHaveURL(/\/requests\/track\?token=/)

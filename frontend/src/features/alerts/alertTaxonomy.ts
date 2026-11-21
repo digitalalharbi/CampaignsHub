@@ -61,8 +61,11 @@ const CATEGORY: Partial<Record<AlertType, AlertCategory>> = {
   launch_advance: 'performance',
 }
 
+// ALERT-CRITERIA-001 — the campaign notices («توقفت أمس», «ما تصرف») belong with the performance findings they sit beside.
+const NOTICE_CATEGORY: Record<string, AlertCategory> = { campaign_stopped: 'performance', not_spending: 'performance' }
+
 export function alertCategory(type: string): AlertCategory {
-  return CATEGORY[type as AlertType] ?? 'other'
+  return CATEGORY[type as AlertType] ?? NOTICE_CATEGORY[type] ?? 'other'
 }
 
 const CATEGORY_LABEL: Record<AlertCategory, { ar: string; en: string }> = {
@@ -109,28 +112,28 @@ const NEXT_ACTION: Partial<Record<AlertType, { ar: string; en: string }>> = {
     en: 'Check attributed revenue and the purchase path before judging the creative.',
   },
   no_results: {
-    ar: 'تأكّد من تتبّع التحويلات أولًا — الإنفاق بلا نتائج قد يكون قياسًا معطّلًا.',
-    en: 'Check conversion tracking first — spend with no results can be broken measurement.',
+    ar: 'تأكّد من تتبّع التحويلات أولًا ← ثم المحتوى ← ثم الاستهداف.',
+    en: 'Check conversion tracking first → then the content → then targeting.',
   },
   sync_failure: {
     ar: 'افتح التكاملات وأعد المزامنة؛ الأرقام الأحدث من آخر مزامنة ناقصة.',
     en: 'Open Integrations and re-sync — figures newer than the last sync are missing.',
   },
   token_expiry: {
-    ar: 'أعد ربط الحساب قبل انتهاء التوكن، وإلا تتوقف المزامنة.',
-    en: 'Reconnect the account before the token expires, or syncing stops.',
+    ar: 'أعد ربط الحساب قبل ما تنتهي صلاحيته، وإلا تتوقف المزامنة.',
+    en: 'Reconnect the account before its access expires, or syncing stops.',
   },
   sync_outage: {
     ar: 'افتح العرض الحي للمصادر: المشروع كله متأخر أو فشلت مزامنته، والأرقام على الصفحات أقدم مما تبدو.',
     en: 'Open the live source view — the whole project is stale or its sync failed, and the figures on the pages are older than they look.',
   },
   measurement_outage: {
-    ar: 'افحص ربط خاصية GA4: لا مزامنة ناجحة ضمن الحد، فأرقام القياس خارج الإسناد المنصّي متوقفة.',
-    en: 'Check the GA4 property connection — no successful sync within the threshold, so measurement figures outside platform attribution have stopped.',
+    ar: 'افحص ربط خاصية الموقع: لا مزامنة ناجحة ضمن الحد، فأرقام القياس خارج الإسناد المنصّي متوقفة.',
+    en: 'Check the website connection — no successful sync within the threshold, so measurement figures outside platform attribution have stopped.',
   },
   tracking_health: {
-    ar: 'افتح «سلامة التتبع» في صفحة النماذج: كل بند يقول ما الخلل وما المطلوب فعله.',
-    en: 'Open «Tracking health» on the Forms page — each finding says what is wrong and what to do about it.',
+    ar: 'افتح «حالة التتبع» في صفحة النماذج: كل بند يقول وش الخلل ووش المطلوب.',
+    en: 'Open «Tracking status» on the Forms page — each finding says what is wrong and what to do about it.',
   },
   launch_advance: {
     ar: 'افتح صفحة الإطلاق وانظر الاقتراح: لم يتغيّر شيء تلقائيًا، والقرار لك.',

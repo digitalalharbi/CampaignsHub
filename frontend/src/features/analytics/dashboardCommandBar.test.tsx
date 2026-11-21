@@ -11,7 +11,7 @@ import { renderWithProviders } from '@/test/utils'
  * prop while editing the page.
  */
 describe('the dashboard filter bar', () => {
-  it('is dense on the dashboard and comfortable on the analysis surface', async () => {
+  it('ANALYTICS-FILTERS-COMPACT-001 — is dense on every surface: the bar takes one short band, like the report link', async () => {
     const dashboard = renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'ar' })
 
     expect((await screen.findByTestId('dashboard-filters')).getAttribute('data-density')).toBe('dense')
@@ -20,7 +20,7 @@ describe('the dashboard filter bar', () => {
 
     renderWithProviders(<AnalyticsPage />, { locale: 'ar' })
 
-    expect((await screen.findByTestId('analytics-filters')).getAttribute('data-density')).toBe('comfortable')
+    expect((await screen.findByTestId('analytics-filters')).getAttribute('data-density')).toBe('dense')
   })
 
   /**
@@ -38,6 +38,7 @@ describe('the dashboard filter bar', () => {
       .filter(Boolean)
 
     expect(order[0]).toContain('المشروع')
-    expect(order[1]).toContain('الفترة')
+    // DATE-RANGE-001 — the period control now states the period in words, so it opens with the preset's name.
+    expect(order[1]).toContain('آخر')
   })
 })

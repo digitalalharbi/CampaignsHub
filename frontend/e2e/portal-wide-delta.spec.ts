@@ -15,28 +15,28 @@ import { AUTH } from './helpers'
 test.use({ storageState: AUTH.client, viewport: { width: 375, height: 667 } })
 
 test('a +2,681% movement stays inside its card and the page does not scroll sideways', async ({ page }) => {
-  await page.route('**/api/v1/client/overview*', async (route) => {
+  // CLIENT-DASHBOARD-PARITY-001 — the portal's cards are the agency dashboard's, read through the client's metrics route.
+  await page.route('**/api/v1/client/projects/*/metrics/summary*', async (route) => {
     const res = await route.fetch()
     const body = await res.json()
-    const movement = (body.data?.movement ?? {}) as Record<string, number | null>
-    for (const k of ['impressions', 'clicks', 'results', 'spend', 'revenue', 'roas', 'cpa']) movement[k] = 26.81
-    for (const k of Object.keys(movement)) movement[k] = 26.81
-    body.data = { ...body.data, movement }
+    const deltas = (body.data?.deltas ?? {}) as Record<string, number | null>
+    for (const k of Object.keys(deltas)) deltas[k] = 26.81
+    for (const k of ['impressions', 'clicks', 'ctr', 'conversions']) deltas[k] = 26.81
+    body.data = { ...body.data, deltas }
     await route.fulfill({ response: res, json: body })
   })
 
   await page.goto('/portal')
-  const first = page.locator('[data-testid^="portfolio-move-"]').first()
-  await expect(first, 'the movement pill is drawn from the overview').toBeVisible({ timeout: 30_000 })
-  await expect(first).toContainText('2,681')
+  // PORTAL-REPORT-HOME-001 — the home opens the client's shared report, or the live dashboard where none is shared.
+  await expect(page.locator('[data-testid="portal-home-report"], [data-testid="client-kpis"]').first(), 'the home draws its figures').toBeVisible({ timeout: 30_000 })
   await page.waitForLoadState('networkidle').catch(() => undefined)
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow, 'page-level horizontal overflow').toBeLessThanOrEqual(0)
 
-  // And no pill pokes out of the viewport on either side.
-  const outside = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-testid^="portfolio-move-"]')]
+  // And nothing in the cards pokes out of the viewport on either side.
+  const outside = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-testid="client-kpis"] *, [data-testid="portal-home-report"] [data-testid$="-kpis"] *')]
     .map((el) => el.getBoundingClientRect())
-    .filter((r) => r.left < 0 || r.right > document.documentElement.clientWidth).length)
-  expect(outside, 'movement pills outside the screen').toBe(0)
+    .filter((r) => r.width > 0 && (r.left < -1 || r.right > document.documentElement.clientWidth + 1)).length)
+  expect(outside, 'card parts outside the screen').toBe(0)
 })

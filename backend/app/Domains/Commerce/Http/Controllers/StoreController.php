@@ -10,6 +10,8 @@ use App\Domains\Commerce\Models\CommerceProduct;
 use App\Domains\Commerce\Registry\CommerceConnectorRegistry;
 use App\Domains\Commerce\Services\StoreAssignment;
 use App\Domains\Commerce\Services\StoreSyncQueue;
+use App\Domains\Integrations\Catalogue\ProviderCapability;
+use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationSyncRun;
@@ -51,27 +53,61 @@ final class StoreController extends Controller
     {
         abort_unless($request->user()->hasPermission('integrations.view'), 403);
 
+        /*
+         * INTEG-PROJECT-SPACE-001 (Owner 2026-11-06) — asked for ONE project, the answer is that project's own:
+         * the stores it reads, and the ones no project has been given yet that its client may take. A store
+         * feeding another project is not read into the answer at all — not its name, domain or counts.
+         */
+        $only = $request->validate(['project_id' => ['sometimes', 'nullable', 'uuid']])['project_id'] ?? null;
+        $space = $only === null ? null : Project::query()->whereKey($only)->first();
+        abort_if($only !== null && $space === null, 404, 'Project not found.');
+        $assignment = app(AccountAssignment::class);
+
         $data = [];
 
         foreach ($this->registry->all() as $key => $connector) {
             $creds = PlatformCredentials::for($key);
 
-            $connection = ProviderConnection::query()
+            /*
+             * INTEG-PROJECT-LINK-STORES-GA4-001 — a project links its store through its OWN authorisation, so one
+             * platform now holds one connection per project beside any older workspace-wide one. Asked for a
+             * project, every connection that project may read through is looked at — its own and the
+             * workspace-wide ones — and never another project's. Unasked, the answer is the latest connection's,
+             * exactly as before.
+             */
+            $connections = ProviderConnection::query()
                 ->where('provider', $key)
                 ->whereIn('status', ['connected', 'error'])
+                ->when($space !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('project_id')->orWhere('project_id', $space->getKey())))
                 ->latest('updated_at')
-                ->first();
+                ->limit($space === null ? 1 : 200)
+                ->get();
 
-            $stores = $connection === null
+            $stores = $connections->isEmpty()
                 ? collect()
                 : ExternalAccount::query()
-                    ->where('provider_connection_id', $connection->getKey())
+                    ->whereIn('provider_connection_id', $connections->modelKeys())
                     ->where('account_type', 'store')
+                    ->where('status', '!=', 'superseded')
                     ->get();
+
+            if ($space !== null) {
+                $stores = $stores->filter(function (ExternalAccount $store) use ($assignment, $space): bool {
+                    $feeds = $assignment->projectIdFor($store);
+
+                    return $feeds === null
+                        ? $store->client_workspace_id === null || (string) $store->client_workspace_id === (string) $space->client_workspace_id
+                        : (string) $feeds === (string) $space->getKey();
+                })->values();
+            }
+
+            // The connection the answer speaks about: the one a listed store is read through, else the latest.
+            $owning = $stores->pluck('provider_connection_id')->map(strval(...))->unique()->values()->all();
+            $connection = $connections->first(fn (ProviderConnection $c): bool => in_array((string) $c->getKey(), $owning, true)) ?? $connections->first();
 
             $syncing = $stores->isNotEmpty() && IntegrationSyncRun::query()
                 ->where('type', 'commerce')
-                ->where('provider_connection_id', $connection?->getKey())
+                ->whereIn('provider_connection_id', $owning)
                 ->where('status', 'running')
                 ->exists();
 
@@ -100,7 +136,7 @@ final class StoreController extends Controller
                  * Zid store would claim a perfect checkout rate for a merchant who is losing carts
                  * every day, so the absence is stated as a capability rather than a count.
                  */
-                'supports_abandoned_carts' => $key !== 'zid',
+                'supports_abandoned_carts' => ProviderCatalogue::supports($key, ProviderCapability::AbandonedCarts),
             ];
         }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { isClientAudience } from './InteractiveReport'
+import { isClientAudience } from './reportAudience'
 import { ScopeCheckList } from './ScopeCheckList'
 import { orderByReportability } from '@/features/campaigns/campaignRelevance'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -22,6 +22,9 @@ import { DateField } from '@/components/ui/DateField'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { Field } from '@/components/ui/Field'
 import { useUi } from '@/stores/ui'
+import { ProviderMark } from '@/components/ProviderMark'
+import { platformLabel, sortPlatforms } from '@/lib/platforms'
+import { sortBySource } from '@/lib/sourceOrder'
 
 /**
  * §14.5 — choosing what a report covers.
@@ -55,7 +58,7 @@ const COPY = {
     platforms: 'المنصات',
     accounts: 'الحسابات الإعلانية',
     campaigns: 'الحملات',
-    adSets: 'المجموعات الإعلانية',
+    adSets: 'المجموعات',
     ads: 'الإعلانات',
     /*
      * CONTENT-TERMINOLOGY-001 — a content item is not an ad, and must not answer to its name.
@@ -193,8 +196,7 @@ export function ReportScopePicker({
   const filters = {
     providers: value.providers,
     account_ids: value.account_ids,
-    // Only an explicit «filter campaigns by objective» narrows the list the operator picks campaigns from.
-    objectives: value.objective_filter ? value.objectives : undefined,
+    // OBJECTIVE-FILTERS-INCLUSIVE-001 — the objective never narrows the campaign list; it only chooses KPIs.
     destinations: value.destinations,
   }
   const options = useQuery({
@@ -386,7 +388,8 @@ export function ReportScopePicker({
 
       <Chips
         label={t.platforms}
-        items={o.providers.map((p) => ({ id: p, label: p }))}
+        // The one label module: a reader is never shown a provider key.
+        items={sortPlatforms(o.providers).map((p) => ({ id: p, label: platformLabel(p, ar), mark: p }))}
         selected={value.providers ?? []}
         onToggle={(id) => toggle('providers', id)}
         ar={ar}
@@ -397,11 +400,11 @@ export function ReportScopePicker({
         kind="accounts"
         label={t.accounts}
         required
-        items={o.accounts.map((a) => ({
+        items={sortBySource(o.accounts, (a) => ({ platform: a.provider, account: a.name }), ar).map((a) => ({
           id: a.id,
           label: a.name,
           // REPORT-BOUND-ACCOUNTS-001 — a bound account with nothing yet is listed and SAYS so.
-          sub: a.state === 'unsynced' ? `${a.provider} · ${ar ? 'لم تتم مزامنته بعد' : 'not synced yet'}` : a.state === 'no_data' ? `${a.provider} · ${ar ? 'لا بيانات بعد' : 'no data yet'}` : a.provider,
+          sub: a.state === 'unsynced' ? `${platformLabel(a.provider, ar)} · ${ar ? 'لم تتم مزامنته بعد' : 'not synced yet'}` : a.state === 'no_data' ? `${platformLabel(a.provider, ar)} · ${ar ? 'لا بيانات بعد' : 'no data yet'}` : platformLabel(a.provider, ar),
         }))}
         selected={value.account_ids ?? []}
         onChange={(next) => set('account_ids', next)}
@@ -428,27 +431,13 @@ export function ReportScopePicker({
         t={t}
       />
       {/*
-        REPORT-OBJECTIVE-TEMPLATE-001 — the chips above choose the report's measurement template (the funnel and KPIs it presents). They
-        never remove a platform or a campaign by themselves: filtering campaigns by their stored objective is this separate, explicit switch.
+        OBJECTIVE-FILTERS-INCLUSIVE-001 (Owner, 2026-11-13) — the chips above choose the report's KPIs, and nothing else: every
+        authorised platform, campaign and riyal stays in the report. The old «filter campaigns by objective» switch is gone.
       */}
       {(value.objectives?.length ?? 0) > 0 && (
-        <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs" data-testid="scope-objective-filter-row">
-          <input
-            type="checkbox"
-            data-testid="scope-objective-filter"
-            checked={value.objective_filter === true}
-            onChange={(e) => onChange({ ...value, objective_filter: e.target.checked ? true : undefined })}
-            className="mt-0.5 h-4 w-4 accent-brand-600"
-          />
-          <span>
-            <b className="block font-semibold">{ar ? 'تصفية الحملات حسب الهدف' : 'Filter campaigns by objective'}</b>
-            <span className="text-text-secondary">
-              {ar
-                ? 'اتركه مغلقًا لتشمل كل المنصات والحملات المصرّح بها. عند تفعيله تُستبعد الحملات التي هدفها المسجّل خارج الأهداف المختارة.'
-                : 'Leave it off to include every authorised platform and campaign. When on, campaigns whose stored objective is outside the chosen ones are excluded.'}
-            </span>
-          </span>
-        </label>
+        <p className="rounded-xl border border-border bg-surface-secondary px-3 py-2 text-xs text-text-secondary" data-testid="scope-objective-kpis-note">
+          {ar ? 'الهدف يحدد ملخص الأداء فقط — تبقى كل الحملات والإنفاق.' : 'The objective sets the KPIs only — every campaign and its spend stays.'}
+        </p>
       )}
 
       {(o.destinations?.length ?? 0) > 0 && (
@@ -558,7 +547,7 @@ export function ReportScopePicker({
                 {tpl.name}
               </button>
               {tpl.shared && <span className="text-text-muted">· {t.shared}</span>}
-              <button type="button" aria-label={t.remove} className="text-text-muted hover:text-danger" onClick={() => remove.mutate(tpl.id)}>
+              <button type="button" aria-label={t.remove} className="text-text-muted hover:text-danger" disabled={remove.isPending} onClick={() => remove.mutate(tpl.id)}>
                 <Trash2 size={11} />
               </button>
             </span>
@@ -837,7 +826,7 @@ const AXIS_LABEL: Record<string, { ar: string; en: string }> = {
   providers: { ar: 'المنصات', en: 'Platforms' },
   account_ids: { ar: 'الحسابات الإعلانية', en: 'Ad accounts' },
   campaign_ids: { ar: 'الحملات', en: 'Campaigns' },
-  ad_set_ids: { ar: 'المجموعات الإعلانية', en: 'Ad sets' },
+  ad_set_ids: { ar: 'المجموعات', en: 'Ad groups' },
   ad_ids: { ar: 'الإعلانات', en: 'Ads' },
   creative_ids: { ar: 'المحتويات', en: 'Content' },
   objectives: { ar: 'الأهداف', en: 'Objectives' },
@@ -857,7 +846,7 @@ function Chips({
 }: {
   label: string
   note?: string
-  items: Array<{ id: string; label: string }>
+  items: Array<{ id: string; label: string; /** A platform key: its logo is drawn before the label. */ mark?: string }>
   selected: string[]
   onToggle: (id: string) => void
   /**
@@ -913,10 +902,11 @@ function Chips({
               aria-pressed={on}
               data-testid={`scope-chip-${item.id}`}
               onClick={() => onToggle(item.id)}
-              className={`rounded-lg border px-2.5 py-1 text-[11px] transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] transition-colors ${
                 on ? 'border-brand-500 bg-brand-500/10 font-semibold text-brand-600' : 'border-border text-text-secondary hover:border-border-strong'
               }`}
             >
+              {item.mark !== undefined && <ProviderMark provider={item.mark} size={14} />}
               {item.label}
             </button>
           )

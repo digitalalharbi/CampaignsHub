@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { ProviderName } from '@/components/ProviderMark'
 import { AdPoster } from '@/features/content/AdPoster'
 import { MetricLineChart } from '@/features/analytics/charts'
 import { canonicalPlatform } from '@/lib/platforms'
+import { numberFormatter } from '@/lib/numerals'
 import { Num } from '@/components/ui/Num'
 import type { Locale } from '@/stores/ui'
 import { figuresFor, type ReportAd } from '../ReportAdsSection'
+import { PendingConversionChip } from '../PendingConversionChip'
 import type { RosterRow } from '../ReportCreativeRoster'
 import { ReportAdDetail } from '../ReportAdDetail'
-import { fetchLiveContent, type LiveContentPayload } from '../api'
+import { fetchLiveContent, type AdsBasis, type LiveContentPayload } from '../api'
 
 /**
  * One shape for a piece of content, whichever list it came from.
@@ -26,13 +28,41 @@ export function asContent(row: RosterRow | ReportAd): ReportAd {
   return { ...(metrics as Record<string, unknown>), ...rest } as ReportAd
 }
 
-export function ContentTile({
+/**
+ * PERF-RENDER-001 — a tile re-renders only when ITS content changes.
+ *
+ * The content grid draws up to fifty tiles at a time and sits inside a page that re-renders on every
+ * filter change, refresh tick and dialog open. Each tile's props are stable by construction — the
+ * row object comes from a memoised sort, the open handler is memoised in `LiveSharedReport` — so a
+ * shallow comparison lets the grid skip the fifty poster + figures re-renders that changed nothing.
+ */
+/** Counts a card can print beside its rank. Money and ratio metrics keep their own rules in `figuresFor`. */
+const RANKED_COUNTS = new Set(['impressions', 'reach', 'clicks', 'landing_page_views', 'engagements', 'video_views', 'video_completions', 'leads', 'qualified_leads', 'purchases', 'conversions', 'installs', 'registrations', 'in_app_events'])
+
+/**
+ * The figure a card is ranked by must be on the card. ChatGPT ads are ranked by clicks (fallback ladder) and printed only
+ * «Spend», so the order read as arbitrary. The ranked count leads; the card keeps three figures. Latin digits, no currency mark.
+ */
+export function withRankedFigure(figures: { label: string; value: string; pending?: string | null }[], content: ReportAd, basis: AdsBasis | null | undefined, ar: boolean) {
+  const metric = basis?.metric
+  if (!metric || !RANKED_COUNTS.has(metric)) return figures
+  const raw = (content as Record<string, unknown>)[metric]
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return figures
+  const label = (ar ? basis?.label_ar : basis?.label_en) ?? metric
+  if (figures.some((f) => f.label === label)) return figures
+  const value = numberFormatter('en-US', { maximumFractionDigits: 0 }).format(raw)
+
+  return [{ label, value }, ...figures].slice(0, 3)
+}
+
+export const ContentTile = memo(function ContentTile({
   content,
   locale,
   currency,
   onOpen,
   rank,
   resultsOnly = false,
+  rankedBy,
 }: {
   content: ReportAd
   locale: Locale
@@ -41,10 +71,12 @@ export function ContentTile({
   rank?: number
   /** CLIENT-REPORT-FRAMING-001 — the summary's tiles state results, never spend or cost. */
   resultsOnly?: boolean
+  /** The ranking basis of the list this tile sits in: the figure the card is ranked by is shown on it (counts only, never a money mark). */
+  rankedBy?: AdsBasis | null
 }) {
   const ar = locale === 'ar'
   const provider = content.provider ? canonicalPlatform(content.provider) : null
-  const figures = figuresFor(content, ar, currency, { resultsOnly })
+  const figures = withRankedFigure(figuresFor(content, ar, currency, { resultsOnly }), content, rankedBy, ar)
   const openable = onOpen !== undefined && !!content.content_key
 
   const body = (
@@ -64,7 +96,7 @@ export function ContentTile({
           component and means exactly «this surface fills». The asset is one click away in the
           viewer, which still contains — §12's line, and the one this change would be wrong to cross.
       */}
-        <AdPoster preview={content.preview ?? null} name={content.name ?? ''} className="h-36 w-full" testid="live-content-poster" fit="cover" forClient provider={content.provider ?? null} />
+        <AdPoster preview={content.preview ?? null} name={content.name ?? ''} className="h-28 w-full sm:h-36" testid="live-content-poster" fit="cover" forClient provider={content.provider ?? null} />
         {rank !== undefined && (
           <span className="tnum absolute start-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-bold text-white">
             <Num>{`#${rank}`}</Num>
@@ -72,7 +104,8 @@ export function ContentTile({
         )}
       </div>
       <div className="min-w-0">
-        <div className="truncate text-sm font-bold text-text-primary" title={content.name ?? undefined}>{content.name ?? '—'}</div>
+        {/* REPORT-COMPACT-001 — `dir="auto"`: a Latin ad name in an Arabic page was cut from the wrong end. */}
+        <div dir="auto" className="truncate text-start text-sm font-bold text-text-primary" title={content.name ?? undefined}>{content.name ?? '—'}</div>
         {provider && (
           <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-muted">
             <ProviderName provider={provider} locale={locale === 'ar' ? 'ar' : 'en'} size={16} />
@@ -90,6 +123,7 @@ export function ContentTile({
             <div key={f.label} className="flex min-w-0 items-baseline justify-between gap-2 rounded-lg bg-surface-secondary px-2 py-1 sm:block sm:px-1 sm:py-1.5">
               <dt className="truncate text-[10px] font-semibold text-text-muted">{f.label}</dt>
               <dd className="tnum whitespace-nowrap text-[11px] font-bold leading-tight text-text-primary"><Num>{f.value}</Num></dd>
+              {f.pending !== undefined && f.pending !== null && <PendingConversionChip currency={f.pending || null} ar={ar} />}
             </div>
           ))}
         </dl>
@@ -113,7 +147,7 @@ export function ContentTile({
   ) : (
     <article data-testid="live-content-tile" className={shell}>{body}</article>
   )
-}
+})
 
 /**
  * The content drilldown's dialog — the card's figures, the media, and the content's own trend.

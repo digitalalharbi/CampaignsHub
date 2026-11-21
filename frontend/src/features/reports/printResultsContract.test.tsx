@@ -25,7 +25,11 @@ const doc = (extra: Record<string, unknown>) => (
 describe('the PDF follows the link\'s Results contract', () => {
   it('with no Results defined: no Results KPI, no Results column, and generic conversions only under their own name', () => {
     doc({ results: { configured: false, total: null, cost: null } })
-    const text = document.body.textContent ?? ''
+    // The contract is about KPIs and columns. The footer note is the Owner's approved disclaimer copy («results may vary…»),
+    // not a Results KPI, so the footnote block is left out of the scan.
+    const body = document.body.cloneNode(true) as HTMLElement
+    body.querySelectorAll('[data-testid="print-document-footer"]').forEach((n) => n.remove())
+    const text = body.textContent ?? ''
 
     expect(text).not.toMatch(/Results|Cost per result/)
     expect(text).toContain('Platform conversions')

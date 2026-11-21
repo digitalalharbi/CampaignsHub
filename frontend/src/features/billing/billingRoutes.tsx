@@ -1,8 +1,11 @@
 import type { ReactElement } from 'react'
-import { QuotesPage } from './QuotesPage'
-import { InvoicesPage } from './InvoicesPage'
-import { PaymentsPage } from './PaymentsPage'
-import { FinanceOverviewPage } from './FinanceOverviewPage'
+import { lazyPage } from '@/app/lazyPage'
+
+// PERF-RECOVERY-001 — a route table's pages load when the route is opened, like the router's own.
+const QuotesPage = lazyPage(() => import('./QuotesPage'), 'QuotesPage')
+const InvoicesPage = lazyPage(() => import('./InvoicesPage'), 'InvoicesPage')
+const PaymentsPage = lazyPage(() => import('./PaymentsPage'), 'PaymentsPage')
+const FinanceOverviewPage = lazyPage(() => import('./FinanceOverviewPage'), 'FinanceOverviewPage')
 
 /**
  * Route fragment for the internal Billing area. The app orchestrator imports this array and mounts it under

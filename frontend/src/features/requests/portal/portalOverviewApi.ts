@@ -16,6 +16,8 @@ export interface PortalOverview {
   platforms: Array<{ provider: string | null; impressions: number | null; clicks: number | null; conversions: number | null; spend?: number | null }>
   projects: Array<{ id: string; name: string; status: string | null; spend?: number }>
   campaigns: { total: number; by_status: Record<string, number> } | null
+  /** CLIENT-DASHBOARD-PARITY-001 — the projects the live dashboard can open; `name` is null where project names are hidden. */
+  dashboard_projects?: Array<{ id: string; name: string | null }>
   /** What is waiting on this client. A missing key means «not available to you», never zero. */
   attention?: { requests_waiting?: number; invoices_overdue?: number; invoices_due?: number }
   /** One point per day that has data; a day with none is absent (a gap), and an unreported figure is null. */

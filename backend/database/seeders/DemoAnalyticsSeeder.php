@@ -109,7 +109,7 @@ final class DemoAnalyticsSeeder extends Seeder
                 ],
             );
             $externalCampaignId = $this->demoUuid("camp:{$provider}:{$name}");
-            $externalAccountId = $this->demoUuid("acct:{$provider}");
+            $externalAccountId = DemoIntegrationsSeeder::accountIdFor($provider);
 
             for ($d = 0; $d < self::DAYS; $d++) {
                 $date = $start->copy()->addDays($d);

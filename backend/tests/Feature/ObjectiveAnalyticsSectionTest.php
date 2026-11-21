@@ -20,6 +20,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -37,6 +38,7 @@ use Tests\TestCase;
  */
 final class ObjectiveAnalyticsSectionTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -89,6 +91,7 @@ final class ObjectiveAnalyticsSectionTest extends TestCase
         ]);
         $this->campaigns[] = (string) $campaign->id;
 
+        $this->bindSeededAccount((string) $this->project->id, $account, $provider);
         foreach ($figures as $key => $value) {
             DailyMetric::create([
                 'id' => (string) Str::uuid(),
@@ -175,6 +178,7 @@ final class ObjectiveAnalyticsSectionTest extends TestCase
         app(TenantContext::class)->setTenantId($this->tenant->id);
         app(ProjectContext::class)->setProjectId($this->project->id);
         $campaign = UnifiedCampaign::create(['project_id' => $this->project->id, 'name' => 'Reach', 'status' => 'active', 'objective' => 'reach']);
+        $this->bindSeededAccount((string) $this->project->id, $this->accountInside);
         foreach (['2026-07-11', '2026-07-12'] as $day) {
             foreach (['spend' => 10, 'impressions' => 5_000, 'reach' => 3_000] as $key => $value) {
                 DailyMetric::create([

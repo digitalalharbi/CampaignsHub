@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Domains\Projects\Services;
 
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Services\ReportingCurrency;
+use App\Domains\Metrics\Spend\SpendLedger;
+use App\Domains\Metrics\Support\SiblingRounding;
 use App\Domains\Projects\Access\ProjectReach;
 use App\Domains\Projects\Models\Project;
 use App\Models\User;
@@ -170,6 +173,7 @@ final class PortfolioOverview
             ]);
 
         $series = [];
+        $exact = [];
         foreach ($rows as $row) {
             $currency = is_string($row->project_currency) ? $row->project_currency : '';
             if ($currency === '') {
@@ -180,9 +184,16 @@ final class PortfolioOverview
                 'date' => Carbon::parse((string) $row->metric_date)->toDateString(),
                 'spend' => round((float) $row->spend, 2),
             ];
+            $exact[$currency][] = (float) $row->spend;
         }
 
         ksort($series);
+        // MONEY-RECON-RUNGS-001 — the days add up to the headline to the cent (see SiblingRounding).
+        foreach ($series as $currency => $points) {
+            foreach (SiblingRounding::cents($exact[$currency]) as $i => $cents) {
+                $series[$currency][$i]['spend'] = $cents / 100;
+            }
+        }
 
         return [
             'by_currency' => array_values(array_map(
@@ -230,6 +241,7 @@ final class PortfolioOverview
             ]);
 
         $byCurrency = [];
+        $exact = [];
         foreach ($rows as $row) {
             $currency = is_string($row->project_currency) ? $row->project_currency : '';
             $projectId = (string) $row->project_id;
@@ -242,12 +254,17 @@ final class PortfolioOverview
                 'name' => $names[$projectId],
                 'spend' => round((float) $row->spend, 2),
             ];
+            $exact[$currency][] = (float) $row->spend;
         }
 
         ksort($byCurrency);
 
         $out = [];
         foreach ($byCurrency as $currency => $items) {
+            // MONEY-RECON-RUNGS-001 — the projects add up to the headline to the cent (see SiblingRounding).
+            foreach (SiblingRounding::cents($exact[$currency]) as $i => $cents) {
+                $items[$i]['spend'] = $cents / 100;
+            }
             usort($items, static fn (array $a, array $b): int => $b['spend'] <=> $a['spend']);
             $out[] = ['currency' => $currency, 'projects' => $items];
         }
@@ -293,7 +310,7 @@ final class PortfolioOverview
      */
     private function reachableProjects(User $user, string $tenantId)
     {
-        $query = Project::query()->where('tenant_id', $tenantId);
+        $query = Project::query()->live()->where('tenant_id', $tenantId); // PROJECT-LIFECYCLE-001
 
         /*
          * Unrestricted access is a POSITIVE grant. Inferring it from the absence of memberships is
@@ -372,6 +389,13 @@ final class PortfolioOverview
              * make them wrong quietly.
              */
             'comparable' => count($byCurrency) <= 1,
+            /*
+             * PROJECT-LIFECYCLE-001 §7, rule 9 — the same window from THE one aggregation (`SpendLedger`): every account-day from
+             * its original currency through FxEngine into the reporting currency, live projects only. It is the figure the
+             * clients list, the budgets page and the campaigns page read, and it names what it excluded for want of a rate and
+             * every old rate used. `by_currency` above keeps its per-basis shape (legacy SAR-basis rows are still segmented).
+             */
+            'reading' => app(SpendLedger::class)->read(array_map('strval', $projectIds), $from, $to, ReportingCurrency::DEFAULT),
         ];
     }
 }

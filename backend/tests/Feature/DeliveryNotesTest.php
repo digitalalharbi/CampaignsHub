@@ -23,6 +23,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
+use Tests\Concerns\KeepsStoredCopies;
 use Tests\TestCase;
 
 /**
@@ -31,6 +32,7 @@ use Tests\TestCase;
  */
 final class DeliveryNotesTest extends TestCase
 {
+    use KeepsStoredCopies;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -163,5 +165,17 @@ final class DeliveryNotesTest extends TestCase
 
         $this->assertStringNotContainsString('سرية للوكالة', $text);
         $this->assertLessThan(mb_strpos($text, 'الأولى'), mb_strpos($text, 'الثانية'), 'the order the Owner chose is the order sent');
+    }
+
+    /** REPORT-SNAPSHOT-PROTECT-001 — a note on a pack rebuilds its report without a second question, and keeps the copy it replaces. */
+    public function test_a_note_keeps_the_copy_its_rebuild_replaces(): void
+    {
+        $original = $this->storeCopy((string) $this->pack->report_id);
+        Queue::fake(); // setUp queued the pack's first build; count from here
+
+        $this->add(['kind' => 'challenge', 'text_ar' => 'تأخر المحتوى الإبداعي', 'audience' => 'client'])->assertOk();
+
+        Queue::assertPushed(GenerateReportJob::class, 1);
+        $this->assertCopyKeptThroughRebuild((string) $this->pack->report_id, $original);
     }
 }

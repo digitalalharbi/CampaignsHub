@@ -1,3 +1,4 @@
+import { BodyPortal } from '@/components/ui/BodyPortal'
 import { useEffect, useState, type ReactNode } from 'react'
 import { AdPoster } from '@/features/content/AdPoster'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
@@ -7,7 +8,9 @@ import { providerLabel, objectiveLabel } from '@/features/campaigns/labels'
 import type { ReportAd } from './ReportAdsSection'
 import type { Locale } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
-import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
+import { formatMoneyParts, formatMoneyReading, moneyParts, readMoney, type MoneyTotals } from '@/lib/money/contract'
+import { withMark } from '@/lib/money/mark'
+import { ReportAdDeepFigures } from './ReportAdDeepFigures'
 
 /**
  * REPORT-AD-PREVIEW-001 §C — an ad in a client's report opens its own detail.
@@ -53,6 +56,11 @@ export function ReportAdDetail({
   const ar = locale === 'ar'
   const preview = ad.preview ?? null
   const reading = readPreview(preview, ar)
+  // REPORT-OPENABLE-OPTIONS-001 — a client link's «تكبير الصور» and «تحميل الأصل», as the server set them; absent (not a link) draws nothing.
+  const [zoom, setZoom] = useState(1)
+  useEffect(() => setZoom(1), [ad.id])
+  const still = reading.kind === 'video' ? null : (preview?.image_url ?? preview?.thumbnail_url ?? null)
+  const download = preview?.can_download === true ? (reading.kind === 'video' ? reading.src : still) : null
 
   /*
    * REPORT-CONTENT-FULL-FRAME-001 (Owner, 2026-10-19) — a reel opened from a report shows the WHOLE frame.
@@ -95,7 +103,7 @@ export function ReportAdDetail({
   const cash = (v: number | null | undefined, digits = 0) => {
     const text = n(v, digits)
 
-    return text === null ? null : currency ? `${text} ${currency}` : text
+    return text === null ? null : withMark(text, currency)
   }
 
   /*
@@ -114,21 +122,24 @@ export function ReportAdDetail({
    */
   const spendReading = readMoney(ad as MoneyTotals, 'spend', currency ?? null, ar)
   if (spendReading.kind !== 'absent') {
-    add(ar ? 'الإنفاق' : 'Spend', formatMoneyReading(spendReading, (value, unit) => {
+    const fmtCash = (value: number | null | undefined, unit?: string) => {
       const text = n(value, 0)
 
-      return text === null ? '—' : (unit ? `${text} ${unit}` : text)
-    }))
+      return text === null ? '—' : withMark(text, unit)
+    }
+    // LIVE-LINK-PARTIAL-MONEY-001 — a partly converted spend prints both amounts, never a dash.
+    const parts = moneyParts(ad as MoneyTotals, 'spend')
+    add(ar ? 'الإنفاق' : 'Spend', parts === null ? formatMoneyReading(spendReading, fmtCash) : formatMoneyParts(parts, currency ?? null, fmtCash))
   }
   add(ar ? 'الظهور' : 'Impressions', n(ad.impressions))
   add(ar ? 'النقرات' : 'Clicks', n(ad.clicks))
   add(
-    ar ? 'نسبة النقر' : 'CTR',
+    ar ? 'معدل النقر' : 'CTR',
     ad.ctr === null || ad.ctr === undefined ? null : `${(ad.ctr * 100).toFixed(2)}%`,
   )
   add(ar ? 'النتائج' : 'Results', n(ad.conversions))
   add(ar ? 'تكلفة النتيجة' : 'Cost per result', ad.cpa && ad.cpa > 0 ? cash(ad.cpa, 2) : null)
-  add(ar ? 'العائد على الإنفاق' : 'ROAS', ad.roas && ad.roas > 0 ? `${ad.roas.toFixed(2)}×` : null)
+  add(ar ? 'معدل العائد' : 'ROAS', ad.roas && ad.roas > 0 ? `${ad.roas.toFixed(2)}×` : null)
 
   const facts = [
     // CLIENT-REPORT-ENTITY-BOUNDARY-001 — the campaign name is gone from here too; the card that
@@ -138,20 +149,22 @@ export function ReportAdDetail({
   ].filter(Boolean)
 
   return (
+    <BodyPortal>
     <div
       role="dialog"
       aria-modal="true"
       aria-label={ad.name ?? (ar ? 'تفاصيل الإعلان' : 'Ad detail')}
       data-testid="report-ad-detail"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center sm:p-6"
+      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 pt-[env(safe-area-inset-top)] sm:items-center sm:p-6"
       onClick={onClose}
     >
       {/* Full height on a phone, a centred sheet above it — the shape the library's dialog uses. */}
       <div
-        className="flex max-h-[92vh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-t-2xl border border-border bg-surface p-4 sm:rounded-2xl"
+        className="flex max-h-[92dvh] w-full max-w-2xl flex-col gap-3 overflow-y-auto rounded-t-2xl border border-border bg-surface p-4 sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3">
+        {/* MOBILE-DIALOG-001 — the title row and its close button stay pinned while the sheet scrolls. */}
+        <div className="sticky -top-4 z-10 -mx-4 -mt-4 flex items-start justify-between gap-3 border-b border-border bg-surface px-4 pb-2 pt-4">
           <div className="min-w-0">
             <h3 className="truncate text-base font-bold text-text-primary">{ad.name ?? '—'}</h3>
             {facts.length > 0 && <p className="truncate text-xs text-text-muted">{facts.join(' · ')}</p>}
@@ -182,21 +195,41 @@ export function ReportAdDetail({
                  * `contain`, stated: the modal is where the reader came to see the whole frame, so
                  * nothing is cut here — and the stage, not the image, owns the box.
                  */
+                <div className="flex max-h-full max-w-full items-center justify-center transition-transform" style={zoom === 1 ? undefined : { transform: `scale(${zoom})` }}>
                 <AdPoster
                   preview={preview}
                   name={ad.name ?? ''}
                   className="max-h-full max-w-full"
                   fit="contain"
                   testid="report-ad-detail-poster"
+                  textScale="stage"
                   forClient
                   provider={ad.provider ?? null}
                   onMeasured={onMeasured}
                   eager
                 />
+                </div>
               )}
             </div>
           )
         })()}
+
+        {(preview?.can_zoom === true && reading.kind !== 'video' && still !== null) || download ? (
+          <div className="flex flex-wrap items-center gap-1 text-xs" data-testid="report-ad-detail-tools">
+            {preview?.can_zoom === true && reading.kind !== 'video' && still !== null && (
+              <>
+                <button type="button" data-testid="report-ad-detail-zoom-out" onClick={() => setZoom((z) => Math.max(z - 0.25, 0.5))} className="rounded border border-border px-2 py-1">−</button>
+                <span className="tnum w-12 text-center"><Num>{`${Math.round(zoom * 100)}%`}</Num></span>
+                <button type="button" data-testid="report-ad-detail-zoom-in" onClick={() => setZoom((z) => Math.min(z + 0.25, 4))} className="rounded border border-border px-2 py-1">+</button>
+              </>
+            )}
+            {download && (
+              <a href={download} download target="_blank" rel="noopener noreferrer" data-testid="report-ad-detail-download" className="ms-auto rounded-lg border border-border px-2 py-1 font-semibold text-brand-700 hover:bg-surface-hover">
+                {ar ? 'تحميل الإعلان' : 'Download the ad'}
+              </a>
+            )}
+          </div>
+        ) : null}
 
         {/*
           CONTENT-PREVIEW-SHAPES-001 — the component decides the kind, not the caller.
@@ -229,8 +262,12 @@ export function ReportAdDetail({
           </p>
         )}
 
+        {/* REPORT-CONTENT-DEEP-001 — the content's whole path: extra figures, the viewer journey, the video retention. */}
+        <ReportAdDeepFigures ad={ad} currency={currency} ar={ar} />
+
         {children}
       </div>
     </div>
+    </BodyPortal>
   )
 }

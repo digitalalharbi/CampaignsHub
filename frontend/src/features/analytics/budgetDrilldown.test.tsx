@@ -62,40 +62,42 @@ describe('the budget hierarchy drills from the project to a campaign', () => {
 
   it('the campaign rung states the platform limit beside the plan, and «not sent» where none was', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
 
-    const row = (await screen.findByText('Spring launch')).closest('tr') as HTMLElement
+    const row = (await within(await screen.findByTestId('budget-campaign-table')).findByText('Spring launch')).closest('tr') as HTMLElement
     expect(within(row.closest('table') as HTMLElement).getByText('Platform limit')).toBeInTheDocument()
-    expect(screen.getByTestId('provider-limit-c1')).toHaveTextContent('12K SAR')
+    expect(screen.getByTestId('provider-limit-c1')).toHaveTextContent('12K ر.س')
     expect(screen.getByTestId('provider-limit-c2')).toHaveTextContent('Not sent')
   })
 
   it('a platform pick narrows the accounts and campaigns, an account pick narrows further, and the crumbs lead back', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
     fireEvent.click(await screen.findByRole('tab', { name: /Budget/i }))
-    await screen.findByText('Spring launch')
-    await screen.findByText('Ramadan clips')
+    await within(await screen.findByTestId('budget-campaign-table')).findByText('Spring launch')
+    await within(await screen.findByTestId('budget-campaign-table')).findByText('Ramadan clips')
     // The three rungs load independently; wait for the account rung too before narrowing.
     await screen.findByText('TikTok shop')
     expect(screen.queryByTestId('budget-crumbs')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('budget-drill-platform-meta'))
-    await waitFor(() => expect(screen.queryByText('Ramadan clips')).not.toBeInTheDocument())
+    await waitFor(() => expect(within(screen.getByTestId('budget-campaign-table')).queryByText('Ramadan clips')).not.toBeInTheDocument())
     expect(screen.queryByText('TikTok shop')).not.toBeInTheDocument()
-    expect(screen.getByText('Spring launch')).toBeInTheDocument()
+    expect(within(screen.getByTestId('budget-campaign-table')).getByText('Spring launch')).toBeInTheDocument()
     expect(screen.getByTestId('budget-crumbs')).toHaveTextContent('Project')
     // The plan linked to no platform campaign is outside the path, and the page says so rather than losing it.
-    expect(screen.queryByText('Unlinked plan')).not.toBeInTheDocument()
+    expect(within(screen.getByTestId('budget-campaign-table')).queryByText('Unlinked plan')).not.toBeInTheDocument()
     expect(screen.getByTestId('budget-unplaced-note')).toHaveTextContent('1 campaign(s)')
 
     fireEvent.click(screen.getByTestId('budget-drill-account-a1'))
     await waitFor(() => expect(screen.getByTestId('budget-crumb-account')).toHaveTextContent('Main Meta'))
-    expect(screen.getByText('Spring launch')).toBeInTheDocument()
+    expect(within(screen.getByTestId('budget-campaign-table')).getByText('Spring launch')).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('budget-crumb-project'))
-    await waitFor(() => expect(screen.getByText('Ramadan clips')).toBeInTheDocument())
+    await waitFor(() => expect(within(screen.getByTestId('budget-campaign-table')).getByText('Ramadan clips')).toBeInTheDocument())
     expect(screen.getByText('TikTok shop')).toBeInTheDocument()
-    expect(screen.getByText('Unlinked plan')).toBeInTheDocument()
+    expect(within(screen.getByTestId('budget-campaign-table')).getByText('Unlinked plan')).toBeInTheDocument()
     expect(screen.queryByTestId('budget-crumbs')).not.toBeInTheDocument()
   })
 })

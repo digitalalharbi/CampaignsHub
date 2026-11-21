@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test'
-import { API_HEADERS } from './helpers'
+import { API_HEADERS, openRail } from './helpers'
 
 /**
  * Create a CLIENT report through the real reports builder and wait until it has generated.
@@ -11,12 +11,21 @@ import { API_HEADERS } from './helpers'
  *
  * Returns the ids the caller needs to address THIS report unambiguously.
  */
-export async function buildGeneratedClientReport(page: Page, name: string): Promise<{ projectId: string; reportId: string }> {
+export async function buildGeneratedClientReport(
+  page: Page,
+  name: string,
+  options: { project?: RegExp } = {},
+): Promise<{ projectId: string; reportId: string }> {
   await page.goto('/reports')
+  // NOV-SIDEBAR-001 (builder D) — the client/project control lives in the agency rail, which now starts collapsed to a
+  // strip; open it first, as every other spec that drives the switcher does. The walk below is unchanged.
+  await openRail(page, { optional: true })
 
-  const clientSelect = page.getByLabel(/^العميل$|^Client$/)
-  await expect(clientSelect).toBeVisible({ timeout: 20_000 })
-  const projectSelect = page.getByLabel(/^المشروع$|^Project$/)
+  // CLIENT-SWITCHER-X-001 — the client field opens a list and each client is a button, no longer a <select>.
+  const clientField = page.getByTestId('agency-scope-client')
+  const clientRows = page.locator('[data-testid^="agency-scope-client-client-"]')
+  await expect(clientField).toBeVisible({ timeout: 20_000 })
+  const projectSelect = page.getByLabel(/^المشاريع$|^المشروع$|^Project$/)
 
   /*
    * Walk the clients until one has a project.
@@ -26,10 +35,11 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
    * and left the project select disabled — which is the switcher behaving correctly and the test
    * assuming otherwise.
    */
-  const clientValues = (await clientSelect.locator('option').evaluateAll((os) =>
-    os.map((o) => (o as HTMLOptionElement).value),
-  )).filter(Boolean)
-  expect(clientValues.length, 'the agency owner can reach no clients').toBeGreaterThan(0)
+  await clientField.click()
+  await clientRows.first().waitFor({ timeout: 20_000 })
+  const clientCount = await clientRows.count()
+  await page.keyboard.press('Escape')
+  expect(clientCount, 'the agency owner can reach no clients').toBeGreaterThan(0)
 
   /*
    * After choosing, the choice is VERIFIED — the switcher is allowed to disagree.
@@ -45,15 +55,53 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
    * this client is skipped rather than proceeding into a builder that cannot build.
    */
   let projectId = ''
-  for (const clientValue of clientValues) {
-    await clientSelect.selectOption(clientValue)
-    await expect(clientSelect).toHaveValue(clientValue)
+  for (let clientIndex = 0; clientIndex < clientCount; clientIndex++) {
+    await clientField.click()
+    await clientRows.nth(clientIndex).click()
 
     // The options arrive with the per-client refetch, so read until they do.
-    const readOptions = () =>
-      projectSelect.locator('option').evaluateAll((os) =>
-        os.map((o) => (o as HTMLOptionElement).value).filter(Boolean),
-      )
+    /*
+     * `options.project` — a spec whose assertions depend on WHICH project it reports on says so.
+     *
+     * «The first client that has a project» is not a choice, it is whatever `GET /client-workspaces`
+     * happens to return first: that list is `latest()`, the demo seed creates every client workspace
+     * within a second or two, and the order of rows with an equal `created_at` is the database's to
+     * decide. So a run that landed on the all-sales demo store and a run that landed on Q3 Launch
+     * (awareness + traffic + sales, therefore a mixed report with no revenue or ROAS column by design)
+     * were both correct, and a spec asserting sales columns passed or failed on a coin it never saw.
+     * It looked like a time-of-day flake because the failures clustered; they cluster by seed speed.
+     */
+    const wanted = options.project
+    /*
+     * CLIENT-UNIT-001 — a client with ONE project has no project select: the switcher makes that project the scope the
+     * moment the client is chosen. So the candidates are the select's options when it is drawn (two or more projects),
+     * and otherwise the project the switcher stored, whose name is read from the API to honour `options.project`.
+     */
+    const readOptions = async (): Promise<string[]> => {
+      if ((await projectSelect.count()) > 0) {
+        return projectSelect.locator('option').evaluateAll(
+          (os, pattern) => {
+            const re = pattern ? new RegExp(pattern.source, pattern.flags) : null
+            return os
+              .map((o) => ({ value: (o as HTMLOptionElement).value, label: (o as HTMLOptionElement).text }))
+              .filter((o) => o.value && (re === null || re.test(o.label)))
+              .map((o) => o.value)
+          },
+          wanted ? { source: wanted.source, flags: wanted.flags } : null,
+        )
+      }
+
+      const stored = await page.evaluate(() => {
+        try { return JSON.parse(window.localStorage.getItem('campaign-hub-project-storage') ?? '{}')?.state?.currentProjectId ?? null } catch { return null }
+      })
+      if (typeof stored !== 'string' || stored === '') return []
+      if (wanted === null || wanted === undefined) return [stored]
+
+      const r = await page.request.get(`/api/v1/projects/${stored}`, { headers: API_HEADERS })
+      const name = r.ok() ? String((await r.json()).data?.name ?? '') : ''
+
+      return new RegExp(wanted.source, wanted.flags).test(name) ? [stored] : []
+    }
 
     let values: string[] = []
     for (let attempt = 0; attempt < 20 && values.length === 0; attempt++) {
@@ -77,7 +125,8 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
     }
     if (chosen === '') continue
 
-    await projectSelect.selectOption(chosen)
+    const hasSelect = (await projectSelect.count()) > 0
+    if (hasSelect) await projectSelect.selectOption(chosen)
 
     /*
      * The switcher runs after its queries settle and clears a project it does not recognise, so the
@@ -85,7 +134,11 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
      * builder will work; if not, this client is skipped rather than walking into a dead dialog.
      */
     await page.waitForTimeout(600)
-    const held = (await projectSelect.evaluate((el) => (el as HTMLSelectElement).value)) === chosen
+    const held = hasSelect
+      ? (await projectSelect.evaluate((el) => (el as HTMLSelectElement).value)) === chosen
+      : (await page.evaluate(() => {
+          try { return JSON.parse(window.localStorage.getItem('campaign-hub-project-storage') ?? '{}')?.state?.currentProjectId ?? null } catch { return null }
+        })) === chosen
 
     if (held) {
       projectId = chosen
@@ -93,7 +146,12 @@ export async function buildGeneratedClientReport(page: Page, name: string): Prom
     }
   }
 
-  expect(projectId, 'no reachable client has a project the switcher will hold').not.toBe('')
+  expect(
+    projectId,
+    options.project
+      ? `no reachable client has a project named ${options.project} that the switcher will hold`
+      : 'no reachable client has a project the switcher will hold',
+  ).not.toBe('')
 
   // The page reloads its reports for the chosen project; the builder is only offered once it has one.
   await expect(page.getByRole('button', { name: /تقرير محفوظ|Saved report/ })).toBeEnabled({ timeout: 20_000 })

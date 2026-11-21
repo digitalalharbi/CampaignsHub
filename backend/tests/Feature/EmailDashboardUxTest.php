@@ -190,7 +190,8 @@ final class EmailDashboardUxTest extends TestCase
         $cases = [
             'monthly' => ['ar' => 'هذا الشهر', 'en' => 'the month', 'not_ar' => 'هذا الأسبوع', 'not_en' => 'the week'],
             'weekly' => ['ar' => 'هذا الأسبوع', 'en' => 'the week', 'not_ar' => 'هذا الشهر', 'not_en' => 'the month'],
-            'daily' => ['ar' => 'أمس', 'en' => 'yesterday', 'not_ar' => 'هذا الأسبوع', 'not_en' => 'the week'],
+            // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 (Owner, 2026-11-12) — the daily is YESTERDAY again, and says so.
+            'daily' => ['ar' => 'ملخص أمس', 'en' => 'yesterday', 'not_ar' => 'آخر 7 أيام', 'not_en' => 'the last 7 days'],
         ];
 
         foreach ($cases as $kind => $expected) {

@@ -55,7 +55,10 @@ final class SyncStoreJob implements ShouldBeUnique, ShouldQueue
         private readonly string $from,
         private readonly string $to,
         private readonly array $meta = [],
-    ) {}
+    ) {
+        // PERF-SYNC-ISOLATION-001 — provider syncs run on their own, serialised queue, never beside a user's request.
+        $this->onQueue('sync');
+    }
 
     public function handle(StoreSyncer $syncer, TenantContext $tenant, AccountAssignment $assignment): void
     {

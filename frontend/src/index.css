@@ -11,6 +11,14 @@
    broken by this. What was broken is the sentence: it invited the next author to write the
    form that renders nothing. `ThemeTokenCoverageTest` now refuses that form. */
 @theme {
+  /*
+   * UX-MOTION-TOKENS-001 — every bare `transition`, `transition-colors` and `transition-opacity`
+   * utility now takes the product's control duration and curve, so the ~200 call sites that never
+   * named a number move in one voice without being edited one by one. (Tailwind's own default was
+   * 150ms on an ease-in-out curve.)
+   */
+  --default-transition-duration: var(--motion-control);
+  --default-transition-timing-function: var(--motion-ease);
   /* Color */
   --color-background: var(--background);
   --color-surface: var(--surface);
@@ -156,4 +164,265 @@
 @keyframes spark {
   from { opacity: 1; transform: rotate(var(--a)) translateX(0) scale(1); }
   to { opacity: 0; transform: rotate(var(--a)) translateX(46px) scale(0.4); }
+}
+
+/*
+ * NOV-MOBILE-001 — the phone foundations, in one place and outside every layer.
+ *
+ * Unlayered on purpose: a rule outside `@layer` beats every Tailwind utility, so a control written
+ * `text-sm` or `h-8` anywhere in the product still meets these floors without being edited one by one.
+ *
+ * Every feature used here is in Safari 16.4, which is also the floor Tailwind v4 itself sets.
+ */
+
+/* iOS rotates the page and then re-scales the text unless told otherwise. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/*
+ * An iPhone in landscape puts the notch beside the page. `viewport-fit=cover` (index.html) lets the page
+ * reach it; this keeps the content out of it. Both are 0 everywhere that has no cut-out.
+ */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/*
+ * 16px inside a field on a phone or any touch screen, or iOS zooms the page on focus and does not zoom back.
+ * Checkboxes, radios, ranges and files are not text fields and keep their own size.
+ */
+@media (max-width: 767px), (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/*
+ * A finger needs 44×44 CSS px (WCAG 2.5.5, Apple HIG). Applied to what is pressed on a touch screen: buttons,
+ * tabs, menu rows and fields. An icon-only button is also 44 wide; a button with words keeps its own width.
+ * `.touch-exempt` is the deliberate escape for a control that is a link inside a line of text.
+ */
+@media (pointer: coarse) {
+  button:not(.touch-exempt),
+  [role='tab'],
+  [role='menuitem'],
+  [role='option'],
+  summary,
+  select,
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']) {
+    min-height: 44px;
+  }
+  button:not(.touch-exempt):has(> svg:only-child) {
+    min-width: 44px;
+  }
+}
+
+/*
+ * NOV-FIT-001 — a page that fits the screen is locked to it, on a desktop only.
+ *
+ * `PortalFrame` sets `data-fit` while a page that called `useFitLock()` is mounted. Here the root is pinned to the
+ * viewport and every level between it and the page may shrink (`min-height: 0` — a flex item otherwise refuses to
+ * go below its content), so the page's own body is what gives. Nothing here hides content: a page that did not
+ * budget its height would be cut off, and `e2e/shell.spec.ts` measures every converted page for exactly that.
+ *
+ * The query is `FIT_LOCK_QUERY` in `styles/scale.ts` (`fitMedia.test.ts` keeps the two equal). Below it — a phone,
+ * a tablet, a short window — the page flows and scrolls vertically like any other. `100vh` first, `100dvh` after:
+ * a browser without `dvh` keeps the first, and one with it takes the viewport that tracks its toolbars.
+ */
+/* SCROLL-RESTORE-001 — no screen matches: every page flows and scrolls (see `FIT_LOCK_QUERY`). */
+@media (min-width: 100000px) {
+  [data-fit='true'] {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  [data-fit='true'] .portal-col,
+  [data-fit='true'] .portal-main {
+    min-height: 0;
+  }
+  [data-fit='true'] .portal-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 0.5rem;
+  }
+  /* AF2 — the part of a fitted page that takes what is left; its contents are budgeted against its height. */
+  [data-fit='true'] .fit-panel {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+/*
+ * FIELD-CLARITY-001 — Owner 2026-11-20: «وضوح مربعات النص مثل أبشر». Every text field, select and box in the product, in one
+ * place and outside every layer, so a field written anywhere with the faint `border-border` still draws a clear edge:
+ *
+ * - the edge is a real grey (`--field-border`, ≥3:1), darker under the pointer;
+ * - focus draws a firm underline in the text colour beside the brand halo — the field you are typing in is unmistakable;
+ * - checkboxes and radios are drawn boxes with a clear edge and a solid brand fill when chosen.
+ *
+ * Fields written borderless on purpose (`border-0`, `border-transparent`, `border-none`) keep that: only the faint border
+ * classes are re-drawn.
+ */
+:is(input, select, textarea):is(.border-border, .border-border-strong, .border) {
+  border-color: var(--field-border);
+}
+@media (hover: hover) {
+  :is(input, select, textarea):is(.border-border, .border-border-strong, .border):hover:not(:disabled):not(:focus) {
+    border-color: var(--field-border-hover);
+  }
+}
+:is(input, select, textarea):is(.border-border, .border-border-strong, .border):focus,
+:is(input, select, textarea):is(.border-border, .border-border-strong, .border):focus-visible {
+  border-color: var(--field-border-hover);
+  border-bottom-color: var(--field-focus);
+  box-shadow: inset 0 -1px 0 var(--field-focus), 0 0 0 3px color-mix(in srgb, var(--brand-500) 15%, transparent);
+  outline: none;
+}
+:is(input, select, textarea)[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+:is(input, select, textarea)::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']) {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  border: 1.5px solid var(--field-border);
+  border-radius: 5px;
+  background: var(--surface) center / 75% no-repeat;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+input[type='radio']:not(.sr-only):not([class*='opacity-0']) {
+  border-radius: 9999px;
+}
+@media (hover: hover) {
+  input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']):hover:not(:disabled) {
+    border-color: var(--field-border-hover);
+  }
+}
+input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']):checked {
+  border-color: var(--brand-600);
+  background-color: var(--brand-600);
+}
+input[type='checkbox']:not(.sr-only):not([class*='opacity-0']):not([role='switch']):checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+}
+input[type='checkbox']:not(.sr-only):not([class*='opacity-0']):not([role='switch']):indeterminate {
+  border-color: var(--brand-600);
+  background-color: var(--brand-600);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' stroke='white' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M4 8h8'/%3E%3C/svg%3E");
+}
+input[type='radio']:not(.sr-only):not([class*='opacity-0']):checked {
+  background-color: var(--surface);
+  box-shadow: inset 0 0 0 4px var(--brand-600);
+}
+input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):not([role='switch']):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-500) 25%, transparent);
+}
+input[type='radio']:not(.sr-only):not([class*='opacity-0']):checked:focus-visible {
+  box-shadow: inset 0 0 0 4px var(--brand-600), 0 0 0 3px color-mix(in srgb, var(--brand-500) 25%, transparent);
+}
+input:is([type='checkbox'], [type='radio']):not(.sr-only):not([class*='opacity-0']):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/*
+ * SELECT-PRO-001 — Owner 2026-11-20: «الفلاتر عادية جدًا». Every select in the product, filters included, opens a designed
+ * list instead of the operating system's menu: the product's surface, a soft shadow, rounded rows, the chosen row in the
+ * brand colour with its tick. One rule for the ~120 selects, so none is rewritten and each keeps being a real <select>
+ * (keyboard, screen readers, form posts and every test still read it natively).
+ *
+ * `appearance: base-select` is the platform's customisable select. Where a browser does not have it yet, it keeps the
+ * native menu — same control, same behaviour, nothing broken.
+ */
+@supports (appearance: base-select) {
+  select:not([multiple]):not([size]) {
+    appearance: base-select;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    cursor: pointer;
+  }
+  select:not([multiple]):not([size])::picker-icon {
+    content: '';
+    width: 0.75rem;
+    height: 0.75rem;
+    flex-shrink: 0;
+    background: currentColor;
+    color: var(--text-muted);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+    transition: rotate 0.15s;
+  }
+  select:not([multiple]):not([size]):open::picker-icon {
+    rotate: 180deg;
+  }
+  select:not([multiple]):not([size])::picker(select) {
+    appearance: base-select;
+    margin-block: 6px;
+    padding: 6px;
+    min-width: anchor-size(width);
+    max-height: min(22rem, 60dvh);
+    overflow-y: auto;
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--text-primary);
+    box-shadow: 0 12px 32px -8px rgb(15 23 42 / 0.22), 0 2px 6px rgb(15 23 42 / 0.08);
+  }
+  select:not([multiple]):not([size]) option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.25rem;
+    padding: 0.45rem 0.75rem;
+    border-radius: 9px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: transparent;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  select:not([multiple]):not([size]) option:focus-visible {
+    background: var(--surface-hover);
+    outline: none;
+  }
+  select:not([multiple]):not([size]) option:checked {
+    background: color-mix(in srgb, var(--brand-500) 12%, transparent);
+    color: var(--brand-600);
+  }
+  select:not([multiple]):not([size]) option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--brand-600);
+    font-weight: 800;
+  }
+  select:not([multiple]):not([size]) option:disabled {
+    color: var(--text-muted);
+    cursor: default;
+  }
+}
+@media (hover: hover) {
+  select:not([multiple]):not([size]) option:hover {
+    background: var(--surface-hover);
+  }
 }

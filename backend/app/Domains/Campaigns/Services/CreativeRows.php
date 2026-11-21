@@ -17,6 +17,7 @@ use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Access\ReachableProjects;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Lifecycle\LiveProjects;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Services\ClientScopeResolver;
 use App\Models\User;
@@ -102,6 +103,8 @@ final class CreativeRows
          * `campaigns.manage`, exactly as the project route does.
          */
         app(ReachableProjects::class)->constrain($query, $user, 'project_id', $capability);
+        // PROJECT-LIFECYCLE-001 — the cross-project library reads LIVE projects only (archived/deleted never aggregated).
+        LiveProjects::whereProjectLive($query, 'project_id');
 
         $reach = app(ClientScopeResolver::class)->reachableClientIds($user);
 
@@ -159,6 +162,35 @@ final class CreativeRows
     }
 
     /**
+     * REPORT-SOURCE-ISOLATION-001 — keep the creatives that ran under one of these ad accounts. One statement of the rule, for the
+     * listing filter and for the guard that reads a stored report back.
+     *
+     * The account is the creative's own column, else its external campaign's. A creative that names neither is admitted only through a
+     * campaign one of the accounts spent on, in the creative's own project. No account evidence at all is refused.
+     *
+     * @param  list<string>  $accountIds  never empty: an empty axis is «no bound», which the caller decides, not this predicate
+     */
+    public static function whereRanUnderAccounts(mixed $query, array $accountIds): void
+    {
+        $query->where(function ($outer) use ($accountIds): void {
+            $outer
+                ->whereIn(DB::raw('COALESCE(external_creatives.external_account_id, (select src_c.external_account_id from external_campaigns as src_c where src_c.id = external_creatives.external_campaign_id))'), $accountIds)
+                ->orWhere(function ($viaMetrics) use ($accountIds): void {
+                    $viaMetrics
+                        ->whereNull('external_creatives.external_account_id')
+                        ->whereNull('external_creatives.external_campaign_id')
+                        ->whereExists(function ($sub) use ($accountIds): void {
+                            $sub->selectRaw('1')
+                                ->from('daily_metrics as src_dm')
+                                ->whereColumn('src_dm.unified_campaign_id', 'external_creatives.campaign_id')
+                                ->whereColumn('src_dm.project_id', 'external_creatives.project_id')
+                                ->whereIn('src_dm.external_account_id', $accountIds);
+                        });
+                });
+        });
+    }
+
+    /**
      * The filters, from a plain array rather than a request.
      *
      * An array because the client's report supplies filters that have already been intersected with
@@ -196,14 +228,65 @@ final class CreativeRows
             }
         }
 
+        /*
+         * CREATIVE-COVERS-COVERAGE-001 — a creative belongs to EVERY campaign one of its ads ran in.
+         *
+         * A creative row is one per account and creative id, so when two campaigns run ads with the same creative
+         * the row's own `campaign_id` names only the campaign imported last. Production 2026-11-07, the Owner's live
+         * link: all 13 Meta creatives of the project were filed under «4Aug 2026- Sales», which has no figures,
+         * while their ads ran — and spent — under «4Aug 2026- Sales -KSA». The link's ceiling is the campaigns with
+         * figures, so every Meta creative fell outside it and Meta vanished from the report's content (0 of 800
+         * rows) while its totals stood in the same report. The ads say where the creative ran; both are read.
+         */
+        if (($campaignIds = $list('campaign_ids')) !== []) {
+            $query->where(function ($q) use ($campaignIds): void {
+                $q->whereIn('external_creatives.campaign_id', $campaignIds)
+                    ->orWhereExists(function ($sub) use ($campaignIds): void {
+                        $sub->selectRaw('1')
+                            ->from('external_ads as ran_in')
+                            ->whereColumn('ran_in.creative_id', 'external_creatives.id')
+                            ->whereIn('ran_in.unified_campaign_id', $campaignIds);
+                    });
+            });
+        }
+
         foreach ([
-            'campaign_ids' => 'campaign_id',
             'ad_set_ids' => 'external_ad_set_id',
             'project_ids' => 'project_id',
         ] as $param => $column) {
             if (($ids = $list($param)) !== []) {
                 $query->whereIn($column, $ids);
             }
+        }
+
+        /*
+         * REPORT-SOURCE-ISOLATION-001 — a project bound is a bound on the creative's CAMPAIGN as well.
+         *
+         * `project_id` above is the creative's own filing. A creative filed under this project whose campaign belongs to
+         * another one is content of that other project wearing this project's label, and listing it names that project's
+         * campaign on a document about this one. Refused here, at the one entry every listing passes through.
+         */
+        if (($projects = $list('project_ids')) !== []) {
+            $query->whereNotExists(function ($sub) use ($projects): void {
+                $sub->selectRaw('1')
+                    ->from('unified_campaigns as src_uc')
+                    ->whereColumn('src_uc.id', 'external_creatives.campaign_id')
+                    ->whereNotIn('src_uc.project_id', $projects);
+            });
+        }
+
+        /*
+         * REPORT-SOURCE-ISOLATION-001 — the ad ACCOUNT axis, which this filter never had.
+         *
+         * A report whose sources name accounts was bounded to them in every figure (`MetricsAggregator::forAccounts`) and in no
+         * content list: the ads section carried every creative of the project, so a client's stored report showed the work of
+         * an account the operator had not chosen. The account a creative ran under is its own column, else its external
+         * campaign's; a creative with neither is admitted only through a campaign the account actually spent on, in the
+         * creative's own project (the identifier space the live link's ceiling is resolved in). No account evidence at all is
+         * refused: deny by default, as `BoundAccountVisibility` reads the same rows.
+         */
+        if (($accountIds = $list('account_ids')) !== []) {
+            self::whereRanUnderAccounts($query, array_map(strval(...), $accountIds));
         }
 
         /*
@@ -368,7 +451,7 @@ final class CreativeRows
                 'key' => $kind,
                 'count' => (clone $scope)->where(fn ($q) => CreativeKind::scope($q, [$kind]))->count(),
             ],
-            CreativeKind::ALL,
+            CreativeKind::FILTERABLE,
         );
     }
 
@@ -460,6 +543,17 @@ final class CreativeRows
 
         /* `orders` is `conversions` one grain down — the same resolution `CreativeMetrics` makes. */
         $leading = $leading === 'orders' ? 'conversions' : $leading;
+
+        /*
+         * OBJECTIVE-RESULT-001 — a traffic campaign now LEADS with landing page views, and its result
+         * is visits where they were measured, else clicks. A library ORDER is one key for every ad,
+         * and at the ad grain landing page views are reported for some platforms only — ordering by
+         * them would sink every ad of a platform that never sends them as if it had none. Clicks are
+         * the unit every traffic ad shares, so the library keeps ordering by them.
+         */
+        if ($leading === 'landing_page_views') {
+            $leading = 'clicks';
+        }
 
         return in_array($leading, self::SORTABLE, true) ? $leading : 'spend';
     }

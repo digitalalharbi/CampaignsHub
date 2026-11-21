@@ -423,6 +423,25 @@ final class DemoCreativeAnalysisSeeder extends Seeder
                 'headline' => 'وصل حديثًا', 'cta' => 'SHOP_NOW',
                 'shape' => 'new', 'video' => false, 'sales' => true,
             ],
+            /*
+             * CONTENT-FORMAT-COMPARISON-001 — DEMO ONLY: a second carousel, so the sales comparison has a carousel
+             * that is not a single-creative anecdote, and a Snapchat `story_ad` token, which no kind names: the
+             * comparison files it under «غير مصنّف» with the platform's token beside it.
+             */
+            [
+                'key' => 'carousel-two', 'name' => 'تشكيلة الصيف — كاروسيل ثانٍ (عرض تجريبي)', 'format' => 'carousel',
+                'objective' => 'sales', 'provider' => 'meta', 'tint' => '#4f2f7a', 'age' => 21,
+                'width' => 1080, 'height' => 1080, 'aspect_ratio' => '1:1',
+                'headline' => 'تشكيلة الصيف', 'cta' => 'SHOP_NOW',
+                'shape' => 'steady', 'video' => false, 'sales' => true,
+            ],
+            [
+                'key' => 'story-token', 'name' => 'قصة سناب — رمز المنصة story_ad (عرض تجريبي)', 'format' => 'story_ad',
+                'objective' => 'sales', 'provider' => 'snapchat', 'tint' => '#7a6a1f', 'age' => 20,
+                'width' => 1080, 'height' => 1920, 'aspect_ratio' => '9:16',
+                'headline' => 'قصة اليوم', 'cta' => 'SHOP_NOW',
+                'shape' => 'steady', 'video' => false, 'sales' => true,
+            ],
         ];
     }
 

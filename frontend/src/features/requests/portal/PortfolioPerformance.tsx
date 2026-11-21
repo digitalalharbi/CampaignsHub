@@ -15,6 +15,8 @@ import { useUi } from '@/stores/ui'
 import { fetchPortalOverview, type PortalOverview } from './portalOverviewApi'
 import { useClientSpacePath } from './clientSpace'
 import { usePortalGuard } from './usePortalGuard'
+import { PortalAudience } from './PortalAudience'
+import { withMark } from '@/lib/money/mark'
 
 /**
  * CP-DASH-001 — the client's portfolio: a few figures that matter, then compact summaries.
@@ -36,14 +38,14 @@ const COPY = {
     title: 'أداء حساباتك', period: (d: number) => `آخر ${days(d, 'ar')}`, synced: 'آخر مزامنة', stale: 'قد تكون البيانات متأخرة',
     platforms: 'المنصات', projects: 'المشاريع', campaigns: 'الحملات', all: 'عرض الكل', none: 'لا توجد بيانات لهذه الفترة بعد.',
     total: 'الإجمالي',
-    k: { impressions: 'مرات الظهور', clicks: 'النقرات', conversions: 'النتائج', ctr: 'نسبة النقر', spend: 'الإنفاق', cpa: 'تكلفة النتيجة', revenue: 'الإيرادات', roas: 'العائد على الإنفاق' } as Record<string, string>,
+    k: { impressions: 'مرات الظهور', clicks: 'النقرات', conversions: 'تحويلات المنصة', ctr: 'معدل النقر', spend: 'الإنفاق', cpa: 'تكلفة التحويل', revenue: 'الإيرادات', roas: 'معدل العائد' } as Record<string, string>,
     st: { active: 'نشطة', paused: 'متوقفة', draft: 'مسودة', ended: 'منتهية', completed: 'مكتملة', archived: 'مؤرشفة' } as Record<string, string>,
   },
   en: {
     title: 'Your performance', period: (d: number) => `Last ${days(d, 'en')}`, synced: 'Last synced', stale: 'Data may be delayed',
     platforms: 'Platforms', projects: 'Projects', campaigns: 'Campaigns', all: 'View all', none: 'No data for this period yet.',
     total: 'Total',
-    k: { impressions: 'Impressions', clicks: 'Clicks', conversions: 'Results', ctr: 'CTR', spend: 'Spend', cpa: 'Cost per result', revenue: 'Revenue', roas: 'ROAS' } as Record<string, string>,
+    k: { impressions: 'Impressions', clicks: 'Clicks', conversions: 'Platform conversions', ctr: 'CTR', spend: 'Spend', cpa: 'Cost per conversion', revenue: 'Revenue', roas: 'ROAS' } as Record<string, string>,
     st: { active: 'Active', paused: 'Paused', draft: 'Draft', ended: 'Ended', completed: 'Completed', archived: 'Archived' } as Record<string, string>,
   },
 }
@@ -57,7 +59,7 @@ function format(key: string, v: number | null | undefined, currency: string | nu
   if (key === 'roas') return `${v.toFixed(2)}×`
   const compact = Math.abs(v) >= 100_000 ? new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(v) : new Intl.NumberFormat('en', { maximumFractionDigits: key === 'cpa' || key === 'spend' || key === 'revenue' ? 2 : 0 }).format(v)
 
-  return ['spend', 'cpa', 'revenue'].includes(key) && currency ? `${compact} ${currency}` : compact
+  return ['spend', 'cpa', 'revenue'].includes(key) && currency ? withMark(compact, currency) : compact
 }
 
 export function PortfolioPerformance() {
@@ -80,10 +82,16 @@ export function PortfolioPerformance() {
 
   // The agency switched the dashboard off, or the contact must first choose a space: nothing to draw.
   if (overview.isError || overview.isPending) {
-    return overview.isPending ? <div data-testid="portfolio-loading" className="mb-6 h-40 animate-pulse rounded-2xl bg-surface-secondary" /> : null
+    return overview.isPending ? <div data-testid="portfolio-loading" className="mb-3 h-40 animate-pulse rounded-2xl bg-surface-secondary" /> : null
   }
 
-  return <Body data={overview.data} t={t} ar={ar} spaceTo={spaceTo} range={range} onRange={setRange} refreshing={overview.isFetching} />
+  return (
+    <>
+      <Body data={overview.data} t={t} ar={ar} spaceTo={spaceTo} range={range} onRange={setRange} refreshing={overview.isFetching} />
+      {/* AUDIENCE-001 — under the performance dashboard, for the same period; absent unless the agency switched it on. */}
+      <PortalAudience {...(range === 30 ? {} : periodOf(range))} />
+    </>
+  )
 }
 
 /** The last N days ending today, as the endpoint reads them (local calendar dates). */
@@ -111,7 +119,7 @@ function Body({ data, t, ar, spaceTo, range, onRange, refreshing }: { data: Port
   const hasAnything = Object.values(data.kpis).some((v) => v !== null && v !== 0)
 
   return (
-    <section data-testid="portfolio-performance" className={`mb-6 transition-opacity ${refreshing ? 'opacity-60' : ''}`}>
+    <section data-testid="portfolio-performance" className={`mb-3 transition-opacity ${refreshing ? 'opacity-60' : ''}`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-heading text-lg font-extrabold text-text-primary">{t.title}</h2>
         <div className="flex gap-1" role="group" aria-label={ar ? 'الفترة' : 'Period'} data-testid="portfolio-range">
@@ -169,7 +177,7 @@ function Body({ data, t, ar, spaceTo, range, onRange, refreshing }: { data: Port
 
       {data.trend !== undefined && data.trend.length > 1 && <PortalTrend trend={data.trend} days={data.period.days} />}
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
         {data.platforms.length > 0 && (
           <div data-testid="portfolio-platforms" className="rounded-2xl border border-border bg-surface p-4">
             <h3 className="mb-2 text-sm font-bold text-text-primary">{t.platforms}</h3>
@@ -190,7 +198,7 @@ function Body({ data, t, ar, spaceTo, range, onRange, refreshing }: { data: Port
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {data.campaigns && data.campaigns.total > 0 && (
             <div data-testid="portfolio-campaigns" className="rounded-2xl border border-border bg-surface p-4">
               <div className="mb-2 flex items-center justify-between">

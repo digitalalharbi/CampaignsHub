@@ -112,7 +112,7 @@ describe('one KPI set, both directions', () => {
     { label: 'Results', ar: 'النتائج', value: '1,204' },
     { label: 'CPA', ar: 'تكلفة النتيجة', value: '21 SAR' },
     { label: 'ROAS', ar: 'العائد', value: '15.36×' },
-    { label: 'CTR', ar: 'نسبة النقر', value: '2.4%' },
+    { label: 'CTR', ar: 'معدل النقر', value: '2.4%' },
   ]
 
   const renderSet = (locale: 'ar' | 'en') =>
@@ -198,8 +198,27 @@ describe('a card is the same height whether or not it carries a hint or a pill',
     const withPill = cardOf({ label: 'CPA', value: '33 SAR', trailing: <span>2%</span> })
     const without = cardOf({ label: 'Budget', value: '250K SAR' })
 
-    expect(withPill.firstElementChild?.className).toMatch(/min-h-6/)
-    expect(without.firstElementChild?.className).toMatch(/min-h-6/)
+    // The label line is reserved on the LABEL itself since the label, value and movement share one wrapping row
+    // (label → value → movement in the DOM, CI-REPAIR PR #1071) — the first child of that row is the label.
+    expect(withPill.firstElementChild?.firstElementChild?.className).toMatch(/min-h-6/)
+    expect(without.firstElementChild?.firstElementChild?.className).toMatch(/min-h-6/)
+  })
+
+  it('reads label, value, then movement — a percentage never trails a cost label in the page text', () => {
+    const card = cardOf({ label: 'CPA', value: '33 SAR', trailing: <span>2%</span> })
+
+    expect(card.textContent).toBe('CPA33 SAR2%')
+  })
+
+  it('keeps the two-row geometry: the movement box is trimmed, and a trailing that renders nothing leaves no box', () => {
+    // The trim is what keeps a WRAPPED movement adding what the old row added (GA4 print fit floor, CI PR #1071).
+    const withPill = cardOf({ label: 'CPA', value: '33 SAR', trailing: <span>2%</span> })
+    expect(withPill.firstElementChild?.lastElementChild?.className).toMatch(/-my-\[4\.5px\]/)
+
+    const Nothing = () => null
+    const empty = cardOf({ label: 'CPA', value: '33 SAR', trailing: <Nothing /> })
+    expect(empty.firstElementChild?.lastElementChild?.className).toMatch(/empty:hidden/)
+    expect(empty.firstElementChild?.lastElementChild?.childElementCount).toBe(0)
   })
 
   it('reserves the hint row, so a card without a hint matches one with', () => {

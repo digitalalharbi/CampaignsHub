@@ -15,6 +15,7 @@ use App\Domains\Influencers\Models\InfluencerTrackingAsset;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\IntegrationCredential;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Support\DemoAccountSelection;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -107,6 +108,8 @@ final class DemoCommerceSeeder extends Seeder
         }
 
         $store = $this->store($tenant, $project);
+        // A store is assigned through the same binding an ad account is, or its orders are not this project's (COMMERCE-PROJECT-001).
+        DemoAccountSelection::bind((string) $project->id, (string) $store->id, 'salla', 'ecommerce');
         $products = $this->products($tenant, $project, $store);
         $campaigns = ExternalCampaign::withoutGlobalScopes()
             ->where('project_id', $project->id)

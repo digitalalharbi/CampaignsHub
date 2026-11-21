@@ -1,5 +1,6 @@
-import { formatMoneyReading, type MoneyTotals, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
-import { formatFixed, formatNumber } from '@/lib/numerals'
+import { formatMoneyParts, formatMoneyReading, moneyParts, type MoneyTotals, readCostPer, readMoney, readRoas } from '@/lib/money/contract'
+import { withMark } from '@/lib/money/mark'
+import { formatFixed, formatNumber, numberFormatter } from '@/lib/numerals'
 
 /**
  * The display formatters — NUMERAL-PREFERENCE-001.
@@ -99,7 +100,7 @@ export function money(n: number | null | undefined, currency: string | null | un
    * number wearing a label, and the reader has no way to tell. Where a surface genuinely cannot
    * reach the currency, the figure goes out bare and the surface's own copy says what it is.
    */
-  return currency ? `${compact(n)} ${currency}` : compact(n)
+  return withMark(compact(n), currency)
 }
 
 /**
@@ -137,7 +138,7 @@ export function moneyExact(n: number | null | undefined, currency: string | null
    * An unknown currency prints NO currency, never a guessed one and never a placeholder: «237.90»
    * is incomplete and reads as incomplete, which is the honest state.
    */
-  return currency ? `${figure} ${currency}` : figure
+  return withMark(figure, currency)
 }
 
 export function num(n: number | null | undefined): string {
@@ -199,10 +200,10 @@ export function wholeMoney(n: number | null | undefined, currency?: string): str
   if (n === null || n === undefined) return '\u2014'
 
   const figure = Number.isInteger(n)
-    ? n.toLocaleString('en-US')
-    : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? numberFormatter('en-US').format(n)
+    : numberFormatter('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 
-  return currency ? `${figure} ${currency}` : figure
+  return withMark(figure, currency)
 }
 
 /**
@@ -260,6 +261,25 @@ export function moneyFromTotals(
  */
 export function rowMoney(row: MoneyTotals, key: 'spend' | 'revenue', currency: string | null = null): string {
   return formatMoneyReading(readMoney(row, key, currency, true), money)
+}
+
+/**
+ * LIVE-LINK-PARTIAL-MONEY-001 — `rowMoney` for a client link: a partial scope prints both of its amounts instead of «—».
+ * Operator surfaces keep `rowMoney` (fail closed); only the shared link, which has no other view, uses this.
+ */
+export function liveRowMoney(row: MoneyTotals, key: 'spend' | 'revenue', currency: string | null = null): string {
+  const parts = moneyParts(row, key)
+
+  return parts === null ? rowMoney(row, key, currency) : formatMoneyParts(parts, currency, money)
+}
+
+/** `moneyFromTotals` for a client link — see `liveRowMoney`. The note stays, so the card can say what is pending. */
+export function liveMoneyFromTotals(totals: MoneyTotals, key: 'spend' | 'revenue', ar: boolean, reportingCurrency: string | null = null): MoneyReading {
+  const parts = moneyParts(totals, key)
+  if (parts === null) return moneyFromTotals(totals, key, ar, reportingCurrency)
+  const r = readMoney(totals, key, reportingCurrency, ar)
+
+  return { text: formatMoneyParts(parts, reportingCurrency, money), withheld: true, note: r.note, exact: null }
 }
 
 export function rowCostPer(

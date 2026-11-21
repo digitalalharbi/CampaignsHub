@@ -24,6 +24,8 @@ final class ClientWorkspaceResource extends JsonResource
             'limits' => $this->limits ?? [],
             'custom_domain' => $this->custom_domain,
             'projects_count' => $this->whenCounted('projects'),
+            // CLIENT-SWITCHER-LOGO-001 — set by the list only: the client's own logo, or null (the switcher draws its initial).
+            'logo_url' => $this->when(array_key_exists('logo_url', $this->resource->getAttributes()), fn () => $this->resource->getAttributes()['logo_url']),
             'created_at' => optional($this->created_at)->toIso8601String(),
         ];
     }

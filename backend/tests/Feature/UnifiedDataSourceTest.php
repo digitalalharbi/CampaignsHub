@@ -30,6 +30,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -46,6 +47,7 @@ use Tests\TestCase;
  */
 final class UnifiedDataSourceTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -63,6 +65,11 @@ final class UnifiedDataSourceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        /*
+         * A daytime clock. These tests seed «yesterday» as the UTC date, while an alert measures yesterday in Riyadh
+         * (DIGESTS-YESTERDAY-BY-OBJECTIVE-001): from 21:00 to 24:00 UTC the two days differ and the fixture is not yesterday.
+         */
+        Carbon::setTestNow(Carbon::parse('2026-11-12 09:00:00', 'UTC'));
         $this->seed(PermissionSeeder::class);
 
         $this->tenant = Tenant::create(['name' => 'U', 'slug' => 'u-'.uniqid(), 'status' => 'active']);
@@ -79,6 +86,7 @@ final class UnifiedDataSourceTest extends TestCase
         $this->project = Project::create(['client_workspace_id' => $workspace->id, 'name' => 'P', 'status' => 'active']);
 
         $this->adAccount = $this->account('snapchat', 'ad_account');
+        $this->bindSeededAccount((string) $this->project->id, $this->adAccount->getKey());
 
         $this->campaign = UnifiedCampaign::create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
@@ -94,6 +102,12 @@ final class UnifiedDataSourceTest extends TestCase
         ]);
 
         app(TenantContext::class)->forget();
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
     }
 
     // ── One engine behind the alerts and the dashboard ───────────────────────────────────────
@@ -123,7 +137,8 @@ final class UnifiedDataSourceTest extends TestCase
             'threshold' => ['pct' => 25, 'days' => 7], 'cooldown_minutes' => 60, 'active' => true,
         ]);
 
-        app(AlertEvaluator::class)->evaluateRule($rule, Carbon::parse('2026-07-31'));
+        // 09:00 Riyadh on 28 Jul: «yesterday» is the 27th, the day it last spent, so the campaign is judged (ALERT-DELIVERING-YESTERDAY-001).
+        app(AlertEvaluator::class)->evaluateRule($rule, Carbon::parse('2026-07-28 06:00:00', 'UTC'));
 
         $event = AlertEvent::withoutGlobalScopes()->where('type', 'roas_drop')->firstOrFail();
 
@@ -137,7 +152,8 @@ final class UnifiedDataSourceTest extends TestCase
     /** Budget alerts spend the same figure the budget pacing screen spends. */
     public function test_the_budget_alert_and_the_budget_screen_spend_the_same_figure(): void
     {
-        $this->seedMetrics(Carbon::today()->subDays(2)->toDateString(), spend: 950, revenue: 100);
+        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a budget alert is for a campaign that delivered yesterday (Riyadh).
+        $this->seedMetrics(Carbon::today('Asia/Riyadh')->subDay()->toDateString(), spend: 950, revenue: 100);
 
         $this->holdingTenant((string) $this->tenant->id);
 
@@ -189,6 +205,18 @@ final class UnifiedDataSourceTest extends TestCase
         $this->assertSame('stale', $states['salla']);
         $this->assertSame('stale', $freshness['state']);
         $this->assertSame((string) $store->getKey(), collect($freshness['sources'])->firstWhere('kind', 'store')['account_id']);
+    }
+
+    /**
+     * A-8 — «آخر مزامنة» is the latest successful run even when that run stored no figure.
+     */
+    public function test_last_sync_by_project_counts_a_successful_run_that_stored_nothing(): void
+    {
+        $this->seedSuccessfulRun('snapchat', Carbon::now()->subHours(3));
+
+        $out = app(DataFreshnessService::class)->lastSyncByProject((string) $this->tenant->id, [(string) $this->project->id]);
+
+        $this->assertArrayHasKey((string) $this->project->id, $out, 'no stored figure, yet the column must not read «—»');
     }
 
     /**
@@ -267,6 +295,32 @@ final class UnifiedDataSourceTest extends TestCase
         $sources = app(DataFreshnessService::class)->sources((string) $this->tenant->id, [(string) $this->project->id], ['snapchat']);
 
         $this->assertSame('fresh', collect($sources)->firstWhere('provider', 'snapchat')['state']);
+    }
+
+    /**
+     * ANALYTICS-SYNC-TRUTH-001 — a successful sync that stored nothing is still a sync.
+     *
+     * The head of Analytics read the newest stored figure, so an account with zero delivery read «no data has
+     * arrived» while its runs succeeded. `last_success_at` carries the run itself.
+     */
+    public function test_freshness_endpoint_reports_last_success_when_the_run_stored_nothing(): void
+    {
+        $at = Carbon::now()->subHour();
+        MetricSyncRun::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,
+            'external_account_id' => $this->adAccount->getKey(), 'provider' => 'snapchat',
+            'status' => 'no_data', 'window_start' => $at->toDateString(), 'window_end' => $at->toDateString(),
+            'metrics_upserted' => 0, 'attempts' => 1, 'started_at' => $at, 'finished_at' => $at,
+        ]);
+
+        $res = $this->actingAs($this->operator, 'sanctum')
+            ->getJson($this->url('metrics/freshness?from='.Carbon::today()->subDays(7)->toDateString().'&to='.Carbon::today()->toDateString()))
+            ->assertOk();
+
+        $row = collect($res->json('data'))->firstWhere('provider', 'snapchat');
+        $this->assertNotNull($row['last_success_at'], 'a quiet-but-synced account read as never synced');
+        $this->assertNull($row['data_freshness_at']);
+        $this->assertNotNull($res->json('meta.summary.last_success_at'));
     }
 
     /** A partial sync is not fresh, and the source says which grain it did not deliver. */
@@ -409,7 +463,8 @@ final class UnifiedDataSourceTest extends TestCase
         app(UpsertDailyMetrics::class)->handle([
             $this->metric($date, 'spend', $spend),
             $this->metric($date, 'revenue', $revenue),
-            $this->metric($date, 'conversions', 0),
+            // ALERT-CRITERIA-001 — a ROAS comparison needs a previous window with enough orders to compare against.
+            $this->metric($date, 'conversions', 10),
         ]);
 
         app(TenantContext::class)->forget();
@@ -455,6 +510,7 @@ final class UnifiedDataSourceTest extends TestCase
 
         $store = $this->account('salla', 'store');
         $store->forceFill(['last_synced_at' => $lastSyncedAt ?? Carbon::now()])->save();
+        $this->bindSeededAccount((string) $this->project->id, $store->getKey());
 
         CommerceOrder::withoutGlobalScopes()->create([
             'tenant_id' => $this->tenant->id, 'project_id' => $this->project->id,

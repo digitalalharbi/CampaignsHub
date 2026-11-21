@@ -1,3 +1,5 @@
+import type { FxConversion } from '@/lib/money/fx'
+
 export interface UnifiedCampaign {
   id: string
   project_id: string
@@ -11,6 +13,8 @@ export interface UnifiedCampaign {
   needs_attention?: boolean
   total_budget: number | null
   budget_currency: string
+  /** FX-APPLY-001 — the budget converted to the reader's display currency by the backend's FxEngine (render with FxAmount). */
+  budget_fx?: FxConversion | null
   starts_on: string | null
   ends_on: string | null
   primary_conversion_purpose: string | null

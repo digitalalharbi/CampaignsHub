@@ -63,10 +63,10 @@ final class ConversionKinds
             case self::GA4:
                 $id = strtoupper(trim((string) ($raw['measurement_id'] ?? '')));
                 if (preg_match('/^G-[A-Z0-9]{6,12}$/', $id) !== 1) {
-                    throw new InvalidArgumentException('A GA4 destination needs its measurement id (G-XXXXXXXXXX).');
+                    throw new InvalidArgumentException('A Google Analytics destination needs its measurement id (G-XXXXXXXXXX).');
                 }
                 if (preg_match('/^[a-z][a-z0-9_]{0,39}$/', $event) !== 1) {
-                    throw new InvalidArgumentException('A GA4 event name is lowercase letters, digits and underscores.');
+                    throw new InvalidArgumentException('A Google Analytics event name is lowercase letters, digits and underscores.');
                 }
 
                 return ['measurement_id' => $id, 'event_name' => $event];

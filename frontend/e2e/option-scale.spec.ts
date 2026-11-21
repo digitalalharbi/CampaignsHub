@@ -32,13 +32,36 @@ test.describe('the campaign picker asks the server', () => {
     await page.goto('/agency/analytics')
     await expect(page.locator('main')).toBeVisible({ timeout: 30000 })
 
+    /*
+      `count()` does not wait, so every decision below is taken only after the thing it reads has
+      been awaited. The bar is drawn whole (an axis with no options is disabled in place, never
+      removed — CLICK-STABLE-001), so once it is visible an absent picker really is absent.
+    */
+    await expect(page.getByTestId('analytics-filters')).toBeVisible({ timeout: 30000 })
+
     const picker = page.getByTestId('analytics-campaign')
     if (await picker.count() === 0) test.skip(true, 'this project offers no campaign filter')
 
-    await picker.click()
+    /* `click()` waits for the button to be enabled, i.e. for its first options page to land. */
+    /*
+      Firefox can take the first click before the button's handler is attached (run 43668600833: the
+      click landed, `aria-expanded` stayed «false»). Click again only while it is still closed, so a
+      click that did open it is never undone; the assertion is the same — the picker opens.
+    */
+    await expect(async () => {
+      if ((await picker.getAttribute('aria-expanded')) !== 'true') await picker.click()
+      await expect(picker).toHaveAttribute('aria-expanded', 'true', { timeout: 2_000 })
+    }).toPass({ timeout: 20_000 })
 
-    const search = page.getByRole('searchbox', { name: /بحث|search/i }).first()
-    if (await search.count() === 0) test.skip(true, 'the option list is short enough to need no search box')
+    /*
+      In server mode the search box is always drawn (FilterBar), so its absence is a regression of
+      the very claim this spec reads — a failure, not a skip. It used to be a non-waiting `count()`
+      here, which on a slow render (webkit, run 43087054975) skipped the test instead of running it.
+    */
+    const popover = page.getByTestId('analytics-campaign-options')
+    await expect(popover).toBeVisible()
+    const search = popover.getByRole('searchbox', { name: /بحث|search/i })
+    await expect(search).toBeVisible()
 
     asked.length = 0
     await search.fill('Ramadan')

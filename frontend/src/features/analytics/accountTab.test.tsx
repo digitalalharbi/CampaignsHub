@@ -42,6 +42,7 @@ function route(accounts: unknown[]) {
 
 async function openAccounts() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Platforms' }))
   fireEvent.click(await screen.findByRole('tab', { name: 'Accounts' }))
 }
 
@@ -84,7 +85,7 @@ describe('the account analysis tab', () => {
 
     await openAccounts()
 
-    expect(await screen.findByTestId('account-table')).toHaveTextContent('412.50 USD')
+    expect(await screen.findByTestId('account-table')).toHaveTextContent('412.50 $')
   })
 
   /**

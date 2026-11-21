@@ -44,8 +44,9 @@ export interface StoreProvider {
   supports_abandoned_carts: boolean
 }
 
-export function listStoreProviders(): Promise<StoreProvider[]> {
-  return getData<StoreProvider[]>('/commerce/stores')
+/** INTEG-PROJECT-SPACE-001 — with a project, only that project's stores and the ones nobody has taken yet. */
+export function listStoreProviders(projectId?: string | null): Promise<StoreProvider[]> {
+  return getData<StoreProvider[]>(typeof projectId === 'string' ? `/commerce/stores?project_id=${projectId}` : '/commerce/stores')
 }
 
 /**
@@ -58,11 +59,20 @@ export function listStoreProviders(): Promise<StoreProvider[]> {
 export async function startStoreOAuth(
   provider: string,
   clientWorkspaceId?: string | null,
+  /**
+   * INTEG-PROJECT-LINK-STORES-GA4-001 — the PROJECT this authorisation is opened for, and the portal whose
+   * project page it returns to. Both ride the server's single-use state; the address that comes back is
+   * never believed about either.
+   */
+  journey?: { projectId: string; returnPortal: 'app' | 'agency' } | null,
 ): Promise<{ authorization_url: string }> {
   await ensureCsrfCookie()
   return postData<{ authorization_url: string }>(
     `/integrations/commerce/${provider}/oauth/start`,
-    clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {},
+    {
+      ...(clientWorkspaceId ? { client_workspace_id: clientWorkspaceId } : {}),
+      ...(journey ? { project_id: journey.projectId, return_portal: journey.returnPortal } : {}),
+    },
   )
 }
 

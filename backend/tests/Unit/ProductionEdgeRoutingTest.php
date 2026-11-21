@@ -81,6 +81,26 @@ final class ProductionEdgeRoutingTest extends TestCase
         );
     }
 
+    /**
+     * CREATIVE-PREVIEWS-001 — the cached covers reach Laravel too, on the edge AND on the dev/gate proxy.
+     *
+     * `CoverCache::urlFor()` links a creative's copied cover root-relative, `/media/covers/ab/….jpg`, and only the
+     * API serves it. The SPA's nginx had a block for `/demo/` and none for this, so every cached cover — all 246
+     * Meta covers, 342 TikTok, 1,293 Snapchat posters on Production — was answered with `index.html` and drew as
+     * a broken image: the Owner's 2026-11-07 «no preview or cover for TikTok and Meta».
+     */
+    public function test_cached_creative_covers_are_routed_to_the_backend(): void
+    {
+        $this->assertMatchesRegularExpression('~location\s+/media/covers/\s*\{~', $this->conf, 'without a /media/covers/ block the SPA fallback answers a cover with index.html');
+
+        $block = (string) preg_replace('~^.*location\s+/media/covers/\s*\{~s', '', $this->conf);
+        $block = (string) preg_replace('~\}.*$~s', '', $block);
+        $this->assertStringContainsString('proxy_pass http://backend:8000', $block);
+
+        $vite = (string) file_get_contents(dirname(__DIR__, 3).'/frontend/vite.config.ts');
+        $this->assertMatchesRegularExpression("~'/media/covers':\s*\{\s*target:\s*API_TARGET~", $vite, 'the dev server and the gate\'s `vite preview` must forward covers as well');
+    }
+
     public function test_the_short_link_hop_is_routed_to_the_backend(): void
     {
         $this->assertMatchesRegularExpression(
@@ -157,6 +177,24 @@ final class ProductionEdgeRoutingTest extends TestCase
                 $this->assertStringContainsString($header, $block, "{$header} must be repeated where add_header replaces the server-level set");
             }
         }
+    }
+
+    /**
+     * PWA-MANIFEST-MIME-001 — Production served `/manifest.webmanifest` as `application/octet-stream` (no `.webmanifest` entry in the
+     * image's stock `mime.types`), beside `nosniff`. The manifest gets its own exact location with the registered type.
+     */
+    public function test_the_web_app_manifest_is_served_as_manifest_json(): void
+    {
+        $manifest = $this->block('location\s+=\s+/manifest\.webmanifest\s*\{');
+        $this->assertMatchesRegularExpression('~types\s*\{\s*application/manifest\+json\s+webmanifest;\s*\}~', $manifest);
+        $this->assertStringContainsString('try_files $uri =404;', $manifest, 'a missing manifest is a 404, not index.html');
+        foreach (['X-Frame-Options', 'X-Content-Type-Options', 'Referrer-Policy'] as $header) {
+            $this->assertStringContainsString($header, $manifest, "{$header} must be repeated where add_header replaces the server-level set");
+        }
+        // The file the location serves is the one the page links.
+        $root = dirname(__DIR__, 3);
+        $this->assertFileExists($root.'/frontend/public/manifest.webmanifest');
+        $this->assertStringContainsString('href="/manifest.webmanifest"', (string) file_get_contents($root.'/frontend/index.html'));
     }
 
     private function block(string $opening): string

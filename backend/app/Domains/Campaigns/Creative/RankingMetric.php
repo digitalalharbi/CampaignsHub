@@ -67,7 +67,7 @@ final class RankingMetric
             // Traffic
             'clicks' => [$up, false, 'النقرات', 'Clicks'],
             'landing_page_views' => [$up, false, 'زيارات الصفحة', 'Landing page views'],
-            'ctr' => [$up, false, 'نسبة النقر', 'CTR'],
+            'ctr' => [$up, false, 'معدل النقر', 'CTR'],
             'cpc' => [$down, true, 'تكلفة النقرة', 'CPC'],
 
             // Engagement
@@ -88,10 +88,10 @@ final class RankingMetric
             'conversion_rate' => [$up, false, 'معدل التحويل', 'Conversion rate'],
 
             // Sales
-            'purchases' => [$up, false, 'المشتريات', 'Purchases'],
+            'purchases' => [$up, false, 'الطلبات', 'Purchases'],
             'conversions' => [$up, false, 'التحويلات', 'Conversions'],
             'revenue' => [$up, true, 'الإيراد', 'Revenue'],
-            'roas' => [$up, false, 'العائد على الإنفاق', 'ROAS'],
+            'roas' => [$up, false, 'معدل العائد', 'ROAS'],
             'cpa' => [$down, true, 'تكلفة النتيجة', 'CPA'],
             'aov' => [$up, true, 'متوسط قيمة الطلب', 'AOV'],
 
@@ -176,6 +176,35 @@ final class RankingMetric
             ObjectiveFamily::Sales => ['primary' => 'roas', 'secondary' => ['cpa', 'purchases', 'revenue', 'aov', 'conversion_rate']],
             ObjectiveFamily::App => ['primary' => 'cpi', 'secondary' => ['installs', 'registrations', 'in_app_events']],
             ObjectiveFamily::Unknown => ['primary' => null, 'secondary' => ['spend', 'impressions', 'clicks']],
+        };
+    }
+
+    /**
+     * CONTENT-FORMAT-COMPARISON-001 — the COST each objective's result is judged on, in fallback order.
+     *
+     * The format comparison answers «what does a result cost in each format, for THIS job», so its verdict is a cost
+     * per result rather than the objective's ranking primary. That difference is deliberate for sales: the primary is
+     * ROAS, and a return computed at creative grain divides partially-reported revenue by fully-attributed spend —
+     * the contradiction CONTENT-FORMAT-ROAS-REMOVED-001 removed. A cost per conversion divides spend by the
+     * conversions the platform reported at that same grain, and is never projected from the campaign.
+     *
+     * Every key here is a declared metric of this registry (so its direction is this registry's), and a ratio
+     * `CreativeMetrics` derives (so its result is that ratio's own denominator). `Unknown` has none: an unclassified
+     * campaign has no result to price.
+     *
+     * @return list<string>
+     */
+    public static function costPerResult(ObjectiveFamily $family): array
+    {
+        return match ($family) {
+            ObjectiveFamily::Awareness => ['cpm'],
+            ObjectiveFamily::Traffic => ['cpc'],
+            ObjectiveFamily::Engagement => ['cpe'],
+            ObjectiveFamily::Video => ['cost_per_view'],
+            ObjectiveFamily::Leads => ['cpl', 'cpa'],
+            ObjectiveFamily::Sales => ['cpa'],
+            ObjectiveFamily::App => ['cpi'],
+            ObjectiveFamily::Unknown => [],
         };
     }
 }

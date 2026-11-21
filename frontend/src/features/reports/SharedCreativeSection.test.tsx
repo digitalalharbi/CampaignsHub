@@ -562,3 +562,65 @@ describe('SharedCreativeSection', () => {
     expect(screen.getByText('Ad library')).toBeTruthy()
   })
 })
+
+/**
+ * CREATIVE-VIEWER-FORMATS-001 — the client's saved report draws the cover the live link draws.
+ *
+ * Its tile asked `posterSource`, which is null for a film with no still, so a Snapchat collection
+ * whose top snap is a film printed a grey square here while the live link drew its first frame; a
+ * ChatGPT chat card printed «no file» over its own words; and the viewer ignored a cached still.
+ */
+describe('SharedCreativeSection covers every format', () => {
+  const FILM = 'https://storage.example.test/combine_snaps/top-snap.mp4'
+  const film = card({
+    id: 'cr-film',
+    name: 'Collection film',
+    format: 'collection',
+    provider: 'snapchat',
+    preview: { state: 'available', kind: 'collection', image_url: null, video_url: FILM, thumbnail_url: null, expires_at: null, note_ar: null, note_en: null },
+  })
+  const chat = card({
+    id: 'cr-chat',
+    name: 'Chat card',
+    format: 'chat_card',
+    provider: 'openai_ads',
+    preview: {
+      state: 'unavailable', kind: 'other', image_url: null, video_url: null, thumbnail_url: null, expires_at: null,
+      note_ar: null, note_en: null, text: { headline: 'Silver rings', body: 'Hand-finished' },
+    } as CreativeCard['preview'],
+  })
+  const cached = card({
+    id: 'cr-cached',
+    name: 'Cached still',
+    provider: 'tiktok',
+    preview: {
+      state: 'available', kind: 'image', image_url: 'https://p16-sign.tiktokcdn.com/a.jpg?x-expires=1', video_url: null,
+      thumbnail_url: '/media/covers/ab/cover.jpg', expires_at: null, note_ar: null, note_en: null,
+    },
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSummary.mockResolvedValue(summary())
+    mockLibrary.mockResolvedValue(page({ creatives: [film, chat, cached], total: 3 }))
+  })
+
+  it('draws a film’s first frame and a chat card’s words on the library tiles', async () => {
+    render('detailed')
+    await screen.findByTestId('shared-creative-library')
+
+    const frame = await screen.findByTestId('shared-creative-poster-cr-film-first-frame')
+    expect(frame.getAttribute('src')).toBe(`${FILM}#t=0.1`)
+    expect(screen.getByTestId('shared-creative-poster-cr-chat-absent')).toHaveAttribute('data-cover', 'text-card')
+    expect(screen.getByTestId('shared-creative-poster-cr-chat-absent')).toHaveTextContent('Silver rings')
+  })
+
+  it('opens a cached still in the viewer instead of a sentence', async () => {
+    mockDetail.mockResolvedValue(sharedDetail({ creative: { ...sharedDetail().creative, ...cached } as SharedCreativeDetail['creative'] }))
+
+    render('detailed', 'en', '/reports/share/tok?creative=cr-cached')
+    const detail = await screen.findByTestId('shared-creative-detail')
+
+    expect(detail.querySelector('img[src="/media/covers/ab/cover.jpg"]')).not.toBeNull()
+  })
+})

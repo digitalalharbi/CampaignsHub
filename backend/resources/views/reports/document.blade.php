@@ -29,20 +29,20 @@
   <h1>{{ $report->name }}</h1>
   <div class="muted">
     {{ $report->type }} ·
-    {{ data_get($data, 'period.from') }} → {{ data_get($data, 'period.to') }} ·
+    {{ data_get($data, 'period.from') && data_get($data, 'period.to') ? \App\Support\PeriodLabel::range((string) data_get($data, 'period.from'), (string) data_get($data, 'period.to'), data_get($data, 'disclaimer.locale_default', 'ar') === 'en' ? 'en' : 'ar') : '' }} ·
     {{ $report->currency }}
     @if($report->is_demo) <span class="badge">Demo</span> @endif
   </div>
 
   @php $k = $data['kpis'] ?? []; @endphp
-  <h2>مؤشرات الأداء الرئيسية</h2>
+  <h2>ملخص الأداء</h2>
   <table class="kpis">
     <tr>
-      <td><div class="label">الإنفاق</div><div class="val">{{ number_format($k['spend'] ?? 0) }} {{ $report->currency }}</div></td>
-      <td><div class="label">الإيرادات</div><div class="val">{{ number_format($k['revenue'] ?? 0) }} {{ $report->currency }}</div></td>
+      <td><div class="label">الإنفاق</div><div class="val">{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($k['spend'] ?? 0), $report->currency) }}</div></td>
+      <td><div class="label">الإيرادات</div><div class="val">{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($k['revenue'] ?? 0), $report->currency) }}</div></td>
       <td><div class="label">ROAS</div><div class="val">{{ isset($k['roas']) ? number_format($k['roas'],2).'×' : '—' }}</div></td>
       <td><div class="label">النتائج</div><div class="val">{{ number_format($k['conversions'] ?? 0) }}</div></td>
-      <td><div class="label">CPA</div><div class="val">{{ isset($k['cpa']) ? number_format($k['cpa']).' '.$report->currency : '—' }}</div></td>
+      <td><div class="label">CPA</div><div class="val">{{ isset($k['cpa']) ? \App\Domains\Funding\Support\FundingMoney::withMark(number_format($k['cpa']), $report->currency) : '—' }}</div></td>
     </tr>
   </table>
 
@@ -58,7 +58,7 @@
     <thead><tr><th>المنصة</th><th>الإنفاق</th><th>الإيرادات</th><th>النتائج</th><th>ROAS</th><th>CPA</th></tr></thead>
     <tbody>
       @foreach(($data['platforms'] ?? []) as $p)
-      <tr><td>{{ $p['provider'] }}</td><td>{{ number_format($p['spend']) }}</td><td>{{ number_format($p['revenue']) }}</td><td>{{ number_format($p['conversions']) }}</td><td>{{ isset($p['roas']) ? number_format($p['roas'],2).'×':'—' }}</td><td>{{ isset($p['cpa']) ? number_format($p['cpa']):'—' }}</td></tr>
+      <tr><td>{{ $p['provider'] }}</td><td>{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($p['spend']), $report->currency) }}</td><td>{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($p['revenue']), $report->currency) }}</td><td>{{ number_format($p['conversions']) }}</td><td>{{ isset($p['roas']) ? number_format($p['roas'],2).'×':'—' }}</td><td>{{ isset($p['cpa']) ? \App\Domains\Funding\Support\FundingMoney::withMark(number_format($p['cpa']), $report->currency):'—' }}</td></tr>
       @endforeach
     </tbody>
   </table>
@@ -68,7 +68,7 @@
     <thead><tr><th>الحملة</th><th>المنصة</th><th>الإنفاق</th><th>الإيرادات</th><th>ROAS</th></tr></thead>
     <tbody>
       @foreach(array_slice($data['campaigns'] ?? [], 0, 10) as $c)
-      <tr><td>{{ $c['campaign_name'] ?? '—' }}</td><td>{{ $c['provider'] ?? '' }}</td><td>{{ number_format($c['spend']) }}</td><td>{{ number_format($c['revenue']) }}</td><td>{{ isset($c['roas']) ? number_format($c['roas'],2).'×':'—' }}</td></tr>
+      <tr><td>{{ $c['campaign_name'] ?? '—' }}</td><td>{{ $c['provider'] ?? '' }}</td><td>{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($c['spend']), $report->currency) }}</td><td>{{ \App\Domains\Funding\Support\FundingMoney::withMark(number_format($c['revenue']), $report->currency) }}</td><td>{{ isset($c['roas']) ? number_format($c['roas'],2).'×':'—' }}</td></tr>
       @endforeach
     </tbody>
   </table>
@@ -94,13 +94,13 @@
       ? 'ملاحظة: تُدار الحملات وفق منهجية قائمة على الأداء، وقد تختلف النتائج بحسب الفترة والمنصة ومصدر البيانات ونموذج الإسناد ومرحلة تعلّم الحملة.'
       : 'Note: Campaigns are managed on a performance-based methodology; results may vary by period, platform, data source, attribution model and the campaign learning phase.';
     $fLabels = $fLoc === 'ar'
-      ? ['آخر تحديث', 'الفترة', 'العملة', 'المنطقة الزمنية', 'هدف الحملة']
-      : ['Last updated', 'Period', 'Currency', 'Time zone', 'Campaign objective'];
+      ? ['آخر تحديث للتقرير', 'الفترة', 'العملة', 'المنطقة الزمنية', 'هدف الحملة']
+      : ['Report last updated', 'Period', 'Currency', 'Time zone', 'Campaign objective'];
     $fFrom = data_get($data, 'period.from');
     $fTo = data_get($data, 'period.to');
     $fItems = array_filter([
-      $fLabels[0] => optional($report->generated_at)->format('Y-m-d H:i'),
-      $fLabels[1] => $fFrom && $fTo ? ($fFrom === $fTo ? $fFrom : $fFrom.' → '.$fTo) : null,
+      $fLabels[0] => $report->generated_at?->copy()->timezone(in_array($report->timezone, timezone_identifiers_list(), true) ? $report->timezone : 'Asia/Riyadh')->format('Y-m-d H:i'),
+      $fLabels[1] => $fFrom && $fTo ? \App\Support\PeriodLabel::range((string) $fFrom, (string) $fTo, $fLoc) : null,
       $fLabels[2] => $report->currency,
       $fLabels[3] => $report->timezone,
       $fLabels[4] => $report->campaign_objective ?: null,

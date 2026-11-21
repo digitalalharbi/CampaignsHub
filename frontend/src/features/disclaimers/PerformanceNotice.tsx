@@ -32,7 +32,8 @@ export function PerformanceNotice({
   const [open, setOpen] = useState(false)
   const t = LABELS[locale]
 
-  if (!data) return null
+  // A missing or malformed payload (an unmocked/empty response) renders nothing rather than crashing the page.
+  if (!data || !data.sections) return null
   const on = (k: string) => (data.enabled?.[k] ?? true) === true
   const short = on('short') ? pickText(data.sections.short, locale) : null
   const full = on('full') ? pickText(data.sections.full, locale) : null
@@ -101,13 +102,13 @@ export function PerformanceNotice({
           <p
             data-testid="performance-notice-short"
             data-clamped={open ? 'false' : 'true'}
-            className={`text-[13px] leading-relaxed text-text-secondary ${open ? '' : 'line-clamp-1'}`}
+            className={`text-xs leading-relaxed text-text-secondary ${open ? '' : 'line-clamp-1'}`}
           >
             {short}
           </p>
           {open && hasMore && (
             <div className="mt-2 space-y-2 border-t border-border pt-2">
-              {full && <p className="text-[13px] leading-relaxed text-text-secondary">{full}</p>}
+              {full && <p className="text-xs leading-relaxed text-text-secondary">{full}</p>}
               {freshness && <p className="text-xs leading-relaxed text-text-muted">{freshness}</p>}
             </div>
           )}

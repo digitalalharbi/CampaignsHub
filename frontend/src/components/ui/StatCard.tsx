@@ -1,7 +1,10 @@
 import { createContext, useContext, type ReactNode } from 'react'
 import { Delta } from '@/components/ui/Delta'
 import { useUi } from '@/stores/ui'
-import { CARD_GAP, CARD_PAD, METRIC_HINT, METRIC_LABEL, METRIC_VALUE_DENSE } from '@/styles/scale'
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { InfoTip } from '@/components/fit/InfoTip'
+import { FIT_CARD, FIT_KPI_VALUE } from '@/styles/scale'
+import { CARD_GAP, CARD_PAD, METRIC_HINT, METRIC_LABEL, METRIC_VALUE, METRIC_VALUE_DENSE } from '@/styles/scale'
 
 /**
  * UX-KPI-PRESENTATION-001 — one card, and one grid, for every figure the product leads with.
@@ -95,6 +98,7 @@ export function StatCard({
   delta,
   spark,
   shape = 'auto',
+  lead = false,
   testid,
 }: {
   /**
@@ -155,9 +159,35 @@ export function StatCard({
    * choose is what a labelled figure looks like.
    */
   shape?: 'auto' | 'square'
+  /**
+   * REPORT-WEBSITE-TAB-001 — the group's headline card (Owner: «البطاقات الكبيرة + تحتها البطاقات الصغيرة الفرعية»): the value in the
+   * scale's lead size, the same one `MetricStrip` gives its lead item. The scale decides the size; the surface only says «lead».
+   */
+  lead?: boolean
   testid?: string
 }) {
   const grid = useContext(StatGridContext)
+  const compact = useFitCompact()
+
+  /* AF2 — the compact card of a fitted `/agency` page: label, big figure, movement; the hint is a tooltip. */
+  if (compact) {
+    return (
+      <div data-testid={testid} className={`flex min-w-0 items-center justify-between gap-2 px-3 py-2 ${FIT_CARD}`}>
+        <div className="min-w-0">
+          <span className="flex min-w-0 items-center gap-1 text-xs font-semibold text-text-secondary">
+            {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[tone]}`} aria-hidden />}
+            <span className="truncate">{label}</span>
+            {hint && <InfoTip text={hint} label={hint} />}
+          </span>
+          <span dir="ltr" title={exact} data-testid={testid ? `${testid}-value` : undefined} className={`block truncate text-start ${FIT_KPI_VALUE} ${VALUE_TONE[tone]}`}>{value}</span>
+        </div>
+        {delta ? (
+          <Delta metric={delta.metric} current={delta.current} previous={delta.previous} since={delta.since} testid={testid ? `${testid}-delta` : undefined} />
+        ) : trailing ? <span className="shrink-0 empty:hidden">{trailing}</span> : null}
+      </div>
+    )
+  }
+
   return (
     <div
       data-testid={testid}
@@ -191,32 +221,50 @@ export function StatCard({
         beside a two-word label: it overflowed its card by 10px and scrolled the whole page sideways on Firefox and WebKit — found the day
         the seeded comparison window slid and every PR went red on the same two specs. Wrapping costs nothing on a card whose pill fits.
       */}
-      <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-        <span className={`flex items-center gap-1.5 text-text-secondary ${METRIC_LABEL}`}>
+      {/*
+        ONE wrapping row holds the label, the value and the movement, and the DOM order is label → value → movement while
+        the screen keeps label and movement on the first line (CSS `order`). The DOM order is a reader's order too — page
+        text, a copied block, a screen reader — and label → movement → value read «CPA ↑5% 40 SAR», «تكلفة النتيجة 0% 40 ر.س»:
+        a percentage trailing a cost label, the unit defect `owner-acceptance-content.spec.ts` guards. It surfaced on
+        Analytics → content (CI, PR #1071) the day the default period's comparison window (DATE-RANGE-001) gave the format
+        cards a measured baseline.
+
+        Same geometry as the two-row layout it replaced, measured on the GA4 print deck (where a few pixels decide the fit
+        floor): the label line keeps `min-h-6`; the value keeps its 6px gap (2 + `mt-1`) and its full row. The movement's
+        box is trimmed by `-my-[4.5px]` — half of (24px label line − 15px label text) — so on the label's line it still
+        centres in 24px, and when it WRAPS its line adds pill − 9px, i.e. exactly what the old row added (15px label + 2 +
+        pill instead of the reserved 24). Without the trim a wrapped pill made every GA4 overview tile 9px taller and the
+        slide printed at 0.84 (CI, PR #1071). `empty:hidden`: a trailing component that renders nothing leaves no box.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+        <span className={`order-1 flex min-h-6 items-center gap-1.5 text-text-secondary ${METRIC_LABEL}`}>
           {dot && <span className={`h-2 w-2 shrink-0 rounded-full ${DOT[tone]}`} aria-hidden />}
           {label}
         </span>
-        {delta ? (
-          <Delta
-            metric={delta.metric}
-            current={delta.current}
-            previous={delta.previous}
-            since={delta.since}
-            testid={testid ? `${testid}-delta` : undefined}
-          />
-        ) : (
-          trailing
-        )}
-      </div>
 
-      <span
-        dir="ltr"
-        title={exact}
-        data-testid={testid ? `${testid}-value` : undefined}
-        className={`min-h-9 text-start ${METRIC_VALUE_DENSE} ${VALUE_TONE[tone]}`}
-      >
-        {value}
-      </span>
+        <span
+          dir="ltr"
+          title={exact}
+          data-testid={testid ? `${testid}-value` : undefined}
+          className={`order-3 mt-1 min-h-9 basis-full text-start ${lead ? METRIC_VALUE : METRIC_VALUE_DENSE} ${VALUE_TONE[tone]}`}
+        >
+          {value}
+        </span>
+
+        {delta ? (
+          <span className="order-2 -my-[4.5px] inline-flex">
+            <Delta
+              metric={delta.metric}
+              current={delta.current}
+              previous={delta.previous}
+              since={delta.since}
+              testid={testid ? `${testid}-delta` : undefined}
+            />
+          </span>
+        ) : trailing ? (
+          <span className="order-2 -my-[4.5px] inline-flex empty:hidden">{trailing}</span>
+        ) : null}
+      </div>
 
       {/*
         RESERVED whether or not it draws — the same rule `MetricStrip` follows for its chart row.

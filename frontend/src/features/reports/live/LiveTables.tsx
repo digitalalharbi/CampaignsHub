@@ -1,16 +1,37 @@
 import { ProviderName } from '@/components/ProviderMark'
-import { compact, percent } from '@/features/analytics/format'
+import { compact, liveRowMoney, percent } from '@/features/analytics/format'
+import { moneyState, type MoneyTotals } from '@/lib/money/contract'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { ChartCard } from '@/features/analytics/charts'
 import type { LivePayload } from '../api'
 import type { ReportAd } from '../ReportAdsSection'
 import { spendHiddenByLink, type useLiveMetricReader } from './liveMetrics'
 import { sectionShown } from '../reportSections'
+import { DailyMeasureChart } from './DailyMeasureChart'
 import { asContent } from './LiveContent'
 import { resultWords } from './leadResults'
 
 type Reader = ReturnType<typeof useLiveMetricReader>
 type Row = Record<string, unknown>
+
+/**
+ * PERF-RENDER-001 — a component TYPE declared outside the render, so React can keep its tree.
+ *
+ * `Block` was a `const` inside `TablesView`, which made it a NEW component type on every render.
+ * React compares types by identity, so each re-render of the parent — the refresh dimming, a content
+ * dialog opening, a sort elsewhere — unmounted all four tables and mounted them again from scratch:
+ * every row rebuilt, every `MetricTable` sort state reset to its initial column. Hoisted, the blocks
+ * are updated in place like any other element.
+ */
+function Block({ ar, title, testid, empty, children }: { ar: boolean; title: string; testid: string; empty: boolean; children: React.ReactNode }) {
+  return (
+    <ChartCard title={title}>
+      <div data-testid={testid} className="min-w-0">
+        {empty ? <p className="text-sm text-text-muted">{ar ? 'لا صفوف في هذه الفترة.' : 'No rows in this period.'}</p> : children}
+      </div>
+    </ChartCard>
+  )
+}
 
 const num = (row: Row, key: string): number | null => (typeof row[key] === 'number' ? (row[key] as number) : null)
 
@@ -42,7 +63,8 @@ export function TablesView({
   const cost = words.cost
   const dash = '—'
 
-  const days = (payload.timeseries ?? []) as Row[]
+  /* LIVE-LINK-DAILY-LOG-001 — the ledger is days, whatever grain the chart was bucketed to. */
+  const days = ((payload.daily_rows ?? []).length > 0 ? payload.daily_rows : payload.timeseries ?? []) as Row[]
   const platforms = (payload.platforms ?? []) as Row[]
   const accounts = ((payload as { accounts?: Row[] }).accounts ?? []) as Row[]
   // The roster nests each creative's figures under `metrics`; the ranked lists carry them at the top level.
@@ -81,7 +103,13 @@ export function TablesView({
     }
   }
   const sortIndex = (keys: string[], preferred: string): number => Math.max(0, keys.indexOf(preferred))
-  const spendCol = <T,>(read: (item: T) => Row): Col<T> | null => (money ? { key: 'spend', head: ar ? 'الإنفاق' : 'Spend', cell: (x) => moneyCell(num(read(x), 'spend')), value: (x) => num(read(x), 'spend') } : null)
+  // LIVE-LINK-PARTIAL-MONEY-001 — a row whose spend is partly or wholly awaiting a rate prints its amounts in their own units, never «—».
+  const spendCell = (row: Row) => {
+    const state = moneyState(row as MoneyTotals, 'spend').state
+
+    return state === 'partial' || state === 'complete_withheld' ? liveRowMoney(row as MoneyTotals, 'spend', payload.currency ?? null) : moneyCell(num(row, 'spend'))
+  }
+  const spendCol = <T,>(read: (item: T) => Row): Col<T> | null => (money ? { key: 'spend', head: ar ? 'الإنفاق' : 'Spend', cell: (x) => spendCell(read(x)), value: (x) => num(read(x), 'spend') } : null)
   const metricCol = <T,>(key: string, head: string, field: string, read: (item: T) => Row): Col<T> => ({ key, head, cell: (x) => compact(num(read(x), field)), value: (x) => num(read(x), field) })
   /*
    * NASEL 2026-10-29 — with Results configured, every table reads them from the one resolver: a platform's configured events and their cost
@@ -99,7 +127,7 @@ export function TablesView({
     { key: 'day', head: ar ? 'اليوم' : 'Day', cell: (d) => String(d.date ?? ''), value: (d) => String(d.date ?? '') },
     metricCol('impressions', ar ? 'الظهور' : 'Impressions', 'impressions', (d) => d),
     metricCol('clicks', ar ? 'النقرات' : 'Clicks', 'clicks', (d) => d),
-    configuredResults<Row>((d) => d, () => null),
+    metricCol('results', ar ? 'تحويلات المنصات' : 'Platform conversions', 'conversions', (d) => d),
     spendCol<Row>((d) => d),
   ], days)
 
@@ -109,7 +137,7 @@ export function TablesView({
 
     metricCol('impressions', ar ? 'الظهور' : 'Impressions', 'impressions', (p) => p),
     { key: 'impressions', head: ar ? 'تغيّر الظهور' : 'Impressions vs previous', cell: (p) => delta(movement(p, 'impressions')), value: (p) => movement(p, 'impressions') },
-    { key: 'ctr', head: ar ? 'نسبة النقر' : 'CTR', cell: (p) => percent(num(p, 'ctr'), 2), value: (p) => num(p, 'ctr') },
+    { key: 'ctr', head: ar ? 'معدل النقر' : 'CTR', cell: (p) => percent(num(p, 'ctr'), 2), value: (p) => num(p, 'ctr') },
     spendCol<Row>((p) => p),
     // With Results, their cost from the resolver; without, the cost per click (named «تكلفة النقرة» by `resultWords`).
     money && configured ? { key: 'cost', head: cost, cell: (p: Row) => costCell(byPlatform(p)?.cost ?? null), value: (p: Row) => byPlatform(p)?.cost ?? null } : null,
@@ -144,43 +172,39 @@ export function TablesView({
       : null,
   ], roster)
 
-  const Block = ({ title, testid, empty, children }: { title: string; testid: string; empty: boolean; children: React.ReactNode }) => (
-    <ChartCard title={title}>
-      <div data-testid={testid} className="min-w-0">
-        {empty ? <p className="text-sm text-text-muted">{ar ? 'لا صفوف في هذه الفترة.' : 'No rows in this period.'}</p> : children}
-      </div>
-    </ChartCard>
-  )
-
   return (
     <div data-testid="live-mode-tables" className="flex flex-col gap-5">
       <p className="text-sm text-text-secondary">{ar ? 'جداول تحليلية قابلة للفرز — كل صف من أرقام هذا التقرير نفسه.' : 'Sortable analytical tables — every row from this report’s own figures.'}</p>
 
       {/* NASEL 2026-10-29 — a table of the «detailed tables» component: the switch that names it is the one that hides it. */}
       {sectionShown(payload, 'detailed_tables') && (
-        <Block title={ar ? 'كل منصة مقابل الفترة السابقة' : 'Every platform against the previous period'} testid="tables-platforms" empty={platforms.length === 0}>
-          <MetricTable head={platTable.head} rows={platTable.rows} values={platTable.values} initialSort={{ column: sortIndex(platTable.keys, 'results'), dir: 'desc' }} />
+        <Block ar={ar} title={ar ? 'كل منصة مقابل الفترة السابقة' : 'Every platform against the previous period'} testid="tables-platforms" empty={platforms.length === 0}>
+          <MetricTable pageSize={8} head={platTable.head} rows={platTable.rows} values={platTable.values} initialSort={{ column: sortIndex(platTable.keys, 'results'), dir: 'desc' }} />
         </Block>
       )}
 
       {sectionShown(payload, 'account_breakdown') && (
-        <Block title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'} testid="tables-accounts" empty={accounts.length === 0}>
-          <MetricTable head={accTable.head} rows={accTable.rows} values={accTable.values} initialSort={{ column: sortIndex(accTable.keys, 'results'), dir: 'desc' }} />
+        <Block ar={ar} title={ar ? 'الحسابات الإعلانية' : 'Ad accounts'} testid="tables-accounts" empty={accounts.length === 0}>
+          <MetricTable pageSize={8} head={accTable.head} rows={accTable.rows} values={accTable.values} initialSort={{ column: sortIndex(accTable.keys, 'results'), dir: 'desc' }} />
         </Block>
       )}
 
-      {/* REPORT-COMPOSITION-CONTROL-001 — the ledger is its own component, off for a new client report. */}
+      {/* REPORT-COMPOSITION-CONTROL-001 — the daily record is its own component, off for a new client report. REPORT-WEBSITE-TAB-001 — drawn as the interactive chart; the rows stay in the CSV / XLSX download. */}
+      {sectionShown(payload, 'daily_records') && <DailyMeasureChart payload={payload} reader={reader} ar={ar} />}
+
+      {/* LIVE-LINK-DAILY-LOG-001 — «السجل اليومي» is back as a table (it had become the chart alone): one row a day, eight to a page, newest first. */}
       {sectionShown(payload, 'daily_records') && (
-        <Block title={ar ? 'السجل اليومي' : 'Day-by-day record'} testid="tables-days" empty={days.length === 0}>
-          <MetricTable head={dayTable.head} rows={dayTable.rows} values={dayTable.values} initialSort={{ column: 0, dir: 'desc' }} />
+        <Block ar={ar} title={ar ? 'السجل اليومي' : 'Daily log'} testid="tables-days" empty={days.length === 0}>
+          <MetricTable pageSize={8} head={dayTable.head} rows={dayTable.rows} values={dayTable.values} initialSort={{ column: 0, dir: 'desc' }} />
         </Block>
       )}
 
       {sectionShown(payload, 'content_performance') && (
-        <Block title={ar ? 'كل المحتوى الذي عُرض' : 'All content that ran'} testid="tables-content" empty={roster.length === 0}>
-          <MetricTable head={conTable.head} rows={conTable.rows} values={conTable.values} initialSort={{ column: sortIndex(conTable.keys, 'results'), dir: 'desc' }} />
+        <Block ar={ar} title={ar ? 'كل المحتوى الذي عُرض' : 'All content that ran'} testid="tables-content" empty={roster.length === 0}>
+          <MetricTable pageSize={8} head={conTable.head} rows={conTable.rows} values={conTable.values} initialSort={{ column: sortIndex(conTable.keys, 'results'), dir: 'desc' }} />
         </Block>
       )}
+
     </div>
   )
 }

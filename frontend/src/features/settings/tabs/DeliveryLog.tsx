@@ -1,5 +1,6 @@
 import { useDeliveryLog } from '../api'
 import { summariseDeliveries, type DeliveryRow } from '../deliveryLog'
+import { FAILURE_WORDS, stageWords } from '../deliveryWords'
 import { Alert } from '@/components/ui/Alert'
 import { Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
@@ -23,7 +24,8 @@ import { Num } from '@/components/ui/Num'
  * `everSent` is rendered as its own state rather than folded into zero.
  */
 const STATUS: Record<string, { ar: string; en: string; tone: string }> = {
-  sent: { ar: 'أُرسلت', en: 'Sent', tone: 'text-success' },
+  // EMAIL-DELIVERY-LEDGER-001 — the transport took it; nobody yet knows it arrived.
+  sent: { ar: 'قبلها خادم البريد', en: 'Accepted by the mail server', tone: 'text-success' },
   failed: { ar: 'فشلت', en: 'Failed', tone: 'text-danger' },
   awaiting_provider_credentials: { ar: 'بانتظار مزوّد البريد', en: 'Awaiting mail provider', tone: 'text-warning' },
   awaiting_credentials: { ar: 'بانتظار مزوّد البريد', en: 'Awaiting mail provider', tone: 'text-warning' },
@@ -113,12 +115,13 @@ export function DeliveryLog() {
         <>
           <ul data-testid="delivery-summary" className="mt-4 grid gap-2 sm:grid-cols-3">
             {([
-              ['sent', ar ? 'أُرسلت' : 'Sent', summary.sent, 'text-text-primary'],
+              // «Accepted», not «sent»: the mail server took these, and that is all anybody knows yet.
+              ['sent', ar ? 'قبلها خادم البريد' : 'Accepted by the mail server', summary.sent, 'text-text-primary'],
               ['failed', ar ? 'فشلت' : 'Failed', summary.failed, summary.failed > 0 ? 'text-danger' : 'text-text-muted'],
               ['blocked', ar ? 'بانتظار المزوّد' : 'Awaiting provider', summary.blocked, summary.blocked > 0 ? 'text-warning' : 'text-text-muted'],
             ] as const).map(([key, label, value, tone]) => (
               <li key={key} data-testid={`delivery-count-${key}`} className="rounded-xl border border-border bg-surface-secondary px-4 py-3">
-                <div className="text-[12px] text-text-secondary">{label}</div>
+                <div className="text-xs text-text-secondary">{label}</div>
                 <div className={`tnum text-xl font-extrabold ${tone}`}><Num>{value}</Num></div>
               </li>
             ))}
@@ -126,8 +129,10 @@ export function DeliveryLog() {
 
           <ul className="mt-4 grid gap-2">
             {rows.map((r, i) => {
-              const status = STATUS[r.status] ?? { ar: r.status, en: r.status, tone: 'text-text-muted' }
-              const reason = r.reason === null ? null : REASONS[r.reason] ?? null
+              const status = r.state === 'delivered' || r.state === 'queued' || r.state === 'attempted'
+                ? stageWords(r.state)
+                : STATUS[r.status] ?? { ar: r.status, en: r.status, tone: 'text-text-muted' }
+              const reason = r.failure_code ? (FAILURE_WORDS[r.failure_code] ?? FAILURE_WORDS.unknown) : (r.reason === null ? null : REASONS[r.reason] ?? null)
 
               return (
                 <li
@@ -136,11 +141,11 @@ export function DeliveryLog() {
                   className="rounded-xl border border-border px-4 py-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[13px] font-semibold text-text-primary">{r.kind}</span>
-                    <span className={`text-[12px] font-semibold ${status.tone}`}>{ar ? status.ar : status.en}</span>
+                    <span className="text-xs font-semibold text-text-primary">{r.kind}</span>
+                    <span className={`text-xs font-semibold ${status.tone}`}>{ar ? status.ar : status.en}</span>
                   </div>
 
-                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-text-secondary">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
                     {/* A digest row has no single recipient: it is one send per person, summarised. */}
                     <span dir="ltr">{r.recipient ?? (ar ? 'ملخّص' : 'digest')}</span>
                     <span dir="ltr">{when(r.at)}</span>
@@ -152,7 +157,7 @@ export function DeliveryLog() {
                   </div>
 
                   {r.reason !== null && (
-                    <p data-testid={`delivery-reason-${i}`} className="mt-1.5 text-[12px] text-text-secondary">
+                    <p data-testid={`delivery-reason-${i}`} className="mt-1.5 text-xs text-text-secondary">
                       {reason === null ? null : <span>{ar ? reason.ar : reason.en} </span>}
                       <span className="font-mono text-text-muted" dir="ltr">{r.reason}</span>
                     </p>

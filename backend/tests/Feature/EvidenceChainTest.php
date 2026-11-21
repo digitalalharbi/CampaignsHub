@@ -36,6 +36,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Tests\Concerns\WithoutMigratedSarPeg;
 use Tests\TestCase;
 
 /**
@@ -52,6 +53,7 @@ use Tests\TestCase;
 final class EvidenceChainTest extends TestCase
 {
     use RefreshDatabase;
+    use WithoutMigratedSarPeg;
 
     private const SPA = ['Origin' => 'http://localhost:5173'];
 

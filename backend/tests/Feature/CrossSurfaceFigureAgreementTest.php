@@ -19,6 +19,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -45,6 +46,7 @@ use Tests\TestCase;
  */
 final class CrossSurfaceFigureAgreementTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -161,7 +163,7 @@ final class CrossSurfaceFigureAgreementTest extends TestCase
             'tenant_id' => $this->tenant->getKey(),
             'project_id' => $this->project->getKey(),
             'unified_campaign_id' => $this->campaign->getKey(),
-            'external_account_id' => (string) Str::uuid(),
+            'external_account_id' => $this->bindSeededAccount($this->project->getKey(), provider: $provider),
             'external_campaign_id' => (string) Str::uuid(),
             'provider' => $provider,
             'metric_key' => $key,

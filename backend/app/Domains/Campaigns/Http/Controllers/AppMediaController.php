@@ -47,12 +47,19 @@ final class AppMediaController
         'png' => 'image/png',
         'gif' => 'image/gif',
         'webp' => 'image/webp',
+        'avif' => 'image/avif',
     ];
 
-    /** TIKTOK-MEDIA-002 — a creative's cached cover; the name is a keyed hash, so a path is not guessable. */
+    /**
+     * TIKTOK-MEDIA-002 — a creative's cached cover; the name is a keyed hash, so a path is not guessable.
+     *
+     * CREATIVE-PREVIEWS-001 — cached for a week, revalidated by `Last-Modified`: a re-capture rewrites the same
+     * name (the hash is of the creative, not of the bytes), so `immutable` would pin a superseded picture.
+     * A missing file is a 404, which every card turns into its own stated absence rather than a broken frame.
+     */
     public function cover(Request $request, string $path): BinaryFileResponse
     {
-        return $this->serve($request, Storage::disk(CoverCache::DISK)->path(CoverCache::ROOT), $path, 'public, max-age=86400');
+        return $this->serve($request, Storage::disk(CoverCache::DISK)->path(CoverCache::ROOT), $path, 'public, max-age=604800, stale-while-revalidate=86400');
     }
 
     public function show(Request $request, string $path): BinaryFileResponse

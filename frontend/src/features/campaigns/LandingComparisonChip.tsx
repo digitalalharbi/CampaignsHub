@@ -4,6 +4,7 @@ import { formatFixed } from '@/lib/numerals'
 
 import { LANDING_COMPARISON, type LandingAnswer } from './campaignsLanding'
 import { objectiveLabel } from './labels'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * CAMPAIGN-INTELLIGENCE-HUB — one landing comparison, with its evidence one click away.
@@ -36,8 +37,8 @@ export function LandingComparisonChip({ kind, count, answer, ar, range, currency
       <div className="mt-2 w-full max-w-xl space-y-3 rounded-xl border border-border bg-surface p-3 text-xs text-text-secondary" data-testid="landing-comparison-evidence">
         <p className="text-text-muted" data-testid="landing-comparison-scope">
           {ar
-            ? `مقارنة تفسيرية وليست حكمًا بالهدر · الفترة ${range.from} → ${range.to} · العملة ${currency ?? '—'} · العينة: حملات بنفس الهدف والنتيجة وبـ${minResults} نتائج على الأقل لكل حملة`
-            : `An explanatory comparison, not a finding of waste · period ${range.from} → ${range.to} · currency ${currency ?? '—'} · sample: campaigns with the same objective and outcome and at least ${minResults} results each`}
+            ? `مقارنة تفسيرية وليست حكمًا بالهدر · الفترة ${formatPeriodRange(range.from, range.to, 'ar')} · العملة ${currency ?? '—'} · العينة: حملات بنفس الهدف والنتيجة وبـ${minResults} نتائج على الأقل لكل حملة`
+            : `An explanatory comparison, not a finding of waste · period ${formatPeriodRange(range.from, range.to, 'en')} · currency ${currency ?? '—'} · sample: campaigns with the same objective and outcome and at least ${minResults} results each`}
         </p>
         {groups.map((g) => (
           <div key={`${g.objective}|${g.outcome}`} className="space-y-1" data-testid="landing-comparison-group">

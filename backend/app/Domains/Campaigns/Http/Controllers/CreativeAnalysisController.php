@@ -20,6 +20,7 @@ use App\Domains\Campaigns\Services\CreativePulse;
 use App\Domains\Campaigns\Services\CreativeRows;
 use App\Domains\Campaigns\Support\PresentationAudience;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Metrics\Services\ContentFormatComparison;
 use App\Domains\Metrics\Services\ContentIntelligence;
 use App\Domains\Metrics\Services\CreativeFormatIntelligence;
 use App\Domains\Projects\Access\ProjectCapability;
@@ -308,6 +309,30 @@ final class CreativeAnalysisController extends Controller
     }
 
     /**
+     * CONTENT-FORMAT-COMPARISON-001 — «مقارنة أنواع المحتوى» for Analytics: one comparison per objective family, the
+     * format from the platform's token only, figures from the canonical creative reader, the verdict from the one
+     * ranker. The operator's own reading: spend and cost are shown (an internal view), and the report part cuts them
+     * for a client through {@see ContentFormatComparison::forAudience()}.
+     */
+    public function formatComparison(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+
+        [$from, $to] = $this->window($request);
+
+        $account = $request->string('external_account_id')->toString() ?: null;
+        $campaign = $request->string('campaign_id')->toString() ?: null;
+        $providers = array_values(array_filter((array) $request->input('providers', []), 'is_string'));
+        $campaigns = array_values(array_filter((array) $request->input('campaign_ids', []), 'is_string'));
+        $ceiling = $providers === [] && $campaigns === [] ? null : array_filter(['providers' => $providers, 'campaign_ids' => $campaigns]);
+
+        return ApiResponse::success(
+            app(ContentFormatComparison::class)->forScope($project, $from, $to, $account, $campaign, $ceiling),
+            'Content format comparison.',
+        );
+    }
+
+    /**
      * The dashboard's creative section (§15.11) — the same creatives the library lists, read as an answer.
      *
      * It takes the SAME query as `index()`: the same reach, the same filters, the same window. That
@@ -454,7 +479,7 @@ final class CreativeAnalysisController extends Controller
          * is a useful sentence only when the average is of content doing the same job. Averaging an
          * awareness video's CPM into a sales benchmark produces a comparison nobody should act on.
          */
-        $peers = $this->peerAverages((string) $model->project_id, $objective, $from, $to, exclude: $id);
+        $peers = $this->peerAverages((string) $model->project_id, $objective, $from, $to, exclude: $id, provider: (string) $model->provider);
 
         $trend = $this->trend($id, $from, $to);
         $findings = $this->findingsFor($request, $insights, $model, $objective, $from, $to);
@@ -739,8 +764,13 @@ final class CreativeAnalysisController extends Controller
          * forwarded from the query string here: on this surface they would be a filter nothing in
          * the UI sets, and enumerating what a request may contain is cheaper to keep right than
          * remembering what it may not.
+         *
+         * CONTENT-FORMAT-COMPARISON-001 — `creative_ids` IS set by the UI now: the format comparison's drill-down asks
+         * the library for the cards of one page of a format's creatives. It only ever narrows, and the reach above it
+         * still decides what this reader may see, so an id from another project returns nothing.
          */
         $this->rows->applyFilters($query, $request->only([
+            'creative_ids',
             'provider', 'providers', 'format', 'formats', 'status', 'statuses',
             'campaign_ids', 'ad_set_ids', 'ad_ids', 'project_ids', 'client_ids',
             'search', 'kinds', 'objectives', 'paths',
@@ -1078,7 +1108,7 @@ final class CreativeAnalysisController extends Controller
      *
      * @return array<string, float|null>|null
      */
-    private function peerAverages(string $project, ?string $objective, Carbon $from, Carbon $to, string $exclude): ?array
+    private function peerAverages(string $project, ?string $objective, Carbon $from, Carbon $to, string $exclude, ?string $provider = null): ?array
     {
         $path = $this->metrics->pathFor($objective);
 
@@ -1100,6 +1130,12 @@ final class CreativeAnalysisController extends Controller
             ->where('project_id', $project)
             ->tap(fn ($q) => BoundAccountVisibility::applyThroughCampaign($q, 'external_creatives.external_campaign_id', 'external_creatives.project_id'))
             ->whereKeyNot($exclude)
+            /*
+             * CONTENT-PEER-SAME-PLATFORM-001 — Owner 2026-11-19: a TikTok video was benchmarked against a sales path
+             * that held Snapchat ads returning 35×, so it read «49% below the path» against no peer of its own kind. The
+             * report compares content inside its platform and objective (`contentWhy`); this page now does too.
+             */
+            ->when($provider !== null && $provider !== '', fn ($q) => $q->where('provider', $provider))
             ->whereIn('campaign_id', function ($sub) use ($objectives): void {
                 $sub->select('id')->from('unified_campaigns')->whereIn('objective', $objectives);
             })
@@ -1114,18 +1150,21 @@ final class CreativeAnalysisController extends Controller
             return null;
         }
 
-        $average = static function (string $key) use ($figures): ?float {
-            $values = array_values(array_filter(
-                array_map(static fn (array $f) => $f[$key] ?? null, $figures),
-                static fn ($v): bool => is_numeric($v),
-            ));
+        /*
+         * CONTENT-PEER-POOLED-001 — Owner 2026-11-19, «تحقق من البيانات 100%».
+         *
+         * The path's figure was the plain mean of every peer's own ratio. A peer with 40 impressions and 3 clicks
+         * weighed as much as one with 500,000, so on a real sales path the «average» read ROAS 13.65× and CTR 1.73%
+         * against a creative at 6.44× and 0.50% — a comparison nobody could act on. The path's figure is now the
+         * path's own ratio: pooled sums over the same peers (`totalsFor`, the rule CROSS-PLATFORM-ATTRIBUTION-DEPTH-001
+         * holds everywhere else: never a mean of ratios).
+         */
+        $pooled = $this->metrics->aggregate(array_values($figures)) ?? [];
 
-            return $values === [] ? null : round(array_sum($values) / count($values), 4);
-        };
-
-        $out = ['count' => count($figures), 'path' => $path->value];
+        $out = ['count' => count($figures), 'path' => $path->value, 'provider' => $provider];
         foreach (['ctr', 'cpc', 'cpm', 'cpa', 'roas', 'view_rate', 'completion_rate'] as $key) {
-            $out[$key] = $average($key);
+            $v = $pooled[$key] ?? null;
+            $out[$key] = is_numeric($v) ? round((float) $v, 4) : null;
         }
 
         return $out;

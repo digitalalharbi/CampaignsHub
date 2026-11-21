@@ -8,6 +8,7 @@ use App\Domains\Integrations\Catalogue\ProviderHierarchy;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
+use App\Domains\Integrations\Status\ConnectionFacts;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
 use App\Domains\Integrations\Support\IntegrationTruth;
 
@@ -212,7 +213,8 @@ final class ConnectionWizardState
          * asked for a read scope at all is refused before anything is called.
          */
         $insightsBlocked = $connection->insights_denied_at !== null
-            || ! InsightsAuthorisation::grantedBy($connection->provider, $connection->scopes);
+            // LINKEDIN-SCOPES-001 — an unknown grant falls back to the request: nothing unrequested can have been granted.
+            || ! InsightsAuthorisation::grantedBy($connection->provider, $connection->scopes ?: $connection->requested_scopes);
 
         $userState = match (true) {
             /*
@@ -241,11 +243,8 @@ final class ConnectionWizardState
          * know «can it authorise» and «did data arrive» at the same time no longer has to infer one
          * of them from the absence of the other.
          */
-        $connectionState = match (true) {
-            in_array($connection->status, ['revoked', 'disconnected'], true) => IntegrationTruth::REVOKED,
-            $insightsBlocked, $authorisationLost, $connection->status === 'error' => IntegrationTruth::REAUTH_REQUIRED,
-            default => IntegrationTruth::CONNECTED,
-        };
+        // INTEG-STATUS-MODEL-001 — one definition of the legacy word, shared with the hub.
+        $connectionState = IntegrationStatusResolver::connectionTruth(ConnectionFacts::fromModel($connection), $authorisationLost);
 
         return [
             'state' => $state,

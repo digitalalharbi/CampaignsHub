@@ -9,11 +9,11 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Reports\Services\ShareCardRenderer;
 use App\Domains\Reports\Services\ShareService;
 use App\Domains\Reports\Support\ReportIdentity;
+use App\Domains\Reports\Support\ReportPeriod;
 use App\Http\Controllers\Controller;
 use App\Support\Frontend;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Response;
-use Illuminate\Support\Carbon;
 
 /**
  * REPORT-TITLE-METADATA-001 — crawler-visible metadata for a shared report link.
@@ -256,12 +256,9 @@ final class SharePreviewController extends Controller
         ]);
     }
 
+    /** SHARE-CARD-ROLLING-001 — a rolling link names its window and that it moves; only a fixed link states dates. */
     private function period(Report $report): ?string
     {
-        if ($report->period_start === null || $report->period_end === null) {
-            return null;
-        }
-
-        return Carbon::parse($report->period_start)->toDateString().' — '.Carbon::parse($report->period_end)->toDateString();
+        return ReportPeriod::cardLabelOfReport($report, $report->reportLocale());
     }
 }

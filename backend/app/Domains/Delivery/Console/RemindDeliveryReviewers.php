@@ -13,6 +13,7 @@ use App\Domains\Reports\Models\Report;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
+use App\Support\PeriodLabel;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -58,7 +59,7 @@ final class RemindDeliveryReviewers extends Command
             $considered++;
             $result = $notices->deliveryReminder(
                 $reviewer, $tenant, $reason, (string) $workspace->name,
-                $pack->period_start->toDateString().' → '.$pack->period_end->toDateString(), (string) $pack->id,
+                PeriodLabel::range($pack->period_start, $pack->period_end, 'ar'), (string) $pack->id,
             );
             if (in_array($result, ['sent', 'sandbox'], true)) {
                 $sent++;

@@ -1,4 +1,12 @@
-import { useState } from 'react'
+import { AddonsShop } from './AddonsShop'
+import { LimitRings } from './LimitRings'
+import { LockedFeature, PlanCompare } from './PlanCompare'
+import { featureKeys, includes, planWith } from './planAccess'
+import { portalBaseOf } from '@/app/portalPath'
+import { useLocation, useSearchParams } from 'react-router-dom'
+import { fetchCurrentUser } from '@/features/auth/api'
+import { UsageCard } from './UsageCard'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CalendarClock, CheckCircle2, CreditCard, Gauge } from 'lucide-react'
 import { PageIntro } from '@/components/ui/PageIntro'
@@ -15,15 +23,18 @@ import { Num } from '@/components/ui/Num'
 /** Bilingual copy — self-contained to this feature (Arabic-first). */
 export const COPY = {
   ar: {
-    title: 'الاشتراكات', subtitle: 'اطّلع على خطة المستأجر الحالية والاستهلاك مقابل الحدود، وبدّل الخطة.',
+    title: 'الاشتراكات', subtitle: 'اطّلع على خطة مساحة العمل الحالية والاستخدام مقابل الحدود، وبدّل الخطة.',
     no_permission: 'لا تملك صلاحية عرض الاشتراكات.',
     loading: 'جارٍ التحميل…', error: 'تعذّر تحميل بيانات الاشتراك.',
     current_plan: 'الخطة الحالية', default_plan: 'الخطة الافتراضية (بدون اشتراك مُسجَّل)',
-    per_month: '/ شهرياً', seats: 'المقاعد', period_end: 'نهاية الدورة',
-    usage_title: 'الاستهلاك والحدود', metric: 'المقياس', used: 'المُستهلك', remaining: 'المتبقّي', limit: 'الحد',
+    per_month: '/ شهرياً', per_year: '/ سنوياً', seats: 'المقاعد', period_end: 'نهاية الدورة',
+    vat_plus: (tax: string, total: string, cur: string) => `+ ضريبة القيمة المضافة ${tax} = ${total} ${cur} لكل تجديد`,
+    vat_in: (tax: string, cur: string) => `يشمل ضريبة القيمة المضافة ${tax} ${cur}`,
+    usage_title: 'الاستخدام والحدود', metric: 'المقياس', used: 'المستخدم', remaining: 'المتبقي', limit: 'الحد',
     unlimited: 'غير محدود', catalogue: 'الخطط المتاحة', change: 'التبديل إلى هذه الخطة',
     current_badge: 'خطتك الحالية', grandfathered: 'باقة سابقة — محفوظة لك بسعرك وحدودك', changing: 'جارٍ التبديل…', changed: 'تم تحديث الاشتراك',
     manage_note: 'تبديل الخطة يتطلّب صلاحية subscriptions.manage.',
+    basis_waived_by_admin: 'معفى من رسوم هذه الفترة', basis_admin_trial: 'فترة تجربة بقرار إداري', basis_external_settlement: 'سُدد خارج بوابة الدفع', comp_note: 'هذه المساحة بدخول مباشر دون دفع، وتدير المنصة باقتها.', basis_complimentary: 'دخول مباشر دون دفع، بلا تاريخ انتهاء', basis_admin_grant: 'مفعّل بقرار إداري دون دفع',
     st_active: 'نشِط', st_trialing: 'الشهر التمهيدي', st_past_due: 'متأخّر السداد', st_canceled: 'مُلغى',
     features: 'المزايا',
     m_projects: 'المشاريع', m_team_members: 'أعضاء الفريق', m_connections: 'الربط', m_reports_per_month: 'التقارير / شهر',
@@ -32,6 +43,8 @@ export const COPY = {
     f_reports: 'التقارير', f_campaign_tracking: 'تتبّع الحملات',
     sup_community: 'مجتمع المستخدمين', sup_email: 'بريد إلكتروني', sup_priority: 'أولوية',
     review: 'مراجعة التغيير', cancel: 'إلغاء',
+    fit_title: 'استخدامك أكبر من حدود هذه الباقة', fit_note: 'لن نحذف أو نوقف أي شيء. قلّل ما فوق الحد ثم غيّر الباقة.',
+    fit_row: (label: string, used: number, limit: number, over: number) => `${label}: ${used} من ${limit} (زيادة ${over})`,
     quote_title: 'تفاصيل تغيير الباقة',
     quote_loading: 'جارٍ حساب الفرق…',
     days_left: 'الأيام المتبقية في الدورة الحالية',
@@ -39,6 +52,8 @@ export const COPY = {
     new_price: 'سعر الباقة الجديدة للدورة',
     prorated: 'قيمة الباقة الجديدة للمدة المتبقية',
     due_now: 'المستحق الآن',
+    vat_added: 'ضريبة القيمة المضافة 15%',
+    total_now: 'الإجمالي المدفوع الآن',
     upgrade_note: 'لن تُفعَّل الباقة الجديدة إلا بعد تأكيد الدفع من بوابة الدفع.',
     downgrade_note: 'لن يُخصم أو يُسترد أي مبلغ. تحتفظ بباقتك الحالية حتى نهاية الدورة المدفوعة، ثم يبدأ التغيير.',
     confirm_upgrade: 'المتابعة إلى الدفع',
@@ -60,15 +75,18 @@ export const COPY = {
     remove_card_note: 'إزالة البطاقة لا تُلغي الاشتراك؛ ستصلك فاتورة التجديد لتسديدها بنفسك.',
   },
   en: {
-    title: 'Subscriptions', subtitle: 'See the tenant’s current plan and usage against limits, and change plan.',
+    title: 'Subscriptions', subtitle: 'See your workspace’s current plan and usage against limits, and change plan.',
     no_permission: 'You do not have permission to view subscriptions.',
     loading: 'Loading…', error: 'Could not load subscription data.',
     current_plan: 'Current plan', default_plan: 'Default plan (no explicit subscription)',
-    per_month: '/ month', seats: 'Seats', period_end: 'Period ends',
+    per_month: '/ month', per_year: '/ year', seats: 'Seats', period_end: 'Period ends',
+    vat_plus: (tax: string, total: string, cur: string) => `+ VAT ${tax} = ${total} ${cur} per renewal`,
+    vat_in: (tax: string, cur: string) => `Includes VAT of ${tax} ${cur}`,
     usage_title: 'Usage & limits', metric: 'Metric', used: 'Used', remaining: 'Remaining', limit: 'Limit',
     unlimited: 'Unlimited', catalogue: 'Available plans', change: 'Switch to this plan',
     current_badge: 'Your current plan', grandfathered: 'Earlier plan — kept for you at your price and limits', changing: 'Switching…', changed: 'Subscription updated',
     manage_note: 'Changing the plan requires the subscriptions.manage permission.',
+    basis_waived_by_admin: 'This period\'s fee is waived', basis_admin_trial: 'Trial granted by an administrator', basis_external_settlement: 'Settled outside the payment gateway', comp_note: 'This workspace has direct entry with no payment, and the platform manages its plan.', basis_complimentary: 'Direct entry with no payment and no end date', basis_admin_grant: 'Activated by an administrator with no payment',
     st_active: 'Active', st_trialing: 'Introductory month', st_past_due: 'Past due', st_canceled: 'Canceled',
     features: 'Features',
     m_projects: 'Projects', m_team_members: 'Team members', m_connections: 'Connections', m_reports_per_month: 'Reports / month',
@@ -77,6 +95,8 @@ export const COPY = {
     f_reports: 'Reports', f_campaign_tracking: 'Campaign tracking',
     sup_community: 'Community', sup_email: 'Email', sup_priority: 'Priority',
     review: 'Review this change', cancel: 'Cancel',
+    fit_title: 'Your usage is above this plan’s limits', fit_note: 'Nothing is deleted or stopped for you. Reduce what is over the limit, then change plan.',
+    fit_row: (label: string, used: number, limit: number, over: number) => `${label}: ${used} of ${limit} (${over} over)`,
     quote_title: 'What this change costs',
     quote_loading: 'Working out the difference…',
     days_left: 'Days left in the current period',
@@ -84,6 +104,8 @@ export const COPY = {
     new_price: 'New plan, per period',
     prorated: 'New plan for the days that remain',
     due_now: 'Due now',
+    vat_added: 'VAT 15%',
+    total_now: 'Total charged now',
     upgrade_note: 'The new plan starts only once the gateway confirms the payment.',
     downgrade_note: 'Nothing is charged and nothing is refunded. You keep your current plan until the period you paid for ends.',
     confirm_upgrade: 'Continue to payment',
@@ -170,9 +192,28 @@ export function SubscriptionsPage() {
   const canView = useAuth((s) => s.hasPermission('subscriptions.view'))
   const canManage = useAuth((s) => s.hasPermission('subscriptions.manage'))
   const qc = useQueryClient()
+  const setUser = useAuth((s) => s.setUser)
+  const [params, setParams] = useSearchParams()
+  const { pathname } = useLocation()
+  const compare = params.get('compare') === '1'
 
   const currentQ = useQuery({ queryKey: ['subscriptions', 'current'], queryFn: getCurrent, retry: false, enabled: canView })
   const plansQ = useQuery({ queryKey: ['subscriptions', 'plans'], queryFn: getPlans, retry: false, enabled: canView })
+
+  /*
+   * Upgrade in the SAME portal, with no sign-out (master task 14): the rail, the home page's levels and every gate read the
+   * account's entitlements from the signed-in user, so a plan that changed must refresh that user. The first value read
+   * is the baseline — only a CHANGE refreshes, so opening this page costs nothing.
+   */
+  const seenPlan = useRef<string | null | undefined>(undefined)
+  useEffect(() => {
+    const code = currentQ.data?.plan?.code ?? null
+    if (currentQ.data === undefined) return
+    if (seenPlan.current !== undefined && seenPlan.current !== code) {
+      void fetchCurrentUser().then((user) => { if (user) setUser(user) })
+    }
+    seenPlan.current = code
+  }, [currentQ.data, setUser])
 
   /*
    * Quote, then confirm — never one click (PAY-002).
@@ -232,7 +273,7 @@ export function SubscriptionsPage() {
   const currentCode = current?.plan?.code ?? null
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-4 md:p-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-3 md:p-4">
       {/*
         UX-PAGE-HERO-001 — the product's header, not an eighth spelling of one.
 
@@ -260,6 +301,20 @@ export function SubscriptionsPage() {
         <>
           <CurrentPlanCard current={current} c={c} />
 
+          {/* Features the current plan does not include: a lock and the NAME of the plan that has it; pressing opens the comparison. */}
+          {(() => {
+            const mine = plans.find((p) => p.code === currentCode)
+            const locked = mine ? featureKeys(plans).filter((k) => !includes(mine, k) && planWith(plans, k) !== null) : []
+
+            return locked.length === 0 ? null : (
+              <div data-testid="locked-features" className="flex flex-wrap gap-1.5">
+                {locked.map((k) => (
+                  <LockedFeature key={k} feature={k} plans={plans} to={`${portalBaseOf(pathname)}/subscriptions`} label={featureLabel(k, c)} />
+                ))}
+              </div>
+            )
+          })()}
+
           {current.renewal && (
             <RenewalCard
               renewal={current.renewal}
@@ -281,11 +336,44 @@ export function SubscriptionsPage() {
             />
           )}
 
-          <UsageTable usage={current.usage} c={c} />
+          <LimitRings usage={current.usage} labelOf={(m) => metricLabel(m, c)} unlimited={c.unlimited} ar={locale === 'ar'} />
+          <details className="rounded-2xl border border-border bg-surface">
+            <summary className="cursor-pointer select-none px-3 py-2 text-xs font-semibold text-text-secondary">{c.usage_title}</summary>
+            <div className="px-3 pb-3"><UsageTable usage={current.usage} c={c} /></div>
+          </details>
+
+          {/* PRICING-USAGE-CREDITS-001 — metered usage, own-key caps and the usage balance. */}
+          <UsageCard ar={locale === 'ar'} />
+
+          {/* PRICING-ADDONS-001 — capacity and feature packs, beside the usage they extend. */}
+          <AddonsShop ar={locale === 'ar'} canManage={canManage} />
           <section className="flex flex-col gap-3">
-            <h2 className="text-sm font-bold text-text-primary">{c.catalogue}</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-bold text-text-primary">{c.catalogue}</h2>
+              <button
+                type="button"
+                data-testid="compare-toggle"
+                aria-expanded={compare}
+                onClick={() => setParams(compare ? {} : { compare: '1' })}
+                className="text-xs font-semibold text-brand-600 hover:text-brand-700"
+              >
+                {locale === 'ar' ? (compare ? 'أخفِ المقارنة' : 'قارن الباقات') : (compare ? 'Hide comparison' : 'Compare plans')}
+              </button>
+            </div>
             {changeM.isError && <span className="text-xs font-semibold text-danger">{toApiError(changeM.error).message}</span>}
             {!canManage && <p className="text-xs text-text-muted">{c.manage_note}</p>}
+            {current.subscription?.commercial_basis === 'complimentary' && <p data-testid="subscription-comp-note" className="text-xs text-text-muted">{c.comp_note}</p>}
+            {compare && (
+              <PlanCompare
+                plans={plans}
+                currentCode={currentCode}
+                featureLabel={(k) => featureLabel(k, c)}
+                limitLabel={(k) => metricLabel(k, c)}
+                valueLabel={(v) => featureValueLabel(v, c)}
+                unlimited={c.unlimited}
+                ar={locale === 'ar'}
+              />
+            )}
             {/* grid-cols-1 + min-w-0 on the cards: a card's badges must never widen a phone's page (sweep @390). */}
             <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {plans.map((plan) => (
@@ -293,7 +381,7 @@ export function SubscriptionsPage() {
                   key={plan.code}
                   plan={plan}
                   isCurrent={plan.code === currentCode}
-                  canManage={canManage}
+                  canManage={canManage && current.subscription?.commercial_basis !== 'complimentary'}
                   pending={changeM.isPending && changeM.variables === plan.code}
                   onChange={() => setChosen(plan)}
                   c={c}
@@ -306,6 +394,7 @@ export function SubscriptionsPage() {
             <ProrationReview
               plan={chosen}
               quote={quoteQ.data?.quote ?? null}
+              fit={quoteQ.data?.fit ?? null}
               loading={quoteQ.isPending}
               error={quoteQ.isError ? toApiError(quoteQ.error).message : null}
               busy={changeM.isPending}
@@ -384,8 +473,19 @@ function CurrentPlanCard({ current, c }: { current: CurrentSubscription; c: Copy
         {sub && <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_TONE[sub.status] ?? 'bg-surface-secondary text-text-muted'}`}>{statusLabel(sub.status, c)}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-text-secondary">
-        {plan && <span className="tnum font-bold text-text-primary" dir="ltr">{plan.price_monthly} {plan.currency} <span className="text-xs font-normal text-text-muted">{c.per_month}</span></span>}
+        {/* What THIS subscriber pays (their captured price and term), not the catalogue's current monthly price. */}
+        {sub?.commercial_basis !== 'complimentary' && (sub?.unit_amount ? (
+          <span data-testid="current-price" className="tnum font-bold text-text-primary">
+            <Num>{sub.unit_amount} {sub.currency ?? plan?.currency}</Num> <span className="text-xs font-normal text-text-muted">{sub.billing_interval === 'annual' ? c.per_year : c.per_month}</span>
+          </span>
+        ) : plan && <span className="tnum font-bold text-text-primary" dir="ltr">{plan.price_monthly} {plan.currency} <span className="text-xs font-normal text-text-muted">{c.per_month}</span></span>)}
+        {sub?.commercial_basis !== 'complimentary' && sub?.vat && Number(sub.vat.tax) > 0 && (
+          <span data-testid="current-vat" className="text-xs text-text-muted">
+            {sub.vat.prices_include_vat ? c.vat_in(sub.vat.tax, sub.currency ?? '') : c.vat_plus(sub.vat.tax, sub.vat.gross, sub.currency ?? '')}
+          </span>
+        )}
         {sub && <span>{c.seats}: <span className="tnum font-semibold text-text-primary">{num(sub.seats, c.unlimited)}</span></span>}
+        {sub?.commercial_basis && <span data-testid="subscription-commercial-basis" className="font-semibold text-text-primary">{c[`basis_${sub.commercial_basis}`]}</span>}
         {sub?.current_period_end && <span>{c.period_end}: <span className="tnum font-semibold text-text-primary">{fmtDate(sub.current_period_end)}</span></span>}
       </div>
     </div>
@@ -506,7 +606,7 @@ function PendingChangeBanner({
           : <CalendarClock size={17} className="mt-0.5 shrink-0 text-info" />}
         <div>
           <p className="text-sm font-bold text-text-primary">{c.pending_title} — {change.plan_name}</p>
-          <p className="mt-0.5 text-[13px] text-text-secondary">
+          <p className="mt-0.5 text-xs text-text-secondary">
             {change.awaiting_payment
               ? c.pending_awaiting_payment
               : `${c.pending_at} ${fmtDate(change.effective_at)}`}
@@ -537,10 +637,11 @@ function PendingChangeBanner({
  * charged twice for the same month.
  */
 function ProrationReview({
-  plan, quote, loading, error, busy, c, onCancel, onConfirm,
+  plan, quote, fit, loading, error, busy, c, onCancel, onConfirm,
 }: {
   plan: SubscriptionPlan
   quote: import('./api').ProrationQuote | null
+  fit: import('./api').PlanFit | null
   loading: boolean
   error: string | null
   busy: boolean
@@ -551,6 +652,7 @@ function ProrationReview({
   const money = (value: string, currency: string) => `${value} ${currency}`
   const isDowngrade = quote?.effective === 'period_end'
   const owes = quote !== null && Number(quote.due_now) > 0
+  const blocked = fit !== null && !fit.fits
 
   return (
     <section data-testid="proration-review" className="flex flex-col gap-3 rounded-2xl border border-brand-500 bg-surface p-5">
@@ -573,18 +675,41 @@ function ProrationReview({
                 <Num>{money(quote.due_now, quote.currency)}</Num>
               </dd>
             </div>
+            {/* PRICING-VAT-001 — on a VAT-exclusive plan the card is asked for the difference plus VAT; say so first. */}
+            {owes && quote.vat && !quote.vat.prices_include_vat && (
+              <>
+                <Row label={c.vat_added} value={money(quote.vat.tax, quote.currency)} />
+                <div className="flex items-center justify-between">
+                  <dt className="text-sm font-bold text-text-primary">{c.total_now}</dt>
+                  <dd data-testid="due-now-total" className="tnum text-base font-extrabold text-text-primary">
+                    <Num>{money(quote.vat.gross, quote.currency)}</Num>
+                  </dd>
+                </div>
+              </>
+            )}
           </dl>
 
           {/* The honest sentence, and it differs by direction. */}
-          <p data-testid="proration-note" className="text-[13px] leading-relaxed text-text-secondary">
+          <p data-testid="proration-note" className="text-xs leading-relaxed text-text-secondary">
             {isDowngrade ? c.downgrade_note : c.upgrade_note}
           </p>
+
+          {/* PLAN-LIMITS-METER-001 — a plan the current usage does not fit is never entered; this says exactly what is over. */}
+          {blocked && fit && (
+            <div data-testid="fit-blocked" role="alert" className="rounded-xl border border-danger/40 bg-[var(--negative-background)] p-3 text-sm">
+              <p className="font-bold text-danger">{c.fit_title}</p>
+              <ul className="mt-1.5 grid gap-1 text-text-primary">
+                {fit.exceeds.map((e) => <li key={e.metric} data-testid={`fit-over-${e.metric}`} className="tnum">{c.fit_row(e.label, e.used, e.limit, e.over)}</li>)}
+              </ul>
+              <p className="mt-1.5 text-xs text-text-secondary">{c.fit_note}</p>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               data-testid="confirm-plan-change"
-              disabled={busy}
+              disabled={busy || blocked}
               onClick={onConfirm}
               className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
             >

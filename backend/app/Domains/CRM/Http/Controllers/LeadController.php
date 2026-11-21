@@ -28,6 +28,7 @@ use App\Domains\Tenancy\Models\Membership;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
+use App\Support\DailyInflow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -149,11 +150,18 @@ final class LeadController extends Controller
          * applied — two figures on one screen that cannot both be about what the reader is looking
          * at.
          */
+        $inflow = DailyInflow::series($query, 'leads.created_at');
         $received = (clone $query)->toBase()->getCountForPagination();
         $unique = (clone $query)->whereNull('canonical_lead_id')->toBase()->getCountForPagination();
 
         if ($request->boolean('unique')) {
             $query->whereNull('canonical_lead_id');
+        }
+
+        // TABLE-SERVER-PAGING-001 — a whitelisted sort, on the same scoped builder; ties break on the key so pages never overlap.
+        $sort = $request->string('sort')->toString();
+        if (in_array($sort, ['name', 'source', 'status', 'created_at'], true)) {
+            $query->reorder($sort, $request->string('dir')->toString() === 'desc' ? 'desc' : 'asc')->orderBy('id');
         }
 
         $perPage = min(max((int) $request->integer('per_page', 15), 1), 100);
@@ -176,6 +184,7 @@ final class LeadController extends Controller
                  * audience, with nothing on screen to say which.
                  */
                 'counts' => ['received' => $received, 'unique' => $unique],
+                'inflow' => $inflow,
                 'stages' => $stages,
                 /*
                  * The one disagreement, stated. Without it, a reader filtered to «new» sees a list

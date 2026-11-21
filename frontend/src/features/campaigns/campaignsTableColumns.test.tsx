@@ -55,7 +55,7 @@ describe('the campaigns table columns', () => {
     expect(table.queryByTestId('campaigns-head-ctr')).toBeNull()
 
     fireEvent.click(screen.getByTestId('campaigns-preset-engagement'))
-    expect(table.getByTestId('campaigns-head-ctr')).toHaveTextContent('نسبة النقر')
+    expect(table.getByTestId('campaigns-head-ctr')).toHaveTextContent('معدل النقر')
     expect(table.queryByTestId('campaigns-head-cost')).toBeNull()
     expect(JSON.parse(localStorage.getItem('ch-campaign-columns') ?? '[]')).toContain('ctr')
   })
@@ -75,7 +75,7 @@ describe('the campaigns table columns', () => {
     renderWithProviders(<CampaignsPage />, { locale: 'ar' })
     const table = await openTable()
     fireEvent.click(screen.getByTestId('campaign-view-v1'))
-    expect(table.getByTestId('campaigns-head-roas')).toHaveTextContent('العائد على الإنفاق')
+    expect(table.getByTestId('campaigns-head-roas')).toHaveTextContent('معدل العائد')
     expect(table.queryByTestId('campaigns-head-cost')).toBeNull()
     await waitFor(() => expect(listCampaigns).toHaveBeenLastCalledWith('p1', expect.objectContaining({ sort: 'spend', dir: 'asc' })))
   })
@@ -88,6 +88,6 @@ describe('the campaigns table columns', () => {
     fireEvent.click(screen.getByTestId('campaign-view-new'))
     fireEvent.change(screen.getByTestId('campaign-view-name'), { target: { value: 'Q4 board' } })
     fireEvent.click(screen.getByTestId('campaign-view-save'))
-    expect(save.mutate).toHaveBeenCalledWith(expect.objectContaining({ name: 'Q4 board', filters: expect.objectContaining({ columns: expect.arrayContaining(['spend', 'results']) }), date_range: { days: 30 } }), expect.anything())
+    expect(save.mutate).toHaveBeenCalledWith(expect.objectContaining({ name: 'Q4 board', filters: expect.objectContaining({ columns: expect.arrayContaining(['spend', 'results']) }), date_range: { days: 7 } }), expect.anything())  // DATE-RANGE-001: a new user's period is the last 7 complete days
   })
 })

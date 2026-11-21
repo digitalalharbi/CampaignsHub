@@ -26,7 +26,14 @@ test('export → download → the XLSX and CSV a person receives are real files 
    */
   test.setTimeout(420_000)
 
-  const { projectId, reportId } = await buildGeneratedClientReport(page, `E2E TABULAR ${Date.now()}`)
+  /*
+   * The all-sales demo store, by name — the columns asserted below are the SALES template's.
+   *
+   * Taking «the first project» also reaches Q3 Launch, which spans awareness, traffic and sales and is
+   * therefore a mixed report (spend, CTR, share — no revenue, no ROAS) by design. Which one came first
+   * was the order of equal `created_at` rows, i.e. luck; see `buildGeneratedClientReport`.
+   */
+  const { projectId, reportId } = await buildGeneratedClientReport(page, `E2E TABULAR ${Date.now()}`, { project: /متجر تجريبي|Demo Store/ })
 
   const reportUrl = `/api/v1/projects/${projectId}/reports/${reportId}`
   type ExportRow = { format: string; status: string; token: string | null; is_demo?: boolean; error?: string | null }
@@ -153,10 +160,14 @@ test('export → download → the XLSX and CSV a person receives are real files 
   // REPORT-KPI-CONTRACT-001 — a client file's metric columns are the report's visible-KPI allowlist (the Sales template here:
   // spend, impressions, clicks, add to cart, purchases, revenue, ROAS), so the cost-per and CTR columns are absent.
   // RESULT-EVENTS-001 — a platform's generic `conversions` is no client column: it is never a Lead or a Result unless configured.
-  expect(cells(lines[headerAt])).toEqual(['Platforms', 'spend', 'revenue', 'roas', 'share'])
+  // FX-APPLY-001 (builder G, by Owner spec) — every platform row also names the currency its platform reported in, as the
+  // LAST column, so the file reconciles with the screen. The metric columns before it are exactly the allowlist above.
+  expect(cells(lines[headerAt])).toEqual(['Platforms', 'spend', 'revenue', 'roas', 'share', 'Original currency / العملة الأصلية'])
 
   const platformRows: string[][] = []
   for (let i = headerAt + 1; i < lines.length && lines[i].trim() !== ''; i++) platformRows.push(cells(lines[i]))
+  // «Codes only — never an amount, never a name» (ReportExporter::withOriginalCurrency).
+  for (const r of platformRows) expect(r[5] ?? '', `the original-currency cell of ${r[0]}`).toMatch(/^([A-Z]{3}(, [A-Z]{3})*)?$/)
 
   /*
    * The figures in the file are the figures the product reports.

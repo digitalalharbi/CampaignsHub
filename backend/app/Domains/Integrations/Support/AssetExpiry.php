@@ -60,7 +60,11 @@ final class AssetExpiry
 
         // Meta states `oe` in hex; Snapchat states `e` in decimal. Meta first: an `e` alongside an
         // `oe` on a Meta URL is not the expiry, and the more specific key is the safer read.
-        foreach ([['oe', 16], ['e', 10]] as [$key, $base]) {
+        //
+        // CONTENT-PREVIEW-COVERAGE-001 — TikTok's CDN states `x-expires` in decimal seconds, beside its
+        // `x-signature` (the shape this repo's own cover-cache fixture uses). It is a whole, hyphenated name,
+        // so it cannot be mistaken for Snapchat's `e`. The same 2010–2100 bound discards anything else.
+        foreach ([['oe', 16], ['x-expires', 10], ['e', 10]] as [$key, $base]) {
             $raw = $params[$key] ?? null;
 
             if (! is_string($raw) || trim($raw) === '') {

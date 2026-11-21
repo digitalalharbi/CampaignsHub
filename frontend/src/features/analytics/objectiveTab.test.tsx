@@ -42,6 +42,7 @@ function route(campaigns: unknown[]) {
 
 async function openObjective() {
   renderWithProviders(<AnalyticsPage />, { locale: 'en' })
+  fireEvent.click(await screen.findByRole('button', { name: 'Performance' }))
   fireEvent.click(await screen.findByRole('tab', { name: 'Objectives' }))
 }
 
@@ -61,8 +62,9 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    expect(await screen.findByTestId('objective-family-awareness')).toHaveTextContent('Brand film')
-    expect(screen.getByTestId('objective-family-sales')).toHaveTextContent('Ramadan sale')
+    // OBJECTIVE-CARDS-001 — one small card per objective; the campaigns are counted on it, not listed in a table.
+    expect(await screen.findByTestId('objective-card-awareness')).toHaveTextContent('1 campaign')
+    expect(screen.getByTestId('objective-card-sales')).toHaveTextContent('1 campaign')
   })
 
   /** The whole point: an awareness family is not headlined with ROAS. */
@@ -74,8 +76,8 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    const awareness = within(await screen.findByTestId('objective-family-awareness'))
-    const sales = within(screen.getByTestId('objective-family-sales'))
+    const awareness = within(await screen.findByTestId('objective-card-awareness'))
+    const sales = within(screen.getByTestId('objective-card-sales'))
 
     /*
       Asserted on the LABELS, not the metric keys.
@@ -102,8 +104,8 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    await screen.findByTestId('objective-family-awareness')
-    expect(screen.queryByTestId('objective-family-app')).not.toBeInTheDocument()
+    await screen.findByTestId('objective-card-awareness')
+    expect(screen.queryByTestId('objective-card-app')).not.toBeInTheDocument()
   })
 
   /** Withheld money keeps its own currency here too. */
@@ -120,7 +122,7 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    expect(await screen.findByTestId('objective-family-awareness')).toHaveTextContent('412.50 USD')
+    expect(await screen.findByTestId('objective-card-awareness')).toHaveTextContent('412.50 $')
   })
 
   /** A campaign the platform never classified lands in Unclassified, never in Sales. */
@@ -129,7 +131,7 @@ describe('the objective analysis tab', () => {
 
     await openObjective()
 
-    expect(await screen.findByTestId('objective-family-unknown')).toHaveTextContent('Unknown intent')
+    expect(await screen.findByTestId('objective-card-unknown')).toHaveTextContent('1 campaign')
   })
 })
 
@@ -137,8 +139,8 @@ describe('the objective analysis tab', () => {
  * NUMBER-PRESENTATION-001 — one number, written the same way wherever it appears.
  *
  * The family summary's two FALLBACK branches — money, and a metric with no spec — printed
- * `toLocaleString` directly, so a family that spent 1,284,663 read «1,284,663 SAR» here and
- * «1.28M SAR» on the KPI card above it. Same figure, two shapes, on one screen: the reader has to
+ * `toLocaleString` directly, so a family that spent 1,284,663 read «1,284,663 ر.س» here and
+ * «1.28M ر.س» on the KPI card above it. Same figure, two shapes, on one screen: the reader has to
  * work out that they are the same number before they can use either.
  *
  * «لم يتم تقريب الارقام 1k, 3M, 54.5K وهكذا» was answered for the entity tables and these two
@@ -187,7 +189,7 @@ describe('a family summary is written like the rest of the product', () => {
 
     expect(costs.length, 'no cost-per figure was rendered to check').toBeGreaterThan(0)
     for (const cost of costs) {
-      expect(cost.trim()).toMatch(/\s(SAR|USD)$/)
+      expect(cost.trim()).toMatch(/\s(ر.س|\$)$/)
     }
   })
 })

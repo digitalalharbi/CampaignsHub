@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { FxAmount } from '@/components/money/FxAmount'
+import { useMemo, useState, type ReactNode } from 'react'
 import { changeFieldLabel, changeValueLabel, changedFields } from './campaignChangeHistory'
 import { useUi } from '@/stores/ui'
 import { TrendingDown, TrendingUp } from 'lucide-react'
@@ -18,7 +19,7 @@ import {
 } from './metrics'
 import type { CampaignCreative } from './metrics'
 import type { MetricTotals, PlatformRow, Range, TimePoint } from '@/features/analytics/api'
-import { ChartCard, ConversionFunnelChart, KpiSparkline, MetricLineChart, PlatformDonutChart, ProgressRing, SpendRevenueAreaChart } from '@/features/analytics/charts'
+import { ChartCard, ConversionFunnelChart, hasFunnel, shownFunnelStages, KpiSparkline, MetricLineChart, PlatformDonutChart, ProgressRing, SpendRevenueAreaChart } from '@/features/analytics/charts'
 /*
  * PERCENT-100X-001 — `percent()` multiplies by 100. This file used to as well.
  *
@@ -40,6 +41,7 @@ import { rankableMoney, readRoas, resolveMoneySeries, spendComparableAmount, typ
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { providerLabel } from './labels'
+import { campaignResult, costLabelOf, missingText, resultCostText, resultLabel, returnsRevenue, sharedUnit, unitCostText, type CampaignResult } from './campaignResult'
 import { AdPoster } from '@/features/content/AdPoster'
 import type { Locale } from '@/stores/ui'
 import { StatCard } from '@/components/ui/StatCard'
@@ -47,11 +49,6 @@ import { Num } from '@/components/ui/Num'
 import { allowsDerived, coverageNote, isComplete, readCoverage, reportedThrough, truncatedOnly } from '@/lib/coverage/contract'
 
 type Sparkable = keyof MetricTotals
-
-/** Objective → the primary cost metric the client cares about (CPA vs CPL). */
-function costLabel(objective: string): string {
-  return objective === 'leads' ? 'CPL' : 'CPA'
-}
 
 /**
  * PARTIAL-WITHHELD-001 — spend as ONE figure in the budget's currency, or null.
@@ -82,10 +79,10 @@ function spendInBudgetCurrency(
  */
 function budgetComparableSpend(
   totals: MoneyTotals | undefined,
-  budgetCurrency: string,
+  budgetCurrency: string | null,
   reportingCurrency: string | null,
 ): number | null {
-  if (totals === undefined || !allowsDerived(readCoverage(totals, 'spend'))) return null
+  if (totals === undefined || budgetCurrency === null || !allowsDerived(readCoverage(totals, 'spend'))) return null
 
   return spendInBudgetCurrency(totals, budgetCurrency, reportingCurrency)
 }
@@ -101,7 +98,7 @@ function budgetComparableSpend(
 function budgetRisk(
   util: number | null,
   budget: number | null,
-  conversions: number | null | undefined,
+  result: CampaignResult | null,
   ar: boolean,
   forecastOver = false,
 ): { text: string; tone?: 'danger' | 'warning' } {
@@ -109,14 +106,20 @@ function budgetRisk(
   if (util !== null && util >= 1) return { text: ar ? 'تجاوزت الميزانية' : 'Over budget', tone: 'danger' }
   if (util !== null && util > 0.95) return { text: ar ? 'الميزانية شارفت على النفاد' : 'Budget almost exhausted', tone: 'danger' }
   if (forecastOver) return { text: ar ? 'تجاوز متوقع' : 'Overrun forecast', tone: 'warning' }
-  if (conversions === 0) return { text: ar ? 'لا نتائج في الفترة' : 'No results in the period', tone: 'warning' }
-  if (util === null) return { text: ar ? 'غير متاح — لا رقم مصروف يُقارن بالميزانية' : 'Unavailable — no spend figure comparable with the budget' }
+  /*
+   * OBJECTIVE-RESULT-001 — «no results» only when THIS objective's own result is a measured zero.
+   * It read `conversions`, so a traffic campaign with 2,881 visits was told it had none.
+   */
+  if (result !== null && result.key !== null && result.value === 0) {
+    return { text: ar ? `${resultLabel(result, true)}: 0 في الفترة` : `${resultLabel(result, false)}: 0 in the period`, tone: 'warning' }
+  }
+  if (util === null) return { text: ar ? 'غير متاح — لا رقم إنفاق يُقارن بالميزانية' : 'Unavailable — no spend figure comparable with the budget' }
 
   return { text: ar ? 'ضمن الحدود' : 'Within limits' }
 }
 
 /** A remaining figure, with an overrun shown as what it is rather than as a minus sign the eye skips. */
-function remainingText(remaining: number | null, cur: string): string {
+function remainingText(remaining: number | null, cur: string | null): string {
   if (remaining === null) return '—'
 
   return remaining < 0 ? `−${money(-remaining, cur)}` : money(remaining, cur)
@@ -141,8 +144,9 @@ function deltaTone(key: Sparkable, delta: number | null | undefined): 'up' | 'do
 function KpiCard({
   label, value, sub, delta, deltaKey, spark,
 }: {
-  label: string; value: string; sub?: string; delta?: number | null; deltaKey?: Sparkable; spark?: number[]
+  label: string; value: ReactNode; sub?: string; delta?: number | null; deltaKey?: Sparkable; spark?: number[]
 }) {
+  delta = meaningfulDelta(delta)
   const tone = deltaKey ? deltaTone(deltaKey, delta) : trend(delta)
   const toneClass = tone === 'up' ? 'text-success' : tone === 'down' ? 'text-danger' : 'text-text-muted'
 
@@ -164,6 +168,33 @@ function KpiCard({
   )
 }
 
+/**
+ * CAMPAIGN-PAGE-LEAN-001 — a movement against a previous period that was near nothing («+337,892%») says nothing about
+ * the campaign; past ±999% the arrow is not drawn.
+ */
+export function meaningfulDelta(delta: number | null | undefined): number | null {
+  return delta == null || !Number.isFinite(delta) || Math.abs(delta) > 9.99 ? null : delta
+}
+
+/** CAMPAIGN-PAGE-LEAN-001 — the report's small card: label, figure and its movement, on one compact line. */
+function MiniKpi({ label, value, hint, delta, deltaKey }: { label: string; value: ReactNode; hint?: string; delta?: number | null; deltaKey?: Sparkable }) {
+  const shown = meaningfulDelta(delta)
+  const tone = deltaKey ? deltaTone(deltaKey, shown) : trend(shown)
+  const toneClass = tone === 'up' ? 'text-success' : tone === 'down' ? 'text-danger' : 'text-text-muted'
+
+  return (
+    <div className="min-w-0 rounded-2xl border border-border bg-surface px-3 py-2" title={hint}>
+      {/* the reason a figure is missing is said, not hidden in a tooltip */}
+      <div className="truncate text-xs text-text-muted">{label}</div>
+      <div className="mt-0.5 flex items-baseline justify-between gap-2">
+        <span className="tnum truncate text-base font-bold text-text-primary">{value}</span>
+        {shown != null && <span dir="ltr" className={`shrink-0 text-xs font-semibold ${toneClass}`}>{percent(Math.abs(shown), 0)}</span>}
+      </div>
+      {hint && <div className="mt-0.5 text-xs leading-snug text-text-secondary">{hint}</div>}
+    </div>
+  )
+}
+
 function sparks(series: TimePoint[] | undefined, key: Sparkable): number[] {
   return (series ?? []).map((p) => Number(p[key] ?? 0))
 }
@@ -175,7 +206,8 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
 
   const k = summary.data?.current
   const budget = campaign.total_budget ?? null
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — the budget's own currency, never a guessed «SAR».
+  const cur = campaign.budget_currency || null
   const locale = useUi((u) => u.locale)
   const ar = locale === 'ar'
 
@@ -210,8 +242,13 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
       : coverageNote(coverage, ar, (c) => providerLabel(c, locale)))
     : null
   const convRate = derived && k && k.clicks > 0 ? k.conversions / k.clicks : null
+  /* OBJECTIVE-RESULT-001 — the result this campaign's objective is judged on, never `conversions` for all. */
+  const result = campaignResult(campaign.objective, k, summary.data?.reported)
+  const sells = returnsRevenue(campaign.objective)
+  const resultDeltaKey = result.key as Sparkable | null
+  const costDelta = result.key === 'conversions' ? d.cpa : result.key === 'clicks' ? d.cpc : null
 
-  // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان المصروف بالميزانية، فيلزمهما رقم مصروف
+  // PARTIAL-WITHHELD-001 — المتبقي/الاستهلاك يقارنان الإنفاق بالميزانية، فيلزمهما رقم إنفاق
   // واحد بعملة الميزانية. سياق جزئي/مختلط، أو مصروف محتجَز بعملة أخرى، لا يوفّره ⇒ كلاهما غير
   // متاح (لا «الميزانية − الجزء المحوَّل» ولا «الميزانية − صفر»).
   const spendVsBudget = budgetComparableSpend(k, cur, summary.data?.currency ?? null)
@@ -219,25 +256,31 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
   const utilization = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
   /* CAMPAIGN-BUDGET-TRUTH-001 — a «—» beside a stated budget says why, and an overrun says so. */
   const remainingSub = remaining !== null && remaining < 0 && utilization !== null
-    ? `تجاوزت الميزانية · استهلاك ${percent(utilization, 0)}`
+    ? `تجاوزت الميزانية · نسبة الإنفاق ${percent(utilization, 0)}`
     : utilization != null
-      ? `استهلاك ${percent(utilization, 0)}`
+      ? `نسبة الإنفاق ${percent(utilization, 0)}`
       : budget != null
-        ? 'بلا رقم مصروف يُقارن بالميزانية'
+        ? 'بلا رقم إنفاق يُقارن بالميزانية'
         : undefined
 
   /*
    * MONEY-TRUTH-003 — the same contract the dashboard and Analytics use.
    *
    * `k` is `MetricsAggregator::totals()`, which coalesces a withheld sum to 0. Read raw, this card
-   * showed «المصروف 0» over money the platform really spent, and CPA/CPC/CPM divided that same zero.
+   * showed «الإنفاق 0» over money the platform really spent, and CPA/CPC/CPM divided that same zero.
    *
    * BUDGET and المتبقي are deliberately NOT read through this: a campaign budget is set by the
    * advertiser in the campaign's own currency and is never withheld. Routing it through a
    * provider-money contract would invent a provenance question it does not have.
    */
-  const spendRead = moneyFromTotals(k, 'spend', true, cur)
-  const revenueRead = moneyFromTotals(k, 'revenue', true, cur)
+  /*
+   * FX-APPLY-001 — THE «253 € here, 253 $ in the table» defect. These totals are in the summary's REPORTING currency
+   * (`summary.currency`, USD), and this line labelled them with the campaign's BUDGET currency: a EUR campaign's spend read
+   * «253 €» while the table read the same figure as «253 $». Totals are labelled with their own currency; the budget keeps its.
+   */
+  const rc = summary.data?.currency ?? null
+  const spendRead = moneyFromTotals(k, 'spend', true, rc)
+  const revenueRead = moneyFromTotals(k, 'revenue', true, rc)
   const roasRead = readRoas(k, true)
 
   if (summary.isLoading) return <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">{Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
@@ -252,30 +295,47 @@ export function CampaignKpis({ campaign, projectId, range }: { campaign: Unified
           : ' The comparison with the previous period is withheld: the two windows are not alike.')}
       </p>
     )}
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
-      <KpiCard label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
-      <KpiCard label="المصروف" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
-      <KpiCard label="المتبقي" value={remainingText(remaining, cur)} sub={remainingSub} />
-      <KpiCard label="النتائج" value={num(k?.conversions)} delta={d.conversions} deltaKey="conversions" spark={sparks(perf.data, 'conversions')} />
-      <KpiCard label={costLabel(campaign.objective)} value={derived ? rowCostPer(k, 'cpa', 'conversions', cur) : '—'} delta={spendRead.withheld ? null : d.cpa} deltaKey="cpa" spark={spendRead.withheld || !derived ? undefined : sparks(perf.data, 'cpa')} />
-      <KpiCard label="الإيرادات" value={revenueRead.text} sub={revenueRead.note ?? undefined} delta={revenueRead.withheld ? null : d.revenue} deltaKey="revenue" spark={revenueRead.withheld ? undefined : sparks(perf.data, 'revenue')} />
-      <KpiCard label="ROAS" value={roasRead.value === null || !derived ? '—' : ratio(roasRead.value)} sub={roasRead.note ?? undefined} delta={roasRead.kind === 'converted' || roasRead.kind === 'zero' ? d.roas : null} deltaKey="roas" spark={roasRead.kind === 'converted' && derived ? sparks(perf.data, 'roas') : undefined} />
-      {/*
-        * AGGREGATION-TRUTH-001 — `percent()` and `num()` already return «—» for a figure the
-        * aggregator did not state, and every call on this screen passed `x ?? 0` first. A CTR that
-        * was never reported printed «0.0%» and results that were never reported printed «0», on the
-        * screen an operator uses to decide whether to pause a campaign — and a campaign that has not
-        * delivered an impression yet is not a campaign nobody clicks. The inconsistency was visible
-        * inside one row: spend, CPA, ROAS and «المساهمة» refuse correctly, and the cells between them
-        * claimed zero.
-        */}
-      <KpiCard label="CTR" value={derived ? percent(k?.ctr) : '—'} delta={d.ctr} deltaKey="ctr" spark={derived ? sparks(perf.data, 'ctr') : undefined} />
-      <KpiCard label="CPC" value={derived ? rowCostPer(k, 'cpc', 'clicks', cur) : '—'} delta={spendRead.withheld ? null : d.cpc} deltaKey="cpc" />
-      {/* CPM divides by impressions per THOUSAND. The factor lives here, visible, rather than in a
-          generic reader — and rather than as a field name no payload carries. */}
-      <KpiCard label="CPM" value={derived ? rowCostPer(k, 'cpm', (k?.impressions ?? 0) / 1000, cur) : '—'} delta={spendRead.withheld ? null : d.cpm} deltaKey="cpm" />
-      <KpiCard label="معدل التحويل" value={convRate != null ? percent(convRate) : '—'} />
-      <KpiCard label="مرات الظهور" value={compact(k?.impressions)} delta={d.impressions} deltaKey="impressions" />
+    {/*
+      * CAMPAIGN-PAGE-LEAN-001 — Owner 2026-11-19: the report's logic, large cards and small cards. The four figures the
+      * campaign is judged on are large; every other figure is a small card, and a small card with nothing to say («—»,
+      * no budget) is not drawn at all.
+      */}
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="campaign-kpis-primary">
+      <KpiCard label="الإنفاق" value={spendRead.text} sub={spendRead.note ?? undefined} delta={spendRead.withheld ? null : d.spend} deltaKey="spend" spark={spendRead.withheld ? undefined : sparks(perf.data, 'spend')} />
+      <KpiCard
+        label={resultLabel(result, ar)}
+        value={result.value === null ? '—' : num(result.value)}
+        sub={missingText(result, ar) ?? (result.note ? (ar ? result.note.ar : result.note.en) : undefined)}
+        delta={resultDeltaKey ? d[resultDeltaKey] : null}
+        deltaKey={resultDeltaKey ?? undefined}
+        spark={resultDeltaKey ? sparks(perf.data, resultDeltaKey) : undefined}
+      />
+      <KpiCard label={costLabelOf(result, ar)} value={derived ? resultCostText(result, k, rc) : '—'} delta={spendRead.withheld ? null : costDelta} deltaKey={result.key === 'clicks' ? 'cpc' : 'cpa'} />
+      {/* Revenue and ROAS belong to a sales campaign only — any other objective was never bought to return revenue. */}
+      {sells
+        ? <KpiCard label="ROAS" value={roasRead.value === null || !derived ? '—' : ratio(roasRead.value)} sub={roasRead.note ?? undefined} delta={roasRead.kind === 'converted' || roasRead.kind === 'zero' ? d.roas : null} deltaKey="roas" spark={roasRead.kind === 'converted' && derived ? sparks(perf.data, 'roas') : undefined} />
+        : <KpiCard label="مرات الظهور" value={compact(k?.impressions)} delta={d.impressions} deltaKey="impressions" spark={sparks(perf.data, 'impressions')} />}
+    </div>
+    {/*
+      * AGGREGATION-TRUTH-001 — `percent()` and `num()` return «—» for a figure nobody stated; never `x ?? 0`. A small card
+      * whose value is «—» is left out rather than drawn empty.
+      */}
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-testid="campaign-kpis-secondary">
+      {[
+        budget != null ? { key: 'budget', label: 'الميزانية', value: campaign.budget_fx ? <FxAmount c={campaign.budget_fx} ar={ar} showOriginal testId="campaign-budget-fx" /> : money(budget, cur) } : null,
+        budget != null ? { key: 'remaining', label: 'المتبقي', value: remainingText(remaining, cur), hint: remainingSub } : null,
+        sells ? { key: 'revenue', label: 'الإيرادات', value: revenueRead.text, hint: revenueRead.note ?? undefined, delta: revenueRead.withheld ? null : d.revenue, deltaKey: 'revenue' as Sparkable } : null,
+        { key: 'ctr', label: 'CTR', value: derived ? percent(k?.ctr) : '—', delta: d.ctr, deltaKey: 'ctr' as Sparkable },
+        { key: 'cpc', label: 'CPC', value: derived ? rowCostPer(k, 'cpc', 'clicks', rc) : '—', delta: spendRead.withheld ? null : d.cpc, deltaKey: 'cpc' as Sparkable },
+        /* CPM divides by impressions per THOUSAND; the factor lives here, visible. */
+        { key: 'cpm', label: 'CPM', value: derived ? rowCostPer(k, 'cpm', (k?.impressions ?? 0) / 1000, rc) : '—', delta: spendRead.withheld ? null : d.cpm, deltaKey: 'cpm' as Sparkable },
+        sells ? { key: 'conv_rate', label: 'معدل التحويل', value: convRate != null ? percent(convRate) : '—' } : null,
+        sells ? { key: 'impressions', label: 'مرات الظهور', value: compact(k?.impressions), delta: d.impressions, deltaKey: 'impressions' as Sparkable } : null,
+      ]
+        .filter((x): x is NonNullable<typeof x> => x !== null && ((x.value !== '—' && x.value !== null && x.value !== undefined && x.value !== '') || ('hint' in x && !!x.hint)))
+        .map((x) => (
+          <MiniKpi key={x.key} label={x.label} value={x.value} hint={'hint' in x ? x.hint : undefined} delta={'delta' in x ? x.delta : null} deltaKey={'deltaKey' in x ? x.deltaKey : undefined} />
+        ))}
     </div>
     </div>
   )
@@ -289,22 +349,51 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
   const insight = useMemo(() => {
     const k = summary.data?.current
     const plats = platforms.data ?? []
-    const byRoas = [...plats].filter((p) => p.roas != null).sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))
+    const ar = locale === 'ar'
+    /*
+     * OBJECTIVE-RESULT-001 — the best platform is judged on what the campaign was bought for: return
+     * for a sales campaign, the lowest cost per result for every other objective. Ranking a traffic
+     * campaign's platforms by ROAS named a «best» platform on revenue it never sought.
+     */
+    const sells = returnsRevenue(campaign.objective)
+    const result = campaignResult(campaign.objective, k, summary.data?.reported)
+    /*
+     * One unit across the platforms before any comparison (a visit and a click are not compared), and
+     * the money through the contract: `rankableMoney` refuses a mixed or withheld spend instead of
+     * dividing a converted part of it.
+     */
+    const unit = sharedUnit(campaign.objective, plats)
+    const money = rankableMoney(plats as MoneyTotals[], 'spend', summary.data?.currency ?? null)
+    const costAt = (i: number): number | null => {
+      const v = unit.values[i]
+      const spend = money?.values[i] ?? null
+      return unit.key !== null && v !== null && v > 0 && spend !== null ? (spend / v) * unit.per : null
+    }
+    const ranked = plats.map((p, i) => ({ p, i, cost: costAt(i) }))
+    const byRoas = sells
+      ? [...plats].filter((p) => p.roas != null).sort((a, b) => (b.roas ?? 0) - (a.roas ?? 0))
+      : ranked.filter((r) => r.cost !== null).sort((a, b) => (a.cost ?? 0) - (b.cost ?? 0)).map((r) => r.p)
+    const bestNote = (p: PlatformRow): string => {
+      if (sells) return ratio(p.roas)
+      const i = plats.indexOf(p)
+      return `${unit.costLabel ? (ar ? unit.costLabel.ar : unit.costLabel.en) : ''} ${unitCostText(unit, i, p, summary.data?.currency ?? null)}`.trim()
+    }
+    const resultText = result.value === null ? (missingText(result, ar) ?? '—') : `${num(result.value)} ${resultLabel(result, ar)}`
     const budget = campaign.total_budget ?? null
     // PARTIAL-WITHHELD-001 — budget risk must not read a partial/withheld spend as a low utilization.
     // No single spend figure in the budget currency ⇒ util is null and the «almost exhausted» claim
     // simply cannot fire, rather than firing wrong or staying silent because a subset looked small.
-    const spendVsBudget = budgetComparableSpend(k as MoneyTotals | undefined, campaign.budget_currency || 'SAR', summary.data?.currency ?? null)
+    const spendVsBudget = budgetComparableSpend(k as MoneyTotals | undefined, campaign.budget_currency || null, summary.data?.currency ?? null)
     const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
     return {
       // CAMPAIGN-KPI-COVERAGE-001 — a ratio only where the window's coverage allows one.
-      topResult: k ? (allowsDerived(readCoverage(k)) ? `${num(k.conversions)} نتيجة · ${ratio(k.roas)} ROAS` : `${num(k.conversions)} نتيجة`) : '—',
-      bestPlatform: byRoas[0] ? `${providerLabel(byRoas[0].provider, locale)} (${ratio(byRoas[0].roas)})` : '—',
-      opportunity: byRoas[0] ? `توسيع ${providerLabel(byRoas[0].provider, locale)} — أعلى عائد` : '—',
-      risk: budgetRisk(util, budget, k?.conversions, locale === 'ar').text,
+      topResult: k ? (sells && allowsDerived(readCoverage(k)) ? `${resultText} · ${ratio(k.roas)} ROAS` : resultText) : '—',
+      bestPlatform: byRoas[0] ? `${providerLabel(byRoas[0].provider, locale)} (${bestNote(byRoas[0])})` : '—',
+      opportunity: byRoas[0] ? `توسيع ${providerLabel(byRoas[0].provider, locale)} — ${sells ? 'أعلى عائد' : 'أقل تكلفة'}` : '—',
+      risk: budgetRisk(util, budget, result, ar).text,
       nextStep: byRoas[0] ? `إعادة توزيع الميزانية نحو ${providerLabel(byRoas[0].provider, locale)}` : 'مراجعة الاستهداف',
     }
-  }, [summary.data, platforms.data, campaign.total_budget, campaign.budget_currency, locale])
+  }, [summary.data, platforms.data, campaign.total_budget, campaign.budget_currency, campaign.objective, locale])
 
   const Item = ({ label, value }: { label: string; value: string }) => (
     <div className="flex flex-col gap-0.5 rounded-lg border border-border bg-surface-secondary p-2.5">
@@ -328,18 +417,32 @@ export function CampaignExecutiveSummary({ campaign, projectId, range, locale }:
 export function CampaignPerformanceTab({ campaign, projectId, range, locale }: { campaign: UnifiedCampaign; projectId: string; range: Range; locale: Locale }) {
   const perf = useCampaignPerformance(projectId, campaign.id, range)
   const platforms = useCampaignPlatforms(projectId, campaign.id, range)
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — the series and the platform split are in the summary's reporting currency, never the budget's.
+  const summary = useCampaignSummary(projectId, campaign.id, range)
+  const cur = summary.data?.currency ?? null
   const series = perf.data ?? []
   // PARTIAL-WITHHELD-001 (d/f) — the spend/revenue trend plots EFFECTIVE money in one currency, or
   // «—»: a trend cannot drop a withheld/partial day the way the donut drops a platform.
   const moneySeries = resolveMoneySeries(series as unknown as Array<Record<string, unknown>>, ['spend', 'revenue'], cur)
 
+  /* OBJECTIVE-RESULT-001 — the daily result is the objective's own; revenue and ROAS are sales-only. */
+  const sells = returnsRevenue(campaign.objective)
+  /* The unit is chosen over the whole window, so the line never changes unit halfway; reach is not additive across days. */
+  const dayResult = useMemo(() => {
+    const total = (key: keyof TimePoint) => series.reduce((a, p) => a + Number(p[key] ?? 0), 0)
+    return campaignResult(campaign.objective, {
+      reach: null, impressions: total('impressions'), landing_page_views: total('landing_page_views'), clicks: total('clicks'),
+      engagements: total('engagements'), video_views: total('video_views'), leads: total('leads'), form_leads: total('form_leads' as keyof TimePoint), conversions: total('conversions'), installs: total('installs'),
+    })
+  }, [series, campaign.objective])
+
   const bestWorst = useMemo(() => {
+    if (!sells) return null
     const withRev = series.filter((p) => p.revenue != null)
     if (withRev.length === 0) return null
     const sorted = [...withRev].sort((a, b) => (b.revenue ?? 0) - (a.revenue ?? 0))
     return { best: sorted[0], worst: sorted[sorted.length - 1] }
-  }, [series])
+  }, [series, sells])
 
   // PARTIAL-WITHHELD-001 — spend share per platform, only when comparable in one currency (else null).
   const platformDonutRank = rankableMoney((platforms.data ?? []) as MoneyTotals[], 'spend', cur)
@@ -375,27 +478,33 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
 
   return (
     <div className="space-y-4">
-      <ChartCard title={ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue'} subtitle={ar ? 'الاتجاه اليومي لهذه الحملة' : 'This campaign, day by day'}>
+      <ChartCard title={sells ? (ar ? 'الإنفاق مقابل الإيرادات' : 'Spend vs revenue') : (ar ? 'الإنفاق' : 'Spend')} subtitle={ar ? 'الاتجاه اليومي لهذه الحملة' : 'This campaign, day by day'}>
         {moneySeries === null
           ? <div className="flex h-[240px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'الإنفاق/الإيراد عبر الزمن غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend/revenue over time unavailable — amounts await a rate or span currencies'}</div>
-          : <SpendRevenueAreaChart data={moneySeries.rows} height={240} currency={moneySeries.currency ?? cur} />}
+          : sells
+            ? <SpendRevenueAreaChart data={moneySeries.rows} height={240} currency={moneySeries.currency ?? cur ?? undefined} />
+            : <MetricLineChart data={moneySeries.rows as unknown as Array<Record<string, unknown>>} series={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend' }]} height={240} />}
       </ChartCard>
       <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard title={ar ? 'النتائج' : 'Results'} subtitle={ar ? 'الاتجاه اليومي' : 'Day by day'}>
-          <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'conversions', name: ar ? 'النتائج' : 'Results' }]} height={190} />
+        <ChartCard title={resultLabel(dayResult, ar)} subtitle={ar ? 'الاتجاه اليومي' : 'Day by day'}>
+          {dayResult.key === null
+            ? <div className="flex h-[190px] items-center justify-center text-center text-sm text-text-muted">{missingText(dayResult, ar)}</div>
+            : <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: dayResult.key, name: resultLabel(dayResult, ar) }]} height={190} />}
         </ChartCard>
-        <ChartCard title="ROAS" subtitle={ar ? 'العائد على الإنفاق' : 'Return on ad spend'}>
-          <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'roas', name: 'ROAS' }]} height={190} />
-        </ChartCard>
-        <ChartCard title="CPA / CPC" subtitle={ar ? 'التكلفة' : 'Cost'}>
-          <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'cpa', name: 'CPA' }, { key: 'cpc', name: 'CPC' }]} height={190} />
+        {sells && (
+          <ChartCard title={ar ? 'معدل العائد (ROAS)' : 'Return on ad spend (ROAS)'} subtitle={ar ? 'الاتجاه اليومي' : 'Day by day'}>
+            <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={[{ key: 'roas', name: 'ROAS' }]} height={190} />
+          </ChartCard>
+        )}
+        <ChartCard title={sells ? 'CPA / CPC' : 'CPC / CPM'} subtitle={ar ? 'التكلفة' : 'Cost'}>
+          <MetricLineChart data={series as unknown as Array<Record<string, unknown>>} series={sells ? [{ key: 'cpa', name: 'CPA' }, { key: 'cpc', name: 'CPC' }] : [{ key: 'cpc', name: 'CPC' }, { key: 'cpm', name: 'CPM' }]} height={190} />
         </ChartCard>
         <ChartCard title={ar ? 'مساهمة المنصات' : 'Platform contribution'} subtitle={ar ? 'حسب الإنفاق' : 'By spend'}>
           {platformDonut === null
             ? <div className="flex h-[190px] items-center justify-center text-center text-sm text-text-muted">{ar ? 'توزيع الإنفاق غير متاح — مبالغ جزئية أو بعملات متعددة' : 'Spend share unavailable — partial or multi-currency'}</div>
             : platformDonut.data.length
               ? <>
-                  <PlatformDonutChart data={platformDonut.data} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={compact(platformDonut.data.reduce((a, b) => a + b.value, 0))} height={190} currency={platformDonutRank?.currency ?? cur} />
+                  <PlatformDonutChart data={platformDonut.data} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={compact(platformDonut.data.reduce((a, b) => a + b.value, 0))} height={190} currency={platformDonutRank?.currency ?? cur ?? undefined} />
                   {platformDonut.dropped > 0 && <p className="mt-1 text-center text-[11px] text-text-muted">{ar ? `${platformDonut.dropped} منصة غير مُدرجة — مبالغ جزئية أو بعملات متعددة` : `${platformDonut.dropped} platform(s) not included — partial or multi-currency`}</p>}
                 </>
               : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">{ar ? 'لا بيانات منصات' : 'No platform data'}</div>}
@@ -405,7 +514,7 @@ export function CampaignPerformanceTab({ campaign, projectId, range, locale }: {
         <div className="grid grid-cols-2 gap-3">
           {/* Daily revenue carries the same withholding as the total it sums into. */}
           <div className="rounded-xl border border-border bg-surface p-3"><span className="text-[11px] uppercase text-text-muted">أفضل يوم</span><div className="tnum text-sm font-bold">{bestWorst.best.date} · {rowMoney(bestWorst.best as never, 'revenue', cur)}</div></div>
-          <div className="rounded-xl border border-border bg-surface p-3"><span className="text-[11px] uppercase text-text-muted">أضعف يوم</span><div className="tnum text-sm font-bold">{bestWorst.worst.date} · {rowMoney(bestWorst.worst as never, 'revenue', cur)}</div></div>
+          <div className="rounded-xl border border-border bg-surface p-3"><span className="text-[11px] uppercase text-text-muted">أقل يوم</span><div className="tnum text-sm font-bold">{bestWorst.worst.date} · {rowMoney(bestWorst.worst as never, 'revenue', cur)}</div></div>
         </div>
       )}
     </div>
@@ -418,17 +527,18 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   const platforms = useCampaignPlatforms(projectId, campaign.id, range)
   const perf = useCampaignPerformance(projectId, campaign.id, range)
   const activity = useCampaignActivity(projectId, campaign.id)
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — the budget's own currency, never a guessed «SAR».
+  const cur = campaign.budget_currency || null
 
   const budget = campaign.total_budget ?? null
   // PARTIAL-WITHHELD-001 — DISPLAY the spend through the contract (partial ⇒ «—», withheld ⇒ its own
   // currency), and do the budget MATH only from a single spend figure in the budget currency.
-  const spendRead = moneyFromTotals(summary.data?.current, 'spend', true, cur)
+  const spendRead = moneyFromTotals(summary.data?.current, 'spend', true, summary.data?.currency ?? null)
   const spendVsBudget = budgetComparableSpend(summary.data?.current, cur, summary.data?.currency ?? null)
   const remaining = budget != null && spendVsBudget != null ? budget - spendVsBudget : null
   const util = budget && budget > 0 && spendVsBudget != null ? spendVsBudget / budget : null
   // PARTIAL-WITHHELD-001 (d/f) — planned-vs-actual trend plots effective money in one currency, or «—».
-  const moneySeries = resolveMoneySeries((perf.data ?? []) as unknown as Array<Record<string, unknown>>, ['spend', 'revenue'], cur)
+  const moneySeries = resolveMoneySeries((perf.data ?? []) as unknown as Array<Record<string, unknown>>, ['spend', 'revenue'], summary.data?.currency ?? null)
 
   const pacing = useMemo(() => {
     if (!campaign.starts_on || !campaign.ends_on || budget == null) return null
@@ -451,7 +561,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   )
   // PARTIAL-WITHHELD-001 — a budget-allocation donut is a spend share; real only when the platforms
   // are comparable in one currency. Null (chart shows «unavailable») otherwise, never fake shares.
-  const platformAllocRank = rankableMoney((platforms.data ?? []) as MoneyTotals[], 'spend', cur)
+  const platformAllocRank = rankableMoney((platforms.data ?? []) as MoneyTotals[], 'spend', summary.data?.currency ?? null)
   /*
    * A donut drops and discloses; only a TOTAL fails closed (PARTIAL-WITHHELD-001). A platform with no
    * comparable magnitude is left off and counted, so the platforms that ARE known still draw.
@@ -472,7 +582,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
   return (
     <div className="space-y-4">
       <div className="grid gap-4 lg:grid-cols-3">
-        <ChartCard title="استهلاك الميزانية" subtitle={budget != null ? `${spendRead.text} من ${money(budget, cur)}` : 'لا ميزانية محددة'}>
+        <ChartCard title="الإنفاق من الميزانية" subtitle={budget != null ? `${spendRead.text} من ${money(budget, cur)}` : 'لا ميزانية محددة'}>
           <div className="flex h-[190px] items-center justify-center">
             <ProgressRing value={util ?? 0} sublabel={util != null ? percent(util, 0) : '—'} size={150} tone={util != null && util > 0.95 ? 'danger' : util != null && util > 0.8 ? 'warning' : 'brand'} />
           </div>
@@ -480,13 +590,13 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
         <ChartCard title="المخطط مقابل الفعلي" subtitle="الاتجاه التراكمي" className="lg:col-span-2">
           {moneySeries === null
             ? <div className="flex h-[190px] items-center justify-center text-center text-sm text-text-muted">{locale === 'ar' ? 'الإنفاق/الإيراد عبر الزمن غير متاح — مبالغ بانتظار سعر صرف أو بعملات متعددة' : 'Spend/revenue over time unavailable — amounts await a rate or span currencies'}</div>
-            : moneySeries.rows.length ? <SpendRevenueAreaChart data={moneySeries.rows} height={190} currency={moneySeries.currency ?? cur} /> : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">لا بيانات</div>}
+            : moneySeries.rows.length ? <SpendRevenueAreaChart data={moneySeries.rows} height={190} currency={moneySeries.currency ?? cur ?? undefined} /> : <div className="flex h-[190px] items-center justify-center text-sm text-text-muted">لا بيانات</div>}
         </ChartCard>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
         <Fact label="الميزانية" value={budget != null ? money(budget, cur) : '—'} />
-        <Fact label="المصروف" value={spendRead.text} />
+        <Fact label="الإنفاق" value={spendRead.text} />
         <Fact label="المتبقي" value={remainingText(remaining, cur)} tone={remaining !== null && remaining < 0 ? 'danger' : undefined} />
         <Fact label="أيام منقضية" value={pacing ? String(pacing.elapsed) : '—'} />
         <Fact label="أيام متبقية" value={pacing ? String(pacing.remainingDays) : '—'} />
@@ -494,7 +604,7 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
         <Fact label="توقع نهاية الحملة" value={pacing && pacing.forecast != null ? money(pacing.forecast, cur) : '—'} tone={pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05 ? 'danger' : undefined} />
         {/* PARTIAL-WITHHELD-001 / CAMPAIGN-BUDGET-TRUTH-001 — judged only from a comparable spend figure, and an overrun is named. */}
         {(() => {
-          const risk = budgetRisk(util, budget, summary.data?.current?.conversions, locale === 'ar', Boolean(pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05))
+          const risk = budgetRisk(util, budget, campaignResult(campaign.objective, summary.data?.current, summary.data?.reported), locale === 'ar', Boolean(pacing && pacing.forecast != null && budget != null && pacing.forecast > budget * 1.05))
           return <Fact label="خطر الميزانية" value={risk.text} tone={risk.tone} />
         })()}
       </div>
@@ -530,7 +640,8 @@ export function CampaignBudgetTab({ campaign, projectId, range, locale }: { camp
 /** CMC-10 — Conversion funnel (objective-aware) for the campaign. */
 export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: UnifiedCampaign; projectId: string; range: Range }) {
   const funnel = useCampaignFunnel(projectId, campaign.id, range)
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — the funnel's costs are platform money in the REPORTING currency, never the budget's.
+  const cur = useCampaignSummary(projectId, campaign.id, range).data?.currency ?? undefined
   const stages = funnel.data ?? []
 
   const bottleneck = useMemo(() => {
@@ -541,7 +652,7 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
 
   if (funnel.isLoading) return <Skeleton className="h-72" />
   if (funnel.isError) return <ErrorState error={funnel.error} title="تعذّر تحميل القمع" onRetry={() => funnel.refetch()} />
-  if (!stages.length) return <EmptyState title="لا قمع" description="لا توجد بيانات قمع لهذه الحملة في الفترة المحددة." />
+  if (!hasFunnel(stages)) return <EmptyState title="لا قمع" description="لا توجد بيانات قمع لهذه الحملة في الفترة المحددة." />
 
   return (
     <div className="space-y-4">
@@ -549,7 +660,7 @@ export function CampaignFunnelTab({ campaign, projectId, range }: { campaign: Un
         <ConversionFunnelChart stages={stages} currency={cur} ar />
       </ChartCard>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {stages.map((s) => (
+        {shownFunnelStages(stages).map((s) => (
           <div key={s.stage} className="rounded-xl border border-border bg-surface p-3">
             <div className="text-[11px] uppercase text-text-muted">{s.label}</div>
             {/* FUNNEL-NULL-001 — «لم تُرسل» is a different sentence from «صفر», and the card must say
@@ -679,9 +790,17 @@ export function CampaignPlatformsTab({
                   Platforms tab reads, and it carries the provenance; these are its readers.
                 */}
                 <MiniStat label="الإنفاق" value={rowMoney(m, 'spend')} />
-                <MiniStat label="النتائج" value={num(m?.conversions)} />
-                <MiniStat label="CPA" value={rowCostPer(m, 'cpa', 'conversions')} />
-                <MiniStat label="ROAS" value={rowRoas(m)} />
+                {/* OBJECTIVE-RESULT-001 — this platform's share of the campaign's OWN result, with its cost; ROAS for sales only. */}
+                {(() => {
+                  const r = campaignResult(campaign.objective, m)
+                  return (
+                    <>
+                      <MiniStat label={resultLabel(r, locale === 'ar')} value={r.value === null ? '—' : num(r.value)} />
+                      <MiniStat label={costLabelOf(r, locale === 'ar')} value={resultCostText(r, m, null)} />
+                      {returnsRevenue(campaign.objective) && <MiniStat label="ROAS" value={rowRoas(m)} />}
+                    </>
+                  )
+                })()}
                 <MiniStat label="المساهمة" value={m?.spend_share != null ? percent(m.spend_share, 0) : '—'} />
                 <MiniStat label="CTR" value={percent(m?.ctr)} />
                 <MiniStat label="حملات خارجية" value={String(externals.length)} />
@@ -867,10 +986,10 @@ export function CampaignNotesTab({ campaign, projectId, canUpdate, canApprove }:
       {a.proposed_action && <p className="mt-1 text-[11px] text-brand-700">الإجراء: {a.proposed_action}</p>}
       {canApprove && a.status !== 'approved' && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <button onClick={() => update.mutate({ id: a.id, status: 'approved' } as never)} className="rounded border border-success/40 px-1.5 py-0.5 text-[10px] font-semibold text-success">اعتماد</button>
-          <button onClick={() => update.mutate({ id: a.id, status: 'reviewed' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">مراجعة</button>
-          <button onClick={() => update.mutate({ id: a.id, status: 'rejected' } as never)} className="rounded border border-danger/40 px-1.5 py-0.5 text-[10px] font-semibold text-danger">رفض</button>
-          <button onClick={() => update.mutate({ id: a.id, status: 'hidden' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">إخفاء</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'approved' } as never)} className="rounded border border-success/40 px-1.5 py-0.5 text-[10px] font-semibold text-success">اعتماد</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'reviewed' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-secondary">مراجعة</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'rejected' } as never)} className="rounded border border-danger/40 px-1.5 py-0.5 text-[10px] font-semibold text-danger">رفض</button>
+          <button disabled={update.isPending} onClick={() => update.mutate({ id: a.id, status: 'hidden' } as never)} className="rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">إخفاء</button>
         </div>
       )}
     </div>
@@ -939,7 +1058,8 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
    * screen behind it, which is the comparison the reader was in the middle of.
    */
   const [open, setOpen] = useState<CampaignCreative | null>(null)
-  const cur = campaign.budget_currency || 'SAR'
+  // FX-APPLY-001 — an ad's spend is platform money in the REPORTING currency, never the campaign budget's.
+  const cur = useCampaignSummary(projectId, campaign.id, range).data?.currency ?? null
   const rows = creatives.data ?? []
   /*
    * This tab was written in Arabic only — the toggle, the header, both empty states and every table
@@ -962,12 +1082,27 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
   }
 
   const cls = (k: string) => CREATIVE_CLASS[k] ?? CREATIVE_CLASS.insufficient_data
+  /* OBJECTIVE-RESULT-001 — every ad carries its campaign objective's result from the backend. */
+  const sells = returnsRevenue(campaign.objective)
+  /*
+   * ONE unit for every ad on this tab, decided like the backend total (`ObjectiveResult::combine`):
+   * when the ads disagree (one measured visits, another only clicks) every ad counts in clicks, and
+   * with no common unit each cell names its own. The header used to come from the first ad alone,
+   * which put clicks under «زيارات الصفحة».
+   */
+  const unit = sharedUnit(campaign.objective, rows.map((c) => c.metrics))
+  const adIndex = new Map(rows.map((c, i) => [c.id, i]))
+  const adValue = (c: CampaignCreative) => unit.values[adIndex.get(c.id) ?? -1] ?? null
+  const adLabel = (c: CampaignCreative, inAr: boolean) => unit.label ? (inAr ? unit.label.ar : unit.label.en) : resultLabel(campaignResult(campaign.objective, c.metrics), inAr)
+  const adCostLabel = (inAr: boolean) => unit.costLabel ? (inAr ? unit.costLabel.ar : unit.costLabel.en) : (inAr ? 'تكلفة النتيجة' : 'Cost per result')
+  const adCost = (c: CampaignCreative) => unit.key === null ? '\u2014' : unitCostText(unit, adIndex.get(c.id) ?? -1, c.metrics, cur ?? null)
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-xs text-text-muted">
           {ar ? 'مرتّبة حسب هدف الحملة' : 'Ranked by the campaign’s objective'} ({campaign.objective})
+          {unit.note && <span data-testid="ads-result-note" className="ms-2">· {ar ? unit.note.ar : unit.note.en}</span>}
         </span>
         <div className="flex gap-1">
           {(['grid', 'table'] as const).map((v) => (
@@ -998,10 +1133,11 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
               <div className="flex items-center gap-2 text-[11px] text-text-muted">{providerLabel(c.provider, locale)} · {c.format}{c.is_demo && <span className="rounded bg-warning/15 px-1 text-warning">Demo</span>}</div>
               <div className="grid grid-cols-3 gap-1.5 text-center">
                 <MiniStat label="الإنفاق" value={money(c.metrics.spend, cur)} exact={moneyExact(c.metrics.spend, cur ?? null)} />
-                <MiniStat label="النتائج" value={num(c.metrics.conversions)} />
-                <MiniStat label="ROAS" value={ratio(c.metrics.roas)} />
+                {/* OBJECTIVE-RESULT-001 — the ad's result is its campaign objective's; ROAS for sales only. */}
+                <MiniStat label={adLabel(c, ar)} value={adValue(c) === null ? '—' : num(adValue(c))} />
+                {sells && <MiniStat label="ROAS" value={ratio(c.metrics.roas)} />}
                 {/* Never compacted — a cost per result's decimals are the decision. */}
-                <MiniStat label="CPA" value={moneyExact(c.metrics.cpa, cur ?? null)} />
+                <MiniStat label={adCostLabel(ar)} value={adCost(c)} />
                 <MiniStat label="CTR" value={percent(c.metrics.ctr)} />
                 <MiniStat label="مشاهدة" value={c.metrics.view_rate != null ? percent(c.metrics.view_rate, 0) : '—'} />
               </div>
@@ -1013,8 +1149,8 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
         <div className="overflow-x-auto rounded-xl border border-border">
           <table className="w-full text-sm">
             <thead className="bg-surface-secondary text-xs text-text-muted"><tr>{(ar
-                ? ['الإعلان', 'المنصة', 'الإنفاق', 'النتائج', 'CPA', 'ROAS', 'CTR', 'التصنيف']
-                : ['Ad', 'Platform', 'Spend', 'Results', 'CPA', 'ROAS', 'CTR', 'Classification']).map((h) => <th key={h} className="p-2 text-start font-semibold">{h}</th>)}</tr></thead>
+                ? ['الإعلان', 'المنصة', 'الإنفاق', unit.label?.ar ?? 'النتيجة', adCostLabel(true), ...(sells ? ['ROAS'] : []), 'CTR', 'التصنيف']
+                : ['Ad', 'Platform', 'Spend', unit.label?.en ?? 'Result', adCostLabel(false), ...(sells ? ['ROAS'] : []), 'CTR', 'Classification']).map((h) => <th key={h} className="p-2 text-start font-semibold">{h}</th>)}</tr></thead>
             <tbody>
               {rows.map((c) => (
                 <tr key={c.id} className="border-t border-border">
@@ -1025,9 +1161,9 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
                   </td>
                   <td className="p-2 text-text-muted">{providerLabel(c.provider, locale)}</td>
                   <td className="p-2"><span className="tnum">{money(c.metrics.spend, cur)}</span></td>
-                  <td className="p-2"><span className="tnum">{num(c.metrics.conversions)}</span></td>
-                  <td className="p-2"><span className="tnum">{moneyExact(c.metrics.cpa, cur ?? null)}</span></td>
-                  <td className="p-2"><span className="tnum">{ratio(c.metrics.roas)}</span></td>
+                  <td className="p-2"><span className="tnum">{adValue(c) === null ? '—' : num(adValue(c))}</span>{unit.key === null && <span className="ms-1 text-xs text-text-muted">{adLabel(c, ar)}</span>}</td>
+                  <td className="p-2"><span className="tnum">{adCost(c)}</span></td>
+                  {sells && <td className="p-2"><span className="tnum">{ratio(c.metrics.roas)}</span></td>}
                   <td className="p-2"><span className="tnum">{percent(c.metrics.ctr)}</span></td>
                   <td className="p-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${cls(c.classification).tone}`}>{cls(c.classification).label}</span></td>
                 </tr>
@@ -1037,7 +1173,7 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
         </div>
       )}
 
-      {open && <AdPreviewPanel creative={open} currency={cur} locale={locale} onClose={() => setOpen(null)} />}
+      {open && <AdPreviewPanel creative={open} objective={campaign.objective} currency={cur} locale={locale} onClose={() => setOpen(null)} />}
     </div>
   )
 }
@@ -1054,12 +1190,14 @@ export function CampaignCreativesTab({ campaign, projectId, range, locale }: { c
  */
 function AdPreviewPanel({
   creative,
+  objective,
   currency,
   locale,
   onClose,
 }: {
   creative: CampaignCreative
-  currency: string
+  objective: string | null
+  currency: string | null
   locale: 'ar' | 'en'
   onClose: () => void
 }) {
@@ -1101,8 +1239,15 @@ function AdPreviewPanel({
 
         <div className="mt-3 grid grid-cols-3 gap-1.5 text-center">
           <MiniStat label={ar ? 'الإنفاق' : 'Spend'} value={money(creative.metrics.spend, currency)} exact={moneyExact(creative.metrics.spend, currency ?? null)} />
-          <MiniStat label={ar ? 'النتائج' : 'Results'} value={num(creative.metrics.conversions)} />
-          <MiniStat label="CPA" value={moneyExact(creative.metrics.cpa, currency ?? null)} />
+          {(() => {
+            const r = campaignResult(objective, creative.metrics)
+            return (
+              <>
+                <MiniStat label={resultLabel(r, ar)} value={r.value === null ? '—' : num(r.value)} />
+                <MiniStat label={costLabelOf(r, ar)} value={moneyExact(creative.metrics.cost_per_result ?? (r.key === 'conversions' ? creative.metrics.cpa : null), currency ?? null)} />
+              </>
+            )
+          })()}
         </div>
 
         <p className="mt-3 text-[11px] text-text-muted">{creative.ranking_reason}</p>

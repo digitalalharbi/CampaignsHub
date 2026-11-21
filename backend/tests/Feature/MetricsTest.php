@@ -195,6 +195,31 @@ final class MetricsTest extends TestCase
         $this->assertEquals(0.0, $aware['spend']);
     }
 
+    /** ANALYTICS-READ-CACHE-001 — one person's same read is served again for a minute; another filter or person is not. */
+    public function test_a_metrics_read_is_kept_a_minute_per_person_and_per_address(): void
+    {
+        config(['cache.read_cache' => true]);
+        app(UpsertDailyMetrics::class)->handle([$this->metric($this->projectA->id, 'spend', 300, '2026-06-01', ['provider' => 'meta', 'camp' => 'm1'])]);
+        $url = "/api/v1/projects/{$this->projectA->id}/metrics/summary?from=2026-06-01&to=2026-06-02";
+
+        $first = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk();
+        $this->assertNull($first->headers->get('X-Read-Cache'));
+        $this->assertEquals(300.0, $first->json('data.current.spend'));
+
+        app(UpsertDailyMetrics::class)->handle([$this->metric($this->projectA->id, 'spend', 500, '2026-06-01', ['provider' => 'meta', 'camp' => 'm1'])]);
+        $again = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk();
+        $this->assertSame('hit', $again->headers->get('X-Read-Cache'));
+        $this->assertEquals(300.0, $again->json('data.current.spend'), 'the same read within the minute is the kept answer');
+
+        $other = $this->actingAs($this->owner, 'sanctum')->getJson($url.'&provider=meta')->assertOk();
+        $this->assertNull($other->headers->get('X-Read-Cache'), 'another filter is another address');
+        $this->assertEquals(500.0, $other->json('data.current.spend'));
+
+        $this->travel(61)->seconds();
+        $later = $this->actingAs($this->owner, 'sanctum')->getJson($url)->assertOk();
+        $this->assertEquals(500.0, $later->json('data.current.spend'), 'after a minute the read is fresh');
+    }
+
     public function test_platform_filter_scopes_metrics_backend_side(): void
     {
         app(UpsertDailyMetrics::class)->handle([
@@ -275,6 +300,47 @@ final class MetricsTest extends TestCase
         $this->assertFalse($stages['purchases']['exceeds_previous']);
         $this->assertNotNull($stages['purchases']['drop_off']);
         $this->assertGreaterThan(0, (float) $stages['purchases']['drop_off']);
+    }
+
+    /**
+     * FUNNEL-ALIGNED-001 — a step rate is read on the platforms that report both of its stages.
+     *
+     * Karam Alnakhil, 2026-11-17: checkout came from one platform and purchases from several, so the
+     * funnel read «363 checkouts → 675 purchases». Each total is true; their ratio described which
+     * platform sends which event. The totals stay; the rate now compares like with like.
+     */
+    public function test_a_step_rate_is_measured_on_the_platforms_that_report_both_stages(): void
+    {
+        $snap = ['provider' => 'snapchat', 'acct' => 'acc-snap', 'camp' => 'ext-snap'];
+        app(UpsertDailyMetrics::class)->handle([
+            $this->metric($this->projectA->id, 'add_to_cart', 50, '2026-06-01'),
+            $this->metric($this->projectA->id, 'checkout', 20, '2026-06-01'),
+            $this->metric($this->projectA->id, 'purchases', 10, '2026-06-01'),
+            // Snapchat reports baskets and purchases but never checkout.
+            $this->metric($this->projectA->id, 'add_to_cart', 200, '2026-06-01', $snap),
+            $this->metric($this->projectA->id, 'purchases', 90, '2026-06-01', $snap),
+        ]);
+
+        $stages = collect($this->actingAs($this->owner, 'sanctum')
+            ->getJson("/api/v1/projects/{$this->projectA->id}/metrics/funnel?from=2026-06-01&to=2026-06-02")
+            ->assertOk()
+            ->json('data'))->keyBy('stage');
+
+        // The totals are unchanged: one number on every surface.
+        $this->assertSame(20.0, (float) $stages['checkout']['count']);
+        $this->assertSame(100.0, (float) $stages['purchases']['count']);
+
+        // Checkout is measured against Meta's own baskets (20/50), not all baskets (20/250).
+        $this->assertEqualsWithDelta(0.4, (float) $stages['checkout']['step_rate'], 0.0001);
+        $this->assertSame(['meta'], $stages['checkout']['providers']);
+        $this->assertTrue($stages['checkout']['rate_partial'] === false);
+
+        // Purchases against checkout: only Meta reports both — 10/20, not 100/20 (500%).
+        $this->assertEqualsWithDelta(0.5, (float) $stages['purchases']['step_rate'], 0.0001);
+        $this->assertFalse($stages['purchases']['exceeds_previous']);
+        $this->assertSame(['meta'], $stages['purchases']['rate_providers']);
+        $this->assertSame(['meta', 'snapchat'], $stages['purchases']['providers']);
+        $this->assertTrue($stages['purchases']['rate_partial']);
     }
 
     /**

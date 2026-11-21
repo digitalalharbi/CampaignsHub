@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { MetaCandidatePage } from './MetaCandidatePage'
 import type { MetaCandidateRun, MetaCandidateState } from './api'
 import { renderWithProviders, signOut } from '@/test/utils'
+import { DialogHost } from '@/components/ui/DialogHost'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
@@ -117,22 +118,24 @@ describe('MetaCandidatePage (META-CANDIDATE-001)', () => {
     const after = { ...state(), promotion: { eligible: false, reason: 'candidate_already_live', rollback_available: true } }
     vi.mocked(promoteMetaCandidate).mockResolvedValue(after)
     vi.mocked(rollbackMetaLive).mockResolvedValue(after)
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true)
-    renderWithProviders(<MetaCandidatePage />, { locale: 'en' })
+    renderWithProviders(<><MetaCandidatePage /><DialogHost /></>, { locale: 'en' })
 
     // META-APP-SWITCH-GUARD-001 — nothing switches until the named acknowledgement is ticked.
     expect(await screen.findByTestId('meta-candidate-promote')).toBeDisabled()
     fireEvent.click(screen.getByTestId('meta-candidate-acknowledge-switch'))
 
+    // DIALOG-001 — the confirmation is in-product now: cancelling it changes nothing, confirming it does.
     fireEvent.click(screen.getByTestId('meta-candidate-promote'))
+    fireEvent.click(await screen.findByTestId('dialog-cancel'))
     expect(promoteMetaCandidate).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByTestId('meta-candidate-promote'))
+    fireEvent.click(await screen.findByTestId('dialog-confirm'))
     await waitFor(() => expect(promoteMetaCandidate).toHaveBeenCalledWith(false))
 
     fireEvent.click(screen.getByTestId('meta-candidate-rollback'))
+    fireEvent.click(await screen.findByTestId('dialog-confirm'))
     await waitFor(() => expect(rollbackMetaLive).toHaveBeenCalledTimes(1))
-    confirm.mockRestore()
   })
 
   it('will not promote a scope-narrowing candidate until the named checkbox is ticked', async () => {
@@ -141,8 +144,7 @@ describe('MetaCandidatePage (META-CANDIDATE-001)', () => {
       promotion: { eligible: true, reason: null, dropped_scopes: ['ads_management', 'business_management'], rollback_available: false },
     })
     vi.mocked(promoteMetaCandidate).mockResolvedValue(state())
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    renderWithProviders(<MetaCandidatePage />, { locale: 'en' })
+    renderWithProviders(<><MetaCandidatePage /><DialogHost /></>, { locale: 'en' })
 
     const promote = await screen.findByTestId('meta-candidate-promote')
     expect(promote).toBeDisabled()
@@ -153,8 +155,8 @@ describe('MetaCandidatePage (META-CANDIDATE-001)', () => {
     fireEvent.click(box)
     fireEvent.click(screen.getByTestId('meta-candidate-acknowledge-switch'))
     fireEvent.click(promote)
+    fireEvent.click(await screen.findByTestId('dialog-confirm'))
     await waitFor(() => expect(promoteMetaCandidate).toHaveBeenCalledWith(true))
-    confirm.mockRestore()
   })
 
   /*

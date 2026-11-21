@@ -98,7 +98,7 @@ final class CreativeFormatIsNotInventedTest extends TestCase
         $this->assertSame('unavailable', $preview['state'], 'the missing image is still stated, never papered over');
         $this->assertNull($preview['image_url']);
         $this->assertSame(['headline' => 'إذا محتار في هدية', 'body' => 'خواتم وسبح بتصاميم راقية'], $preview['text']);
-        $this->assertStringContainsString('no way to read back', $preview['note_en']);
+        $this->assertStringContainsString('returned no image link', $preview['note_en']);
     }
 
     /** Cards imported before the copy columns were written still hold the body in the retained payload. */
@@ -108,6 +108,19 @@ final class CreativeFormatIsNotInventedTest extends TestCase
 
         $this->assertNull($card->body);
         $this->assertSame(['headline' => 'Old card', 'body' => 'Text kept in the payload'], app(CreativePresenter::class)->preview($card)['text']);
+    }
+
+    /** CREATIVE-SYNC-MEDIA-001 — a Google search ad / X text post is a `text_card`: its words are shown, no picture claimed. */
+    public function test_a_text_card_carries_its_words_and_claims_no_picture(): void
+    {
+        $card = $this->import(['external_id' => 'tc-1', 'name' => 'Buy shoes', 'format' => 'text_card', 'headline' => 'Buy shoes', 'body' => 'Best prices']);
+
+        $preview = app(CreativePresenter::class)->preview($card);
+
+        $this->assertSame('unavailable', $preview['state']);
+        $this->assertNull($preview['image_url']);
+        $this->assertSame(['headline' => 'Buy shoes', 'body' => 'Best prices'], $preview['text']);
+        $this->assertStringContainsString('text ad', $preview['note_en']);
     }
 
     public function test_only_a_chat_card_gets_a_text_preview(): void

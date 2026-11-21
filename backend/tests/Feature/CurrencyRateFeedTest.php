@@ -11,14 +11,17 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Metrics\Contracts\CurrencyRateSource;
 use App\Domains\Metrics\Models\CurrencyRate;
 use App\Domains\Metrics\Rates\CurrencyRateFeed;
+use App\Domains\Metrics\Rates\EcbReferenceRates;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Ramsey\Uuid\Uuid;
+use Tests\Concerns\WithoutMigratedSarPeg;
 use Tests\TestCase;
 
 /**
@@ -37,6 +40,7 @@ use Tests\TestCase;
 final class CurrencyRateFeedTest extends TestCase
 {
     use RefreshDatabase;
+    use WithoutMigratedSarPeg;
 
     private ?Tenant $tenant = null;
 
@@ -62,6 +66,21 @@ final class CurrencyRateFeedTest extends TestCase
         $this->assertSame('official-peg:SAMA', $sar->source);
         $this->assertSame(['EUR→USD'], $result['missing']);
         $this->assertSame(0, CurrencyRate::query()->where('base_currency', 'EUR')->count(), 'a floating currency is never invented');
+    }
+
+    /**
+     * Owner 2026-11-19 — the ECB reference rates are the default source: public, free, no key, official. Nothing has to be
+     * set on a server for the daily `fx:rates` run to have a publisher; an operator can still replace or switch it off.
+     */
+    public function test_the_ecb_reference_rates_are_the_default_source_and_fx_rates_is_scheduled(): void
+    {
+        $this->assertSame(EcbReferenceRates::class, config('fx.rates.driver'));
+        $this->assertInstanceOf(CurrencyRateSource::class, app(config('fx.rates.driver')));
+        $this->assertTrue(app(config('fx.rates.driver'))->isConfigured(), 'the ECB publication needs no key');
+
+        $scheduled = collect(app(Schedule::class)->events())
+            ->contains(fn ($e) => str_contains((string) $e->command, 'fx:rates'));
+        $this->assertTrue($scheduled, 'the daily fx:rates run must stay on the schedule');
     }
 
     // ── The state of the supply ───────────────────────────────────────────────────────────────

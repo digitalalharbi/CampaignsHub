@@ -166,6 +166,9 @@ final class ClientPortalUsersTest extends TestCase
 
         $list = collect($this->getJson($this->url())->assertOk()->json('data.users'));
         $this->assertSame(['active', 'invited'], $list->pluck('state')->sort()->values()->all());
+        // CLIENT-PORTAL-LOGIN-001 — an active member carries when they last signed in (null: never).
+        $this->assertArrayHasKey('last_login_at', $list->firstWhere('state', 'active'));
+        $this->assertNull($list->firstWhere('state', 'active')['last_login_at']);
 
         $membershipId = $list->firstWhere('state', 'active')['membership_id'];
         $this->deleteJson($this->url("/{$membershipId}"))->assertOk();

@@ -44,6 +44,8 @@ final class BoundAccountVisibilityTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected bool $selectsSeededAccounts = false;
+
     private const FROM = '2026-08-01';
 
     private const TO = '2026-08-31';
@@ -169,11 +171,11 @@ final class BoundAccountVisibilityTest extends TestCase
 
     public function test_the_no_binding_record_branch_is_pinned_to_the_inventorys_reading(): void
     {
-        // Flipped in one place, once the Production inventory has said which reading is right.
-        $this->assertTrue(BoundAccountVisibility::UNBOUND_ROWS_VISIBLE);
+        // Read on 2026-11-02 from the Production inventory (run 41493369348): deny by default, a row with no binding is stored, not read.
+        $this->assertFalse(BoundAccountVisibility::UNBOUND_ROWS_VISIBLE);
 
         $creatives = $this->listedCreativeIds();
-        $this->assertContains($this->rowsOf[$this->unbound->id]['creative'], $creatives);
+        $this->assertNotContains($this->rowsOf[$this->unbound->id]['creative'], $creatives);
     }
 
     // ── surfaces ───────────────────────────────────────────────────────────────────────────────────

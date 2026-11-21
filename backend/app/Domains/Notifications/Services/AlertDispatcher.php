@@ -6,9 +6,14 @@ namespace App\Domains\Notifications\Services;
 
 use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
+use App\Domains\Notifications\Support\MailDeepLinks;
+use App\Domains\Notifications\Support\MailFailure;
 use App\Domains\Notifications\Support\MessageCatalogue;
+use App\Domains\Notifications\Support\OperationalDigestModel;
+use App\Domains\Notifications\Support\PlainFindings;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Models\User;
+use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -63,6 +68,8 @@ final class AlertDispatcher
         private readonly ProviderRegistry $providers,
         private readonly TenantContext $tenants,
         private readonly NotificationChoices $choices,
+        private readonly MailSendGate $gate,
+        private readonly MailUnsubscribes $unsubscribes,
     ) {}
 
     /*
@@ -125,8 +132,23 @@ final class AlertDispatcher
             $digest = $this->daily->buildRange($user, $tenantId, $projectIds, $day->copy()->startOfDay(), $day->copy()->endOfDay());
 
             foreach ($digest['projects'] ?? [] as $block) {
+                /*
+                 * ALERT-MAIL-DATED-BARS-001 (Owner, 2026-11-12) — a performance card only for a project that DELIVERED in the
+                 * period (spend or impressions, or spend withheld for want of a rate): an idle project has nothing to decide.
+                 */
+                $t = (array) ($block['totals'] ?? []);
+                $delivered = (float) ($t['spend'] ?? 0) > 0 || (float) ($t['impressions'] ?? 0) > 0 || (int) ($t['spend_withheld_rows'] ?? 0) > 0;
                 foreach ($block['observations'] ?? [] as $note) {
                     if (! in_array($note['severity'] ?? '', self::ALERTABLE, true)) {
+                        continue;
+                    }
+                    // LINK-HEALTH-YESTERDAY-001 — a link card is the alert engine's (yesterday did not arrive), never a seven-day
+                    // freshness reading sent as an instant mail; and a performance card needs a block that delivered.
+                    if (($note['kind'] ?? '') === 'stale_data' || ! $delivered) {
+                        continue;
+                    }
+                    // …and a return-on-spend card only where the whole block is sales: ROAS is a sales figure.
+                    if (($note['metric'] ?? '') === 'roas' && ($block['objective'] ?? '') !== 'sales') {
                         continue;
                     }
 
@@ -150,6 +172,12 @@ final class AlertDispatcher
                      */
                     if ($this->choices->chose($userId, $tenantId, $kind, 'email') === false) {
                         $counts['switched_off']++;
+
+                        continue;
+                    }
+
+                    if (! $this->choices->meetsImportance($userId, $tenantId, $kind, (string) $note['severity'])) {
+                        $counts['below_importance'] = ($counts['below_importance'] ?? 0) + 1;
 
                         continue;
                     }
@@ -186,11 +214,23 @@ final class AlertDispatcher
                         continue;
                     }
 
+                    // EMAIL-DIGESTS-OPERATIONAL-001 — the finding in plain words, with its next step and the page inside the system.
+                    $say = PlainFindings::say($note, $locale === 'ar');
+                    $projectId = (string) ($block['project_id'] ?? '');
+                    $platformName = str_starts_with((string) ($note['id'] ?? ''), 'budget:')
+                        ? AdPlatforms::name(substr((string) $note['id'], 7), $locale === 'ar' ? 'ar' : 'en')
+                        : (string) (($note['scope']['name'] ?? '') ?: '');
                     $eligible[] = [
                         'severity' => (string) $note['severity'],
-                        'title' => (string) $note['title'],
-                        'detail' => (string) $note['detail'],
-                        'context' => (string) ($block['project_name'] ?? ''),
+                        'title' => $say['headline'],
+                        'detail' => $say['text'],
+                        'context' => implode(' · ', array_values(array_filter([(string) ($block['project_name'] ?? ''), $platformName]))),
+                        'action' => $say['action'],
+                        'url' => $projectId === '' ? MailDeepLinks::alerts() : MailDeepLinks::platforms($projectId),
+                        'button' => $locale === 'ar' ? 'افتح المنصات داخل النظام' : 'Open the platforms',
+                        // DIGESTS-CADENCE-BUDGETS-001 — what the card draws: the finding's own movement, or the stages it is about.
+                        'rule' => (string) ($note['kind'] ?? ''),
+                        'viz' => self::findingViz($note, $locale === 'ar', (array) ($block['window'] ?? [])),
                         'period_key' => $this->periodKey($block, $note, $day),
                     ];
                 }
@@ -204,6 +244,28 @@ final class AlertDispatcher
         } finally {
             $this->tenants->forget();
         }
+    }
+
+    /**
+     * The finding's movement as before → now bars, from the ratio it already carries — or null, and the card draws its stages.
+     *
+     * @param  array<string,mixed>  $note
+     * @return array<string,mixed>|null
+     */
+    private static function findingViz(array $note, bool $ar, array $window = []): ?array
+    {
+        $change = is_numeric($note['change'] ?? null) ? (float) $note['change'] : null;
+        if ($change === null || $change <= -1.0 || ! in_array((string) ($note['kind'] ?? ''), ['period_comparison', 'rising_cost', 'falling_rate'], true)) {
+            return null;
+        }
+        $now = 1.0 + $change;
+        $max = max(1.0, $now);
+
+        // ALERT-MAIL-DATED-BARS-001 — the bars name their days: «الثلاثاء 10 نوفمبر» against «أمس الأربعاء 11 نوفمبر», never «الفترة السابقة / الآن».
+        $when = OperationalDigestModel::when($window, $ar);
+
+        return ['type' => 'before_now', 'before' => max(6, (int) round(1.0 / $max * 100)), 'now' => max(6, (int) round($now / $max * 100)),
+            'before_label' => $when === [] ? ($ar ? 'الفترة السابقة' : 'previous period') : '', 'now_label' => (string) ($note['value'] ?? ''), 'threshold' => null] + $when;
     }
 
     /**
@@ -255,22 +317,26 @@ final class AlertDispatcher
             return $counts;
         }
 
+        // EMAIL-GAPS — one bundle is one message against the allowance, however many findings it carries.
+        $refusal = $this->gate->refusal($tenantId, (string) $user->email, MailUnsubscribes::ALERTS);
+
+        if ($refusal !== null) {
+            $counts[$refusal] = $this->finishAll($user, $keys, $refusal, $refusal);
+
+            return $counts;
+        }
+
         try {
-            Mail::to($user->email)->send(new AlertBundleMail(
+            $sent = Mail::to($user->email)->send((new AlertBundleMail(
                 items: array_map(
-                    static fn (array $item): array => [
-                        'severity' => $item['severity'],
-                        'title' => $item['title'],
-                        'detail' => $item['detail'],
-                        'context' => $item['context'],
-                    ],
+                    static fn (array $item): array => array_diff_key($item, ['period_key' => true]),
                     $claimed,
                 ),
                 lang: $locale,
                 recipientName: (string) $user->name,
-            ));
+            ))->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, MailUnsubscribes::ALERTS, (int) $user->getKey())));
 
-            $counts['sent'] = $this->finishAll($user, $keys, 'sent', null, Carbon::now());
+            $counts['sent'] = $this->finishAll($user, $keys, 'sent', null, Carbon::now(), messageId: TransactionalMailer::messageId($sent));
         } catch (Throwable $e) {
             /*
              * Recorded and left alone, never retried in a loop.
@@ -278,7 +344,8 @@ final class AlertDispatcher
              * The standing rule in this repo is that an intermittent failure must not be hidden by a
              * retry; the next sweep re-claims a failed row and this one stops.
              */
-            $counts['failed'] = $this->finishAll($user, $keys, 'failed', 'exception', error: $e->getMessage());
+            $failure = MailFailure::from($e);
+            $counts['failed'] = $this->finishAll($user, $keys, 'failed', 'exception', error: $failure['safe'], failureCode: $failure['code']);
         }
 
         return $counts;
@@ -288,10 +355,10 @@ final class AlertDispatcher
      * @param  list<string>  $periodKeys
      * @return int how many findings were finished, which is what the counts report
      */
-    private function finishAll(User $user, array $periodKeys, string $status, ?string $reason = null, ?Carbon $sentAt = null, ?string $error = null): int
+    private function finishAll(User $user, array $periodKeys, string $status, ?string $reason = null, ?Carbon $sentAt = null, ?string $error = null, ?string $messageId = null, ?string $failureCode = null): int
     {
         foreach ($periodKeys as $key) {
-            $this->finish($user, $key, $status, $reason, $sentAt, $error);
+            $this->finish($user, $key, $status, $reason, $sentAt, $error, $messageId, $failureCode);
         }
 
         return count($periodKeys);
@@ -362,7 +429,7 @@ final class AlertDispatcher
         }
     }
 
-    private function finish(User $user, string $periodKey, string $status, ?string $reason = null, ?Carbon $sentAt = null, ?string $error = null): string
+    private function finish(User $user, string $periodKey, string $status, ?string $reason = null, ?Carbon $sentAt = null, ?string $error = null, ?string $messageId = null, ?string $failureCode = null): string
     {
         DB::table('digest_sends')
             ->where('user_id', $user->getKey())
@@ -373,6 +440,9 @@ final class AlertDispatcher
                 'reason' => $reason,
                 'last_error' => $error,
                 'sent_at' => $sentAt,
+                'accepted_at' => $status === 'sent' ? $sentAt : null,
+                'provider_message_id' => $messageId,
+                'failure_code' => $failureCode,
                 'updated_at' => Carbon::now(),
             ]);
 

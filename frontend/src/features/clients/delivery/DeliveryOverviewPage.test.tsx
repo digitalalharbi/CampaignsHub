@@ -32,7 +32,7 @@ describe('DeliveryOverviewPage', () => {
     expect(rows[0]).toHaveAttribute('data-testid', 'delivery-row-hot')
     expect(within(rows[0]).getByText('Follow up the payment')).toBeInTheDocument()
     expect(within(rows[0]).getByText('Overdue')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('1K SAR')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('1K ر.س')).toBeInTheDocument()
     expect(within(rows[1]).getByText('Nothing needed')).toBeInTheDocument()
   })
 
@@ -41,7 +41,7 @@ describe('DeliveryOverviewPage', () => {
     renderWithProviders(<DeliveryOverviewPage />, { locale: 'en' })
 
     expect(await screen.findByText('No invoice')).toBeInTheDocument()
-    expect(screen.queryByText(/SAR/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/(?:SAR|ر\.س)/)).not.toBeInTheDocument()
   })
 
   it('speaks Arabic', async () => {
@@ -50,5 +50,24 @@ describe('DeliveryOverviewPage', () => {
 
     expect(await screen.findByText('جهّز تسليم الأسبوع الماضي')).toBeInTheDocument()
     expect(screen.getByText('لا توجد حزمة بعد')).toBeInTheDocument()
+  })
+
+  it('lists a client whose scheduled reports are going out instead of «لا توجد حزمة بعد»', async () => {
+    vi.mocked(getDeliveryOverview).mockResolvedValue([row({
+      client_id: 'sch', pack: null, next_action: 'none', visual: 'ok',
+      scheduled: {
+        active: 1, next_run_at: '2026-11-22T05:00:00Z', last_run_at: '2026-11-15T05:00:00Z',
+        last_report: { id: 'r1', project_id: 'p1', status: 'completed', generated_at: '2026-11-15T05:01:00Z', period: { from: '2026-10-17', to: '2026-11-15' } },
+        deliveries: { awaiting_provider_credentials: 1 },
+      },
+    })])
+    renderWithProviders(<DeliveryOverviewPage />, { locale: 'ar' })
+
+    const scheduled = await screen.findByTestId('delivery-scheduled-sch')
+    expect(scheduled).toHaveTextContent('تقرير مجدول')
+    expect(scheduled).toHaveTextContent('آخر إرسال')
+    expect(scheduled).toHaveTextContent('بانتظار مزود بريد')
+    expect(screen.queryByText('لا توجد حزمة بعد')).not.toBeInTheDocument()
+    expect(screen.getByText('لا شيء مطلوب')).toBeInTheDocument()
   })
 })

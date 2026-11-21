@@ -40,7 +40,10 @@ export function CampaignQuickPreview({
   range,
   filters,
   onClose,
+  analysisOnly = false,
 }: {
+  /** ANALYTICS-READ-ONLY-001 — on the analytics surface the preview answers in place and links nowhere. */
+  analysisOnly?: boolean
   row: CampaignRow
   projectId: string | null
   range: Range
@@ -140,7 +143,7 @@ export function CampaignQuickPreview({
         </div>
       )}
 
-      {projectId !== null && (
+      {projectId !== null && !analysisOnly && (
         <Link
           to={{ pathname: `${portalBaseOf(location.pathname) ?? '/app'}/campaigns/${projectId}/${row.campaign_id}`, search: location.search }}
           state={{ from: `${location.pathname}${location.search}` }}
@@ -168,7 +171,7 @@ function statusLabel(status: string | null, ar: boolean): string {
   if (status === 'paused') return ar ? 'موقوفة' : 'Paused'
   if (status === 'draft') return ar ? 'مسودة' : 'Draft'
 
-  return ar ? 'غير معروفة' : 'Unknown'
+  return ar ? 'بدون بيانات' : 'Unknown'
 }
 
 /** The operator portals that mount a campaign route; see `CampaignLink` for the whole reasoning. */

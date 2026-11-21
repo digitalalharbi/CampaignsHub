@@ -232,6 +232,26 @@ final class ClientReportView
     ];
 
     /**
+     * REPORT-PARITY-FOUR-SURFACES-001 — the client-facing document of a snapshot: THE one choice every surface makes.
+     *
+     * The shared link chose between the summary and the full client view by the link's FORM; the print route and the file
+     * export chose by the report's AUDIENCE. A link sent as «executive summary» therefore showed five trimmed pages and printed
+     * the whole deck. Both questions are asked here, once: a summary is the audience `executive` or the form `executive_summary`.
+     * An internal copy is the operator's own and is returned whole.
+     *
+     * @param  array<string,mixed>  $data  internal snapshot
+     * @return array<string,mixed>
+     */
+    public function document(array $data, string $audience, ?string $form = null): array
+    {
+        if ($audience === 'internal') {
+            return $data;
+        }
+
+        return $audience === 'executive' || $form === 'executive_summary' ? $this->executive($data) : $this->filter($data);
+    }
+
+    /**
      * Executive view = the client filter PLUS a trimmed slide set (drop per-platform detail, funnel,
      * standalone recommendations). Keeps the report to a handful of decision-focused pages.
      *

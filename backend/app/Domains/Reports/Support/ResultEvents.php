@@ -375,6 +375,19 @@ final class ResultEvents
             'by_path' => $byPath,
             'by_platform_path' => $byPlatformPath,
             'events' => $this->map,
+            /*
+             * KPI-PARITY-001 — a Results total is NOT the conversions total, and the payload says so.
+             *
+             * `totals.conversions` sums every platform's generic `conversions`; this sums the one metric
+             * each platform's configuration names as THE result (`events`), over the eligible rows only.
+             * The two legitimately differ, so the figure travels with its basis and formula — never a
+             * silent second «conversions» a page could print under the same label.
+             */
+            'basis' => 'configured_result_events',
+            'formula' => [
+                'total' => 'sum of each platform\'s configured result metric (events) over campaigns that reported it',
+                'cost' => 'spend of those same campaigns ÷ total',
+            ],
         ];
     }
 }

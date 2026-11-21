@@ -1,4 +1,4 @@
-import { ensureCsrfCookie, getData, postData } from '@/lib/api/client'
+import { deleteData, ensureCsrfCookie, getData, postData } from '@/lib/api/client'
 import type { AuthUser } from '@/lib/api/types'
 
 export interface LoginInput {
@@ -57,11 +57,9 @@ export async function phoneSignInStart(phone: string): Promise<{
 
 export async function phoneSignInVerify(verificationId: string, code: string, remember: boolean): Promise<AuthUser> {
   await ensureCsrfCookie()
-  const { user } = await postData<{ user: AuthUser }>('/auth/phone/verify', {
+  return signedInOrTwoStep(await postData<MaybeTwoStep>('/auth/phone/verify', {
     verification_id: verificationId, code, remember,
-  })
-
-  return user
+  }))
 }
 
 /**
@@ -75,36 +73,68 @@ export async function phoneSignInVerify(verificationId: string, code: string, re
  * configured and NOTHING was sent — the page must not say «check your inbox» as though something
  * were on its way.
  */
-export async function emailCodeStart(email: string): Promise<{
-  verification_id: string
-  delivery_status: string
-  resend_after: number
-  /** AUTH-LOGIN-UX-002 — how long the code lives; the page says when it has expired. */
-  expires_in_minutes?: number
-  dev_code: string | null
-}> {
-  await ensureCsrfCookie()
-  return postData('/auth/email-code/start', { email })
-}
-
-export async function emailCodeVerify(verificationId: string, code: string, remember: boolean): Promise<AuthUser> {
-  await ensureCsrfCookie()
-  const { user } = await postData<{ user: AuthUser }>('/auth/email-code/verify', {
-    verification_id: verificationId, code, remember,
-  })
-
-  return user
-}
-
-export async function signInMethod(identifier: string): Promise<{ method: 'password' | 'code'; channel: 'email' | 'sms' }> {
-  await ensureCsrfCookie()
-  return postData<{ method: 'password' | 'code'; channel: 'email' | 'sms' }>('/auth/method', { identifier })
-}
-
 export async function login(input: LoginInput): Promise<AuthUser> {
   await ensureCsrfCookie()
-  const { user } = await postData<UserEnvelope>('/auth/login', input)
-  return user
+  return signedInOrTwoStep(await postData<MaybeTwoStep>('/auth/login', input))
+}
+
+/**
+ * TWO-STEP-001 — the second step.
+ *
+ * A correct first step for a person who turned on a second one opens NO session: the server answers `user: null` with what the
+ * challenge accepts. Every sign-in call below turns that answer into {@link TwoStepRequired}, so a caller that only knows how to
+ * handle a signed-in user can never mistake a held sign-in for a finished one.
+ */
+export type TwoStepMethod = 'totp' | 'email' | 'sms'
+
+export interface TwoStepInfo {
+  required: true
+  methods: TwoStepMethod[]
+  default: TwoStepMethod | null
+  email_hint: string | null
+  phone_hint: string | null
+  recovery_available: boolean
+  resend_after: number
+}
+
+export class TwoStepRequired extends Error {
+  readonly info: TwoStepInfo | null
+
+  constructor(info: TwoStepInfo | null) {
+    super('two_step_required')
+    this.name = 'TwoStepRequired'
+    this.info = info
+  }
+}
+
+interface MaybeTwoStep {
+  user: AuthUser | null
+  two_factor?: TwoStepInfo | null
+}
+
+function signedInOrTwoStep(data: MaybeTwoStep): AuthUser {
+  if (data.user === null || data.two_factor?.required === true) throw new TwoStepRequired(data.two_factor ?? null)
+  return data.user
+}
+
+export async function fetchTwoStep(): Promise<TwoStepInfo> {
+  const { two_factor } = await getData<{ two_factor: TwoStepInfo }>('/auth/two-factor')
+  return two_factor
+}
+
+export async function sendTwoStepCode(method: 'email' | 'sms'): Promise<{ delivery_status: string; resend_after: number; dev_code: string | null }> {
+  await ensureCsrfCookie()
+  return postData('/auth/two-factor/send', { method })
+}
+
+export async function verifyTwoStep(method: TwoStepMethod | 'recovery', code: string): Promise<{ user: AuthUser; destination: string }> {
+  await ensureCsrfCookie()
+  return postData('/auth/two-factor/verify', { method, code })
+}
+
+export async function cancelTwoStep(): Promise<void> {
+  await ensureCsrfCookie()
+  await deleteData<null>('/auth/two-factor')
 }
 
 export async function logout(): Promise<void> {
@@ -146,8 +176,31 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
   }
 }
 
+/**
+ * The same probe, saying WHICH «no user» this is (WORKSPACE-SWITCH-001).
+ *
+ * `fetchCurrentUser` answers null for a guest and for a server that could not say; the callers refreshing an existing
+ * session want that. The boot probe does not: «you are not signed in» and «we could not tell» lead to different screens.
+ */
+export async function probeSession(): Promise<{ user: AuthUser | null; unreachable: boolean }> {
+  try {
+    const { user } = await getData<UserEnvelope>('/auth/me')
+    return { user, unreachable: false }
+  } catch (error) {
+    if (isDefinitelyGuest(error)) return { user: null, unreachable: false }
+
+    try {
+      await ensureCsrfCookie()
+      const { user } = await getData<UserEnvelope>('/auth/me')
+      return { user, unreachable: false }
+    } catch (second) {
+      return { user: null, unreachable: !isDefinitelyGuest(second) }
+    }
+  }
+}
+
 /** Only the server's own "not authenticated" counts. 401 and 403 are answers; everything else is noise. */
-function isDefinitelyGuest(error: unknown): boolean {
+export function isDefinitelyGuest(error: unknown): boolean {
   const status = (error as { status?: number } | null)?.status
 
   return status === 401 || status === 403
@@ -190,12 +243,17 @@ export interface OAuthProvider {
 }
 
 /** AUTH-LOGIN-UX-002 — which ways in the page may offer right now (a way that cannot work is not shown). */
-export interface SignInMethods { password: { available: boolean }; email_code: { available: boolean } }
-export const fetchSignInMethods = (): Promise<SignInMethods> => getData<SignInMethods>('/auth/methods')
 
-export async function fetchOAuthProviders(): Promise<OAuthProvider[]> {
-  const { providers } = await getData<{ providers: OAuthProvider[] }>('/auth/oauth/providers')
-  return providers
+/** What `/login` may offer. One answer for both, so the page waits on one lookup and reserves its rows once. */
+export interface SignInOptions {
+  providers: OAuthProvider[]
+  emailCode: boolean
+}
+
+export async function fetchSignInOptions(): Promise<SignInOptions> {
+  const { providers, email_code } = await getData<{ providers: OAuthProvider[]; email_code?: boolean }>('/auth/oauth/providers')
+
+  return { providers, emailCode: email_code === true }
 }
 
 /**
@@ -209,4 +267,62 @@ export async function startOAuth(
 ): Promise<{ authorize_url: string }> {
   await ensureCsrfCookie()
   return postData<{ authorize_url: string }>(`/auth/oauth/${provider}/start`, context)
+}
+
+/**
+ * LOGIN-004 — a Google account whose verified address matches an account here, waiting for its owner to prove it.
+ *
+ * The server keeps the profile (ten minutes, one use) in THIS browser's session; the page only ever sees what it needs to draw the
+ * card. The masked address is the account's own, never anybody else's, and nothing here is a secret.
+ */
+export interface PendingLink {
+  provider: string
+  name: string | null
+  email: string | null
+  avatar: string | null
+  /** `mo•••@example.com` — enough to recognise your own address. */
+  local_email: string
+  expires_in: number
+  email_sent: boolean
+  can_email: boolean
+}
+
+export async function fetchPendingLink(): Promise<PendingLink> {
+  return getData<PendingLink>('/auth/oauth/pending-link')
+}
+
+interface LinkedSignIn {
+  user: AuthUser
+  /** Where the server sends this account — the same answer the password form and the Google callback get. */
+  destination: string
+}
+
+/** Prove ownership with the account's password: the sign-in form's own check, then link and sign in. */
+export async function confirmLinkWithPassword(password: string): Promise<LinkedSignIn> {
+  await ensureCsrfCookie()
+  return linkedOrTwoStep(await postData<LinkedSignIn | MaybeTwoStep>('/auth/oauth/pending-link/password', { password }))
+}
+
+function linkedOrTwoStep(data: LinkedSignIn | MaybeTwoStep): LinkedSignIn {
+  if (data.user === null || ('two_factor' in data && data.two_factor?.required === true)) {
+    throw new TwoStepRequired('two_factor' in data ? data.two_factor ?? null : null)
+  }
+  return data as LinkedSignIn
+}
+
+/** Mail a one-time link to the account's own address. `delivery` is honest: `awaiting_credentials` means nothing left. */
+export async function sendLinkEmail(): Promise<{ delivery: string; resend_after: number }> {
+  await ensureCsrfCookie()
+  return postData('/auth/oauth/pending-link/email')
+}
+
+/** Spend the mailed link — only works in the browser session that asked for it. */
+export async function confirmLinkWithEmail(token: string): Promise<LinkedSignIn> {
+  await ensureCsrfCookie()
+  return linkedOrTwoStep(await postData<LinkedSignIn | MaybeTwoStep>('/auth/oauth/pending-link/confirm-email', { token }))
+}
+
+export async function cancelPendingLink(): Promise<void> {
+  await ensureCsrfCookie()
+  await deleteData<null>('/auth/oauth/pending-link')
 }

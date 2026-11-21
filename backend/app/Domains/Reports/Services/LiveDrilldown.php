@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Services;
 
 use App\Domains\Reports\Models\ReportShare;
+use App\Domains\Reports\Support\ChosenFigures;
+use App\Domains\Reports\Support\GenericNames;
 use App\Domains\Reports\Support\ReportBreakdowns;
 use Illuminate\Support\Facades\Log;
 
@@ -56,7 +58,11 @@ final class LiveDrilldown
             $payload['objectives'],
         );
 
-        return $this->guarded($payload, 'platform');
+        // REPORT-FILTERS-FUNCTIONAL-001 — a drawer states the row of the platforms table: the chosen KPIs and columns only.
+        $payload = ChosenFigures::forLive($share)->cutDrawer($payload);
+
+        // REPORT-GENERIC-LABELS-001 — a drawer says what the page says.
+        return $this->guarded(GenericNames::for(null, $share)->apply($payload), 'platform');
     }
 
     /**
@@ -78,8 +84,10 @@ final class LiveDrilldown
         $sanitised = $this->shares->sanitizeLive(['ads_roster' => [$content['content']], 'timeseries' => $content['trend']], $share);
         $content['content'] = $sanitised['ads_roster'][0];
         $content['trend'] = $sanitised['timeseries'];
+        // REPORT-FILTERS-FUNCTIONAL-001 — one creative, under the same choice as the list it was opened from.
+        $content = ChosenFigures::forLive($share)->cutContent($content);
 
-        return $this->guarded($content, 'content');
+        return $this->guarded(GenericNames::for(null, $share)->apply($content), 'content');
     }
 
     /**

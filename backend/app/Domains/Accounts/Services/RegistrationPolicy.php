@@ -25,7 +25,11 @@ use App\Domains\Accounts\Models\RegistrationRequest;
 final class RegistrationPolicy
 {
     /**
-     * @return array{requires_mobile: bool, requires_approval: bool, requires_payment: bool}
+     * The platform's verification switches come from the APPLICATION'S snapshot, never the live setting, so a change at
+     * `/admin` cannot move anybody already in the queue. Approval and payment have no switch here and stay as they were:
+     * no verification decision can open a commercial gate. A reviewer's statement on this one application still wins.
+     *
+     * @return array{requires_email: bool, requires_mobile: bool, requires_approval: bool, requires_payment: bool}
      */
     public function for(RegistrationRequest $request): array
     {
@@ -45,9 +49,23 @@ final class RegistrationPolicy
          */
         $perRequest = (array) (($request->review_concessions ?? [])['policy'] ?? []);
 
-        $merged = array_merge($default, $perType, $perPlan, $perRequest);
+        $switches = (array) (($request->effective_policy ?? [])['switches'] ?? []);
+
+        $merged = array_merge($default, $perType, $perPlan);
+        // Absent means required: an application opened before the switches existed owes what it always owed.
+        $merged['requires_email'] = (bool) ($merged['requires_email'] ?? true) && (bool) ($switches['email'] ?? true);
+        $merged['requires_mobile'] = (bool) ($merged['requires_mobile'] ?? false) && (bool) ($switches['mobile'] ?? true);
+        /*
+         * A reviewer can demand a payment here, and can no longer excuse one (SIGNUP-DECISION-001). A bare `false` carries no
+         * plan, period or amount, so what clears the money is a scoped decision: see `RegistrationCommercialGate`.
+         */
+        if (($perRequest['requires_payment'] ?? null) === false) {
+            unset($perRequest['requires_payment']);
+        }
+        $merged = array_merge($merged, $perRequest);
 
         return [
+            'requires_email' => (bool) $merged['requires_email'],
             'requires_mobile' => (bool) ($merged['requires_mobile'] ?? false),
             'requires_approval' => (bool) ($merged['requires_approval'] ?? false),
             'requires_payment' => (bool) ($merged['requires_payment'] ?? false),

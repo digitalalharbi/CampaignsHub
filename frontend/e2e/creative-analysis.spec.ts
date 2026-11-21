@@ -456,7 +456,12 @@ test.describe('the dashboard’s creative section', () => {
   test('accounts for exactly as many findings as its own counter promises', async ({ page, request }) => {
     const projectId = await seededProject(request, STORE_PROJECT)
     await selectProject(page, projectId)
-    await page.goto('/agency/dashboard')
+    await page.goto('/agency/analytics')
+    /*
+     * ANALYTICS-ONE-BOARD-001 — the creative pulse moved from the retired agency board's «المحتوى» tab into the «المحتوى»
+     * section of the one board; the reader opens that section, and every assertion about the pulse below is unchanged.
+     */
+    await page.getByRole('button', { name: /^المحتوى$|^Content$/ }).click()
 
     await expect(page.getByTestId('creative-pulse')).toBeVisible({ timeout: 30000 })
 
@@ -580,11 +585,24 @@ test.describe('the media a reader can actually play', () => {
 
     await page.goto(`/agency/content/${playable!.id}`)
 
-    const video = page.locator('video')
+    /*
+     * CREATIVE-VIEWER-FORMATS-001 — the player is the `<video>` WITHOUT `data-cover`.
+     *
+     * A film the platform sent no poster for now has a second `<video>` under its play button: its own
+     * first frame (`data-cover="video-first-frame"`, metadata only, no source attached to the player).
+     * The test still proves what it did — that the film PLAYS, with real dimensions and no media error —
+     * on the player element alone. Where the seeded film does carry a poster there is no first-frame
+     * element at all, so it is asserted only when one is drawn, and must be gone once Play arms the file.
+     */
+    const video = page.locator('video:not([data-cover])')
     await expect(video, 'the detail page rendered no player').toBeVisible({ timeout: 30000 })
+    const firstFrame = page.locator('video[data-cover="video-first-frame"]')
+    const hadFirstFrame = (await firstFrame.count()) > 0
+    if (hadFirstFrame) await expect(firstFrame, 'a film with no poster opened to a black box').toHaveCount(1)
 
     // The source attaches on play — a grid of autoplaying films would cost a phone tens of megabytes.
     await page.getByRole('button', { name: /play|تشغيل/i }).first().click()
+    if (hadFirstFrame) await expect(firstFrame, 'the first frame stayed over the playing film').toHaveCount(0)
 
     await expect
       .poll(async () => video.evaluate((v: HTMLVideoElement) => v.readyState), { timeout: 20000 })

@@ -151,12 +151,28 @@ final class AShareLinkIsNotAnAssetTest extends TestCase
     {
         $preview = app(CreativePresenter::class)->preview($this->creative([
             'format' => 'image',
-            'asset_url' => 'https://scontent-cdg4-2.xx.fbcdn.net/v/765872842_n.jpg',
+            'asset_url' => 'https://cdn.example/v/765872842_n.jpg',
             'preview_url' => 'https://fb.me/2x0aR2X4NTvx2V7',
         ]));
 
         $this->assertSame('available', $preview['state']);
-        $this->assertSame('https://scontent-cdg4-2.xx.fbcdn.net/v/765872842_n.jpg', $preview['image_url']);
+        $this->assertSame('https://cdn.example/v/765872842_n.jpg', $preview['image_url']);
+    }
+
+    /**
+     * CREATIVE-PREVIEWS-001 — a still on a short-lived signed CDN (Meta's fbcdn) is only ever drawn from OUR copy, so
+     * until that copy exists the card says «being prepared» and carries no platform link in an <img>.
+     */
+    public function test_a_signed_cdn_still_waits_for_our_copy_instead_of_drawing_the_platform_link(): void
+    {
+        $preview = app(CreativePresenter::class)->preview($this->creative([
+            'format' => 'image',
+            'asset_url' => 'https://scontent-cdg4-2.xx.fbcdn.net/v/765872842_n.jpg',
+            'preview_url' => 'https://fb.me/2x0aR2X4NTvx2V7',
+        ]));
+
+        $this->assertSame('cover_pending', $preview['state']);
+        $this->assertNull($preview['image_url']);
     }
 
     /** And a thumbnail is still a still — the video path keeps its poster. */

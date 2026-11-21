@@ -44,7 +44,17 @@ final class RuleMetrics
             $clicks = $v('clicks');
             $conv = $v('conversions');
             $rev = $v('revenue');
+            /*
+             * FX-APPLY-001 — money with a withheld part (a row with no rate for its date) is NOT the sum of the rest: a EUR
+             * account's spend with one unconverted day would be read as a smaller number and compared with a limit. The
+             * money figures go null and the rule says «no_rate»; counts stay.
+             */
+            if ((int) ($b['money_withheld_rows'] ?? 0) > 0) {
+                $spend = null;
+                $rev = null;
+            }
             $out[$id] = [
+                'money_withheld' => (int) ($b['money_withheld_rows'] ?? 0) > 0 ? 1.0 : null,
                 'spend' => $spend, 'impressions' => $impr, 'clicks' => $clicks, 'conversions' => $conv, 'revenue' => $rev,
                 'cpa' => $spend !== null && $conv ? $spend / $conv : null,
                 'roas' => $rev !== null && $spend ? $rev / $spend : null,
@@ -67,9 +77,13 @@ final class RuleMetrics
         BoundAccountVisibility::apply($q, 'daily_metrics');
 
         $out = [];
-        foreach ($q->groupBy('external_campaign_id', 'metric_key')->selectRaw('external_campaign_id, metric_key, SUM(value) AS total')->get() as $r) {
+        foreach ($q->groupBy('external_campaign_id', 'metric_key')->selectRaw('external_campaign_id, metric_key, SUM(value) AS total, COUNT(*) FILTER (WHERE value IS NULL AND original_amount IS NOT NULL) AS withheld')->get() as $r) {
             $total = $r->getAttribute('total');
-            $out[(string) $r->external_campaign_id][(string) $r->metric_key] = $total !== null ? (float) $total : null;
+            $id = (string) $r->external_campaign_id;
+            $out[$id][(string) $r->metric_key] = $total !== null ? (float) $total : null;
+            if (in_array((string) $r->metric_key, ['spend', 'revenue'], true)) {
+                $out[$id]['money_withheld_rows'] = ($out[$id]['money_withheld_rows'] ?? 0) + (int) $r->getAttribute('withheld');
+            }
         }
 
         return $out;
@@ -82,7 +96,8 @@ final class RuleMetrics
         $out = [];
         foreach ($this->entities->byEntity($projectId, $type, $from, $to) as $row) {
             if (in_array((string) $row['entity_id'], $ids, true)) {
-                $out[(string) $row['entity_id']] = array_intersect_key($row, array_flip(self::BASE));
+                $out[(string) $row['entity_id']] = array_intersect_key($row, array_flip(self::BASE))
+                    + ['money_withheld_rows' => (int) ($row['spend_withheld_rows'] ?? 0) + (int) ($row['revenue_withheld_rows'] ?? 0)];
             }
         }
 

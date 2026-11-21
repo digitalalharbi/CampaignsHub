@@ -10,6 +10,7 @@ use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Models\PeriodReach;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * REACH-PERIOD-001 — the provider's reach for a displayed scope and window, or nothing.
@@ -87,7 +88,8 @@ final class PeriodReachReader
         $row = $all->first(static fn (PeriodReach $r): bool => $r->grain === $grain
             && ($campaignId === null || (string) $r->external_campaign_id === $campaignId));
 
-        if ($row === null && $all->isEmpty()) {
+        // Never asked, or asked but changed since (stale): requested again, while the stored figure is still served.
+        if ($all->isEmpty() || $all->contains(static fn (PeriodReach $r): bool => $r->stale_at !== null)) {
             $this->request($account, $from, $to);
         }
 
@@ -111,6 +113,17 @@ final class PeriodReachReader
             ->get();
     }
 
+    public static function askKey(string $account, string $from, string $to): string
+    {
+        return "period-reach:ask:{$account}:{$from}:{$to}";
+    }
+
+    /** Cache key of the refusal memory (the table's figure columns are not the place for a refusal). */
+    public static function refusedKey(string $account, string $from, string $to): string
+    {
+        return "period-reach:refused:{$account}:{$from}:{$to}";
+    }
+
     private function request(string $account, Carbon $from, Carbon $to): void
     {
         $key = $account.'|'.$from->toDateString().'|'.$to->toDateString();
@@ -119,9 +132,19 @@ final class PeriodReachReader
         }
         $this->requested[$key] = true;
 
+        // A window the provider refused (E9001) is not asked again until the refusal memory lapses.
+        if (Cache::has(self::refusedKey($account, $from->toDateString(), $to->toDateString()))) {
+            return;
+        }
+
         $model = ExternalAccount::withoutGlobalScopes()->find($account);
 
         if ($model === null || ! app(PeriodReachFetcher::class)->supports($model, $from, $to)) {
+            return;
+        }
+
+        // One request per window per 6 h across every reader and request (the in-instance memo dies with the request).
+        if (! Cache::add(self::askKey($account, $from->toDateString(), $to->toDateString()), 1, Carbon::now()->addHours(6))) {
             return;
         }
 

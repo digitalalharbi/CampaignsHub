@@ -39,6 +39,9 @@ use Throwable;
  */
 final class StoreSyncer
 {
+    /** INTEG-UNIFIED-BOUNDARIES-001 — what a run says when the binding went away while it was reading. */
+    private const UNLINKED_MID_RUN = 'The store was unlinked from this project (or syncing was switched off) while this run was reading from the provider, so what it read was not stored.';
+
     public function __construct(
         private readonly CommerceConnectorRegistry $registry,
         private readonly ImportStoreData $import,
@@ -180,19 +183,49 @@ final class StoreSyncer
          * product row that already exists. Ordering it the other way leaves every line unjoined until
          * the NEXT sweep, which is a day of a product report showing nothing.
          */
+        /*
+         * INTEG-UNIFIED-BOUNDARIES-001 — each write re-proves the binding at the moment it is made.
+         *
+         * A store read takes as long as the platform takes; the merchant may unlink the store, switch syncing off or move it to
+         * another project meanwhile. `whileBound()` holds the binding row for the length of one write set, so nothing is filed
+         * into a project the store has left, and the reads after the detach are not even attempted.
+         */
+        $unlinked = false;
+        $write = function (callable $import) use ($store, $projectId, &$unlinked): mixed {
+            $out = null;
+            $held = $this->assignment->whileBound($store, $projectId, function () use (&$out, $import): void {
+                $out = $import();
+            });
+            $unlinked = $unlinked || ! $held;
+
+            return $out;
+        };
+
         $products = $this->attempt(fn () => $connector->syncProducts($storeId), $problems, 'products');
-        $productCount = $products === null ? 0 : $this->import->products($store, $projectId, $products->records);
+        $productCount = $products === null ? 0 : (int) $write(fn () => $this->import->products($store, $projectId, $products->records));
 
-        $customers = $this->attempt(fn () => $connector->syncCustomers($storeId, ...$window), $problems, 'customers');
-        $customerCount = $customers === null ? 0 : $this->import->customers($store, $projectId, $customers->records);
+        $customerCount = 0;
+        $orderCounts = ['orders' => 0, 'items' => 0, 'attributed' => 0];
+        $cartCount = 0;
 
-        $orders = $this->attempt(fn () => $connector->syncOrders($storeId, ...$window), $problems, 'orders');
-        $orderCounts = $orders === null
-            ? ['orders' => 0, 'items' => 0, 'attributed' => 0]
-            : $this->import->orders($store, $projectId, $orders->records);
+        if (! $unlinked) {
+            $customers = $this->attempt(fn () => $connector->syncCustomers($storeId, ...$window), $problems, 'customers');
+            $customerCount = $customers === null ? 0 : (int) $write(fn () => $this->import->customers($store, $projectId, $customers->records));
+        }
 
-        $carts = $this->attempt(fn () => $connector->syncAbandonedCarts($storeId, ...$window), $problems, 'abandoned carts');
-        $cartCount = $carts === null ? 0 : $this->import->abandonedCarts($store, $projectId, $carts->records);
+        if (! $unlinked) {
+            $orders = $this->attempt(fn () => $connector->syncOrders($storeId, ...$window), $problems, 'orders');
+            $orderCounts = $orders === null ? $orderCounts : ($write(fn () => $this->import->orders($store, $projectId, $orders->records)) ?? $orderCounts);
+        }
+
+        if (! $unlinked) {
+            $carts = $this->attempt(fn () => $connector->syncAbandonedCarts($storeId, ...$window), $problems, 'abandoned carts');
+            $cartCount = $carts === null ? 0 : (int) $write(fn () => $this->import->abandonedCarts($store, $projectId, $carts->records));
+        }
+
+        if ($unlinked) {
+            $problems[] = self::UNLINKED_MID_RUN;
+        }
 
         $records = $productCount + $customerCount + $orderCounts['orders'] + $cartCount;
 
@@ -210,6 +243,8 @@ final class StoreSyncer
          * have your sales» over an empty table. It is now stated as what it is, and it is not red.
          */
         $status = match (true) {
+            // Cut short by an unlink: not a failure of the provider and not a success of the sync.
+            $unlinked && $records === 0 => SyncRunStatus::AwaitingAssignment->value,
             $records === 0 && $problems !== [] => SyncRunStatus::Failed->value,
             $problems !== [] => SyncRunStatus::PartialMapping->value,
             $records === 0 => SyncRunStatus::NoData->value,

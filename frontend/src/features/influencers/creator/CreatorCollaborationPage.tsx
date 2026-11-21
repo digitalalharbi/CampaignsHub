@@ -16,6 +16,8 @@ import { Textarea } from '@/components/ui/Textarea'
 import { ErrorState, Skeleton } from '@/components/ui/States'
 import { useUi } from '@/stores/ui'
 import { Num } from '@/components/ui/Num'
+import { withMark } from '@/lib/money/mark'
+import { formatPeriodBounds } from '@/lib/period/formatPeriodLabel'
 
 /**
  * `/influencers/me/:id` — one agreement, from the creator's side (INFL-002).
@@ -32,7 +34,7 @@ import { Num } from '@/components/ui/Num'
  */
 
 const money = (amount: string | null, currency: string) =>
-  amount === null ? null : `${Number(amount).toLocaleString('en-US')} ${currency}`
+  amount === null ? null : withMark(Number(amount).toLocaleString('en-US'), currency)
 
 /**
  * A Latin-script run inside Arabic text, isolated.
@@ -86,7 +88,7 @@ function TermsPanel({ c, ar, id }: { c: CreatorCollaboration; ar: boolean; id: s
             ? ar ? 'قبلت هذه الشروط' : 'You accepted these terms'
             : ar ? 'اعتذرت عن هذه الشروط' : 'You declined these terms'}
         </span>
-        <p className="mt-1.5 text-[12px] text-text-muted">
+        <p className="mt-1.5 text-xs text-text-muted">
           {ar
             ? 'لتغيير الاتفاق تحتاج الوكالة إلى إرسال شروط معدّلة.'
             : 'Changing the agreement means the agency sends revised terms.'}
@@ -97,17 +99,17 @@ function TermsPanel({ c, ar, id }: { c: CreatorCollaboration; ar: boolean; id: s
 
   return (
     <div data-testid="creator-terms" className="rounded-2xl border border-warning/40 bg-warning/5 p-4">
-      <h2 className="font-heading text-[15px] font-bold text-text-primary">
+      <h2 className="font-heading text-sm font-bold text-text-primary">
         {ar ? 'شروط بانتظار ردّك' : 'Terms awaiting your answer'}
       </h2>
-      <p className="mt-1 text-[12px] text-text-secondary">
+      <p className="mt-1 text-xs text-text-secondary">
         {ar
           ? 'يمكنك الرد مرة واحدة. بعدها يلزم إرسال شروط معدّلة من الوكالة.'
           : 'You can answer once. After that, changing it means the agency sends revised terms.'}
       </p>
 
       {respond.isError && (
-        <p role="alert" className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-[12px] font-semibold text-danger">
+        <p role="alert" className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-xs font-semibold text-danger">
           {ar ? 'تعذّر حفظ ردّك. حدّث الصفحة وحاول مجددًا.' : 'Your answer could not be saved. Refresh and try again.'}
         </p>
       )}
@@ -180,10 +182,10 @@ function DeliverableRow({
         <div className="min-w-0">
           <Ltr className="font-heading text-sm font-bold text-text-primary">
             {d.type}
-            {d.platform && <span className="ps-2 font-sans text-[12px] font-semibold text-text-muted">{d.platform}</span>}
+            {d.platform && <span className="ps-2 font-sans text-xs font-semibold text-text-muted">{d.platform}</span>}
           </Ltr>
           {d.due_on && (
-            <span className="mt-1 flex items-center gap-1.5 text-[12px] text-text-muted">
+            <span className="mt-1 flex items-center gap-1.5 text-xs text-text-muted">
               <Clock size={12.5} aria-hidden />
               {ar ? 'موعد التسليم' : 'Due'} <Ltr>{d.due_on}</Ltr>
               {d.is_overdue && (
@@ -202,7 +204,7 @@ function DeliverableRow({
       {d.feedback && d.status === 'rejected' && (
         <p
           data-testid="creator-feedback"
-          className="mt-3 flex gap-2 rounded-lg bg-danger/10 px-3 py-2 text-[12px] text-danger"
+          className="mt-3 flex gap-2 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger"
         >
           <MessageSquareWarning size={15} className="mt-px shrink-0" aria-hidden />
           <span dir="auto">{d.feedback}</span>
@@ -214,7 +216,7 @@ function DeliverableRow({
           href={d.submitted_url}
           target="_blank"
           rel="noreferrer noopener"
-          className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-brand-600 hover:underline"
+          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:underline"
         >
           <ExternalLink size={13} aria-hidden />
           {ar ? 'ما سلّمته' : 'What you submitted'}
@@ -243,7 +245,7 @@ function DeliverableRow({
                 />
               </Field>
               {submit.isError && (
-                <p role="alert" className="text-[12px] font-semibold text-danger">
+                <p role="alert" className="text-xs font-semibold text-danger">
                   {ar ? 'تعذّر التسليم. تأكد من الرابط وحاول مجددًا.' : 'That could not be submitted. Check the link and try again.'}
                 </p>
               )}
@@ -324,7 +326,7 @@ export function CreatorCollaborationPage() {
       <div>
         <Link
           to="/influencers/me"
-          className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-text-muted hover:text-text-primary"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-muted hover:text-text-primary"
         >
           <ArrowRight size={14} className="rtl:rotate-180" aria-hidden />
           {ar ? 'أعمالك' : 'Your work'}
@@ -347,7 +349,7 @@ export function CreatorCollaborationPage() {
         <div className="rounded-2xl border border-border bg-surface p-4">
           <dt className="text-[11px] font-semibold text-text-muted">{ar ? 'الفترة' : 'Period'}</dt>
           <dd className="mt-1 text-sm font-semibold text-text-primary">
-            <Num>{c.starts_on || c.ends_on ? `${c.starts_on ?? '—'} → ${c.ends_on ?? '—'}` : ar ? 'غير محدّدة' : 'Not set'}</Num>
+            <Num>{c.starts_on || c.ends_on ? formatPeriodBounds(c.starts_on, c.ends_on, ar ? 'ar' : 'en') : ar ? 'غير محدّدة' : 'Not set'}</Num>
           </dd>
         </div>
         <div className="rounded-2xl border border-border bg-surface p-4">
@@ -360,7 +362,7 @@ export function CreatorCollaborationPage() {
 
       {c.brief && (
         <section>
-          <h2 className="font-heading text-[15px] font-bold text-text-primary">{ar ? 'الموجز' : 'The brief'}</h2>
+          <h2 className="font-heading text-sm font-bold text-text-primary">{ar ? 'الموجز' : 'The brief'}</h2>
           <p dir="auto" className="mt-2 whitespace-pre-wrap rounded-2xl border border-border bg-surface p-4 text-sm leading-relaxed text-text-secondary">
             {c.brief}
           </p>
@@ -368,7 +370,7 @@ export function CreatorCollaborationPage() {
       )}
 
       <section>
-        <h2 className="font-heading text-[15px] font-bold text-text-primary">
+        <h2 className="font-heading text-sm font-bold text-text-primary">
           {ar ? 'المطلوب تسليمه' : 'What you owe'}
         </h2>
         {c.deliverables.length === 0 ? (

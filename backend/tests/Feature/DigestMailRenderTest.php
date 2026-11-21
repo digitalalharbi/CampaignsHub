@@ -112,6 +112,51 @@ final class DigestMailRenderTest extends TestCase
     }
 
     /**
+     * MONEY-USD-001 (Owner: «العملة») — a project with no figure in the window is not a project that spent nothing.
+     *
+     * The seeded agency printed «الإنفاق 0 USD» beside SAR rows for projects with no rows at all: the sums
+     * coalesce to 0 and the unit falls back to the reporting default. A withheld figure never prints as zero,
+     * and the row says «no data» in the product's own words — in both languages, with and without money.
+     */
+    public function test_a_project_with_no_figures_says_no_data_and_never_prints_zero_in_a_currency(): void
+    {
+        $empty = [
+            'project_id' => 'p2', 'project_name' => 'Quiet Project', 'currency' => 'USD',
+            'totals' => ['spend' => 0.0, 'conversions' => 0.0, 'impressions' => 0.0, 'revenue' => 0.0],
+            'reported' => ['spend' => false, 'conversions' => false, 'impressions' => false, 'revenue' => false],
+            'change' => [], 'budget' => [],
+            'freshness' => ['state' => 'fresh', 'sync_failed' => false, 'failing' => []],
+        ];
+        $withData = array_merge($this->digest()['projects'][0], ['currency' => 'SAR']);
+        $digest = $this->digest(['currency' => 'SAR', 'projects' => [$withData, $empty]]);
+
+        foreach (['ar' => ['لا بيانات', 'لا أرقام مسجّلة'], 'en' => ['No data', 'No figures recorded']] as $locale => [$chip, $line]) {
+            // EMAIL-CLIENT-COMPAT-001 — margins are spacer tables now; they are not the row's end.
+            $html = (string) preg_replace('#<table[^>]*data-spacer="\d+"[^>]*>.*?</table>#s', '', $this->renderOf($digest, $locale));
+            $quiet = (string) substr($html, (int) strrpos($html, 'data-block="portfolio-row"'));
+            $quiet = (string) substr($quiet, 0, (int) strpos($quiet, '</table>') + 8);
+            $this->assertStringContainsString('Quiet Project', $quiet);
+            $this->assertStringContainsString($chip, $quiet, "[$locale] the row says it has no data");
+            $this->assertStringContainsString($line, $quiet);
+            $this->assertDoesNotMatchRegularExpression('/\b0\s*(USD|SAR|\$|ر\.س)(?!\w)/u', $quiet, "[$locale] a withheld figure is never «0 USD»");
+            $this->assertStringNotContainsString('USD', $quiet, "[$locale] no currency is stated beside a figure nobody has");
+            $this->assertStringNotContainsString(' $', $quiet, "[$locale] no currency mark is stated beside a figure nobody has");
+            $this->assertStringNotContainsString('within the range', $quiet, "[$locale] no verdict is offered on nothing");
+            $this->assertStringContainsString('9,400', $html, "[$locale] the project with data keeps its spend");
+        }
+
+        // The member without money.view gets the same honest row, and no spend either way.
+        $restricted = (string) (new DailyDigestMail($digest, 'en', 'Mohammed', 'daily', null, 'restricted'))->render();
+        $this->assertStringContainsString('No data', $restricted);
+        $this->assertStringNotContainsString('0 USD', $restricted);
+        $this->assertStringNotContainsString('0 $', $restricted);
+
+        // The presenter itself: a coalesced spend/revenue is no card; a measured zero still is one.
+        $this->assertNull((new DigestPresenter('ar', 1, 'SAR'))->card('spend', ['spend' => 0.0], ['spend' => false], []));
+        $this->assertNotNull((new DigestPresenter('ar', 1, 'SAR'))->card('spend', ['spend' => 0.0], ['spend' => true], []));
+    }
+
+    /**
      * The account line carries no blended cost per result — and no sentence saying so.
      *
      * Across projects it would divide one client's money by another client's orders, so it is not
@@ -126,7 +171,7 @@ final class DigestMailRenderTest extends TestCase
             $this->assertStringNotContainsString('لا تُجمَع تكلفة النتيجة', $html);
             $text = (string) preg_replace('/\s+/u', ' ', (string) strip_tags($html));
             $header = mb_substr($text, 0, (int) mb_strpos($text, 'Nakheel'));
-            $this->assertDoesNotMatchRegularExpression('/(Cost per result|تكلفة النتيجة|ROAS|العائد على الإنفاق)/u', $header, "[$locale] the account line carries no blended ratio");
+            $this->assertDoesNotMatchRegularExpression('/(Cost per result|تكلفة النتيجة|ROAS|معدل العائد)/u', $header, "[$locale] the account line carries no blended ratio");
         }
     }
 
@@ -144,10 +189,10 @@ final class DigestMailRenderTest extends TestCase
         unset($digest['projects'][0]['totals']['cpa'], $digest['projects'][0]['totals']['roas']);
         $html = $this->renderOf($digest, 'ar');
         $row = (string) substr($html, (int) strpos($html, 'data-block="portfolio-row"'));
-        $row = (string) substr($row, 0, (int) strpos($row, '</table>', (int) strpos($row, 'ch-kpi')) + 8);
+        $row = (string) substr($row, 0, (int) strpos($row, '</table>', (int) strpos($row, 'ch-strip')) + 8);
         $this->assertStringNotContainsString('ch-kpi-lead', $row, 'no objective block without an objective figure');
         // Two real cells → two equal 50% columns, labels over figures.
-        $this->assertSame(2, substr_count($row, 'class="ch-kpi" width="50%"'), $row);
+        $this->assertSame(2, substr_count($row, 'class="ch-strip" width="50%"'), $row);
 
         // The account line without a results total shows spend and projects only — no «no data» tile.
         $html = $this->html('en', ['totals' => ['projects' => 2, 'spend' => 12400.0]]);
@@ -194,9 +239,9 @@ final class DigestMailRenderTest extends TestCase
         $en = (new DailyDigestMail($this->digest(), 'en', 'Mohammed'))->envelope()->subject;
         $ar = (new DailyDigestMail($this->digest(), 'ar', 'Mohammed'))->envelope()->subject;
 
-        $this->assertStringContainsString('12,400 USD', $en);
+        $this->assertStringContainsString('12,400 $', $en);
         $this->assertStringContainsString('84 results', $en);
-        $this->assertStringContainsString('12,400 USD', $ar);
+        $this->assertStringContainsString('12,400 $', $ar);
         $this->assertStringContainsString('نتيجة', $ar);
     }
 
@@ -206,11 +251,11 @@ final class DigestMailRenderTest extends TestCase
         $en = (new DailyDigestMail($this->digest(), 'en', 'Mohammed'))->render();
         $ar = (new DailyDigestMail($this->digest(), 'ar', 'Mohammed'))->render();
 
-        $this->assertStringContainsString('Reading the results depends on the performance and data available', $en);
+        $this->assertStringContainsString('Note: Campaigns are managed on a performance-based methodology; results may vary by period, platform, data source, attribution model and the campaign learning phase.', $en);
         $this->assertStringContainsString('Last updated:', $en);
         $this->assertStringContainsString('Currency: USD', $en);
         $this->assertStringContainsString('Time zone: Asia/Riyadh', $en);
-        $this->assertStringContainsString('تعتمد قراءة النتائج على الأداء والبيانات المتاحة', $ar);
+        $this->assertStringContainsString('ملاحظة: تُدار الحملات وفق منهجية قائمة على الأداء، وقد تختلف النتائج بحسب الفترة والمنصة ومصدر البيانات ونموذج الإسناد ومرحلة تعلّم الحملة.', $ar);
         $this->assertStringContainsString('آخر تحديث:', $ar);
         $this->assertStringContainsString('العملة: USD', $ar);
     }
@@ -249,9 +294,9 @@ final class DigestMailRenderTest extends TestCase
         $html = $this->html('en');
 
         $this->assertSame(1, substr_count($html, '<img'));
-        $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/lockup-en-dark\.png" width="220" alt="CampaignsHub"#', $html);
+        $this->assertMatchesRegularExpression('#<img src="[^"]+/brand/email/banner-en\.png" width="600" height="150" alt="CampaignsHub#', $html);
         $this->assertStringNotContainsString('data:image', $html);
-        $this->assertStringNotContainsString('background-image', $html);
+        $this->assertStringNotContainsString('url(', $html);
     }
 
     /** Every reader can reach their own preferences and the three policies from the footer. */
@@ -360,7 +405,9 @@ final class DigestMailRenderTest extends TestCase
         $subject = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', 'Nakheel Media'))
             ->envelope()->subject;
 
-        $this->assertStringStartsWith('Nakheel Media —', $subject, 'the subject still announced the product');
+        // Owner §17.3.1 is the later instruction: the product opens every subject, and the agency follows it.
+        $this->assertStringStartsWith('CampaignsHub — Nakheel Media:', $subject);
+        $this->assertStringContainsString('on behalf of Nakheel Media', $html);
     }
 
     /**
@@ -376,7 +423,7 @@ final class DigestMailRenderTest extends TestCase
             $subject = (new DailyDigestMail($this->digest(), 'en', 'Mohammed', 'daily', $absent))
                 ->envelope()->subject;
 
-            $this->assertStringStartsWith((string) config('brand.name').' —', $subject);
+            $this->assertStringStartsWith('CampaignsHub — Your daily report', $subject);
         }
     }
 

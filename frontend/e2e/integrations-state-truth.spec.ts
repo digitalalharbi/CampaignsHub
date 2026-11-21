@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, switchToEnglish } from './helpers'
+import { AUTH, selectFirstProject, switchToEnglish } from './helpers'
 
 /**
  * INTEGRATION-DATASOURCE-WIZARD-001 §§22, 26 — what the Connection Hub must never fail to say.
@@ -20,6 +20,7 @@ import { AUTH, switchToEnglish } from './helpers'
 test.use({ storageState: AUTH.owner })
 
 test('the hub says which state every authorisation is in, on both axes', async ({ page }) => {
+  await selectFirstProject(page)
   await page.goto('/agency/integrations')
   await switchToEnglish(page)
 
@@ -39,10 +40,14 @@ test('the hub says which state every authorisation is in, on both axes', async (
     const id = ((await rows.nth(i).getAttribute('data-testid')) ?? '').replace('hub-row-', '')
 
     // BOTH, always. Either alone is the collapse that hid a Reconnect button on Production.
+    // The row carries ONE chip; the separate states are under it, one press away.
+    await expect(page.getByTestId(`hub-state-${id}`), `«${id}» has no state on its row`).toBeVisible()
+    await page.getByTestId(`hub-expand-${id}`).click()
     await expect(page.getByTestId(`hub-auth-${id}`), `«${id}» has no authorisation state`).toBeVisible()
     await expect(page.getByTestId(`hub-sync-${id}`), `«${id}» has no data state`).toBeVisible()
-    // «1 of 17» — chosen over reachable, which is the sentence that stops «everything syncs».
-    await expect(page.getByTestId(`hub-accounts-${id}`)).toContainText(/of|من/)
+    // INTEG-PROJECT-LINK-001 — the row counts LINKED accounts only; what was merely discovered is not on the centre.
+    await expect(page.getByTestId(`hub-accounts-${id}`)).toContainText(/\d/)
+    await expect(page.getByTestId(`hub-accounts-${id}`)).not.toContainText(/ of | من /)
   }
 })
 
@@ -54,6 +59,7 @@ test('the hub says which state every authorisation is in, on both axes', async (
  * happen is one sitting in the account with nothing on screen about it.
  */
 test('an unfinished authorisation carries the way to finish it', async ({ page }) => {
+  await selectFirstProject(page)
   await page.goto('/agency/integrations')
   await switchToEnglish(page)
 
@@ -70,6 +76,7 @@ test('an unfinished authorisation carries the way to finish it', async ({ page }
 })
 
 test('the integrations page prints no placeholder value', async ({ page }) => {
+  await selectFirstProject(page)
   await page.goto('/agency/integrations')
   await switchToEnglish(page)
 

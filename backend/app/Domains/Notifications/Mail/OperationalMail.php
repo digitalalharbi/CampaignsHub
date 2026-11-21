@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Mail;
 
+use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
+use App\Domains\Notifications\Support\AlertVisual;
 use App\Domains\Notifications\Support\MailShell;
+use App\Domains\Notifications\Support\MailSubject;
 use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Str;
 
 /**
  * One message, one thing to say — MAIL-006.
@@ -32,7 +36,7 @@ use Illuminate\Queue\SerializesModels;
  */
 final class OperationalMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use OffersUnsubscribe, Queueable, SerializesModels;
 
     public function __construct(
         /** `alert` · `report_ready` · `billing` · `approval` · `request` · `message`. */
@@ -51,17 +55,30 @@ final class OperationalMail extends Mailable
         public readonly ?string $action = null,
         /** Why this arrived, when «you follow this project» is not true — an account or billing message. */
         public readonly ?string $why = null,
+        /** DIGESTS-CADENCE-BUDGETS-001 — the next steps in order («افتح ← راجع ← قرّر»); none when the button says it all. */
+        public readonly ?string $steps = null,
+        /** DIGESTS-CADENCE-BUDGETS-001 — the problem drawn (`AlertMailItem::viz()` shapes); the message's stages when null. */
+        public readonly ?array $viz = null,
     ) {}
+
+    private function firstLine(): string
+    {
+        $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', $this->detail) ?: []), static fn (string $l): bool => $l !== ''));
+
+        return $lines[0] ?? '';
+    }
+
+    /** @return list<string> the detail's other lines, each short, at most four */
+    private function otherLines(): array
+    {
+        $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', $this->detail) ?: []), static fn (string $l): bool => $l !== ''));
+
+        return array_map(static fn (string $l): string => Str::limit($l, AlertVisual::LINE_LIMIT, '…'), array_slice($lines, 1, 4));
+    }
 
     public function envelope(): Envelope
     {
-        $ar = $this->lang === 'ar';
-
-        return new Envelope(
-            subject: $ar
-                ? sprintf('CampaignsHub — %s', $this->title)
-                : sprintf('CampaignsHub — %s', $this->title),
-        );
+        return new Envelope(subject: MailSubject::of($this->title, $this->lang === 'ar'));
     }
 
     public function content(): Content
@@ -83,6 +100,21 @@ final class OperationalMail extends Mailable
             // already carries the title and repeating it wastes the only preview a reader gets.
             preheader: $this->detail,
         ) + [
+            /*
+             * DIGESTS-CADENCE-BUDGETS-001 — the same card as every alert: chip, the message drawn, ONE line, ordered steps, one
+             * button. A detail written on several lines keeps its other lines as a short list under the card, never a paragraph.
+             */
+            'card' => AlertVisual::present([
+                'severity' => $this->severity,
+                'title' => $this->title,
+                'context' => $this->context,
+                'detail' => $this->firstLine(),
+                'action' => (string) $this->steps,
+                'rule' => $this->kind,
+                'viz' => $this->viz,
+                'url' => null,
+            ], $ar),
+            'more' => $this->otherLines(),
             'severity' => $this->severity,
             'title' => $this->title,
             'detail' => $this->detail,
@@ -98,6 +130,7 @@ final class OperationalMail extends Mailable
         }
 
         return new Content(view: 'mail.layout', with: $body + [
+            'unsubscribeUrl' => $this->unsubscribeUrl,
             'slot' => view('mail.operational', $body)->render(),
         ]);
     }

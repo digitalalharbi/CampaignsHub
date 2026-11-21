@@ -61,6 +61,9 @@ final class ProjectRouteCapabilityCoverageTest extends TestCase
         'api.v1.projects.clone',
         'api.v1.projects.pause',
         'api.v1.projects.resume',
+        // PROJECT-LIFECYCLE-001 — same layer: tenant permission projects.archive / projects.view + reach (ProjectLifecycleContractTest).
+        'api.v1.projects.archive-impact',
+        'api.v1.projects.lifecycle',
 
         /*
          * PROJECT-DELETE-001 — destroying a client, and the read that tells you what that costs.
@@ -78,6 +81,12 @@ final class ProjectRouteCapabilityCoverageTest extends TestCase
          */
         'api.v1.projects.deletion-impact',
         'api.v1.projects.destroy',
+        // PROJECT-LIFECYCLE-001 §4–§5 (N2) — same layer: tenant permission projects.restore / projects.purge / projects.move
+        // + authorizeReach, typed name server-side for purge and move (ProjectTrashPurgeMoveTest).
+        'api.v1.projects.restore-impact',
+        'api.v1.projects.purge',
+        'api.v1.projects.move-impact',
+        'api.v1.projects.move',
 
         /*
          * The capability SET itself — the endpoint a rail reads to decide what to draw.

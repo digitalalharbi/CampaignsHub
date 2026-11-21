@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/Button'
 import { Num } from '@/components/ui/Num'
 import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
+import { confirmDialog } from '@/stores/dialogs'
 
 /**
  * META-CANDIDATE-001 — the ONE isolated Candidate Meta app.
@@ -160,7 +161,7 @@ export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candid
     onSuccess: (data) => qc.setQueryData(key, data),
   })
 
-  const start = useMutation({
+  const start = useMutation({ meta: { feedback: 'none' },
     mutationFn: saas ? startMetaSaasTest : startMetaCandidateTest,
     onSuccess: (data) => { window.location.assign(data.authorization_url) },
   })
@@ -189,7 +190,7 @@ export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candid
       )}
 
       <section className="rounded-2xl border border-border bg-surface p-5">
-        <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.credentials}</h2>
+        <h2 className="font-heading text-sm font-bold text-text-primary">{c.credentials}</h2>
         <p className="mt-1 text-xs text-text-muted">{c.writeOnly}</p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -214,7 +215,7 @@ export function MetaCandidatePage({ variant = 'candidate' }: { variant?: 'candid
               <span className="flex items-center gap-2 text-xs text-text-muted">
                 {v.present ? <span>{v.source === 'environment' ? c.environment : c.stored} · <bdi dir="ltr">••••{v.hint ?? ''}</bdi></span> : c.notSet}
                 {v.source === 'stored' && (
-                  <button type="button" className="inline-flex items-center gap-1 text-danger" onClick={() => forget.mutate(v.key)}>
+                  <button type="button" className="inline-flex items-center gap-1 text-danger" disabled={forget.isPending} onClick={() => forget.mutate(v.key)}>
                     <Trash2 size={12} aria-hidden /> {c.clear}
                   </button>
                 )}
@@ -297,7 +298,7 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
 
   return (
     <section data-testid="meta-candidate-promotion" className="rounded-2xl border border-border bg-surface p-5">
-      <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.promotion}</h2>
+      <h2 className="font-heading text-sm font-bold text-text-primary">{c.promotion}</h2>
       <p className="mt-1 max-w-3xl text-xs text-text-secondary">{c.promotionNote}</p>
       {!promotion.eligible && promotion.reason && (
         <p data-testid="meta-candidate-promotion-reason" className="mt-2 text-xs text-text-muted">
@@ -330,7 +331,7 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
           variant="danger"
           disabled={!canPromote || !acknowledged || (narrows && !narrowConfirmed)}
           loading={promote.isPending}
-          onClick={() => { if (window.confirm(c.confirmPromote)) promote.mutate() }}
+          onClick={async () => { if (await confirmDialog({ title: c.confirmPromote, danger: true })) promote.mutate() }}
         >
           {c.promote}
         </Button>
@@ -339,7 +340,7 @@ function Promotion({ promotion, copy: c }: { promotion: NonNullable<MetaCandidat
           variant="secondary"
           disabled={!canRollback || !acknowledged}
           loading={rollback.isPending}
-          onClick={() => { if (window.confirm(c.confirmRollback)) rollback.mutate() }}
+          onClick={async () => { if (await confirmDialog({ title: c.confirmRollback, danger: true })) rollback.mutate() }}
         >
           {c.rollback}
         </Button>
@@ -371,7 +372,7 @@ function RunChecklist({ run, copy: c }: { run: MetaCandidateRun | null; copy: Co
   return (
     <section data-testid="meta-candidate-checklist" className="rounded-2xl border border-border bg-surface p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-heading text-[15px] font-bold text-text-primary">{c.checklist}</h2>
+        <h2 className="font-heading text-sm font-bold text-text-primary">{c.checklist}</h2>
         <span data-testid="meta-candidate-status" className="text-sm font-semibold text-text-primary">{c[run.status]}</span>
       </div>
       <p className="mt-1 text-xs text-text-muted">
@@ -402,7 +403,7 @@ function StepRow({ step, copy: c }: { step: MetaCandidateStep; copy: Copy }) {
   const e = step.error
 
   return (
-    <li data-testid={`meta-candidate-step-${step.key}`} data-status={step.status} className="rounded-lg bg-surface-secondary px-3 py-2 text-[13px]">
+    <li data-testid={`meta-candidate-step-${step.key}`} data-status={step.status} className="rounded-lg bg-surface-secondary px-3 py-2 text-xs">
       <div className="flex items-center gap-2">
         {icon}
         <span className="font-semibold text-text-primary">{c.steps[step.key]}</span>

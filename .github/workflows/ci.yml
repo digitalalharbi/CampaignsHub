@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # `labeled`: the Lander adds `full-gate` to the PR it is about to land, which starts the full three-browser run.
+    types: [opened, synchronize, reopened, labeled]
   # GitHub's own merge queue (a repository-ruleset option) builds each queued PR on this event, with no
   # token of ours involved. Inert until the ruleset enables it; see docs/MERGE_QUEUE.md.
   merge_group:
@@ -24,8 +26,139 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
+  # CI-SPEED-002 — what does this change need? (.github/scripts/ci-changes.py, tested by test_ci_changes.py)
+  #
+  # A frontend-only change used to run the whole sharded backend suite, and a docs change ran everything. The script reads the
+  # pull request's file list from the API (no checkout of history, no third-party action) and answers four questions:
+  # the full backend suite, the frontend unit job, the production image, the chromium browser gate. Everything that is
+  # not needed REPORTS GREEN under its own name — `backend`, `frontend`, `image` and `gate (chromium)` always run and say
+  # «not needed for this change» — so the checks the Lander (`waitpr.py` NEED list), the merge queue and the ruleset read
+  # are always present and always SUCCESS or red. Nothing here weakens a verdict: it only decides whether the work behind
+  # one is needed. A merge_group, a dispatch, a `full-gate` label (the PR being landed), a change under .github/, or any
+  # doubt (unreadable file list) answers «all of it». See docs/ci/CI-SPEED-2026-11-19.md.
+  changes:
+    name: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend_full: ${{ steps.c.outputs.backend_full }}
+      frontend: ${{ steps.c.outputs.frontend }}
+      image: ${{ steps.c.outputs.image }}
+      e2e: ${{ steps.c.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: The classifier's own tests
+        run: python3 .github/scripts/test_ci_changes.py
+      - name: Classify the change
+        id: c
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 .github/scripts/ci-changes.py \
+            --event "${{ github.event_name }}" \
+            --full-gate "${{ contains(github.event.pull_request.labels.*.name, 'full-gate') }}" \
+            --pr "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}"
+
+  # CI-TIER-001: the longest jobs are defined first so the runner queue starts them first (webkit ~19 min, firefox ~17).
+  gate-webkit-shards:
+    name: gate shards (webkit)
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gate') }}
+    uses: ./.github/workflows/gate-shards.yml
+    with:
+      browser: webkit
+      shards: '[1,2,3,4,5]'
+      total: 5
+      weights: '215:224:278:206:195'
+
+  gate-firefox-shards:
+    name: gate shards (firefox)
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gate') }}
+    uses: ./.github/workflows/gate-shards.yml
+    with:
+      browser: firefox
+      shards: '[1,2,3,4,5]'
+      total: 5
+      weights: '236:257:285:166:189'
+  # CI-TIER-001 — the cheap run for every PR, the full three-browser gate for the PR that is about to land.
+  #
+  # Every open PR used to start all 24 jobs; GitHub's free plan runs 20 at once, so a run sat queued 35-45 minutes
+  # behind other PRs' runs (measured 2026-11-13: shards started +35..+45 min after the run did, then ran 16 minutes).
+  # A PR now runs backend + frontend + image + chromium. Firefox and WebKit run for a dispatch, a merge_group, or a PR
+  # labelled `full-gate` — which the Lander does to the one PR it is landing (`ch-scripts/fullgate.sh`, from
+  # `refresh.sh`). Otherwise they are SKIPPED, never green, and `waitpr.sh` / `merge-queue.yml` require `gate (firefox)`
+  # and `gate (webkit)` to be SUCCESS, so nothing lands without all three browsers.
+  #
+  # CI-TIER-002 — shard counts: backend 5, firefox 5, webkit 5 (was 4 each), so the slowest shard (webkit 19.4 min
+  # measured on #1054) drops to about 15; firefox and webkit weights are the measured 4-way weights re-cut at equal
+  # time. CI-TIER-003: re-cut once more from the measured shard times of #1055 (webkit 15.5/20.9/13.8/17.5/14.8, firefox
+  # 10.6/14.6/10.6/17.9/12.0 minutes), damped by 0.6 for the fixed per-shard setup. The long jobs are defined first and carry no `needs`, so the runner queue starts them at t=0.
+  # CI-SPEED-001 — the backend check, as three kinds of job behind ONE name.
+  #
+  # `backend` used to be one job: autopilot + pint + larastan, then `php artisan test` over ~8,000 tests in one process
+  # — 35 to 67 minutes, the longest job of the run. The suite is now dealt into four shards by
+  # `.github/scripts/backend-shard.py`, from PHPUnit's OWN list of the suite (`--list-test-files`, `--list-tests`
+  # against the repository's `phpunit.xml`), each on its own runner with its own postgres and redis — the isolation
+  # every shard needs, because RefreshDatabase migrates the database a shard owns.
+  #
+  # `artisan test --parallel` is NOT used: there is no paratest here, and it prints nothing and exits 0.
+  #
+  # The job named `backend` — the required check, and the name the Lander and the merge queue read — runs last and is
+  # green ONLY when the static job and every shard SUCCEEDED (cancelled, skipped or failed are all red) AND the
+  # shards' evidence proves the whole suite ran exactly once: same full list in every shard, disjoint shards whose
+  # union is that list, and each shard's junit recording every test it was given (see the script's docstring).
+  backend-static:
+    name: backend (static)
+    needs: changes
+    if: ${{ needs.changes.outputs.backend_full == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          # 8.4, not 8.3. The lock file resolves symfony/* v8.1, which requires php >= 8.4.1, so
+          # `composer install` could not succeed here and this workflow had never once passed.
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.example .env && php artisan key:generate
+      # AUTOPILOT-001 — the agent's cost guard and merge gate, exercised with a stubbed `gh`.
+      # Cheap, hermetic, no network: it is here because a workflow that only parses is not a
+      # workflow that behaves, and the two claims worth protecting are "an idle hour costs nothing"
+      # and "only an exact-head green PR can be merged".
+      - name: Autopilot controllers
+        # `working-directory: backend` applies to this job, so the path must be absolute from the
+        # workspace root — the suite lives at the repository root, not inside the Laravel app.
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/autopilot/test-autopilot.sh
+      - name: Pint (style)
+        run: ./vendor/bin/pint --test
+      - name: Larastan (static analysis)
+        run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=1G
+
+  backend-tests:
+    name: backend (tests ${{ matrix.shard }}/8)
+    needs: changes
+    if: ${{ needs.changes.outputs.backend_full == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      # Every shard reports: «shard 2 failed» and «shards 2 and 3 failed» are different findings.
+      fail-fast: false
+      matrix:
+        # The shard count is written four times — here, in the job name, and as the `8` in the plan/verdict calls below.
+        # CI-SPEED-002: 5 -> 8 (measured 11.8 min median per shard at 5; the 8-way cut targets ~7).
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     services:
       postgres:
         image: postgres:16
@@ -47,8 +180,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          # 8.4, not 8.3. The lock file resolves symfony/* v8.1, which requires php >= 8.4.1, so
-          # `composer install` could not succeed here and this workflow had never once passed.
           php-version: '8.4'
           extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
           coverage: none
@@ -61,20 +192,10 @@ jobs:
       # optional would be deleting the coverage while keeping the reassurance.
       - name: Python dependency for the PDF text-layer contract
         run: python3 -m pip install --quiet pikepdf
-      # AUTOPILOT-001 — the agent's cost guard and merge gate, exercised with a stubbed `gh`.
-      # Cheap, hermetic, no network: it is here because a workflow that only parses is not a
-      # workflow that behaves, and the two claims worth protecting are "an idle hour costs nothing"
-      # and "only an exact-head green PR can be merged".
-      - name: Autopilot controllers
-        # `working-directory: backend` applies to this job, so the path must be absolute from the
-        # workspace root — the suite lives at the repository root, not inside the Laravel app.
-        working-directory: ${{ github.workspace }}
-        run: bash scripts/autopilot/test-autopilot.sh
-
-      - name: Pint (style)
-        run: ./vendor/bin/pint --test
-      - name: Larastan (static analysis)
-        run: ./vendor/bin/phpstan analyse --no-progress --memory-limit=512M
+      # Writes this shard's phpunit.xml (the repository's, with only <testsuites> narrowed to this shard's files) and
+      # the evidence the `backend` verdict reads. Fails if PHPUnit lists nothing.
+      - name: Plan shard ${{ matrix.shard }}/8
+        run: python3 ../.github/scripts/backend-shard.py plan ${{ matrix.shard }} 8 "$RUNNER_TEMP/backend-evidence"
       - name: Tests
         env:
           DB_CONNECTION: pgsql
@@ -84,10 +205,123 @@ jobs:
           DB_PASSWORD: postgres
           REDIS_HOST: 127.0.0.1
           REDIS_CLIENT: phpredis
-        run: php artisan test
+        # The same command as before. `--log-junit` only records what ran, for the verdict.
+        run: php artisan test --log-junit="$RUNNER_TEMP/backend-evidence/junit.xml"
+      - name: Shard evidence for the verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-shard-${{ matrix.shard }}
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
+          path: ${{ runner.temp }}/backend-evidence/
+          if-no-files-found: ignore
+          retention-days: 7
 
-  frontend:
+  # CI-SPEED-002 — the backend tests that read files OUTSIDE backend/ (frontend sources, docs, the ledger and the matrix
+  # vocabulary guards), for a change that does not touch backend/ (docs-only, frontend-only). The set is found by
+  # reading the tests, not by a list kept here: every *Test.php that names frontend/, docs/ or a path above backend/.
+  # So `OwnerDefectLedgerTest` and `MatrixStatusVocabularyTest` still run when the ledger or the matrix changes.
+  backend-guards:
+    name: backend (guards)
+    needs: changes
+    if: ${{ needs.changes.outputs.backend_full != 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mediabuying_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: cp .env.example .env && php artisan key:generate
+      - name: Tests that read the repository outside backend/
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_DATABASE: mediabuying_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+          REDIS_HOST: 127.0.0.1
+          REDIS_CLIENT: phpredis
+        run: |
+          set -euo pipefail
+          classes=$(grep -rlE "frontend|docs/|\.\./docs|base_path\('\.\./|/docs" tests --include='*Test.php' \
+            | xargs -n1 basename | sed 's/\.php$//' | sort -u | paste -sd'|' -)
+          [ -n "$classes" ] || { echo "::error::no guard tests found - the grep matched nothing"; exit 1; }
+          echo "guard classes: $(echo "$classes" | tr '|' '\n' | wc -l)"
+          php artisan test --filter "($classes)"
+
+  backend:
+    # `always()`, not `!cancelled()`: a job that is skipped reports «skipped», and a skipped required check counts
+    # as passing. This one always runs and is red unless every part it stands for succeeded.
+    #
+    # CI-SPEED-002: two modes, chosen by the `changes` job. FULL (backend/ or anything not frontend/docs changed, a
+    # dispatch, a merge_group, the `full-gate` label): static + eight shards + the proof that they ran the whole suite
+    # once — exactly as before. GUARDS (docs/frontend only): the guard job above; the static and shard jobs are
+    # skipped on purpose and must be skipped, not merely absent.
+    if: ${{ always() }}
+    needs: [changes, backend-static, backend-tests, backend-guards]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Every backend job succeeded
+        run: |
+          full="${{ needs.changes.outputs.backend_full }}"
+          echo "changes: ${{ needs.changes.result }}  full: $full"
+          echo "backend (static): ${{ needs.backend-static.result }}"
+          echo "backend (tests):  ${{ needs.backend-tests.result }}"
+          echo "backend (guards): ${{ needs.backend-guards.result }}"
+          [ "${{ needs.changes.result }}" = success ] || { echo "::error::the change classifier did not succeed"; exit 1; }
+          if [ "$full" = true ]; then
+            [ "${{ needs.backend-static.result }}" = success ] && [ "${{ needs.backend-tests.result }}" = success ] \
+              || { echo "::error::a backend job did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+          else
+            [ "${{ needs.backend-guards.result }}" = success ] \
+              || { echo "::error::the backend guard tests did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+          fi
+      - if: ${{ needs.changes.outputs.backend_full == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - if: ${{ needs.changes.outputs.backend_full == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: backend-shard-*
+          path: ${{ runner.temp }}/backend-evidence
+      - name: The shards ran the whole suite, exactly once
+        if: ${{ needs.changes.outputs.backend_full == 'true' }}
+        run: python3 .github/scripts/backend-shard.py verdict 8 "$RUNNER_TEMP/backend-evidence"
+
+  # CI-SPEED-002 — `frontend` as three kinds of job behind ONE name, like `backend`: the static checks (typecheck, lint,
+  # build), the unit tests dealt into three Vitest shards (`--shard`, Vitest's own partition: every file in exactly one
+  # shard; measured 484 s as one process), and `frontend`, which is green only when all of them succeeded — or when
+  # the `changes` job says nothing under frontend/ changed, in which case it says so and is green.
+  frontend-static:
+    name: frontend (static)
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -103,10 +337,51 @@ jobs:
         run: npm run typecheck
       - name: Lint
         run: npm run lint
-      - name: Unit tests
-        run: npm run test
       - name: Production build
         run: npm run build
+
+  frontend-unit:
+    name: frontend (unit ${{ matrix.shard }}/3)
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Written twice — here and in the `--shard` argument below (and in the job name).
+        shard: [1, 2, 3]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Unit tests
+        run: npm run test -- --shard=${{ matrix.shard }}/3
+
+  frontend:
+    if: ${{ always() }}
+    needs: [changes, frontend-static, frontend-unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every frontend job succeeded
+        run: |
+          echo "changes: ${{ needs.changes.result }}  frontend: ${{ needs.changes.outputs.frontend }}"
+          echo "static: ${{ needs.frontend-static.result }}  unit: ${{ needs.frontend-unit.result }}"
+          [ "${{ needs.changes.result }}" = success ] || { echo "::error::the change classifier did not succeed"; exit 1; }
+          if [ "${{ needs.changes.outputs.frontend }}" = true ]; then
+            [ "${{ needs.frontend-static.result }}" = success ] && [ "${{ needs.frontend-unit.result }}" = success ] \
+              || { echo "::error::a frontend job did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+          else
+            echo "frontend: not needed for this change (nothing under frontend/ or .github/ changed)."
+          fi
   # REPORT-EXPORT-FUNCTIONAL-001 — the image the server actually runs, built before it is deployed.
   #
   # Nothing here ever built `deploy/backend.production.Dockerfile`. The host rebuilds it from `main`
@@ -117,17 +392,39 @@ jobs:
   # This job does not deploy and does not push: it proves the Dockerfile still builds, and that the
   # renderer runtime the PDF pipeline needs is present INSIDE the built image. A guard reading the
   # file could be satisfied by a line that looks right; asking the image is what cannot be faked.
+  #
+  # CI-SPEED-002 — the job always runs (the `image` check is read by the Lander and the merge queue and must be SUCCESS),
+  # but its steps run only when the change can affect the image (backend/, deploy/, .github/). The build now reads the
+  # layer cache `deploy-production.yml` writes on main (`scope=backend`, read-only here, so a PR never evicts it).
   image:
+    needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - name: Not needed for this change
+        if: ${{ needs.changes.outputs.image != 'true' }}
+        run: |
+          echo "image: not needed for this change (nothing under backend/, deploy/ or .github/ changed)."
+      - if: ${{ needs.changes.outputs.image == 'true' }}
+        uses: actions/checkout@v4
+      - if: ${{ needs.changes.outputs.image == 'true' }}
+        uses: docker/setup-buildx-action@v3
 
       - name: Build the production backend image
-        run: docker build -f deploy/backend.production.Dockerfile -t campaignshub-backend:ci .
+        if: ${{ needs.changes.outputs.image == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/backend.production.Dockerfile
+          load: true
+          push: false
+          tags: campaignshub-backend:ci
+          cache-from: type=gha,scope=backend
 
       # Each of these is a dependency the renderer spawns or resolves at runtime. A missing one does
       # not break the build — it breaks the export, silently, on the server.
       - name: The renderer runtime exists in the image
+        if: ${{ needs.changes.outputs.image == 'true' }}
         run: |
           set -euo pipefail
           run() { docker run --rm --entrypoint sh campaignshub-backend:ci -c "$1"; }
@@ -140,6 +437,16 @@ jobs:
           run 'fc-list 2>/dev/null | grep -qi arabic || ls /usr/share/fonts/noto | grep -qi arabic'
           # The scripts the renderer shells out to must be IN the image, not just in the repo.
           run 'test -f scripts/report-print.mjs && test -f scripts/fix-arabic-textlayer.py'
+
+      # CREATIVE-VIDEO-FRAME-COVER-001 — the cover fallback spawns ffmpeg (and busybox `nice`). Ask the image,
+      # then take a real frame from a generated clip, over the same argument shape the extractor uses.
+      - name: ffmpeg exists in the image and can take a frame
+        if: ${{ needs.changes.outputs.image == 'true' }}
+        run: |
+          set -euo pipefail
+          run() { docker run --rm --entrypoint sh campaignshub-backend:ci -c "$1"; }
+          echo "ffmpeg: $(run 'ffmpeg -version | head -1')"
+          run 'nice -n 10 ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc=duration=1:size=320x240:rate=10 -ss 0.5 -frames:v 1 -vf "scale=min(640\,iw):-2" -q:v 4 -f image2pipe -c:v mjpeg pipe:1 | head -c 3 | od -An -tx1 | grep -q "ff d8 ff"'
 
 
   # ── The browser gate, on a runner that is only running the gate ────────────────────────────────
@@ -166,169 +473,143 @@ jobs:
   #
   # Each also installs only the browser it runs. Installing all three took several minutes per job to
   # download two engines it would never open.
-  gate:
+  #
+  # CI-SPEED-001 — and now each browser in FOUR shard jobs, behind the same check name.
+  #
+  # One job per browser still took 41–77 minutes, and the slowest browser was the whole run's wall clock. Each browser
+  # is now `gate-shards.yml` called with four shards: every shard is the old per-browser job (own runner, own
+  # database reset and seed, own servers, `npm run gate` verbatim) running a contiguous quarter of that browser's
+  # files via Playwright's `--shard`. The `setup` project runs in every shard, as it ran in every job.
+  #
+  # The job named `gate (<browser>)` — the name the Lander, `waitpr.sh` and the merge queue read — is no longer the
+  # one that runs tests. It runs after its four shards and is green ONLY when (1) the shard call SUCCEEDED (failure,
+  # cancelled and skipped are all red — it uses `always()`, so it is never itself skipped into a pass), and (2)
+  # `gate-verdict.py` proves from the shards' own reports that the union of what they ran is EXACTLY the suite
+  # Playwright lists for that browser, each test once, none failed.
+  #
+  # The weights move the boundaries between the contiguous slices so each takes ~equal MINUTES rather than equal
+  # test counts (one file holds 224 quick tests). They were computed from the per-test timestamps of run 43054580907
+  # (min-max contiguous partition over whole files). They cannot change coverage: Playwright's shard filter is a
+  # partition whatever the weights say, and the verdict checks it on every run.
+  # CI-SPEED-002 — six chromium shards, re-cut from the measured per-test times of run 44413244191 (see
+  # docs/ci/CI-SPEED-2026-11-19.md). The floor is a FILE: `agency-fit-2.spec.ts` alone is 16.4 minutes (312 tests),
+  # and Playwright keeps a file's tests together, so no shard count goes below ~17 minutes of tests until that file
+  # is split. The weights below put it alone in a shard (shard 2); the fifth and sixth shards are the same ~16.5.
+  # The shard count is written three times: `shards`, `total`, and the `6` in the verdict below.
+  gate-chromium-shards:
+    name: gate shards (chromium)
+    needs: changes
+    if: ${{ needs.changes.outputs.e2e == 'true' }}
+    uses: ./.github/workflows/gate-shards.yml
+    with:
+      browser: chromium
+      shards: '[1,2,3,4,5,6]'
+      total: 6
+      weights: '36:170:498:495:317:373'
+  gate-chromium:
+    name: gate (chromium)
+    if: ${{ always() }}
+    needs: [changes, gate-chromium-shards]
     runs-on: ubuntu-latest
-    strategy:
-      # Every browser reports its own verdict. `fail-fast: false` because «webkit failed» and
-      # «webkit failed AND firefox failed» are different bugs, and cancelling the others hides the
-      # second one until somebody fixes the first.
-      fail-fast: false
-      matrix:
-        browser: [chromium, firefox, webkit]
-    name: gate (${{ matrix.browser }})
-    # A gate that cannot START its tests is not a verdict, and must not look like one.
-    #
-    # Sized from measurement: the slowest single browser is ~22.5 minutes of tests, and the job also
-    # installs a browser and boots two servers. Ninety minutes is real headroom for one of them, where
-    # two hours was headroom for all three. GitHub's default is SIX, which is how a stalled browser
-    # download sat `in_progress` for 2h40m on run 32224855943 with backend and frontend long since
-    # green and not one test executed.
-    timeout-minutes: 90
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: mediabuying_e2e
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd="pg_isready -U postgres" --health-interval=10s
-          --health-timeout=5s --health-retries=5
-      redis:
-        image: redis:7
-        ports: ['6379:6379']
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, pcntl
-          coverage: none
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Backend dependencies
-        working-directory: backend
-        run: composer install --no-interaction --prefer-dist
-      - name: Backend environment
-        working-directory: backend
-        run: cp .env.example .env && php artisan key:generate
-      # The gate's own servers read these; `e2e/env.ts` overrides the rest per run.
-      - name: Frontend dependencies
-        working-directory: frontend
-        run: npm ci
-      # Pure download, no application code. It takes ~2 minutes when GitHub's mirror is healthy; the
-      # bound is here so a stall on their side fails in fifteen minutes and says which step did it,
-      # instead of holding a runner until the job timeout and reporting nothing at all.
-      # The matrix browser AND chromium.
-      #
-      # Every project in `playwright.config.ts` declares `dependencies: ['setup']`, and the `setup`
-      # project carries no `use` — so it runs under Playwright's default, chromium. The firefox job
-      # therefore launches chromium before it launches firefox, and installing only firefox failed
-      # six tests with «Executable doesn't exist at …/chromium_headless_shell». Playwright dedupes
-      # the repeat when the matrix browser IS chromium.
-      #
-      # CACHED, and the timeout raised — the webkit leg has lost this step three times.
-      #
-      # «~2 minutes when GitHub's mirror is healthy» was true and is not the whole distribution.
-      # Three runs in this programme died here, each one at exactly fifteen minutes, with the apt
-      # half (`--with-deps`) still fetching mesa and gstreamer packages — a job that ran no test and
-      # reported «gate failed», which reads as a product defect and is a download.
-      #
-      # The cache removes the browser payload on a hit (the apt packages are not cached: they are
-      # installed into the runner image, not into a directory). The key carries the Playwright
-      # version, so an upgrade misses deliberately rather than restoring browsers that no longer
-      # match. Twenty-five minutes is the bound for a cold miss — still a bound, so a genuine stall
-      # fails and names this step rather than holding the runner.
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('frontend/package-lock.json') }}
-      # BROWSER-INSTALL-PREFETCH-001 — system packages come down in parallel, from a cache that survives a failed job.
-      #
-      # The whole story (the stalled mirror, the dpkg lock a retry used to race, why the install is one hard-failing
-      # command and only the browser download retries) is in `.github/scripts/install-browsers.sh`; it is a script so
-      # `browser-deps-probe.yml` can exercise the same code on a runner in minutes instead of inside an hour of gate.
-      # The archives are cached under a key per run and restored by prefix, so the newest set wins; the save step
-      # runs `if: always()` and only when something new was fetched, because the run most in need of the cache is the
-      # one that dies partway through the download.
-      - name: Restore apt archives
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/apt-debs
-          key: apt-debs-${{ runner.os }}-${{ matrix.browser }}-${{ github.run_id }}
-          restore-keys: |
-            apt-debs-${{ runner.os }}-${{ matrix.browser }}-
-      - name: Browsers
-        id: browsers
-        working-directory: frontend
-        timeout-minutes: 30
-        run: bash ../.github/scripts/install-browsers.sh ${{ matrix.browser }}
-      - name: Save apt archives
-        if: always() && steps.browsers.outputs.fetched != '' && steps.browsers.outputs.fetched != '0'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/apt-debs
-          key: apt-debs-${{ runner.os }}-${{ matrix.browser }}-${{ github.run_id }}
-      # The report exporter's Arabic text-layer pass (CAMPAIGNSHUB-PDF-TEXTLAYER) shells out to
-      # python3 + pikepdf. It is best-effort and never blocks an export, but leaving it absent here
-      # would mean the gate exercises a different code path than a developer's machine does.
-      - name: Arabic text-layer toolchain
-        run: python3 -m pip install --quiet pikepdf
-      - name: Gate — ${{ matrix.browser }}
-        working-directory: frontend
-        env:
-          DB_CONNECTION: pgsql
-          DB_HOST: 127.0.0.1
-          DB_USERNAME: postgres
-          DB_PASSWORD: postgres
-          REDIS_HOST: 127.0.0.1
-          REDIS_CLIENT: phpredis
-          # The default is all three; a job that runs one names it.
-          GATE_BROWSERS: ${{ matrix.browser }}
-        # No `continue-on-error`, no retry wrapper: the script exits with the first non-zero code it
-        # saw, and that code is the gate's verdict.
-        run: npm run gate
-      # A 500 the gate saw, and could not explain.
-      #
-      # `expansion-surfaces.spec.ts` failed with «the server responded with a status of 500» on
-      # /app/integrations, twice on the same head. That sentence is the entire report: Playwright's
-      # artifacts describe the BROWSER's side — a status code and a screenshot of the resulting page
-      # — while the exception, its file, its line and its stack were written to the backend's log
-      # inside the runner and discarded when the job ended.
-      #
-      # Tailed inline as well as uploaded, so the next occurrence is readable from the run page
-      # instead of behind an artifact download.
-      - name: Backend log (why the server answered 500)
-        if: failure()
+      # The browser gate is not needed (docs-only, backend-only without database changes): the check still reports,
+      # green, with the reason. The `full-gate` run that lands the PR always answers e2e=true.
+      - name: Not needed for this change
+        if: ${{ needs.changes.result == 'success' && needs.changes.outputs.e2e != 'true' }}
         run: |
-          echo "::group::backend/storage/logs — last 200 lines"
-          tail -n 200 backend/storage/logs/*.log 2>/dev/null || echo "(no backend log was written)"
-          echo "::endgroup::"
-
-      - name: Failure artifacts
-        if: failure()
+          echo "gate (chromium): not needed for this change (see the 'changes' job). Shards ${{ needs.gate-chromium-shards.result }}."
+      - name: Every chromium shard succeeded
+        if: ${{ needs.changes.result != 'success' || needs.changes.outputs.e2e == 'true' }}
+        run: |
+          echo "changes: ${{ needs.changes.result }}  shards: ${{ needs.gate-chromium-shards.result }}"
+          [ "${{ needs.changes.result }}" = success ] && [ "${{ needs.gate-chromium-shards.result }}" = success ] \
+            || { echo "::error::the change classifier or a chromium shard did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+      - if: ${{ needs.changes.outputs.e2e == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - if: ${{ needs.changes.outputs.e2e == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gate-shard-chromium-*
+          path: ${{ runner.temp }}/gate-evidence
+      - name: The shards ran the whole chromium suite, exactly once
+        if: ${{ needs.changes.outputs.e2e == 'true' }}
+        run: python3 .github/scripts/gate-verdict.py chromium 6 "$RUNNER_TEMP/gate-evidence"
+      - name: Merged report
+        if: ${{ always() && needs.changes.outputs.e2e == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: gate-artifacts
-          path: |
-            frontend/test-results/
-            frontend/playwright-report/
-            backend/storage/logs/
-            # Snapshots written by this run — the only way to obtain a LINUX visual baseline.
-            #
-            # Baselines are per-platform (`-chromium-linux`, `-chromium-darwin`) and a developer on
-            # macOS cannot render the linux one. Playwright writes a missing baseline to the snapshot
-            # path and fails that run, so collecting the directory turns an unreproducible file into
-            # a downloadable one. Without this the linux baselines could only ever go stale: the
-            # homepage pair sat unchanged since #85 and still passed, against an image of a logo the
-            # product had replaced.
-            frontend/e2e/**/*-snapshots/
+          name: gate-merged-chromium
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
+          path: ${{ runner.temp }}/gate-evidence/merged.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  gate-firefox:
+    name: gate (firefox)
+    if: ${{ always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gate')) }}
+    needs: gate-firefox-shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Every firefox shard succeeded
+        run: |
+          echo "shards: ${{ needs.gate-firefox-shards.result }}"
+          [ "${{ needs.gate-firefox-shards.result }}" = success ] \
+            || { echo "::error::a firefox shard did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gate-shard-firefox-*
+          path: ${{ runner.temp }}/gate-evidence
+      - name: The shards ran the whole firefox suite, exactly once
+        run: python3 .github/scripts/gate-verdict.py firefox 5 "$RUNNER_TEMP/gate-evidence"
+      - name: Merged report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-merged-firefox
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
+          path: ${{ runner.temp }}/gate-evidence/merged.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  gate-webkit:
+    name: gate (webkit)
+    if: ${{ always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gate')) }}
+    needs: gate-webkit-shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Every webkit shard succeeded
+        run: |
+          echo "shards: ${{ needs.gate-webkit-shards.result }}"
+          [ "${{ needs.gate-webkit-shards.result }}" = success ] \
+            || { echo "::error::a webkit shard did not succeed (failure, cancelled and skipped are all red)"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gate-shard-webkit-*
+          path: ${{ runner.temp }}/gate-evidence
+      - name: The shards ran the whole webkit suite, exactly once
+        run: python3 .github/scripts/gate-verdict.py webkit 5 "$RUNNER_TEMP/gate-evidence"
+      - name: Merged report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-merged-webkit
+          # A rerun of failed jobs re-uploads under the same name; without this, upload-artifact@v4 answers 409.
+          overwrite: true
+          path: ${{ runner.temp }}/gate-evidence/merged.json
+          if-no-files-found: ignore
           retention-days: 7
 
   # A branch update made by the merge queue (the repository token) starts no pull_request run, so it
@@ -337,7 +618,7 @@ jobs:
   # real results of this run on this exact commit — nothing is invented, and a failed job posts a failure.
   report-status:
     if: ${{ always() && github.event_name == 'workflow_dispatch' }}
-    needs: [backend, frontend, image, gate]
+    needs: [backend, frontend, image, gate-chromium, gate-firefox, gate-webkit]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -360,6 +641,7 @@ jobs:
           post "backend" "${{ needs.backend.result }}"
           post "frontend" "${{ needs.frontend.result }}"
           post "image" "${{ needs.image.result }}"
-          # One matrix job, three browsers: each browser's context carries the matrix verdict, so a
-          # red browser makes all three red rather than hiding which one in an aggregate.
-          for b in chromium firefox webkit; do post "gate ($b)" "${{ needs.gate.result }}"; done
+          # One verdict job per browser now, so each browser's context carries its OWN verdict.
+          post "gate (chromium)" "${{ needs.gate-chromium.result }}"
+          post "gate (firefox)" "${{ needs.gate-firefox.result }}"
+          post "gate (webkit)" "${{ needs.gate-webkit.result }}"

@@ -60,19 +60,37 @@ class User extends Authenticatable
     ];
 
     protected $hidden = [
-        'password', 'remember_token',
+        'password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_totp_last_step',
     ];
+
+    /**
+     * This address was never proved, because signup policy did not ask (SIGNUP-VERIFY-POLICY-001).
+     *
+     * Holding it proves nothing about who holds the account, so it opens no recovery and no passwordless sign-in until
+     * the person proves it from inside a session. An account with neither timestamp predates the policy and keeps the
+     * treatment it has today.
+     */
+    public function emailUnprovenByPolicy(): bool
+    {
+        return $this->email_verified_at === null && $this->email_unproven_by_policy_at !== null;
+    }
 
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
+            'email_unproven_by_policy_at' => 'datetime',
             'password' => 'hashed',
             'is_platform_admin' => 'bool',
             'disabled_at' => 'datetime',
             'last_login_at' => 'datetime',
             'two_factor_secret' => 'encrypted',
             'two_factor_enabled' => 'bool',
+            'two_factor_totp_confirmed_at' => 'datetime',
+            'two_factor_totp_last_step' => 'integer',
+            'two_factor_email_enabled_at' => 'datetime',
+            'two_factor_sms_enabled_at' => 'datetime',
+            'two_factor_recovery_codes' => 'array',
             'sessions_valid_after' => 'datetime',
         ];
     }

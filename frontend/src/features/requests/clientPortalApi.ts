@@ -6,6 +6,8 @@ import { api, getData, postData } from '@/lib/api/client'
  */
 
 export interface PortalLoginStart {
+  resend_after?: number
+  expires_in_minutes?: number
   verification_id: string
   delivery_status: string
   dev_code: string | null
@@ -14,8 +16,8 @@ export interface PortalLoginStart {
 export const portalLoginStart = (channel: 'sms' | 'whatsapp' | 'email', destination: string) =>
   postData<PortalLoginStart>('/client/login/start', { channel, destination })
 
-export const portalLoginVerify = (verification_id: string, code: string) =>
-  postData<{ authenticated: boolean; contact: string; dev_token: string | null }>('/client/login/verify', { verification_id, code })
+export const portalLoginVerify = (verification_id: string, code: string, redirect?: string | null) =>
+  postData<{ authenticated: boolean; contact: string; dev_token: string | null; destination: string }>('/client/login/verify', { verification_id, code, redirect: redirect ?? null })
 
 export const portalSession = () => getData<{ contact_email: string | null; contact_phone: string | null }>('/client/session')
 export const portalLogout = () => postData<{ ok: boolean }>('/client/logout')
@@ -42,13 +44,16 @@ export interface NewPortalRequest {
   priority?: 'low' | 'medium' | 'high'
   project_id?: string
   related?: { kind: 'campaign' | 'report' | 'invoice'; id: string }
+  /** CP-REQ-ONE-001 — the temporary upload session holding the files to attach. */
+  upload_token?: string
 }
 export const createPortalRequest = (body: NewPortalRequest) =>
   postData<{ reference: string; status: string; submitted_at: string | null }>('/client/requests', body)
 
 export interface PortalRequestDetail extends PortalRequestCard {
-  timeline: { type: string; status: string | null; message: string | null; at: string | null }[]
-  comments: { author: string; body: string; at: string | null }[]
+  timeline: { type: string; status: string | null; message: string | null; label_ar?: string; label_en?: string; at: string | null }[]
+  /** CLIENT-CHAT-001 — `read_by_team_at` on the client's own message: when the team read it (null: not yet). */
+  comments: { author: string; body: string; at: string | null; read_by_team_at?: string | null }[]
   files: { id: number; name: string; size: number }[]
   /** CLIENT-REPORT-ENTITY-BOUNDARY-001 — the project, never the campaign it was filed under. */
   result: { converted: boolean; project_name: string | null } | null

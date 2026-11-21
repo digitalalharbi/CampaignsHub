@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Domains\Integrations\Console\SyncAdPlatformsCommand;
 use Illuminate\Console\Scheduling\Schedule;
 use Tests\TestCase;
 
@@ -40,17 +41,39 @@ final class ScheduledWorkInventoryTest extends TestCase
         // AUTO-RULES-001 — due automated rules, each on its own frequency and timezone.
         'automation:evaluate',
         'commerce:sync',
+        // INTEG-WEBHOOK-ENGINE-001 — webhook reconciliation, listed always and run only when WEBHOOK_RECONCILE_ENABLED is set.
+        'webhooks:reconcile',
         // SALLA-ONBOARD-001 — a Salla store uninstalled 30 days ago has its synced data removed (the retention promised to the merchant).
         'commerce:purge-uninstalled',
-        // TIKTOK-MEDIA-002 — covers into our own storage, nightly at 03:30, after the structure sweep refreshed the links.
-        'creatives:refresh-covers',
+        // TIKTOK-MEDIA-002 / CREATIVE-PREVIEWS-001 — covers into our own storage, hourly at :40, only what is due.
+        'creatives:backfill-covers',
         // WD-SCHEDULE-001 — last week's DRAFT delivery packs, for the clients that opted in; sending stays the Owner's.
         'delivery:prepare-weekly',
         // DELIVERY-REMINDERS-001 — the chosen reviewer is nudged about a waiting, failed or unsent delivery.
         'delivery:remind',
         // FORMS-PDPL-001 — the evidence around a form submission is anonymised past its form's retention (02:30 daily); the consent record is kept.
         'forms:purge-evidence',
+        // EMAIL-DELIVERY-LEDGER-001 — a failed digest comes back after its backoff; the hourly sweep never reached it again.
+        'notifications:retry-failed',
+        // NOTIF-PUSH-001 — pushes held through quiet hours go out as ONE summary per person; every ten minutes, a few rows.
+        'notifications:flush-deferred-push',
+        // NOTIF-V2-ENGINE-001 — the shared engine: due digests into the outbox (5 min), the outbox drained in spread batches
+        // (1 min), the 7-day unconfirmed notice and the grace-period heads-up (daily).
+        'notifications:v2-digests',
+        'notifications:v2-send',
+        'notifications:v2-internal-scan',
+        'notifications:v2-morning-brief',
+        'notifications:v2-consent-sweep',
+        'notifications:v2-grace-heads-up',
+        // NOTIF-V2-EXTERNAL-001 — the review window of held external messages (15 min).
+        'notifications:v2-review-sweep',
+        // NOTIF-V2-EXTERNAL-001 — the default external events, daily 07:30 Riyadh.
+        'notifications:v2-external-events',
         'fx:rates',
+        // FX-ENGINE-001 — in-app alerts for a used currency with no rate or a stale one, and the daily money guard (03:00).
+        'fx:monitor',
+        // ANALYTICS-DATA-001 — the heavy analytics sections pre-aggregated per project every 3 hours (:50), queued and bounded.
+        'analytics:build-snapshots',
         /*
          * Added 2026-09-07. `SyncAccountStructureJob::failed()` cannot close a run whose worker
          * vanished, so a structure run had been «running» since 2026-08-26 — twelve days, on a job
@@ -61,7 +84,10 @@ final class ScheduledWorkInventoryTest extends TestCase
          */
         'integrations:close-abandoned-runs',
         'integrations:prune-raw',
+        // INTEG-SOURCE-REMOVAL-001 — inert until INTEGRATIONS_ABANDONED_SWEEP_ENABLED; hides, never deletes.
+        'integrations:sweep-abandoned',
         'integrations:refresh-tokens',
+        // Scheduled TWICE under one name (PERF-SYNC-ISOLATION-001): the half-hourly 3-day sweep and the 03:50 `--days=14` pass.
         'integrations:sync',
         'integrations:sync-structure',
         /*
@@ -74,16 +100,28 @@ final class ScheduledWorkInventoryTest extends TestCase
          * inventory is for.
          */
         'measurement:sync',
+        // PERF-RECOVERY-001 — logs an error when a route p95 or a queue backlog passes its limit.
+        'ops:perf-check',
         'notifications:send-alerts',
         'notifications:send-digests',
+        // SPEND-SUMMARY-EXTERNAL-RECIPIENTS-001 — hourly from 08:00 Riyadh; ledger rows make it idempotent.
+        'notifications:send-spend-summaries',
         'reports:dispatch-scheduled',
         'requests:evaluate-sla',
         'requests:prune-uploads',
         // PRICING-SEATS-001 — hourly; stamps a released ad-account seat near when it was released.
         'seats:reconcile',
         'subscriptions:lifecycle',
+        // PROJECT-LIFECYCLE-001 §4 (N2) — daily 02:30; purges only trashed projects past purge_after, warns owners 3 days before.
+        'lifecycle:purge-expired',
         // PAY-RECONCILE-001 — every fifteen minutes; asks the gateway only about pending payments past their webhook's window.
         'subscriptions:reconcile-payments',
+        // PLATFORM-PAYMENT-ALERTS-001 — every fifteen minutes, offset from the reconcile sweep; reads only, files owner alerts.
+        'platform:payment-alerts',
+        // FIN-LOOP-001 — at :20 and :50, after each sync; copies spend into each project budget, one replaced row per account-day.
+        'funding:refresh',
+        // FIN-LOOP-001 — daily at 02:40 Riyadh; fixes last month's summary once per project.
+        'funding:close-month',
     ];
 
     /** @return list<string> the artisan commands the scheduler will actually run */
@@ -155,7 +193,15 @@ final class ScheduledWorkInventoryTest extends TestCase
             'integrations:sync-structure',
             'integrations:refresh-tokens',
             'notifications:send-digests',
+            'notifications:send-spend-summaries',
             'notifications:send-alerts',
+            // NOTIF-PUSH-001 — two overlapping flushes could each send a person's summary.
+            'notifications:flush-deferred-push',
+            // NOTIF-V2-ENGINE-001 — the claim makes a double send impossible; overlap would still be wasted work.
+            'notifications:v2-send',
+            'notifications:v2-digests',
+            'notifications:v2-internal-scan',
+            'notifications:v2-morning-brief',
             'commerce:sync',
             /*
              * Overlap here costs QUOTA rather than correctness: the unique key on
@@ -165,8 +211,13 @@ final class ScheduledWorkInventoryTest extends TestCase
              */
             'measurement:sync',
             'fx:rates',
+            'fx:monitor',
             'subscriptions:lifecycle',
+            'lifecycle:purge-expired',
             'subscriptions:reconcile-payments',
+            'platform:payment-alerts',
+            // Two overlapping refreshes write the same keys: harmless (an upsert), but doubled work for nothing.
+            'funding:refresh',
         ];
 
         foreach (app(Schedule::class)->events() as $event) {
@@ -185,5 +236,27 @@ final class ScheduledWorkInventoryTest extends TestCase
                 "«{$m[1]}» may overlap itself — a second run while the first is writing is how a row gets written twice",
             );
         }
+    }
+
+    /** PERF-SYNC-ISOLATION-001 — a 3-day half-hourly sweep plus a daily 14-day pass, neither overlapping itself. */
+    public function test_the_sync_sweep_is_half_hourly_with_a_daily_fourteen_day_pass(): void
+    {
+        $events = array_values(array_filter(
+            app(Schedule::class)->events(),
+            fn ($e) => property_exists($e, 'command') && preg_match("/artisan'?\s+'?integrations:sync'?(\s|$)/", (string) $e->command) === 1,
+        ));
+
+        $this->assertCount(2, $events);
+
+        $daily = array_values(array_filter($events, fn ($e) => str_contains((string) $e->command, '--days=14')));
+        $this->assertCount(1, $daily);
+        $this->assertSame('50 3 * * *', $daily[0]->expression);
+        $this->assertSame('Asia/Riyadh', (string) $daily[0]->timezone);
+
+        foreach ($events as $event) {
+            $this->assertNotEmpty($event->withoutOverlapping);
+        }
+
+        $this->assertSame('3', app(SyncAdPlatformsCommand::class)->getDefinition()->getOption('days')->getDefault());
     }
 }

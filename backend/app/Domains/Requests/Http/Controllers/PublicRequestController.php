@@ -13,12 +13,14 @@ use App\Domains\Requests\Models\RequestType;
 use App\Domains\Requests\Models\RequestUploadSession;
 use App\Domains\Requests\Services\ClientNotifier;
 use App\Domains\Requests\Services\ContactVerificationService;
-use App\Domains\Requests\Services\PortalTenantResolver;
+use App\Domains\Requests\Services\PlatformRequestNotifier;
 use App\Domains\Requests\Services\RequestIntake;
+use App\Domains\Requests\Services\RequestOwnerResolver;
 use App\Domains\Taxonomy\Services\PaidServiceCatalog;
 use App\Rules\PhoneNumberRule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -33,7 +35,8 @@ final class PublicRequestController
 {
     public function __construct(
         private readonly RequestIntake $intake,
-        private readonly PortalTenantResolver $portal,
+        private readonly RequestOwnerResolver $owners,
+        private readonly PlatformRequestNotifier $platformNotifier,
         private readonly ContactVerificationService $verification,
         private readonly ClientNotifier $notifier,
         private readonly PaidServiceCatalog $paidServices,
@@ -139,6 +142,24 @@ final class PublicRequestController
             }
         }
 
+        /*
+         * PLATFORM-SERVICE-INBOX-001 — who this request belongs to, before anything is spent on it.
+         *
+         * Decided from the host it arrived on: a subscriber's own portal domain, or the platform's own site.
+         * Nothing else is an owner — in production there is no «default» workspace to fall back to — so a
+         * request nobody can be shown to own is refused here, with the reason on the log, and the visitor's
+         * verified phone and address are left unconsumed.
+         */
+        $owner = $this->owners->resolve($request);
+        if ($owner === null) {
+            Log::warning('requests.intake.refused', [
+                'reason' => 'owner_unresolved',
+                'host' => strtolower($request->getHost()),
+                'type' => $data['type'],
+            ]);
+            abort(404, 'This request portal is not available.');
+        }
+
         // A final request is never accepted without a verified means of contact (phone + email).
         $phoneOk = $this->verification->consumeVerified($data['phone_verification_id'], $data['contact_phone']);
         $emailOk = $this->verification->consumeVerified($data['email_verification_id'], Str::lower($data['contact_email']));
@@ -148,14 +169,15 @@ final class PublicRequestController
             ]);
         }
 
-        // Resolve the owning tenant from the request host / default portal — fail closed if none.
-        $tenant = $this->portal->resolve($request);
-        abort_if($tenant === null, 404, 'This request portal is not available.');
+        ['request' => $req, 'token' => $token] = $this->intake->create($data, $owner);
 
-        ['request' => $req, 'token' => $token] = $this->intake->create($data, $tenant);
-
-        // Record client-facing confirmations (email + WhatsApp) — honest delivery state, AFTER the DB txn.
-        $this->notifier->notify($req, 'received');
+        if ($req->isPlatformOwned()) {
+            // The platform's own administrators, through the mail ledger. No subscriber is told anything.
+            $this->platformNotifier->received($req);
+        } else {
+            // Record client-facing confirmations (email + WhatsApp) — honest delivery state, AFTER the DB txn.
+            $this->notifier->notify($req, 'received');
+        }
 
         return response()->json([
             'data' => [

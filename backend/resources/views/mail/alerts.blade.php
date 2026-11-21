@@ -9,22 +9,24 @@
   The same email rules as everywhere: tables, inline styles, no external images, explicit
   backgrounds so a dark-mode client cannot invert a card into black-on-black. See `layout.blade.php`.
 --}}
-@php($tone = ['critical' => '#b91c1c', 'warning' => '#b45309', 'positive' => '#0d8a6f', 'info' => '#5b6b68'])
-@php($toneBg = ['critical' => '#fef2f2', 'warning' => '#fffbeb', 'positive' => '#e8f5f1', 'info' => '#faf8f3'])
+@php($S = \App\Domains\Notifications\Support\DigestStatus::class)
 
-<div style="font-family:{!! $font !!}; color:#0b1a16;">
+<div dir="{{ $dir }}" style="font-family:{!! $font !!}; color:#0b1a16; text-align:{{ $startSide }};">
 
-    <div style="font-size:15px; color:#5b6b68; margin:0 0 6px;">{{ $greeting }}</div>
-    <div style="font-size:14px; color:#3d4742; line-height:1.8; margin:0 0 12px;">{{ $intro }}</div>
-    {{-- EMAIL-DECISION-REPORT-001 — how many need a decision, by severity, before the cards: the portfolio-health strip of an alert mail. --}}
-    @php($bySeverity = array_count_values(array_map(static fn (array $i): string => (string) ($i['severity'] ?? 'info'), $items)))
+    {{-- How many need a decision, as the digest counts them (✕ ! ✓ –), before the ranked cards. --}}
+    @php($byState = array_count_values(array_map(static fn (array $i): string => (string) ($i['chip']['state'] ?? 'none'), $items)))
     @if (count($items) > 1)
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" data-block="severity-strip" style="margin:0 0 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="severity-strip" style="margin:0 0 12px; table-layout:fixed;">
             <tr>
-                @foreach (['critical', 'warning', 'positive', 'info'] as $level)
-                    @if (($bySeverity[$level] ?? 0) > 0)
-                        <td style="padding-{{ $endSide }}:8px;">
-                            <span style="display:inline-block; padding:5px 12px; border-radius:999px; font-size:12px; font-weight:700; background-color:{{ $toneBg[$level] }}; color:{{ $tone[$level] }};" dir="ltr">{{ $bySeverity[$level] }} {{ $level === 'critical' ? ($dir === 'rtl' ? 'حرج' : 'critical') : ($level === 'warning' ? ($dir === 'rtl' ? 'تحذير' : 'warning') : ($level === 'positive' ? ($dir === 'rtl' ? 'إيجابي' : 'positive') : ($dir === 'rtl' ? 'للعلم' : 'info'))) }}</span>
+                @foreach (['bad', 'watch', 'ok', 'none'] as $k)
+                    @if (($byState[$k] ?? 0) > 0)
+                        <td style="padding-{{ $endSide }}:4px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                                <td align="center" bgcolor="{{ $S::CELL[$k] }}" style="background-color:{{ $S::CELL[$k] }}; border-radius:10px; padding:6px 2px; text-align:center;">
+                                    <div style="font-size:11px; font-weight:700; color:{{ $S::INK[$k] }};">{{ $S::GLYPH[$k] }} {{ \App\Domains\Notifications\Support\AlertVisual::chip(['bad' => 'critical', 'watch' => 'warning', 'ok' => 'positive', 'none' => 'info'][$k], $dir === 'rtl')['label'] }}</div>
+                                    <div style="font-size:20px; font-weight:800; color:{{ $S::INK[$k] }};" dir="ltr">{{ $byState[$k] }}</div>
+                                </td>
+                            </tr></table>
                         </td>
                     @endif
                 @endforeach
@@ -32,68 +34,13 @@
         </table>
     @endif
 
+    {{-- DIGESTS-CADENCE-BUDGETS-001 — every card in the approved digest grammar: chip, drawn problem, one line, ordered steps, one button. --}}
     @foreach ($items as $item)
-        @php($colour = $tone[$item['severity']] ?? $tone['info'])
-        @php($background = $toneBg[$item['severity']] ?? $toneBg['info'])
-
-        {{--
-          One table per finding rather than one table with many rows.
-
-          Outlook collapses the border-radius and the left rule on nested rows, and a card that loses
-          its severity colour loses the only signal that separates «worth reading» from «act today».
-        --}}
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-               style="background-color:{{ $background }}; border-radius:12px; margin-bottom:12px;">
-            <tr>
-                <td style="padding:16px 18px; border-{{ $startSide }}:4px solid {{ $colour }}; border-radius:12px;">
-                    @if ($item['context'] !== '')
-                        <div style="font-size:12px; font-weight:700; color:#5b6b68; text-transform:uppercase; letter-spacing:0.4px;">{{ $item['context'] }}</div>
-                    @endif
-                    <div style="font-size:16px; font-weight:800; color:#0b1a16; padding-top:4px; line-height:1.5;">{{ $item['title'] }}</div>
-                    {{--
-                      EMAIL-PERF-DASHBOARDS-001 — the finding's own number first, then the sentence.
-                      One lead figure at display size and the rest as a compact strip, the hierarchy the
-                      digest and the web's Platform view use; absent when the rule carries no figure.
-                    --}}
-                    @if (! empty($item['figures']))
-                        <div style="margin-top:10px;">
-                            <div style="font-size:12px; color:#5b6b68;">{{ $item['figures']['lead']['label'] }}</div>
-                            <div class="ch-kpi-lead" style="font-size:24px; line-height:1.15; font-weight:800; color:#0b1a16; text-align:{{ $startSide }};" dir="ltr">{{ $item['figures']['lead']['value'] }}</div>
-                        </div>
-                        @if (! empty($item['figures']['strip']))
-                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
-                                <tr>
-                                    @foreach ($item['figures']['strip'] as $card)
-                                        <td class="ch-kpi" width="{{ (int) (100 / count($item['figures']['strip'])) }}%" style="vertical-align:top; text-align:center; padding:0 6px;">
-                                            <div style="font-size:11px; color:#5b6b68;">{{ $card['label'] }}</div>
-                                            <div style="font-size:15px; font-weight:700; color:#0b1a16;" dir="ltr">{{ $card['value'] }}</div>
-                                        </td>
-                                    @endforeach
-                                </tr>
-                            </table>
-                        @endif
-                    @endif
-                    <div style="font-size:14px; color:#3d4742; line-height:1.8; padding-top:8px;">{{ $item['detail'] }}</div>
-                    @if (! empty($item['action']))
-                        {{-- The decision this card asks for, and the one place to take it. --}}
-                        <div data-block="action" style="font-size:13px; font-weight:700; color:#0b1a16; padding-top:10px;">{{ $item['action'] }}</div>
-                    @endif
-                    @if (! empty($item['url']))
-                        <div style="padding-top:8px;">
-                            <a href="{{ $item['url'] }}" style="display:inline-block; background-color:#ffffff; color:{{ $colour }}; border:1px solid {{ $colour }}; font-size:12px; font-weight:700; text-decoration:none; padding:7px 14px; border-radius:8px;">{{ $dir === 'rtl' ? 'افتح التنبيه ←' : 'Open the alert →' }}</a>
-                        </div>
-                    @endif
-                </td>
-            </tr>
-        </table>
+        @include('mail.partials.alert-card', ['c' => $item, 'big' => count($items) === 1])
     @endforeach
 
     {{-- One button, and it says what it does. «اضغط هنا» tells a reader nothing about where they land. --}}
-    <div style="padding-top:8px;">
-        <a href="{{ $actionUrl }}"
-           style="display:inline-block; background-color:#0d8a6f; color:#ffffff; font-size:14px; font-weight:700;
-                  text-decoration:none; padding:11px 20px; border-radius:8px;">{{ $actionLabel }}</a>
-    </div>
+    @include('mail.partials.button', ['href' => $actionUrl, 'label' => $actionLabel])
 
     {{--
       Why this arrived. An unexplained email is one a person marks as spam rather than unsubscribes.
@@ -108,7 +55,12 @@
         {{ $single
             ? $t['why']
             : ($dir === 'rtl'
-                ? 'وصلتك هذه الرسالة لأنك تتابع هذه المشاريع في كامبينز هب.'
-                : 'You are receiving this because you follow these projects in CampaignsHub.') }}
+                ? 'وصلتك لأنك تتابع هذه المشاريع.'
+                : 'Sent because you follow these projects.') }}
     </div>
+
+    {{-- MONEY-MARKS-001 — the one financial disclaimer (BUDGET-DISCLAIMER-001), wherever a team member's mail carries money figures. --}}
+    @if (collect($items)->contains(fn ($it) => \App\Domains\Funding\Support\FundingMoney::textHasMoney(trim(($it['numbers'] ?? '').' '.json_encode($it['figures'] ?? [], JSON_UNESCAPED_UNICODE)))))
+        <div data-block="financial-disclaimer" style="font-size:11px; color:#5b6b68; line-height:1.7; margin-top:12px; border-top:1px solid #e4e0d6; padding-top:8px;">{{ \App\Domains\Funding\Support\FundingDisclaimer::text($dir === 'rtl' ? 'ar' : 'en') }}</div>
+    @endif
 </div>

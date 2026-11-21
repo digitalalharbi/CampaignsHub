@@ -5,7 +5,9 @@ import { Num } from '@/components/ui/Num'
 import { Card, CardTitle } from '@/components/ui/Card'
 import { EmptyState, Skeleton } from '@/components/ui/States'
 import { fmtClock } from '@/lib/datetime'
+import { NO_ACTIVITY_LABEL } from '@/lib/syncStatus'
 import { useUi } from '@/stores/ui'
+import { PeriodText } from '@/components/ui/PeriodText'
 
 /**
  * SYNC-001 — the run log the pipeline has always kept, on the page that asks about it.
@@ -65,7 +67,7 @@ function Run({ run, ar }: { run: SyncRun; ar: boolean }) {
   return (
     <li data-testid={`sync-run-${run.id}`} className="rounded-[9px] border border-border p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge tone={status?.tone ?? 'neutral'}>{statusLabel(run.status, ar)}</Badge>
+        <Badge tone={status?.tone ?? 'neutral'}>{run.status === 'success' && run.no_activity ? (ar ? NO_ACTIVITY_LABEL.ar : NO_ACTIVITY_LABEL.en) : statusLabel(run.status, ar)}</Badge>
         <span className="text-sm font-semibold">{run.account ?? (ar ? 'حساب غير معروف' : 'Unknown account')}</span>
         {run.account_external_id && <span className="tnum text-xs text-text-muted">{run.account_external_id}</span>}
         {run.is_demo && <Badge tone="info">{ar ? 'تجريبي' : 'Demo'}</Badge>}
@@ -89,7 +91,7 @@ function Run({ run, ar }: { run: SyncRun; ar: boolean }) {
               under Arabic the range lands on the opposite edge from «الفترة» — which is what
               `ltrNumeralAlignment` catches by name, and it caught this one.
             */}
-            <dd className="inline"><Num className="tnum">{run.window_start} → {run.window_end}</Num></dd>
+            <dd className="inline"><Num className="tnum"><PeriodText from={run.window_start} to={run.window_end} /></Num></dd>
           </div>
         )}
         {rows.map(([label, value]) => (

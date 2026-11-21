@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchTenantCapabilities, setTenantCapability } from './api'
 import { toApiError } from '@/lib/api/client'
+import { promptDialog } from '@/stores/dialogs'
 
 /**
  * SUPERADMIN-FEATURES-001 — one workspace's own switch for each capability: inherit its plan, force on, or force off.
@@ -14,20 +15,20 @@ export function TenantCapabilitiesPanel({ tenantId, ar }: { tenantId: string; ar
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['admin', 'tenant-capabilities', tenantId] }),
   })
 
-  const set = (module: string, value: string) => {
+  const set = async (module: string, value: string) => {
     const enabled = value === 'on' ? true : value === 'off' ? false : null
-    const reason = window.prompt(ar ? 'سبب التغيير (يُسجَّل في سجل التدقيق):' : 'Reason (recorded in the audit trail):')
-    if (reason && reason.trim().length >= 5) change.mutate({ module, enabled, reason: reason.trim() })
+    const reason = await promptDialog({ title: ar ? 'سبب التغيير' : 'Reason for the change', label: ar ? 'يُسجَّل في سجل التدقيق' : 'Recorded in the audit trail', minLength: 5 })
+    if (reason) change.mutate({ module, enabled, reason })
   }
 
   return (
     <section className="mt-5">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wide text-text-muted">{ar ? 'الخصائص' : 'Features'}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{ar ? 'الخصائص' : 'Features'}</h3>
       {change.isError && <p className="mt-1 text-xs font-semibold text-danger">{toApiError(change.error).message}</p>}
       <ul className="mt-2 grid gap-1.5">
         {(list.data?.capabilities ?? []).map((c) => (
           <li key={c.module} data-testid={`tenant-feature-${c.module}`} data-enabled={c.enabled}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-1.5 text-[13px]">
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-1.5 text-xs">
             <span className="min-w-0">
               <span className="font-mono text-text-primary" dir="ltr">{c.module}</span>
               <span className={`ms-2 text-[11px] ${c.enabled ? 'text-[var(--positive-foreground)]' : 'text-text-muted'}`}>

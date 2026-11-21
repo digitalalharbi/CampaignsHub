@@ -79,6 +79,27 @@
 
 
 :root {
+  /*
+   * UX-MOTION-TOKENS-001 — the product's motion, as three durations and two curves.
+   *
+   * Calm, not slow. A control answers in `--motion-control` and a panel (drawer, popover, tab body)
+   * in `--motion-panel`; both are compositor-cheap (opacity, transform, and the colour of a hover),
+   * and NEITHER sits in front of the action: the click's effect is immediate, only its visual
+   * settles. The pointer is never touched, and scrolling is never smoothed.
+   *
+   * `--motion-ease` decelerates into rest (the standard for things arriving or changing state);
+   * `--motion-ease-exit` accelerates away (the standard for things leaving), so an exit is shorter
+   * to the eye than an entrance of the same length.
+   *
+   * `prefers-reduced-motion: reduce` collapses every duration (index.css), so these are the whole
+   * vocabulary and a component that writes its own number is the exception to be argued.
+   */
+  --motion-fast: 120ms;
+  --motion-control: 160ms;
+  --motion-panel: 240ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
   /* ---- Brand + semantic color ---- */
   --brand-50: #ecfdf5;
   --brand-100: #d1fae5;
@@ -126,6 +147,10 @@
 
   --border: #e6eaef;
   --border-strong: #d4dae1;
+  /* FIELD-CLARITY-001 — a field's edge is read, not guessed: ≥3:1 against the surface (WCAG 1.4.11). */
+  --field-border: #8a9199;
+  --field-border-hover: #5f6872;
+  --field-focus: #0d1526;
 
   --text-primary: #0d1526;
   --text-secondary: #475569;
@@ -161,13 +186,14 @@
    * them are monochrome, which is why they are tokens rather than constants — see the dark block.
    */
   --platform-meta: #1877f2;
+  /* GOOGLE-RED-001 (owner) — Google is its own red, as on every ad platform, not purple. */
   --platform-google: #ea4335;
   --platform-tiktok: #000000;
   --platform-snapchat: #f7b500;
-  --platform-x: #111111;
-  --platform-linkedin: #0a66c2;
+  --platform-x: #64748b;
+  --platform-linkedin: #4f46e5;
   /* ChatGPT Ads — OpenAI's mark is near-black, so the dark theme swaps it below (PLATFORM-ORDER-001). */
-  --platform-openai: #10a37f;
+  --platform-openai: #0d9488;
 
   --shadow-small: 0 1px 2px rgba(13, 21, 38, 0.05), 0 1px 1px rgba(13, 21, 38, 0.03);
   --shadow-medium: 0 4px 16px rgba(13, 21, 38, 0.06), 0 1px 3px rgba(13, 21, 38, 0.04);
@@ -248,6 +274,9 @@
 
   --border: #29323d;
   --border-strong: #3a4550;
+  --field-border: #6b7682;
+  --field-border-hover: #8b96a3;
+  --field-focus: #e8eef5;
 
   --text-primary: #e8eef5;
   --text-secondary: #a7b2bf;
@@ -271,8 +300,10 @@
    * perfectly well on this ground and keep their exact brand value.
    */
   --platform-tiktok: #f1f5f9;
-  --platform-x: #e7e9ea;
-  --platform-openai: #19c37d;
+  --platform-x: #94a3b8;
+  --platform-openai: #2dd4bf;
+  --platform-google: #f28b82;
+  --platform-linkedin: #818cf8;
 
   --shadow-small: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.35);

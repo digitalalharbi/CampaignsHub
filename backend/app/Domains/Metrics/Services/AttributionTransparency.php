@@ -176,12 +176,14 @@ final class AttributionTransparency
             'disagreement' => $this->disagreement->build($hasStore, $projectId, $window['from_date'], $window['to_date'], $loaded['orders'], $providers),
             'model_comparison' => $this->modelComparison->build($hasStore, $tenantId, $projectId, $loaded['orders'], $to, $platforms, $creditConfig),
             'reconciliation' => $this->reconciliation($hasStore, $platforms, $loaded, $projectId, $tenantId, $window['from_date'], $window['to_date'], $providers),
+            // ATTRIB-CAMPAIGN-001 — per campaign, what the platform claimed beside what the store recorded (Thunder's two halves).
+            'campaigns' => $this->campaignComparison($hasStore, $projectId, $window['from_date'], $window['to_date'], $loaded['orders'], $providers),
             'measurement' => [
-                'label_ar' => 'ما قاسه الموقع (GA4)',
-                'label_en' => 'Site-Measured (GA4)',
+                'label_ar' => 'ما قاسه الموقع',
+                'label_en' => 'Site-Measured',
                 'available' => $ga4 !== null,
-                'basis_ar' => 'زيارات مدفوعة كما سجّلها GA4: الوسيط مدفوع والمصدر هو المنصة. لا يُجمع مع ما أبلغت به المنصات ولا مع ما أكده المتجر.',
-                'basis_en' => 'Paid visits as GA4 recorded them: a paid medium with the platform as source. Never added to what the platforms reported or to what the store confirmed.',
+                'basis_ar' => 'زيارات مدفوعة كما سجّلها الموقع: الوسيط مدفوع والمصدر هو المنصة. لا يُجمع مع ما أبلغت به المنصات ولا مع ما أكده المتجر.',
+                'basis_en' => 'Paid visits as the website recorded them: a paid medium with the platform as source. Never added to what the platforms reported or to what the store confirmed.',
                 'other_paid' => $ga4['other_paid'] ?? null,
             ],
         ];
@@ -544,7 +546,7 @@ final class AttributionTransparency
         $measurement = $this->measurement($tenantId, $projectId, $fromDate, $toDate);
         $labels = [
             'platform_reported' => ['ar' => 'ما أبلغت به المنصات', 'en' => 'Platform-reported'],
-            'measurement' => ['ar' => 'القياس (GA4)', 'en' => 'Measurement (GA4)'],
+            'measurement' => ['ar' => 'القياس', 'en' => 'Measurement'],
             'commerce' => ['ar' => 'ما أكّده المتجر', 'en' => 'Commerce truth'],
             'reconciled' => ['ar' => 'المُسوّى', 'en' => 'Reconciled'],
         ];
@@ -783,8 +785,8 @@ final class AttributionTransparency
                 'available' => false,
                 'basis' => 'measurement',
                 'unavailable_reason' => 'no_measurement_rows',
-                'note_ar' => 'لم تُقرأ أي أرقام قياس لهذه الفترة — لا خاصية GA4 مربوطة أو لم تُزامَن بعد.',
-                'note_en' => 'No measurement figures were read for this period — no GA4 property is connected, or none has synced yet.',
+                'note_ar' => 'لم تُقرأ أي أرقام قياس لهذه الفترة — لا قياس للموقع مربوط أو لم تُزامَن بعد.',
+                'note_en' => 'No measurement figures were read for this period — no website property is connected, or none has synced yet.',
                 'transactions' => null,
                 'revenue' => null,
                 'currency' => null,
@@ -795,8 +797,8 @@ final class AttributionTransparency
             'available' => true,
             'basis' => 'measurement',
             'unavailable_reason' => null,
-            'note_ar' => 'ما عدّته خاصية GA4 على الموقع نفسه. طبقة قائمة بذاتها، لا تُصحّح المنصات ولا الدفتر ولا تُخلط بهما.',
-            'note_en' => 'What the GA4 property counted on the site itself. A layer of its own — it corrects neither the platforms nor the ledger and is blended into neither.',
+            'note_ar' => 'ما سجّله قياس الموقع على الموقع نفسه. طبقة قائمة بذاتها، لا تُصحّح المنصات ولا الدفتر ولا تُخلط بهما.',
+            'note_en' => 'What the website property counted on the site itself. A layer of its own — it corrects neither the platforms nor the ledger and is blended into neither.',
             'transactions' => isset($rows['transactions']) ? (float) $rows['transactions']->total : null,
             'revenue' => isset($rows['revenue']) ? round((float) $rows['revenue']->total, 2) : null,
             'currency' => $rows['revenue']->currency ?? null,
@@ -836,6 +838,208 @@ final class AttributionTransparency
         }
 
         return $out;
+    }
+
+    /**
+     * ATTRIB-CAMPAIGN-001 — Owner 2026-11-20 (the Thunder model): each campaign's platform-reported orders, revenue and ROAS
+     * beside the orders the store matched to that same campaign (UTM, click id or creator code), their net revenue and
+     * refunds. The verdict is read from the gap: the platform over-claims, under-claims, or the two agree. With no store
+     * connected the store half is null — never zero — and no verdict is given.
+     *
+     * @param  Collection<int,CommerceOrder>  $orders
+     * @return list<array<string,mixed>>
+     */
+    private function campaignComparison(bool $hasStore, string $projectId, string $fromDate, string $toDate, Collection $orders, array $providers): array
+    {
+        $rows = DailyMetric::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereBetween('metric_date', [$fromDate, $toDate])
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereNotNull('external_campaign_id')
+            ->whereIn('metric_key', ['spend', self::ORDERS_KEY, self::REVENUE_KEY])
+            ->when($providers !== [], fn ($q) => $q->whereIn('provider', $providers))
+            ->groupBy('external_campaign_id', 'metric_key')
+            ->select('external_campaign_id', 'metric_key')
+            ->selectRaw('SUM(value) AS total')
+            ->toBase()
+            ->get();
+
+        $platform = [];
+        foreach ($rows as $r) {
+            $platform[(string) $r->external_campaign_id][(string) $r->metric_key] = (float) $r->total;
+        }
+
+        $store = [];
+        if ($hasStore) {
+            foreach ($orders as $order) {
+                if ($order->cancelled_at !== null || $order->external_campaign_id === null) {
+                    continue;
+                }
+                $id = (string) $order->external_campaign_id;
+                $store[$id] ??= ['orders' => 0, 'revenue' => 0.0, 'refunds' => 0.0];
+                $store[$id]['orders']++;
+                $store[$id]['revenue'] += $order->netRevenue() ?? 0.0;
+                $store[$id]['refunds'] += (float) ($order->refunded_total ?? 0);
+            }
+        }
+
+        $ids = array_values(array_unique([...array_keys($platform), ...array_keys($store)]));
+        if ($ids === []) {
+            return [];
+        }
+
+        $campaigns = ExternalCampaign::withoutGlobalScopes()->whereIn('id', $ids)->get(['id', 'name', 'provider'])->keyBy('id');
+
+        $out = [];
+        foreach ($ids as $id) {
+            $p = $platform[$id] ?? [];
+            $claimed = (float) ($p[self::ORDERS_KEY] ?? 0);
+            $s = $store[$id] ?? null;
+            if ($claimed <= 0 && $s === null) {
+                continue; // nothing claimed and nothing sold: not an attribution question
+            }
+            $spend = (float) ($p['spend'] ?? 0);
+            $storeOrders = $hasStore ? ($s['orders'] ?? 0) : null;
+            $storeRevenue = $hasStore ? round($s['revenue'] ?? 0.0, 2) : null;
+
+            $verdict = null;
+            if ($hasStore) {
+                $verdict = match (true) {
+                    $claimed > max($storeOrders * 1.2, $storeOrders + 1) => 'over',
+                    $storeOrders > max($claimed * 1.2, $claimed + 1) => 'under',
+                    default => 'match',
+                };
+            }
+
+            $c = $campaigns->get($id);
+            $out[] = [
+                'id' => $id,
+                'name' => $c?->name,
+                'provider' => $c?->provider !== null ? AdPlatforms::canonical((string) $c->provider) : null,
+                'spend' => round($spend, 2),
+                'platform_orders' => round($claimed, 2),
+                'platform_revenue' => round((float) ($p[self::REVENUE_KEY] ?? 0), 2),
+                'platform_roas' => $spend > 0 && ($p[self::REVENUE_KEY] ?? 0) > 0 ? round((float) $p[self::REVENUE_KEY] / $spend, 2) : null,
+                'store_orders' => $storeOrders,
+                'store_revenue' => $storeRevenue,
+                'store_refunds' => $hasStore ? round($s['refunds'] ?? 0.0, 2) : null,
+                'store_roas' => $hasStore && $spend > 0 && $storeRevenue > 0 ? round($storeRevenue / $spend, 2) : null,
+                'store_cpa' => $hasStore && $storeOrders > 0 ? round($spend / $storeOrders, 2) : null,
+                'profit' => $hasStore ? round($storeRevenue - $spend, 2) : null,
+                'verdict' => $verdict,
+            ];
+        }
+
+        usort($out, static fn (array $a, array $b): int => $b['spend'] <=> $a['spend']);
+
+        return array_slice($out, 0, 50);
+    }
+
+    /**
+     * GA4-PLATFORM-GAP-001 — what each ad platform reported for the project's window, and nothing else: the same rows
+     * {@see threeSources()} reads, in the project's reporting calendar and under the bound-account ceiling.
+     *
+     * @return array<string, array{conversions: ?float, revenue: ?float, currency: ?string}>
+     */
+    public function reportedByPlatform(string $projectId, Carbon $from, Carbon $to): array
+    {
+        $window = $this->timezones->window($projectId, $from, $to);
+
+        return array_map(
+            static fn (array $r): array => ['conversions' => round($r['orders'], 2), 'revenue' => round($r['revenue'], 2), 'currency' => $r['currency']],
+            $this->platformRows($projectId, $window['from_date'], $window['to_date'], []),
+        );
+    }
+
+    /**
+     * GA4-PLATFORM-COMPARE-001 — per platform, what each of the three sources says, each in its own cell.
+     *
+     * Reads the same rows {@see build()} reads, without the reconciliation and model work around them, so the Site
+     * tab can carry the comparison. The three are never added: each source's total is its own, `summed` says so, and a
+     * source that has nothing to say is `available: false` with null cells, not zeroes.
+     *
+     * The explanation names what the arithmetic can support. It does not say which source is right.
+     *
+     * @return array<string, mixed>
+     */
+    public function threeSources(string $tenantId, string $projectId, Carbon $from, Carbon $to): array
+    {
+        $window = $this->timezones->window($projectId, $from, $to);
+        $loaded = $this->projectOrders->forWindow($tenantId, $projectId, $window['from'], $window['to']);
+        $hasStore = $this->projectStores->forProject($tenantId, $projectId)->isNotEmpty();
+        $reported = $this->platformRows($projectId, $window['from_date'], $window['to_date'], []);
+        $confirmed = $hasStore ? $this->storeOrdersByPlatform($loaded['orders']) : [];
+        $ga4 = $this->site->paidByPlatform($tenantId, $projectId, Carbon::parse($window['from_date']), Carbon::parse($window['to_date']));
+
+        $rows = [];
+        foreach (array_unique([...array_keys($reported), ...array_keys($confirmed), ...array_keys($ga4 ?? [])]) as $provider) {
+            if ($provider === 'other_paid') {
+                continue;
+            }
+            $claim = $reported[$provider] ?? null;
+            $store = $confirmed[$provider] ?? null;
+            $site = $ga4[$provider] ?? null;
+            $storeOrders = $hasStore ? ($store['orders'] ?? 0) : null;
+            $rows[] = [
+                'platform' => $provider,
+                'platform_reported' => $claim === null ? null : ['orders' => round($claim['orders'], 2), 'revenue' => round($claim['revenue'], 2), 'currency' => $claim['currency']],
+                'store_confirmed' => $hasStore ? ['orders' => $storeOrders, 'revenue' => round($store['revenue'] ?? 0.0, 2)] : null,
+                'ga4_measured' => $ga4 === null ? null : ['sessions' => round($site['sessions'] ?? 0.0, 2), 'orders' => round($site['purchases'] ?? 0.0, 2), 'revenue' => round($site['revenue'] ?? 0.0, 2), 'currency' => $site['currency'] ?? null],
+                'differences' => $this->threeSourceDifference($claim === null ? null : $claim['orders'], $storeOrders),
+                'explanation' => $this->threeSourceExplanation($claim === null ? null : $claim['orders'], $storeOrders, $ga4 === null ? null : ($site['purchases'] ?? 0.0)),
+            ];
+        }
+
+        $live = $loaded['orders']->filter(static fn (CommerceOrder $o): bool => $o->cancelled_at === null);
+        $unattributed = $live->filter(static fn (CommerceOrder $o): bool => $o->external_campaign_id === null && $o->click_id_provider === null);
+
+        return [
+            'period' => ['from' => $window['from_date'], 'to' => $window['to_date'], 'timezone' => $window['timezone']],
+            'summed' => false,
+            'available' => ['platform_reported' => $reported !== [], 'store_confirmed' => $hasStore, 'ga4_measured' => $ga4 !== null],
+            'sources' => [
+                ['key' => 'platform_reported', 'label_ar' => 'ما أبلغت به المنصات', 'label_en' => 'Platform-reported', 'orders' => $reported === [] ? null : round(array_sum(array_column($reported, 'orders')), 2), 'note_ar' => 'كل منصة تعدّ ما تنسبه لنفسها، فقد تعدّ البيعة نفسها أكثر من منصة.', 'note_en' => 'Each platform counts what it credits itself with, so one sale can be counted by several.'],
+                ['key' => 'store_confirmed', 'label_ar' => 'ما أكّده المتجر', 'label_en' => 'Store-confirmed', 'orders' => $hasStore ? $live->count() : null, 'note_ar' => 'سجل التاجر نفسه: صف واحد لكل بيعة.', 'note_en' => 'The merchant’s own ledger: one row per sale.'],
+                ['key' => 'ga4_measured', 'label_ar' => 'ما قاسه الموقع', 'label_en' => 'Website-measured', 'orders' => $ga4 === null ? null : round(array_sum(array_column($ga4, 'purchases')), 2), 'note_ar' => 'مشتريات الزيارات المدفوعة كما سجّلها الموقع بنموذجه هو.', 'note_en' => 'Purchases in paid visits as the website recorded them, under its own model.'],
+            ],
+            'rows' => AdPlatforms::sortRows($rows, 'platform'),
+            'store_unattributed' => $hasStore ? ['orders' => $unattributed->count(), 'revenue' => round((float) $unattributed->sum(static fn (CommerceOrder $o) => $o->netRevenue() ?? 0.0), 2)] : null,
+            'store_currency' => $hasStore ? $live->first()?->currency : null,
+            'other_paid' => $ga4['other_paid'] ?? null,
+        ];
+    }
+
+    /** @return array{platform_minus_store_orders: ?float, material: bool} */
+    private function threeSourceDifference(?float $claimed, ?int $confirmed): array
+    {
+        if ($claimed === null || $confirmed === null) {
+            return ['platform_minus_store_orders' => null, 'material' => false];
+        }
+        $gap = $claimed - $confirmed;
+
+        // Material: more than a fifth of the larger figure, and more than a couple of orders of noise.
+        return ['platform_minus_store_orders' => round($gap, 2), 'material' => abs($gap) > 2 && abs($gap) > 0.2 * max($claimed, (float) $confirmed)];
+    }
+
+    /** @return array{ar: string, en: string} */
+    private function threeSourceExplanation(?float $claimed, ?int $confirmed, ?float $measured): array
+    {
+        if ($claimed === null) {
+            return ['ar' => 'لم تُبلّغ هذه المنصة عن تحويلات في الفترة.', 'en' => 'This platform reported no conversions in the period.'];
+        }
+        if ($confirmed === null) {
+            return ['ar' => 'لا يوجد متجر مربوط، فلا يمكن التأكد من هذا الرقم من سجل مبيعات.', 'en' => 'No store is connected, so this figure cannot be checked against a sales ledger.'];
+        }
+        if ($claimed > $confirmed) {
+            return ['ar' => 'تنسب المنصة لنفسها أكثر مما يربطه المتجر بها بدليل: قد يكون تداخلًا مع منصات أخرى، أو نافذة إسناد أوسع، أو طلبات بلا دليل في المتجر. لا يمكن تحديد أيها من هذه الأرقام وحدها.', 'en' => 'The platform credits itself with more than the store can tie to it by evidence: overlap with other platforms, a wider attribution window, or store orders with no evidence. These figures alone cannot say which.'];
+        }
+        if ($claimed < $confirmed) {
+            return ['ar' => 'يربط المتجر بهذه المنصة أكثر مما أبلغت به: قد يكون البكسل لم يسجل كل عملية شراء.', 'en' => 'The store ties more orders to this platform than it reported: the pixel may have missed purchases.'];
+        }
+
+        return $measured === null
+            ? ['ar' => 'يتطابق رقم المنصة مع المتجر في هذه الفترة، ولا قياس للموقع للمقارنة.', 'en' => 'The platform and the store agree for this period; no website property to compare.']
+            : ['ar' => 'يتطابق رقم المنصة مع المتجر في هذه الفترة. نموذج الموقع مختلف، فلا يُفترض تطابقه معهما.', 'en' => 'The platform and the store agree for this period. The website uses another model, so it is not assumed to match.'];
     }
 
     /**

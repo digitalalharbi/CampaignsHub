@@ -4,21 +4,35 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Alerts\Models\AlertEvent;
+use App\Domains\Alerts\Services\AlertAnatomy;
+use App\Domains\Alerts\Services\AlertEvaluator;
+use App\Domains\Alerts\Services\AttentionBoard;
+use App\Domains\Alerts\Support\CampaignDelivery;
 use App\Domains\Campaigns\Enums\CampaignObjective;
 use App\Domains\Campaigns\Enums\MarketingPath;
+use App\Domains\Campaigns\Enums\ObjectiveFamily;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Support\ObjectiveResult;
 use App\Domains\CRM\Access\LeadVisibility;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\CRM\Services\FollowUpWorkspace;
+use App\Domains\Funding\Services\ProjectBudgetReader;
+use App\Domains\Integrations\Measurement\Ga4DigestBlock;
+use App\Domains\Integrations\Status\AccountDayCoverage;
 use App\Domains\Metrics\Models\SpendLimit;
+use App\Domains\Metrics\Services\ClientBudgetRollup;
 use App\Domains\Metrics\Services\DataFreshnessService;
 use App\Domains\Metrics\Services\MetricsAggregator;
+use App\Domains\Metrics\Services\ObjectivePerformance;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
+use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Reports\Services\ReportObjectiveLens;
 use App\Domains\Reports\Services\ReportObservations;
 use App\Domains\Reports\Services\ReportTemplateEngine;
+use App\Domains\Reports\Support\ReportPeriod;
 use App\Models\User;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
@@ -96,7 +110,7 @@ final class DailyDigest
      * @param  list<string>  $projectIds
      * @return array<string,mixed>
      */
-    public function buildRange(User $user, string $tenantId, array $projectIds, Carbon $from, Carbon $to): array
+    public function buildRange(User $user, string $tenantId, array $projectIds, Carbon $from, Carbon $to, ?string $kind = null): array
     {
         /*
          * EMAIL-SETTINGS-DEPTH-001 — read once, here, from the recipient's own row.
@@ -136,14 +150,48 @@ final class DailyDigest
         $prevTo = $from->copy()->subSecond();
         $prevFrom = $from->copy()->subDays($days)->startOfDay();
 
+        /*
+         * EMAIL-CANONICAL-METRICS-001 — a weekly or monthly email compares against the window the web's
+         * weekly or monthly report compares against.
+         *
+         * «The same length immediately before» is right for a rolling span and wrong for a calendar one:
+         * November (30 days) against «the 30 days before» is 2–31 October, while the monthly report
+         * compares it with October from the 1st, so the same project and month read a different movement
+         * in the inbox and on the page. `ReportPeriod` owns that rule; it is asked here rather than
+         * restated. It applies only when the email's own window IS that kind's window (a Monday-to-Sunday
+         * week, a whole calendar month) — a rolling seven days sent on another weekday keeps the rule above.
+         */
+        if (in_array($kind, ['weekly', 'monthly'], true)) {
+            $canonical = ReportPeriod::resolve($kind, $from->copy()->startOfDay(), $to->copy()->startOfDay(), $to->copy()->addDay());
+            if ($canonical['from']->isSameDay($from) && $canonical['to']->isSameDay($to)) {
+                $prevFrom = $canonical['previous_from']->copy()->startOfDay();
+                $prevTo = $canonical['previous_to']->copy()->endOfDay();
+            }
+        }
+
         $projects = Project::query()
+            ->live() // PROJECT-LIFECYCLE-001
             ->where('tenant_id', $tenantId)
             ->whereIn('id', $projectIds)
             ->get(['id', 'name', 'client_workspace_id']);
 
+        /*
+         * DIGESTS-CADENCE-BUDGETS-001 — the month's budget for EVERY project in ONE pacing read, grouped by the `project_id` the
+         * rows carry (the agency budgets screen's arrangement, `ClientBudgetController`). One `budgetPacing()` per project was
+         * thirty full passes per reader on a one-CPU host.
+         */
+        $monthFrom = $to->copy()->startOfMonth()->startOfDay();
+        $pacing = $projects->isEmpty() ? collect() : collect(
+            $this->metrics->acrossProjects()->forProjects($projects->map(fn (Project $p): string => (string) $p->id)->all())
+                ->budgetPacing($monthFrom, $to->copy()->endOfMonth()->endOfDay(), $to->copy()->startOfDay()),
+        )->groupBy(static fn (array $r): string => (string) ($r['project_id'] ?? ''));
+
         $blocks = [];
         foreach ($projects as $project) {
             $block = $this->forProject($tenantId, (string) $project->id, $from, $to, $prevFrom, $prevTo, $wantsRecommendations);
+            $block['budget_month'] = $this->monthBudget(array_values($pacing->get((string) $project->id, collect())->all()), $to, (string) $project->id);
+            // GA4-DIGEST-001 — one compact GA4 line; the reader's own capability decides whether sales are in it.
+            $block['ga4'] = app(Ga4DigestBlock::class)->forProject($user, $tenantId, (string) $project->id, $from, $to);
             $block['project_id'] = (string) $project->id;
             $block['project_name'] = (string) $project->name;
             $blocks[] = $block;
@@ -172,6 +220,19 @@ final class DailyDigest
             $blocks,
         )) > 0;
 
+        /*
+         * DIGESTS-VISUAL-V2-001 — a portfolio where NOTHING arrived is itself the finding, when the operational digest is on.
+         *
+         * «No activity → no email» is right for a daily summary of money, and exactly wrong for the Owner who replaced his
+         * morning review of every account with this mail: thirty silent projects are the day's worst news. So with
+         * `mail.operational_digests` on, a source that stopped syncing or went stale makes the day sendable.
+         */
+        $silentButBroken = (bool) config('mail.operational_digests') && array_filter(
+            $blocks,
+            static fn (array $b): bool => ($b['freshness']['sync_failed'] ?? false) === true || in_array($b['freshness']['state'] ?? '', ['stale', 'sync_failed'], true),
+        ) !== [];
+        $anyLeads = $anyLeads || $silentButBroken;
+
         return [
             'sendable' => $anySpend || $anyLeads,
             'reason' => $anySpend || $anyLeads ? null : 'no_activity',
@@ -179,9 +240,23 @@ final class DailyDigest
             'to_date' => $to->toDateString(),
             'days' => $days,
             'previous_date' => $prevFrom->toDateString(),
+            // The portfolio's unit is the web overview's: `currencyBasis` over every project in scope at once.
+            'currency' => $this->unit($this->metrics->acrossProjects()->forProjects($projects->map(fn (Project $p): string => (string) $p->id)->all()), $from, $to),
             'projects' => $blocks,
             'totals' => $this->rollUp($blocks),
         ];
+    }
+
+    /**
+     * The unit the web states for these rows: the currency when every row agrees, null when they mix
+     * (no single unit is true), and the reporting default when there are no money rows to contradict it
+     * — the rule `ReportGenerator` applies to a report's stamp.
+     */
+    private function unit(MetricsAggregator $scope, Carbon $from, Carbon $to): ?string
+    {
+        $basis = $scope->currencyBasis($from, $to);
+
+        return $basis['bases'] === 0 ? ReportingCurrency::DEFAULT : $basis['currency'];
     }
 
     /**
@@ -259,6 +334,7 @@ final class DailyDigest
 
         $current = $scoped->totals($from, $to);
         $previous = $scoped->totals($prevFrom, $prevTo);
+        $unit = $this->unit($scoped, $from, $to);
         $reported = $scoped->reportedKeys($from, $to);
 
         $platforms = $scoped->byProvider($from, $to);
@@ -271,19 +347,56 @@ final class DailyDigest
          * a brand project's digest is not scored on a cost per order it never tried to produce.
          */
         $lens = ReportObjectiveLens::infer($campaigns);
+        // DIGESTS-OBJECTIVE-KPIS-001 / DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the figures per OBJECTIVE group, each from its own campaigns only.
+        // Membership from BOTH windows: a campaign that spent only the day before still belongs to its objective's «previous».
+        $groups = $this->objectiveGroups(array_merge($campaigns, $scoped->byCampaign($prevFrom, $prevTo)), $from, $to, $prevFrom, $prevTo);
+        /*
+         * A project whose spend all went to ONE objective is judged on that objective — the campaigns' own, not an inference
+         * that skips campaigns the importer classified. A project of several objectives has no single lens: its whole-project
+         * figures are never read as one objective's (no ROAS or cost per result over the whole account).
+         */
+        $mixedObjectives = count($groups) > 1;
+        if (count($groups) === 1) {
+            $only = (string) $groups[0]['objective'];
+            $lens = new ReportObjectiveLens($only === 'engagement' ? 'awareness' : $only);
+        }
         // Per PLATFORM — CLIENT-REPORT-ENTITY-BOUNDARY-001. A digest lands in a client's inbox.
         $budget = $scoped->budgetPacingByProvider($from, $to, $to);
         $funnel = $scoped->funnel($from, $to);
         $freshness = $this->freshnessFor($projectId, $from, $to);
 
         $block = [
-            'objective' => $lens->value(),
+            // ALERT-MAIL-DATED-BARS-001 — the two periods every before/now card compares, so each bar names its days.
+            'window' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'previous_from' => $prevFrom->toDateString(), 'previous_to' => $prevTo->toDateString()],
+            // EMAIL-CANONICAL-METRICS-001 — the unit the web states for this window; null = the rows mix.
+            'currency' => $unit,
+            'objective' => count($groups) === 1 ? (string) $groups[0]['objective'] : ($mixedObjectives ? 'custom' : $lens->value()),
             'metric_set' => $this->template->metricSet($lens->value()),
             'totals' => $current,
             'previous' => $previous,
             'reported' => $reported,
             'change' => $this->change($current, $previous),
             'paths' => $this->byPath($campaigns),
+            /*
+             * EMAIL-DIGESTS-OPERATIONAL-001 — every platform's own figures, the window before it, and which
+             * keys each platform actually sent. These are the SAME `byProvider()` / `reportedKeysByProvider()`
+             * reads the live report's «platforms» section makes, passed through untouched: the operational
+             * digest's per-platform rows are this array, not a second computation.
+             */
+            'platform_rows' => $platforms,
+            'platform_previous' => $scoped->byProvider($prevFrom, $prevTo),
+            'platform_reported' => $scoped->reportedKeysByProvider($from, $to),
+            // The daily spend per platform (for the per-platform bars) and every platform's budget pacing — not only the ones off plan.
+            'platform_series' => array_map(
+                static fn (array $rows): array => array_values(array_map(
+                    static fn (array $point): array => ['date' => (string) $point['date'], 'spend' => is_numeric($point['spend'] ?? null) ? round((float) $point['spend'], 2) : null],
+                    $rows,
+                )),
+                $scoped->timeseriesByProvider($from, $to),
+            ),
+            'budget_rows' => $budget,
+            // DIGESTS-OBJECTIVE-KPIS-001 — the same figures per OBJECTIVE group, so a project with awareness and sales campaigns never averages them.
+            'groups' => $groups,
             'best_platform' => $this->pick($platforms, 'provider', best: true),
             'worst_platform' => $this->pick($platforms, 'provider', best: false),
             // EMAIL-DECISION-REPORT-001 — the shape of the window and where the money went, for the email's charts.
@@ -326,6 +439,16 @@ final class DailyDigest
                 ? $this->recommendations->forProject($tenantId, $projectId, $from, $to)
                 : [],
             'freshness' => $freshness,
+            // LINK-HEALTH-YESTERDAY-001 — why a day shows no spend: the link, the campaigns' status, or the platform spent nothing.
+            // PROJECT-LIFECYCLE-001 (N4) — judged by N3's coverage rule (per account, its own time zone, settle window), the
+            // same one the data-arrival alert uses, so the digest and the alert can never disagree about a link.
+            'no_data_state' => app(AccountDayCoverage::class)->noDataState($tenantId, (string) $projectId, $to->copy(), Carbon::now()),
+            // …and every bound ad platform read by the same rule: «ملخص الربط» lists only those whose required day did not arrive.
+            'link_health' => app(AccountDayCoverage::class)->projectReadings($tenantId, (string) $projectId, Carbon::now()),
+            // DIGESTS-VISUAL-V2-001 — the alerts open right now, so a cell says what the in-app board says.
+            'open_alerts' => $this->openAlerts($projectId, $from, $to),
+            // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the open connection alerts, for «ملخص الربط» only.
+            'open_link_alerts' => $this->openLinkAlerts($projectId),
             /*
              * EXECUTIVE-DAILY-DIGEST-001 — what happened AFTER the lead arrived.
              *
@@ -339,6 +462,11 @@ final class DailyDigest
              * product is where a person with the permission goes to see who.
              */
             'follow_up' => $this->followUpFor($tenantId, $projectId, $from, $to),
+            /*
+             * OBJECTIVE-PATHS-001 — one total spend split by what each ad set was bought to do, with each
+             * objective's own result; ROAS on the sales path only. Counts and figures, no campaign names.
+             */
+            'objective_paths' => (new ObjectivePerformance(projectIds: [$projectId]))->objectivePaths($from, $to),
         ];
 
         /*
@@ -349,7 +477,8 @@ final class DailyDigest
          * detectors read a snapshot-shaped array, so the digest hands them one.
          */
         $block['observations'] = $this->observations->build($lens, [
-            'currency' => ReportingCurrency::DEFAULT,
+            // Observations name money in prose and need a word; where the rows mix there is no true one, so the default stands for them only.
+            'currency' => $unit ?? ReportingCurrency::DEFAULT,
             'kpis' => $current,
             'delta' => $block['change'],
             'reported' => $reported,
@@ -367,7 +496,105 @@ final class DailyDigest
             'freshness' => $freshness,
         ]);
 
+        if ($mixedObjectives) {
+            /*
+             * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a finding about an OBJECTIVE's figure (return, cost per result, results)
+             * computed over a project of several objectives divides one objective's money by another's results. Those are
+             * withdrawn here; each objective group carries its own verdicts per platform.
+             */
+            $block['observations'] = array_values(array_filter(
+                (array) $block['observations'],
+                static fn (array $n): bool => ! in_array((string) ($n['kind'] ?? ''), ['period_comparison', 'rising_cost', 'falling_rate', 'reallocation'], true),
+            ));
+        }
+
         return $block;
+    }
+
+    /**
+     * DIGESTS-CADENCE-BUDGETS-001 — budget, spend to date, remaining and pace for the calendar month `$to` falls in.
+     *
+     * The month, not the email's window: a budget is planned per month, and «pace» only means something against the share of
+     * the month that has passed. For the daily and weekly that is month-to-date as of the last reported day; for the monthly
+     * (whose window IS the finished month) it is the whole month. The arithmetic is `ClientBudgetRollup`'s — comparable rows
+     * only, one currency or no total, withheld spend never counted as zero — so the mail cannot disagree with the budgets screen.
+     *
+     * @param  list<array<string,mixed>>  $rows  this project's rows of the one `budgetPacing()` read over the month
+     * @return array<string,mixed>
+     */
+    private function monthBudget(array $rows, Carbon $to, ?string $projectId = null): array
+    {
+        /*
+         * BUDGET-APPROVED-SAR-001 — Owner 2026-11-17: the budgets were written in dollars while the project's budget is in riyals.
+         * A project that has an APPROVED budget (the finance loop, always SAR, spend converted once at ingest) reads from it: the one
+         * budget finance recorded, never a roll-up of the platforms' own campaign budgets in the account's currency. A project
+         * without one keeps the campaign roll-up below.
+         */
+        if ($projectId !== null && ($approved = $this->approvedBudget($projectId, $to)) !== null) {
+            return $approved;
+        }
+
+        $from = $to->copy()->startOfMonth()->startOfDay();
+        $roll = app(ClientBudgetRollup::class)->of($rows);
+        $elapsed = min(1.0, ((int) round($from->diffInDays($to->copy()->startOfDay())) + 1) / max(1, $from->daysInMonth));
+
+        /*
+         * The budgeted campaigns the figure could NOT include, and why — named, never dropped in silence. A campaign whose spend
+         * has no figure in the budget's currency (no exchange rate: `partial`, `mixed_currency`; or spend in another currency:
+         * `currency_mismatch`) is left out of `ClientBudgetRollup`'s budget, spend and remaining; when every budgeted campaign is,
+         * the roll-up has no budget at all, and the mail must say «no figure, because…», not «no budget recorded».
+         */
+        $outside = array_values(array_filter(
+            $rows,
+            static fn (array $r): bool => (float) ($r['budget'] ?? 0) > 0 && ! in_array($r['pacing_basis'] ?? null, ['comparable', 'nothing_measured_in_window'], true),
+        ));
+
+        return $roll + [
+            'from' => $from->toDateString(),
+            'to' => $to->copy()->endOfMonth()->toDateString(),
+            'through' => $to->toDateString(),
+            'elapsed' => round($elapsed, 4),
+            'outside' => count($outside),
+            'outside_reasons' => array_count_values(array_map(static fn (array $r): string => (string) ($r['pacing_basis'] ?? 'unknown'), $outside)),
+        ];
+    }
+
+    /**
+     * The project's approved budget in the roll-up's own shape, or null when it has none (or no balance to read).
+     *
+     * @return array<string,mixed>|null
+     */
+    private function approvedBudget(string $projectId, Carbon $to): ?array
+    {
+        $r = app(ProjectBudgetReader::class)->forProject($projectId, $to->copy()->startOfDay());
+        if (($r['has_budget'] ?? false) !== true || ! is_numeric($r['approved'] ?? null) || (float) $r['approved'] <= 0) {
+            return null;
+        }
+        $approved = (float) $r['approved'];
+        $projected = is_numeric($r['projected'] ?? null) ? (float) $r['projected'] : null;
+        $start = ! empty($r['period_start']) ? Carbon::parse((string) $r['period_start'])->startOfDay() : $to->copy()->startOfMonth()->startOfDay();
+        $end = ! empty($r['period_end']) ? Carbon::parse((string) $r['period_end'])->startOfDay() : $to->copy()->endOfMonth()->startOfDay();
+        $total = max(1, (int) round($start->diffInDays($end)) + 1);
+        $elapsed = min(1.0, max(0.0, ((int) round($start->diffInDays($to->copy()->startOfDay())) + 1) / $total));
+
+        return [
+            'budget' => $approved,
+            'spent' => is_numeric($r['spent'] ?? null) ? (float) $r['spent'] : null,
+            'remaining' => is_numeric($r['remaining'] ?? null) ? (float) $r['remaining'] : null,
+            'projected' => $projected,
+            'pace' => $projected !== null ? round($projected / $approved, 4) : null,
+            'currency' => 'SAR',
+            'currencies' => 1,
+            'excluded' => 0,
+            'unmeasured' => 0,
+            'campaigns' => 0,
+            'from' => $start->toDateString(),
+            'to' => $end->toDateString(),
+            'through' => $to->toDateString(),
+            'elapsed' => round($elapsed, 4),
+            'outside' => 0,
+            'outside_reasons' => [],
+        ];
     }
 
     /**
@@ -579,6 +806,175 @@ final class DailyDigest
     }
 
     /**
+     * The project's campaigns grouped by the report objective they were bought for, with each group's own figures.
+     *
+     * Every figure comes from `MetricsAggregator` narrowed to the group's campaigns — the engine the report link uses — so a group's
+     * ROAS is that group's revenue over that group's spend and an awareness group never has one. A campaign that spent nothing in the
+     * window does not found a group; one with no declared objective joins the project's own objective (or `custom` when that is mixed).
+     *
+     * @param  list<array<string,mixed>>  $campaigns  `byCampaign()` rows
+     * @return list<array<string,mixed>>
+     */
+    /** The digest's group key for an objective family (OBJECTIVE-RESULT-001); an unclassified objective is `custom` («أخرى»). */
+    public static function groupKey(ObjectiveFamily $family): string
+    {
+        return match ($family) {
+            ObjectiveFamily::App => 'app_installs',
+            ObjectiveFamily::Unknown => 'custom',
+            default => $family->value,
+        };
+    }
+
+    private function objectiveGroups(array $campaigns, Carbon $from, Carbon $to, Carbon $prevFrom, Carbon $prevTo): array
+    {
+        $ids = [];
+        foreach ($campaigns as $row) {
+            if ((float) ($row['spend'] ?? 0) <= 0 || ! isset($row['campaign_id'])) {
+                continue;
+            }
+            /*
+             * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — every campaign joins the group of ITS OWN objective, 100%: one ad account
+             * can hold a sales, a traffic and an awareness campaign, and the sales group (its purchases, revenue and ROAS) is
+             * those sales campaigns only. The family comes from OBJECTIVE-RESULT-001's one table. A campaign used to join the
+             * project's inferred objective when its source was `unset` — the importer's seed, which IS the platform's mapped
+             * objective — so a traffic campaign could be counted in a sales group's ROAS, or land in «أهداف متعددة».
+             * An objective nobody can classify is «أخرى», never guessed into a family.
+             */
+            $key = self::groupKey(ObjectiveResult::familyOf(isset($row['objective']) ? (string) $row['objective'] : null));
+            $ids[$key][(string) $row['campaign_id']] = (string) $row['campaign_id'];
+        }
+        $ids = array_map('array_values', $ids);
+        $order = ['sales', 'leads', 'traffic', 'awareness', 'video', 'app_installs', 'engagement', 'custom'];
+        uksort($ids, static fn (string $a, string $b): int => (array_search($a, $order, true) === false ? 99 : array_search($a, $order, true)) <=> (array_search($b, $order, true) === false ? 99 : array_search($b, $order, true)));
+
+        $out = [];
+        foreach ($ids as $objective => $campaignIds) {
+            $scoped = $this->metrics->acrossProjects()->forCampaigns($campaignIds);
+            $out[] = [
+                'objective' => $objective,
+                'campaigns' => count($campaignIds),
+                'totals' => $scoped->totals($from, $to),
+                'previous' => $scoped->totals($prevFrom, $prevTo),
+                'reported' => $scoped->reportedKeys($from, $to),
+                'platform_rows' => $scoped->byProvider($from, $to),
+                'platform_previous' => $scoped->byProvider($prevFrom, $prevTo),
+                'platform_reported' => $scoped->reportedKeysByProvider($from, $to),
+                'platform_live' => $this->liveRows($campaignIds, $from, $to),
+                'funnel' => $scoped->funnel($from, $to)['stages'] ?? [],
+            ];
+        }
+
+        return $out;
+    }
+
+    /** Figures that add up across judgement windows, for {@see liveRows()}. */
+    private const LIVE_SUMS = ['spend', 'impressions', 'clicks', 'conversions', 'purchases', 'revenue', 'leads', 'form_leads', 'installs'];
+
+    /**
+     * ALERT-DELIVERING-YESTERDAY-001 — per platform, the figures of the group's campaigns that a decision may be about: running by
+     * the platform's latest status and delivering on the period's last day, each over the days since it last started delivering
+     * ({@see CampaignDelivery}). «صرف بدون نتائج» in «يحتاج قرارك الآن» is judged on these, so a campaign stopped mid-period, or
+     * one «active» that delivered nothing, never makes its platform «spend with no results». A platform with no such campaign
+     * has no row, and no «no results» verdict.
+     *
+     * @param  list<string>  $campaignIds
+     * @return array<string, array<string, float>> provider → summed figures
+     */
+    private function liveRows(array $campaignIds, Carbon $from, Carbon $to): array
+    {
+        $models = UnifiedCampaign::query()->withoutGlobalScope(ProjectScope::class)->whereIn('id', $campaignIds)->get();
+        $days = max(1, (int) $from->copy()->startOfDay()->diffInDays($to->copy()->startOfDay()) + 1);
+        $windows = [];
+        foreach (app(CampaignDelivery::class)->assess($models, Carbon::now(), $days, $to->toDateString()) as $id => $v) {
+            // Only a judged campaign speaks for its platform; one stopped, ended, not delivering or still learning does not.
+            if ($v['reason'] === null) {
+                $windows[(string) $v['from']][] = $id;
+            }
+        }
+
+        $out = [];
+        foreach ($windows as $since => $ids) {
+            foreach ($this->metrics->acrossProjects()->forCampaigns($ids)->byProvider(Carbon::parse($since), $to) as $row) {
+                $provider = (string) ($row['provider'] ?? '');
+                foreach (self::LIVE_SUMS as $key) {
+                    if (is_numeric($row[$key] ?? null)) {
+                        $out[$provider][$key] = ($out[$provider][$key] ?? 0.0) + (float) $row[$key];
+                    }
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Open (or still-snoozed) alert events of the project, with the board's own priority (`AttentionBoard::anatomised`, derived on read
+     * for an event written before the anatomy existed): provider when the event names one, priority, severity, snoozed, when it fired.
+     *
+     * @return list<array{provider: string, priority: string, severity: string, snoozed: bool, fired: int}>
+     */
+    /**
+     * The open connection alerts of the project (token, sync, website measurement, tracking) — «ملخص الربط»'s, never a decision.
+     *
+     * @return list<array{type: string, provider: string, severity: string, context: array<string,mixed>}>
+     */
+    private function openLinkAlerts(string $projectId): array
+    {
+        return AlertEvent::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereIn('status', ['open', 'snoozed'])
+            ->whereIn('type', AlertAnatomy::LINK_HEALTH)
+            ->limit(20)
+            ->get()
+            ->map(static fn ($e): array => [
+                'type' => (string) $e->type,
+                'provider' => is_string($e->context['provider'] ?? null) ? (string) $e->context['provider'] : '',
+                'severity' => (string) $e->severity,
+                'context' => (array) $e->context,
+            ])->values()->all();
+    }
+
+    private function openAlerts(string $projectId, Carbon $from, Carbon $to): array
+    {
+        $now = Carbon::now();
+        $board = app(AttentionBoard::class);
+
+        $events = AlertEvent::withoutGlobalScopes()
+            ->where('project_id', $projectId)
+            ->whereIn('status', ['open', 'snoozed'])
+            // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — a connection alert is the «ملخص الربط» section's, never a performance decision.
+            ->whereNotIn('type', AlertAnatomy::LINK_HEALTH)
+            ->limit(200)
+            ->get();
+        // …and an alert on a campaign that is no longer running (paused, completed, past its end date) is history, not a decision.
+        $campaignIds = $events->where('entity_type', UnifiedCampaign::class)->pluck('entity_id')->map(fn ($id): string => (string) $id)->unique()->values()->all();
+        $running = $campaignIds === [] ? [] : UnifiedCampaign::withoutGlobalScopes()->whereIn('id', $campaignIds)->get()
+            ->filter(static fn (UnifiedCampaign $c): bool => AlertEvaluator::running($c, $now))
+            ->map(static fn (UnifiedCampaign $c): string => (string) $c->id)->values()->all();
+        // …and that DELIVERED in the measured period (spend or impressions, or spend withheld for want of a rate).
+        if ($running !== []) {
+            $figures = $this->metrics->acrossProjects()->forCampaigns($running)->figuresByCampaign($from, $to);
+            $running = array_values(array_filter($running, static fn (string $id): bool => (float) ($figures[$id]['spend'] ?? 0) > 0
+                || (float) ($figures[$id]['impressions'] ?? 0) > 0 || (int) ($figures[$id]['spend_withheld_rows'] ?? 0) > 0));
+        }
+
+        return $events
+            ->filter(static fn ($e): bool => $e->entity_type !== UnifiedCampaign::class || in_array((string) $e->entity_id, $running, true))
+            ->values()
+            ->map(static function ($e) use ($board, $now): array {
+                $e = $board->anatomised($e);
+
+                return [
+                    'provider' => is_string($e->context['provider'] ?? null) ? (string) $e->context['provider'] : '',
+                    'priority' => (string) ($e->priority ?? 'P3'),
+                    'severity' => (string) $e->severity,
+                    'snoozed' => $e->status === 'snoozed' && ($e->snoozed_until === null || $e->snoozed_until->greaterThan($now)),
+                    'fired' => (int) ($e->last_triggered_at?->getTimestamp() ?? 0),
+                ];
+            })->all();
+    }
+
+    /**
      * How old the figures are, and whether anything failed.
      *
      * A digest that quotes yesterday's spend from a source that stopped syncing three days ago is
@@ -601,6 +997,11 @@ final class DailyDigest
             'last_sync_at' => $state['last_sync_at'] ?? null,
             'missing_days' => $state['missing_days'] ?? null,
             'sync_failed' => (bool) ($state['sync_failed'] ?? false),
+            // DIGESTS-VISUAL-V2-001 — every ad platform the project has and its source state: a platform that sent no figures still gets its cell.
+            'sources' => array_values(array_map(
+                static fn (array $s): array => ['provider' => (string) ($s['provider'] ?? ''), 'kind' => (string) ($s['kind'] ?? ''), 'state' => (string) ($s['state'] ?? '')],
+                array_filter($state['sources'] ?? [], static fn (array $s): bool => ($s['kind'] ?? '') === 'ad_platform'),
+            )),
             'failing' => array_values(array_filter(
                 array_map(
                     static fn (array $s): ?array => ($s['state'] ?? null) === 'failed'

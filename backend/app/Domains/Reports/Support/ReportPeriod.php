@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Support;
 
 use App\Domains\Reports\Models\Report;
+use App\Support\PeriodLabel;
 use Illuminate\Support\Carbon;
 
 /**
@@ -65,6 +66,62 @@ final class ReportPeriod
     }
 
     public const KINDS = ['daily', 'weekly', 'monthly', 'custom'];
+
+    /**
+     * SHARE-CARD-ROLLING-001 — Owner 2026-11-17: a ROLLING link's preview must not freeze its dates.
+     *
+     * The chat (WhatsApp) keeps the cover and the description it fetched the day the link was sent, while the link itself keeps
+     * moving: «2026-11-04 — 2026-11-17» under a link that opens on another window is a claim the page contradicts. A FIXED link
+     * states its dates; a rolling one states what it covers and that it moves, which stays true on every later day.
+     */
+    public static function cardLabelOfReport(Report $report, string $locale): ?string
+    {
+        $config = (array) ($report->config ?? []);
+
+        return self::cardLabel(
+            self::modeOfReport($report),
+            is_string($config['period_kind'] ?? null) ? $config['period_kind'] : null,
+            $report->period_start === null ? null : Carbon::parse($report->period_start)->toDateString(),
+            $report->period_end === null ? null : Carbon::parse($report->period_end)->toDateString(),
+            $locale,
+        );
+    }
+
+    public static function cardLabel(string $mode, ?string $kind, ?string $start, ?string $end, string $locale): ?string
+    {
+        $ar = $locale === 'ar';
+        if ($mode === 'fixed') {
+            return $start === null || $end === null ? null : PeriodLabel::range($start, $end, $locale);
+        }
+
+        $label = match ($kind) {
+            'daily' => $ar ? 'تقرير يومي' : 'Daily report',
+            'weekly' => $ar ? 'تقرير أسبوعي' : 'Weekly report',
+            'monthly' => $ar ? 'تقرير شهري' : 'Monthly report',
+            default => null,
+        };
+        if ($label === null) {
+            if ($start === null || $end === null) {
+                $label = $ar ? 'تقرير مباشر' : 'Live report';
+            } else {
+                $days = (int) Carbon::parse($start)->diffInDays(Carbon::parse($end)) + 1;
+                $label = $ar ? 'آخر '.self::arabicDays($days) : 'Last '.$days.' day'.($days === 1 ? '' : 's');
+            }
+        }
+
+        return $label.' · '.($ar ? 'يتحدّث تلقائيًا' : 'updates automatically');
+    }
+
+    /** «يوم» · «يومين» · «7 أيام» · «30 يومًا» — the Arabic count agrees with its noun. */
+    private static function arabicDays(int $days): string
+    {
+        return match (true) {
+            $days === 1 => 'يوم',
+            $days === 2 => 'يومين',
+            $days <= 10 => $days.' أيام',
+            default => $days.' يومًا',
+        };
+    }
 
     /**
      * @return array{kind: string, from: Carbon, to: Carbon, previous_from: Carbon, previous_to: Carbon, grain: string, partial: bool, comparison_ar: string, comparison_en: string}

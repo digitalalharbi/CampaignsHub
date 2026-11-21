@@ -1,4 +1,5 @@
 import { deleteData, getData, patchData, postData, putData } from '@/lib/api/client'
+import type { FxConversion } from '@/lib/money/fx'
 
 /**
  * The platform owner's console (ADMIN-001).
@@ -83,6 +84,8 @@ export interface TenantPerson {
   roles?: string[]
   is_platform_admin?: boolean
   status: string
+  /** ADMIN-FULL-CONTROL-001 — the account itself, separate from this membership's status. */
+  disabled?: boolean
 }
 
 /** The four OPS-002 names, or null for everything else the platform records. */
@@ -139,16 +142,17 @@ export function fetchTenant(id: string): Promise<{
   client_workspaces: number
   /** SUPERADMIN-MEMBERS-001 — the workspace's own roles. */
   available_roles?: Array<{ slug: string; name: string }>
+  /** ADMIN-FULL-CONTROL-001 — asked and not answered yet. Never the token. */
+  pending_invitations?: PendingInvitation[]
 }> {
   return getData(`/admin/tenants/${id}`)
 }
 
 /**
- * Suspending locks every person whose only workspace is this one out of the product, so the reason
- * is required by the server rather than optional here — an audit entry with no reason explains
- * nothing to whoever reads it a year later.
+ * Either direction decides who can get in, so the reason is required by the server rather than optional here — an audit
+ * entry with no reason explains nothing to whoever reads it a year later.
  */
-export function setTenantStatus(id: string, status: 'active' | 'suspended', reason?: string): Promise<{
+export function setTenantStatus(id: string, status: 'active' | 'suspended', reason: string): Promise<{
   tenant: { id: string; status: string }
   public_intake_affected: boolean
 }> {
@@ -499,6 +503,20 @@ export interface AdminRegistration {
   plan_code: string | null
   email_verified: boolean
   mobile_verified: boolean
+  /** `not_required_by_policy` means nobody asked, never that it was proved. Absent on an older payload. */
+  verification?: { email: 'verified' | 'required' | 'not_required_by_policy'; mobile: 'verified' | 'required' | 'not_required_by_policy' }
+  decisions?: Array<{
+    id: string
+    outcome: string
+    status: string
+    actor_id: number | null
+    reason: string
+    terms: (RegistrationDecisionTerms & { evidence?: Record<string, string> }) | null
+    access: Record<string, unknown> | null
+    verified_by: number | null
+    created_at: string | null
+  }>
+  effective_policy?: { switches?: { email?: boolean; mobile?: boolean }; settings_version?: number; taken_at?: string } | null
   next_step: string | null
   reason: string | null
   provisioned: boolean
@@ -509,9 +527,18 @@ export interface AdminRegistration {
   concessions: Record<string, unknown> | null
   created_at: string | null
   tenant_id: string | null
+  /** PLATFORM-INBOX-ATTENTION-001 — the verification step it is held at, or null when it is not held at one. */
+  verification_stage?: {
+    channel: 'email' | 'mobile'
+    since: string | null
+    sends: number
+    last_sent_at: string | null
+    last_outcome: string | null
+  } | null
 }
 
 export interface RegistrationGates {
+  requires_email?: boolean
   requires_mobile: boolean
   requires_approval: boolean
   requires_payment: boolean
@@ -545,7 +572,7 @@ export function fetchRegistration(id: string): Promise<{
   return getData(`/admin/registrations/${id}`)
 }
 
-export function approveRegistration(id: string, note?: string): Promise<{ registration: AdminRegistration }> {
+export function approveRegistration(id: string, note?: string): Promise<{ registration: AdminRegistration; no_change?: boolean }> {
   return postData(`/admin/registrations/${id}/approve`, { note })
 }
 
@@ -573,6 +600,204 @@ export function updateRegistrationTerms(id: string, terms: RegistrationTerms): P
   policy: RegistrationGates
 }> {
   return patchData(`/admin/registrations/${id}`, terms)
+}
+
+/*
+ * SIGNUP-DECISION-001 — the one decision. The server computes every figure; what is sent is the choice, and the amount the
+ * reviewer was shown so the server can refuse if it has moved.
+ */
+export type RegistrationDecisionOutcome =
+  | 'approve_payment_required' | 'approve_discount' | 'approve_waiver' | 'approve_trial'
+  | 'approve_external_settlement' | 'approve_join_existing' | 'approve_complimentary'
+
+export interface RegistrationDecisionInput {
+  outcome: RegistrationDecisionOutcome | 'request_info' | 'defer' | 'reject'
+  reason: string
+  idempotency_key?: string
+  expected_decision_id?: string | null
+  discount_percent?: number
+  trial_ends_on?: string
+  confirm_waiver?: boolean
+  confirm_amount?: string | null
+  confirm_complimentary?: boolean
+  evidence?: { reference: string; amount: string; currency: string; paid_on: string; note?: string }
+  access?: {
+    mode: 'new_workspace' | 'join_existing'
+    portal?: string
+    modules?: string[]
+    tenant_id?: string
+    role?: string
+    project_ids?: string[]
+    client_ids?: string[]
+  }
+}
+
+export interface RegistrationDecisionTerms {
+  list_amount?: string
+  amount_due?: string
+  fee?: string
+  currency?: string
+  renewal_amount?: string
+  renewal_on?: string
+  discount_percent?: number
+  vat?: { treatment: string; rate: number; tax: string }
+  covered_by?: string
+  /** ADMIN-FULL-CONTROL-001 — open-ended direct entry: no period, no renewal and nothing due. */
+  complimentary?: boolean
+  scope?: string
+}
+
+export interface RegistrationDecisionPreview {
+  outcome: string
+  terms: RegistrationDecisionTerms | null
+  access: {
+    mode: string
+    portal?: string | null
+    role: string
+    modules?: string[] | null
+    permissions: 'all_in_own_workspace' | string[]
+    projects?: string[]
+    clients?: string[]
+    creates: { tenant: number; workspace: number; membership: number; project: number }
+    who_has_access: string[]
+  }
+  payment_provider_ready: boolean
+}
+
+export function previewRegistrationDecision(id: string, input: RegistrationDecisionInput): Promise<RegistrationDecisionPreview> {
+  return postData(`/admin/registrations/${id}/decision/preview`, input)
+}
+
+export function decideRegistration(id: string, input: RegistrationDecisionInput): Promise<{ registration: AdminRegistration; no_change?: boolean }> {
+  return postData(`/admin/registrations/${id}/decision`, input)
+}
+
+export function verifyRegistrationSettlement(id: string, decisionId: string, reason: string): Promise<{ registration: AdminRegistration }> {
+  return postData(`/admin/registrations/${id}/decisions/${decisionId}/verify-settlement`, { reason })
+}
+
+export function fetchTenantDecisionTargets(tenantId: string): Promise<{
+  roles: Array<{ slug: string; name: string }>
+  projects: Array<{ id: string; name: string }>
+  clients: Array<{ id: string; name: string }>
+}> {
+  return getData(`/admin/tenants/${tenantId}/decision-targets`)
+}
+
+/** SIGNUP-VERIFY-POLICY-001 — move one application to the current verification policy, with a reason. */
+export function reevaluateRegistrationVerification(id: string, reason: string): Promise<{
+  registration: AdminRegistration
+  policy: RegistrationGates
+}> {
+  return postData(`/admin/registrations/${id}/reevaluate-verification`, { reason })
+}
+
+/**
+ * PLATFORM-INBOX-ATTENTION-001 — a fresh challenge on the step the application is held at. The server sends it and
+ * returns only the outcome: the code or link is the applicant's, and nothing here verifies anything.
+ */
+export function resendRegistrationVerification(id: string): Promise<{
+  registration: AdminRegistration
+  verification: { channel: 'email' | 'mobile'; delivery_status: string; expires_at: string | null }
+}> {
+  return postData(`/admin/registrations/${id}/resend-verification`, {})
+}
+
+export interface RegistrationVerificationPolicy {
+  email_enabled: boolean
+  mobile_enabled: boolean
+  email_daily_cap: number | null
+  sms_daily_cap: number | null
+  per_application_daily_cap: number | null
+  email_unit_cost: string | null
+  sms_unit_cost: string | null
+  cost_currency: string | null
+  budget_alert_percent: number
+  unverified_signups_daily_cap: number
+  version: number
+}
+
+export interface RegistrationVerificationChannel {
+  gate: 'enabled' | 'disabled'
+  /** A separate question from the gate: a disabled gate is a decision, a missing provider is a fault. */
+  provider: 'configured' | 'not_configured'
+  last_24h: { attempted: number; delivered: number; blocked: number }
+  delivered_30d: number
+  cap: number | null
+  alert: 'ok' | 'near_cap' | 'at_cap' | 'no_cap'
+  unit_cost: string | null
+  currency: string | null
+  /** Null means unknown, because no rate was entered. Never read it as zero. */
+  estimated_cost_30d: string | null
+  cost_known: boolean
+}
+
+export interface RegistrationVerificationOverview {
+  policy: RegistrationVerificationPolicy
+  channels: { email: RegistrationVerificationChannel; mobile: RegistrationVerificationChannel }
+  open_applications: { at_email_gate: number; at_mobile_gate: number }
+  unverified_signups_last_24h: number
+  counted_since: string | null
+  changes: Array<{
+    at: string | null
+    user_id: number | null
+    reason: string | null
+    before: Partial<RegistrationVerificationPolicy> | null
+    after: Partial<RegistrationVerificationPolicy> | null
+  }>
+}
+
+export function fetchRegistrationVerificationPolicy(): Promise<RegistrationVerificationOverview> {
+  return getData('/admin/registration-verification-policy')
+}
+
+export function saveRegistrationVerificationPolicy(
+  policy: Omit<RegistrationVerificationPolicy, 'version'> & { reason: string; expected_version: number; confirm_risk: boolean },
+): Promise<RegistrationVerificationOverview> {
+  return putData('/admin/registration-verification-policy', policy)
+}
+
+/* AUTH-CODE-SWITCHES-001 — one-time codes at sign-in and recovery. Password, Google and the reset link are not among them. */
+
+export type AuthCodeSwitchKey = 'sign_in_sms_code' | 'portal_email_code' | 'portal_sms_code' | 'recovery_sms_code'
+
+export interface AuthCodeChannel {
+  enabled: boolean
+  provider: 'configured' | 'not_configured' | 'failing'
+  last_24h: { issued: number; sent: number }
+  sent_30d: number
+  unit_cost: string | null
+  currency: string | null
+  estimated_cost_30d: string | null
+  cost_known: boolean
+}
+
+export interface AuthCodeSwitchesOverview {
+  switches: Record<AuthCodeSwitchKey, boolean> & { version: number }
+  channels: Record<AuthCodeSwitchKey, AuthCodeChannel>
+  /** `PORTAL_CODE_ON_LOGIN`, read-only: whether a contact can sign in by code at all. */
+  portal_code_on_login: boolean
+  recovery_link: { available: boolean; switchable: boolean; open_question: string }
+  limits: { code_ttl_minutes: number; max_attempts: number; resend_cooldown_seconds: number }
+  lockout: { stranded_contacts: number; accounts_only_sms_back: number }
+  counted_since: string | null
+  changes: Array<{
+    at: string | null
+    user_id: number | null
+    reason: string | null
+    before: Partial<Record<AuthCodeSwitchKey, boolean>> | null
+    after: Partial<Record<AuthCodeSwitchKey, boolean>> | null
+  }>
+}
+
+export function fetchAuthCodeSwitches(): Promise<AuthCodeSwitchesOverview> {
+  return getData('/admin/auth-code-switches')
+}
+
+export function saveAuthCodeSwitches(
+  body: Record<AuthCodeSwitchKey, boolean> & { reason: string; expected_version: number; confirm_risk: boolean },
+): Promise<AuthCodeSwitchesOverview> {
+  return putData('/admin/auth-code-switches', body)
 }
 
 /*
@@ -963,14 +1188,25 @@ export function rollbackMetaLive(): Promise<MetaCandidateState> {
 export interface EmailDelivery {
   id: string
   /** `transactional` (mail_deliveries) or `digest` (digest_sends) — two ledgers, one question. */
-  source: 'transactional' | 'digest'
+  source: 'transactional' | 'digest' | 'subscription'
+  /** EMAIL-TEST-SEND-001 — a platform admin's own test: masked, and left out of `by_state`. */
+  is_test?: boolean
   at: string
   kind: string
   template: string
   recipient: string | null
   tenant_name: string | null
   locale: string | null
+  /** The stored word. Read `state`: `sent` here only ever meant a transport took it. */
   status: string
+  /** queued, attempted, accepted, delivered, failed or suppressed — EMAIL-DELIVERY-LEDGER-001. */
+  state: string
+  suppression_reason?: string | null
+  failure_code?: string | null
+  /** What a person recorded having seen. The only thing that makes a row `delivered`. */
+  evidence?: string | null
+  next_attempt_at?: string | null
+  provider_message_id?: string | null
   transport: string | null
   attempts: number
   reason: string | null
@@ -982,6 +1218,7 @@ export interface EmailLedger {
   page: number
   per_page: number
   by_state: Record<string, number>
+  test_sends?: number
   transport: {
     state: 'awaiting_credentials' | 'sandbox' | 'live'
     provider_configured: boolean
@@ -990,13 +1227,22 @@ export interface EmailLedger {
     sender?: { address: string; name: string }
     reply_to?: string
     last_success_at?: string | null
-    last_failure?: { at: string; kind: string; error: string } | null
+    last_failure?: { at: string; kind: string; error: string; failure_code?: string | null } | null
   }
   available_states: string[]
+  /** NOTIFICATION-ENROLMENT-001 — who the notification system can reach, and when each scheduled digest last went out. */
+  reach?: {
+    members: number
+    verified: number
+    enrolled: number
+    digest_on: number
+    last_digest: { daily: string | null; weekly: string | null; monthly: string | null }
+  }
 }
 
 export function fetchEmailLedger(params: {
   status?: string
+  state?: string
   kind?: string
   recipient?: string
   source?: string
@@ -1010,15 +1256,53 @@ export function fetchEmailLedger(params: {
   return getData<EmailLedger>(`/admin/email/deliveries${q.size > 0 ? `?${q}` : ''}`)
 }
 
-/** One message to the signed-in operator, recorded in the ledger whatever the transport can do. */
-export const sendTestEmail = (lang: 'ar' | 'en') =>
-  postData<{ state: string; recipient: string }>('/admin/email/test', { lang })
+/** What the transport answered. `delivery_state: accepted` is the mail server taking it, not an inbox receiving it. */
+export interface TestSendResult {
+  state: string
+  delivery_state: string
+  /** The address it really went to, whichever target was chosen. */
+  recipient: string
+  to?: TestSendTarget
+  delivery_id?: string | null
+  transport?: string | null
+  suppression_reason?: string | null
+  failure_code?: string | null
+  provider_message_id?: string | null
+}
 
-export function fetchEmailPreviews(): Promise<{ keys: string[]; locales: string[] }> {
+/**
+ * EMAIL-TEST-SEND-002 — the two places a test may go: the admin's own proven address, or the platform's
+ * own mailbox (the configured Reply-To). A word, never an address: the server holds both.
+ */
+export type TestSendTarget = 'self' | 'platform_mailbox'
+
+/** EMAIL-TEST-SEND-001 — one fixture message to one of the two targets. No address is ever sent from here. */
+export const sendTestEmail = (lang: 'ar' | 'en', to: TestSendTarget, key?: string) =>
+  postData<TestSendResult>('/admin/email/test', { lang, to, key })
+
+export interface EmailPreviewList {
+  keys: string[]
+  locales: string[]
+  /** Where a test would go, and whether that address was ever proved. */
+  test_send?: { recipient: string; address_proven: boolean; platform_mailbox?: string | null }
+}
+
+export function fetchEmailPreviews(): Promise<EmailPreviewList> {
   return getData('/admin/email/previews')
 }
 
-export function fetchEmailPreview(key: string, locale: string): Promise<{ key: string; locale: string; html: string }> {
+export interface EmailPreview {
+  key: string
+  locale: string
+  html: string
+  subject?: string
+  test_subject?: string
+  text?: string
+  /** A security or account message: nobody can switch it off. */
+  mandatory?: boolean
+}
+
+export function fetchEmailPreview(key: string, locale: string): Promise<EmailPreview> {
   return getData(`/admin/email/previews/${key}?locale=${locale}`)
 }
 
@@ -1057,31 +1341,122 @@ export interface StoredRate {
   rate: number
   rate_date: string
   source: string
+  /** FX-ENGINE-001 — manual · pegged · automatic */
+  kind?: 'manual' | 'pegged' | 'automatic'
+  effective_to?: string | null
+  note?: string | null
+  recorded_by?: string | null
+  version?: number
+  outcome?: 'applied' | 'shadowed'
+}
+
+/** FX-ENGINE-001 — a currency used by connected ad accounts, and whether it converts today. */
+export interface UsedCurrency {
+  currency: string
+  accounts: number
+  providers: string[]
+  status: 'valid' | 'stale' | 'missing' | 'base'
+  rate: number | null
+  rate_date: string | null
+  kind: string | null
+  source: string | null
+  recorded_by: string | null
+  withheld: number
+}
+
+export interface FxPolicy {
+  display_currency: 'USD' | 'SAR'
+  auto_source_enabled: boolean
+  auto_source: string
+  auto_source_label: string
+}
+
+export interface FxWorkspace { id: string; name: string; display_currency: 'USD' | 'SAR' | null; effective: 'USD' | 'SAR' }
+
+export interface FxAlert { id: string; kind: 'fx_rate_missing' | 'fx_rate_stale'; severity: string; currency: string; accounts: number; withheld: number; rate_date: string | null; since: string | null }
+
+export interface FxGuard { checked_from: string; stored_without_rate: number; unit_unknown_but_converted: number; bypasses: Record<string, number>; ok: boolean; ran_at?: string }
+
+export interface RateVersion {
+  id: string
+  rate: number
+  previous_rate: number | null
+  rate_date: string
+  effective_to: string | null
+  kind: string
+  source: string
+  note: string | null
+  version: number
+  outcome: 'applied' | 'shadowed'
+  recorded_by: string | null
+  recorded_at: string
+}
+
+export interface RecomputeSummary {
+  from: string
+  to: string
+  applied: boolean
+  examined: number
+  changed: number
+  released: number
+  withheld: number
+  unchanged: number
+  by_currency: Array<{ currency: string; rows: number; changed: number; before: number; after: number }>
+  entity: { examined: number; changed: number }
+  budgets_refreshed: number
 }
 
 export function fetchCurrencyRates(): Promise<{
   feed: CurrencyRateFeedState
   unmet_pairs: UnmetRatePair[]
   rates: StoredRate[]
+  policy?: FxPolicy
+  currencies?: UsedCurrency[]
+  alerts?: FxAlert[]
+  workspaces?: FxWorkspace[]
+  guard?: FxGuard | null
 }> {
   return getData('/admin/fx/rates')
 }
 
-/** Hand entry is a first-class path: an operator is a real source, and the rate records who they are. */
+/** Hand entry is a first-class path: an operator is a real source, and the rate records who they are. Editing makes a new version. */
 export function recordCurrencyRate(body: {
   base: string
   quote: string
   rate: number
   rate_date: string
+  effective_to?: string | null
+  note?: string | null
+  kind?: 'manual' | 'pegged'
 }): Promise<StoredRate> {
   return postData('/admin/fx/rates', body)
+}
+
+export function fetchRateHistory(base: string, quote: string): Promise<{ versions: RateVersion[] }> {
+  return getData(`/admin/fx/rates/history?base=${encodeURIComponent(base)}&quote=${encodeURIComponent(quote)}`)
+}
+
+export function updateFxPolicy(body: Partial<Pick<FxPolicy, 'display_currency' | 'auto_source_enabled'>>): Promise<FxPolicy> {
+  return putData('/admin/fx/policy', body)
+}
+
+export function setWorkspaceDisplayCurrency(tenantId: string, display_currency: 'USD' | 'SAR' | null): Promise<FxWorkspace> {
+  return putData(`/admin/fx/workspaces/${tenantId}/display-currency`, { display_currency })
+}
+
+export function previewConversion(body: { amount: number; from: string; to: string; date: string }): Promise<FxConversion> {
+  return postData('/admin/fx/preview', body)
+}
+
+export function recomputeConverted(body: { from: string; to: string; apply?: boolean }): Promise<RecomputeSummary> {
+  return postData('/admin/fx/recompute', body)
 }
 
 /*
  * SUPERADMIN-ACCESS-001 — restore a person's access. A reason is always required; `password_link` and `reset_mfa` also need the
  * operator's own current password. A returned link is single use and shown once.
  */
-export type UserAccessAction = 'revoke_sessions' | 'password_link' | 'reset_mfa'
+export type UserAccessAction = 'revoke_sessions' | 'password_link' | 'reset_mfa' | 'deactivate' | 'activate'
 
 export function actOnUserAccess(userUuid: string, body: { action: UserAccessAction; reason: string; current_password?: string }): Promise<{
   action: UserAccessAction
@@ -1089,6 +1464,7 @@ export function actOnUserAccess(userUuid: string, body: { action: UserAccessActi
   delivery?: string | null
   sessions_revoked?: boolean
   mfa_enabled?: boolean
+  disabled?: boolean
 }> {
   return postData(`/admin/users/${userUuid}/access`, body)
 }
@@ -1096,10 +1472,79 @@ export function actOnUserAccess(userUuid: string, body: { action: UserAccessActi
 /** SUPERADMIN-MEMBERS-001 — one person's role and membership in one workspace. A reason is always required. */
 export type MembershipAction = 'change_role' | 'suspend' | 'reactivate' | 'remove'
 
-export function actOnMembership(tenantId: string, userUuid: string, body: { action: MembershipAction; role?: string; reason: string }): Promise<{
+export function actOnMembership(tenantId: string, userUuid: string, body: { action: MembershipAction; role?: string; reason: string; confirm_owner?: boolean }): Promise<{
   member: { roles: string[]; status: string | null; member: boolean }
 }> {
   return postData(`/admin/tenants/${tenantId}/members/${userUuid}`, body)
+}
+
+/*
+ * ADMIN-FULL-CONTROL-001 — a person into a workspace, a fresh link, and the subscription with no money moving. No password is set
+ * or shown by any of these, and every one needs a reason on the server.
+ */
+export interface PendingInvitation {
+  id: string
+  email: string
+  role: string
+  delivery_status: string | null
+  expires_at: string | null
+}
+
+export interface IssuedInvitation {
+  delivery_status: string | null
+  accept_link: string | null
+  expires_in_hours: number | null
+}
+
+export function addTenantMember(tenantId: string, body: { email: string; role: string; reason: string }): Promise<{
+  added: boolean
+  member: { roles: string[]; status: string | null; member: boolean } | null
+  invitation: IssuedInvitation | null
+}> {
+  return postData(`/admin/tenants/${tenantId}/members`, body)
+}
+
+export function reissueTenantInvitation(tenantId: string, invitationId: string, reason: string): Promise<{ invitation: IssuedInvitation | null }> {
+  return postData(`/admin/tenants/${tenantId}/invitations/${invitationId}/reissue`, { reason })
+}
+
+export type TenantSubscriptionAction = 'activate' | 'extend' | 'end' | 'complimentary' | 'convert_paid' | 'convert_discount' | 'change_plan'
+
+export interface TenantSubscriptionState {
+  status: string
+  plan_code: string | null
+  plan_name: string | null
+  billing_interval: string | null
+  unit_amount: string | null
+  currency: string | null
+  current_period_end: string | null
+  trial_ends_at: string | null
+  grace_ends_at: string | null
+  commercial_basis: string | null
+  open_ended: boolean
+  next_charge: { discount_percent: number; amount: string; currency: string | null } | null
+}
+
+export interface TenantSubscriptionOverview {
+  subscription: TenantSubscriptionState | null
+  plans: Array<{ code: string; name: string; currency: string; price_monthly: string | null; price_annual: string | null }>
+  history: Array<{ action: string; at: string | null; by: string | null; reason: string | null }>
+}
+
+export function fetchTenantSubscription(tenantId: string): Promise<TenantSubscriptionOverview> {
+  return getData(`/admin/tenants/${tenantId}/subscription`)
+}
+
+export function actOnTenantSubscription(tenantId: string, body: {
+  action: TenantSubscriptionAction
+  reason: string
+  plan_code?: string
+  interval?: 'monthly' | 'annual'
+  ends_on?: string
+  discount_percent?: number
+  confirm_complimentary?: boolean
+}): Promise<{ subscription: TenantSubscriptionState; public_intake_affected: boolean }> {
+  return postData(`/admin/tenants/${tenantId}/subscription`, body)
 }
 
 /*
@@ -1201,4 +1646,416 @@ export function startSupportSession(tenantId: string, reason: string, currentPas
 
 export function endSupportSession(): Promise<{ ended: boolean; return_path: string }> {
   return deleteData('/admin/support-session')
+}
+
+/** PRICING-ADDONS-001 — the add-ons catalogue and each workspace's add-ons, from the console. Every change carries a reason. */
+export interface AdminAddon {
+  id: string
+  code: string
+  kind: 'capacity' | 'feature'
+  name: string
+  name_ar: string
+  price_monthly: string | null
+  currency: string
+  readiness: 'available' | 'coming_soon'
+  is_active: boolean
+  sold: boolean
+  grants: { limits?: Record<string, number> } | null
+  active_workspaces: number
+  requests_waiting: number
+}
+
+export interface WorkspaceAddon {
+  id: string
+  code: string | null
+  name: string | null
+  name_ar: string | null
+  quantity: number
+  status: 'requested' | 'active' | 'declined' | 'cancelled'
+  source: string
+  unit_price: string | null
+  currency: string | null
+  reason: string | null
+}
+
+export function fetchAddons(): Promise<{ addons: AdminAddon[] }> {
+  return getData('/admin/addons')
+}
+
+export function updateAddon(id: string, body: { price_monthly?: number | null; readiness?: 'available' | 'coming_soon'; is_active?: boolean; reason: string }): Promise<{ addon: AdminAddon }> {
+  return patchData(`/admin/addons/${id}`, body)
+}
+
+export function fetchWorkspaceAddons(tenantId: string): Promise<{ addons: WorkspaceAddon[] }> {
+  return getData(`/admin/tenants/${tenantId}/addons`)
+}
+
+export function grantWorkspaceAddon(tenantId: string, code: string, quantity: number, reason: string): Promise<{ addons: WorkspaceAddon[] }> {
+  return postData(`/admin/tenants/${tenantId}/addons`, { code, quantity, reason })
+}
+
+export function decideWorkspaceAddon(id: string, decision: 'approve' | 'decline' | 'cancel', reason: string): Promise<{ addons: WorkspaceAddon[] }> {
+  return patchData(`/admin/tenant-addons/${id}`, { decision, reason })
+}
+
+// ── PRICING-MIGRATION-001 — launch-catalogue subscribers onto the current catalogue ─────────────────────────────
+
+export interface MigrationMetric {
+  metric: 'projects' | 'clients' | 'team_members' | 'ad_accounts'
+  usage: number
+  current_limit: number | null
+  new_limit: number | null
+  fits: boolean
+}
+
+export interface MigrationTarget {
+  plan: string
+  plan_name: string
+  amount: string | null
+  currency: string
+  interval: string
+  fits: boolean
+  metrics: MigrationMetric[]
+}
+
+export interface MigrationWorkspace {
+  tenant_id: string
+  tenant_name: string
+  tenant_slug: string
+  status: string
+  current_period_end: string | null
+  from: { plan: string | null; plan_name: string | null; amount: string | null; currency: string | null; interval: string | null }
+  suggested: MigrationTarget | null
+  scheduled: { plan: string; plan_name: string; amount: string | null; currency: string; effective_at: string | null } | null
+}
+
+export function fetchPlanMigration(): Promise<{ workspaces: MigrationWorkspace[]; catalogue: { currency: string; plans: { code: string; name: string }[] } }> {
+  return getData('/admin/plan-migration')
+}
+
+export function schedulePlanMigration(tenantId: string, body: { plan_code: string; reason: string; confirm: string }): Promise<{ workspace: MigrationWorkspace }> {
+  return postData(`/admin/tenants/${tenantId}/plan-migration`, body)
+}
+
+export function withdrawPlanMigration(tenantId: string, reason: string): Promise<{ workspace: MigrationWorkspace }> {
+  return deleteData(`/admin/tenants/${tenantId}/plan-migration`, { reason })
+}
+
+export function bulkPlanMigration(body: { tenant_ids: string[]; reason: string; confirm: string }): Promise<{ scheduled: string[]; skipped: { tenant_id: string; reason: string }[] }> {
+  return postData('/admin/plan-migration/bulk', body)
+}
+
+// PRICING-USAGE-CREDITS-001 — meters (actual unit cost, credit charging, allowances per plan) and each workspace's credits.
+export interface AdminUsageMeter {
+  code: string
+  name: string
+  name_ar: string
+  unit: string
+  funded_by: 'platform' | 'customer'
+  unit_cost: string | null
+  currency: string
+  charges_credits: boolean
+  charges: boolean
+  included_per_plan: Record<string, number>
+  is_active: boolean
+}
+
+export interface WorkspaceCredits {
+  seats?: { active: number; holding: number; replacements_used: number; replacements_allowed: number | null; next_replacement_at: string | null; cap: number | null }
+  balance: string
+  currency: string
+  meters: { code: string; name: string; name_ar: string; used: number; included: number | null; cost: string; credits_charged: string; uncovered: string; funded_by: 'platform' | 'customer' }[]
+  transactions: { id: number; kind: 'grant' | 'consume' | 'adjust'; amount: string; balance_after: string; reason: string | null; actor_id: number | null; at: string | null }[]
+}
+
+export function fetchUsageMeters(): Promise<{ meters: AdminUsageMeter[] }> {
+  return getData('/admin/usage/meters')
+}
+
+export function updateUsageMeter(code: string, body: { unit_cost?: number | null; charges_credits?: boolean; included_per_plan?: Record<string, number | null>; reason: string }): Promise<{ meter: AdminUsageMeter }> {
+  return patchData(`/admin/usage/meters/${code}`, body)
+}
+
+export function fetchWorkspaceCredits(tenantId: string): Promise<WorkspaceCredits> {
+  return getData(`/admin/tenants/${tenantId}/credits`)
+}
+
+export function adjustWorkspaceCredits(tenantId: string, amount: number, reason: string, idempotencyKey: string): Promise<{ balance: string; transaction_id: number }> {
+  return postData(`/admin/tenants/${tenantId}/credits`, { amount, reason, idempotency_key: idempotencyKey })
+}
+
+// PRICING-VAT-002 — VAT treatment and price basis per catalogue edition (new sales only), and the read-only invoice review.
+export interface TaxEdition {
+  id: string
+  number: number
+  label: string
+  currency: string
+  status: string
+  tax_treatment: string
+  rate: number
+  prices_include_vat: boolean
+  subscriptions_keeping_their_terms: number
+}
+
+export interface InvoiceReviewRow {
+  invoice_id: string
+  number: string
+  tenant: string | null
+  status: string
+  currency: string
+  subtotal: string
+  tax_total: string
+  total: string
+  amount_paid: string
+  charged: string | null
+  charge_status: string | null
+  tax_treatment: string | null
+  issued_at: string | null
+  issues: string[]
+}
+
+export function fetchTax(): Promise<{ treatments: { key: string; rate: number }[]; needs_customer_eligibility?: string[]; editions: TaxEdition[] }> {
+  return getData('/admin/tax')
+}
+
+export function updateTaxEdition(id: string, body: { tax_treatment: string; prices_include_vat: boolean; reason: string }): Promise<{ edition: TaxEdition }> {
+  return patchData(`/admin/tax/editions/${id}`, body)
+}
+
+export function fetchInvoiceReview(): Promise<{ checked: number; flagged: number; by_issue: Record<string, number>; rows: InvoiceReviewRow[] }> {
+  return getData('/admin/tax/invoice-review')
+}
+
+/*
+ * PLATFORM-SERVICE-INBOX-001 — services ordered from the official CampaignsHub site.
+ *
+ * Platform-owned requests only. A subscriber's own requests are that subscriber's work and are not part of this
+ * payload under any filter; the server decides the owner at intake and this console never sees the rest.
+ */
+export interface ServiceRequestName { key: string; name_ar: string; name_en: string }
+
+export interface ServiceRequestRow {
+  id: string
+  reference: string
+  type: ServiceRequestName
+  status: ServiceRequestName & { is_terminal: boolean }
+  priority: string
+  company: string | null
+  contact_name: string | null
+  assignee: { id: number; name: string } | null
+  submitted_at: string | null
+  last_activity_at: string | null
+  sla_due_at: string | null
+  overdue: boolean
+  source: string
+}
+
+export interface ServiceRequestList {
+  requests: ServiceRequestRow[]
+  total: number
+  page: number
+  per_page: number
+  last_page: number
+  counts: { open: number; unassigned: number; overdue: number }
+  statuses: (ServiceRequestName & { is_terminal: boolean })[]
+  administrators: { id: number; name: string }[]
+}
+
+export interface ServiceRequestDetail extends ServiceRequestRow {
+  contact: { name: string | null; email: string | null; phone: string | null; company: string | null }
+  objective: string | null
+  budget: number | null
+  currency: string | null
+  services: string[]
+  next_statuses: string[]
+  /** The visitor's replies from the tracking page, and the team's client-visible replies. */
+  messages: { id: number; from_visitor: boolean; author: string | null; body: string; at: string | null }[]
+  files: { id: number; name: string; size: number; mime: string | null; at: string | null }[]
+  activity: { type: string; from: string | null; to: string | null; message: string | null; actor_id: number | null; at: string | null }[]
+  /** PLATFORM-INBOX-ATTENTION-001 — what the console emailed the visitor, each with the mail ledger's state. */
+  replies?: InboxReply[]
+}
+
+export type ServiceRequestFilter = 'open' | 'unassigned' | 'all'
+
+export function fetchServiceRequests(filter: ServiceRequestFilter = 'open', page = 1): Promise<ServiceRequestList> {
+  const qs = filter === 'open' ? 'open=1' : filter === 'unassigned' ? 'open=1&unassigned=1' : 'include_archived=1'
+
+  return getData<ServiceRequestList>(`/admin/service-requests?${qs}&page=${page}`)
+}
+
+/** Streamed by the server through the platform-owned request; the storage path never reaches the browser. */
+export function serviceRequestFileUrl(id: string, fileId: number): string {
+  return `/api/v1/admin/service-requests/${encodeURIComponent(id)}/files/${fileId}`
+}
+
+export function fetchServiceRequest(id: string): Promise<{ request: ServiceRequestDetail }> {
+  return getData(`/admin/service-requests/${encodeURIComponent(id)}`)
+}
+
+export function updateServiceRequest(
+  id: string,
+  body: { status?: string; assigned_to?: number | null; reason?: string },
+): Promise<{ request: ServiceRequestDetail }> {
+  return patchData(`/admin/service-requests/${encodeURIComponent(id)}`, body)
+}
+
+/** PLATFORM-INBOX-ATTENTION-001 — reply to the visitor: on their tracking page, and by email to the request's contact. */
+export function replyToServiceRequest(id: string, body: string): Promise<{ request: ServiceRequestDetail }> {
+  return postData(`/admin/service-requests/${encodeURIComponent(id)}/reply`, { body })
+}
+
+/*
+ * PLATFORM-INBOX-ATTENTION-001 — «الوارد»: contact messages, support tickets and data requests.
+ *
+ * Addressed to the platform, never to a workspace. Opening a row marks it read for everyone; a reply goes by email to
+ * the address the visitor gave, and its state is the mail ledger's — `awaiting_credentials` says no mail left.
+ */
+export type InboxQueue = 'contact' | 'support' | 'data'
+
+export interface InboxSummary {
+  contact: { unread: number; open: number }
+  support: { unread: number; open: number }
+  data: { unread: number; open: number }
+  unread: number
+}
+
+export interface InboxReply { id: string; author: string | null; body: string; delivery_status: string; at: string | null }
+
+interface InboxRowBase {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  status: string
+  read_at: string | null
+  created_at: string
+  locale: string | null
+}
+
+export interface ContactMessageRow extends InboxRowBase {
+  company: string | null
+  topic: string | null
+  source: string | null
+  subject: string | null
+  message: string | null
+}
+
+export interface SupportTicketRow extends InboxRowBase {
+  reference: string
+  subject: string
+  message: string
+  category: string
+  priority: string | null
+}
+
+export interface DataRequestRow extends InboxRowBase {
+  reference: string
+  type: string
+  details: string | null
+  source: string | null
+  verified_at: string | null
+}
+
+export type InboxRow = ContactMessageRow | SupportTicketRow | DataRequestRow
+
+export const INBOX_STATUSES: Record<InboxQueue, readonly string[]> = {
+  contact: ['new', 'read', 'answered', 'closed', 'spam'],
+  support: ['open', 'in_progress', 'waiting_on_customer', 'resolved', 'closed'],
+  data: ['pending', 'verifying', 'in_review', 'blocked', 'completed', 'rejected', 'withdrawn'],
+}
+
+const INBOX_PATH: Record<InboxQueue, string> = {
+  contact: '/admin/legal/contact-messages',
+  support: '/admin/legal/support-tickets',
+  data: '/admin/legal/data-requests',
+}
+
+const INBOX_LIST_KEY: Record<InboxQueue, 'messages' | 'tickets' | 'requests'> = {
+  contact: 'messages',
+  support: 'tickets',
+  data: 'requests',
+}
+
+const INBOX_ROW_KEY: Record<InboxQueue, 'message' | 'ticket' | 'request'> = {
+  contact: 'message',
+  support: 'ticket',
+  data: 'request',
+}
+
+export const fetchInboxSummary = () => getData<InboxSummary>('/admin/inbox/summary')
+
+export async function fetchInbox(queue: InboxQueue, page = 1): Promise<{ rows: InboxRow[]; total: number; unread: number }> {
+  const data = await getData<Record<string, unknown>>(`${INBOX_PATH[queue]}?page=${page}`)
+
+  return {
+    rows: (data[INBOX_LIST_KEY[queue]] as InboxRow[] | undefined) ?? [],
+    total: Number(data.total ?? 0),
+    unread: Number(data.unread ?? 0),
+  }
+}
+
+export async function fetchInboxItem(queue: InboxQueue, id: string): Promise<{ row: InboxRow; replies: InboxReply[] }> {
+  const data = await getData<Record<string, unknown>>(`${INBOX_PATH[queue]}/${encodeURIComponent(id)}`)
+
+  return { row: data[INBOX_ROW_KEY[queue]] as InboxRow, replies: (data.replies as InboxReply[] | undefined) ?? [] }
+}
+
+export function updateInboxStatus(queue: InboxQueue, id: string, status: string): Promise<unknown> {
+  return patchData(`${INBOX_PATH[queue]}/${encodeURIComponent(id)}`, { status })
+}
+
+export async function replyToInboxItem(queue: Exclude<InboxQueue, 'data'>, id: string, body: string): Promise<{ delivery_status: string }> {
+  const data = await postData<{ reply: { delivery_status: string } }>(`${INBOX_PATH[queue]}/${encodeURIComponent(id)}/reply`, { body })
+
+  return data.reply
+}
+
+/*
+ * PLATFORM-PAYMENT-ALERTS-001 — customers stuck at payment or sign-up, for the platform owner only.
+ *
+ * The server writes every word and draws every card (the same card the owner's email carries), from recorded facts
+ * only. The screen lays it out; it adds no figure of its own.
+ */
+export type PlatformAlertState = 'ok' | 'watch' | 'bad' | 'none'
+
+export type PlatformAlertViz =
+  | { type: 'steps'; steps: { label: string; state: PlatformAlertState }[] }
+  | { type: 'count'; n: number; blocks: number; more: boolean; label: string; state: PlatformAlertState }
+
+export interface PlatformAlertRow {
+  id: string
+  kind: 'checkout_abandoned' | 'payment_unverified' | 'payment_activation_mismatch' | 'settlement_missing' | 'customer_blocking_error'
+  severity: 'critical' | 'warning'
+  card: {
+    severity: string
+    title: string
+    context: string
+    line: string
+    more: string[]
+    steps: string
+    viz: PlatformAlertViz
+    links: { label: string; path: string }[]
+  }
+  occurrences: number
+  first_seen_at: string | null
+  last_seen_at: string | null
+  emailed_at: string | null
+  resolved_at: string | null
+  acknowledged_at: string | null
+  contact: { email: string | null; phone: string | null } | null
+}
+
+export interface PlatformAlertList {
+  alerts: PlatformAlertRow[]
+  counts: { open: number; critical: number; by_kind: Record<string, number> }
+  settlement_check: 'available' | 'BLOCKED_EXTERNAL_CREDENTIALS' | 'refused_by_gateway' | 'no_settlement_history'
+}
+
+export function fetchPlatformAlerts(scope: 'open' | 'all' = 'open'): Promise<PlatformAlertList> {
+  return getData<PlatformAlertList>(`/admin/platform-alerts?status=${scope}`)
+}
+
+export function acknowledgePlatformAlert(id: string, acknowledged: boolean): Promise<{ alert: PlatformAlertRow }> {
+  return patchData(`/admin/platform-alerts/${encodeURIComponent(id)}`, { acknowledged })
 }

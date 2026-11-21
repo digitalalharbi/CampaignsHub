@@ -451,7 +451,7 @@ final class AdPlatformConnectorTest extends TestCase
 
         // The line this platform makes dangerous. Twelve sales, not five hundred.
         $this->assertSame(12.0, $row['purchases'], 'a purchase is a completed payment, never «a conversion»');
-        $this->assertSame(500.0, $row['conversions'], 'TikTok\'s own results figure is still carried — just never as the sale');
+        $this->assertSame(12.0, $row['conversions'], 'TIKTOK-CONVERSIONS-PURCHASES-001 — a conversion is a completed purchase, never TikTok\'s optimisation-event count');
         $this->assertSame(140.0, $row['checkout'], 'a started checkout is its own stage, never a sale');
         // TIKTOK-METRIC-REFUSAL-001 — the website add-to-cart event, documented as `web_event_add_to_cart`.
         $this->assertSame(260.0, $row['add_to_cart'], 'the basket stage is the website add-to-cart event');
@@ -501,7 +501,7 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertSame(1.0, $rows['lead-form']['form_leads']);
         $this->assertArrayNotHasKey('form_leads', $rows['landing'], 'a null native count is absent, never zero — and the website form is not a native lead');
         $this->assertSame(0.0, $rows['landing']['purchases'], 'a reported zero purchase stays a measured zero');
-        $this->assertSame(700.0, $rows['landing']['conversions'], 'optimisation events are carried as conversions only');
+        $this->assertSame(0.0, $rows['landing']['conversions'], 'TIKTOK-CONVERSIONS-PURCHASES-001 — optimisation events are not conversions; a conversion is a purchase');
     }
 
     public function test_snapchat_native_leads_are_carried_at_the_campaign_grain_and_never_from_sign_ups(): void
@@ -703,6 +703,38 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertCount(2, $asked);
         $this->assertStringContainsString('identity_id=idn-1', $asked[0]);
         $this->assertStringContainsString('identity_type=AUTHORIZED_BC', $asked[0]);
+    }
+
+    /** CONTENT-PREVIEW-COVERAGE-001 — one post shared by two ads: the ad that names the identity decides, whatever its order. */
+    public function test_a_spark_post_shared_by_ads_is_asked_with_the_identity_of_the_ad_that_has_one(): void
+    {
+        $this->configure('tiktok');
+        $asked = [];
+        Http::fake(function ($request) use (&$asked) {
+            $url = urldecode($request->url());
+            if (str_contains($url, 'identity/video/info/')) {
+                $asked[] = $url;
+
+                return Http::response(['code' => 0, 'data' => ['video_detail' => ['video_info' => ['poster_url' => 'https://p16.tiktokcdn.com/p.jpg', 'url' => 'https://v16.tiktokcdn.com/p.mp4?x-expires=1790000000', 'width' => 576, 'height' => 1024, 'duration' => 12.5]]]]);
+            }
+
+            return Http::response(['code' => 0, 'data' => ['list' => [
+                ['ad_id' => 'first', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'No identity', 'video_id' => null, 'tiktok_item_id' => '7300000000000000001'],
+                ['ad_id' => 'second', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Numeric identity', 'video_id' => null, 'tiktok_item_id' => '7300000000000000001', 'identity_type' => 'TT_USER', 'identity_id' => 123456],
+            ], 'page_info' => ['page' => 1, 'total_page' => 1]]]);
+        });
+
+        $ads = collect($this->bound('tiktok')->syncAds('adv-1')->records)->keyBy('external_id');
+
+        $this->assertCount(1, $asked);
+        $this->assertStringContainsString('identity_id=123456', $asked[0]);
+        foreach (['first', 'second'] as $id) {
+            $this->assertSame('https://p16.tiktokcdn.com/p.jpg', $ads[$id]['creative']['thumbnail_url']);
+            $this->assertArrayNotHasKey('media_reason', $ads[$id]['creative']['raw']);
+        }
+        $this->assertSame(576, $ads['second']['creative']['width']);
+        $this->assertSame(1024, $ads['second']['creative']['height']);
+        $this->assertSame(1790000000, Carbon::parse($ads['second']['creative']['asset_expires_at'])->getTimestamp(), 'the post link states its expiry');
     }
 
     /**
@@ -1378,6 +1410,107 @@ final class AdPlatformConnectorTest extends TestCase
         $this->assertCount(2, $rows);
         $this->assertSame(['2026-08-01', '2026-08-03'], array_column($rows, 'date'));
         $this->assertEqualsWithDelta(3.0, $rows[1]['spend'], 0.001);
+    }
+
+    /**
+     * X-NO-ACTIVITY-001 — a known campaign whose metrics are all null or empty is zero, not «could not read».
+     *
+     * X answers a campaign that did not deliver with `"metrics": {"impressions": null, ...}` (or an empty object).
+     * That used to yield no rows, so the run read `provider_raw_rows > 0, parsed 0` and was filed as an unread-rows
+     * failure. The campaign id is one we asked about, so the honest reading is zero for every day of the window.
+     */
+    public function test_x_stores_zero_for_a_known_campaign_whose_metrics_are_all_null(): void
+    {
+        $this->configure('x');
+        Http::fake([
+            'ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [
+                ['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE', 'currency' => 'SAR'],
+                ['id' => 'cy', 'name' => 'D', 'entity_status' => 'ACTIVE', 'currency' => 'SAR'],
+            ]]),
+            'ads-api.x.com/*/stats/*' => Http::response(['data' => [
+                ['id' => 'cx', 'id_data' => [['metrics' => ['billed_charge_local_micro' => null, 'impressions' => null, 'clicks' => [null, null]]]]],
+                ['id' => 'cy', 'id_data' => [['metrics' => []]]],
+            ]]),
+        ]);
+
+        $out = $this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-02');
+
+        $this->assertTrue($out->success);
+        $this->assertCount(4, $out->records, 'two campaigns x two days, each stored as zero');
+        foreach ($out->records as $row) {
+            $this->assertSame(0.0, (float) $row['spend']);
+            $this->assertSame(0.0, (float) $row['impressions']);
+            $this->assertSame(0.0, (float) $row['clicks']);
+            $this->assertSame('SAR', $row['currency']);
+        }
+        $this->assertSame(['2026-08-01', '2026-08-02'], array_values(array_unique(array_column($out->records, 'date'))));
+    }
+
+    /** Real numbers are still stored as they came, and money is converted from micros exactly once. */
+    public function test_x_converts_micros_for_real_numbers(): void
+    {
+        $this->configure('x');
+        Http::fake([
+            'ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE']]]),
+            'ads-api.x.com/*/stats/*' => Http::response(['data' => [[
+                'id' => 'cx', 'id_data' => [['metrics' => ['billed_charge_local_micro' => [12_500_000], 'impressions' => [40], 'clicks' => [3]]]],
+            ]]]),
+        ]);
+
+        $rows = $this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-01')->records;
+
+        $this->assertCount(1, $rows);
+        $this->assertEqualsWithDelta(12.5, $rows[0]['spend'], 0.0001);
+        $this->assertSame(40.0, (float) $rows[0]['impressions']);
+    }
+
+    /** A wrong shape or a number we cannot parse is a real error: the sync fails and says so. */
+    public function test_x_fails_on_an_unexpected_shape_or_an_unparseable_number(): void
+    {
+        $this->configure('x');
+        $campaigns = ['ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE']]])];
+
+        foreach ([
+            'data not a list' => ['data' => 'oops'],
+            'id_data not a list' => ['data' => [['id' => 'cx', 'id_data' => 'oops']]],
+            'metrics not an object' => ['data' => [['id' => 'cx', 'id_data' => [['metrics' => 'oops']]]]],
+            'non-numeric spend' => ['data' => [['id' => 'cx', 'id_data' => [['metrics' => ['billed_charge_local_micro' => ['abc']]]]]]],
+        ] as $label => $body) {
+            Http::fake($campaigns + ['ads-api.x.com/*/stats/*' => Http::response($body)]);
+
+            $out = $this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-01');
+
+            $this->assertFalse($out->success, $label);
+        }
+    }
+
+    /**
+     * MONEY-CURRENCY-NEVER-ASSUMED-001 — an X row carries the currency its CAMPAIGN states.
+     *
+     * The X account object has no currency at all (docs.x.com/x-ads-api/campaign-management: `name`,
+     * `timezone`, `id`, `approval_status`, …), so every X account is stored without one, and the stats
+     * arrays are bare micros. The campaign object does carry `currency` — the connector already reads it for
+     * budgets — so each row is labelled from the campaign it belongs to. A campaign that states none yields
+     * a row with no `currency` key, and the pipeline withholds that money rather than assuming a unit.
+     */
+    public function test_x_rows_carry_the_currency_their_campaign_states(): void
+    {
+        $this->configure('x');
+        Http::fake([
+            'ads-api.x.com/*/accounts/*/campaigns*' => Http::response(['data' => [
+                ['id' => 'cx', 'name' => 'C', 'entity_status' => 'ACTIVE', 'currency' => 'sar'],
+                ['id' => 'cy', 'name' => 'D', 'entity_status' => 'ACTIVE'],
+            ]]),
+            'ads-api.x.com/*/stats/*' => Http::response(['data' => [
+                ['id' => 'cx', 'id_data' => [['metrics' => ['billed_charge_local_micro' => [1_000_000], 'impressions' => [100]]]]],
+                ['id' => 'cy', 'id_data' => [['metrics' => ['billed_charge_local_micro' => [2_000_000], 'impressions' => [200]]]]],
+            ]]),
+        ]);
+
+        $rows = collect($this->bound('x')->syncInsights('act-1', '2026-08-01', '2026-08-01')->records)->keyBy('campaign_id');
+
+        $this->assertSame('SAR', $rows['cx']['currency'] ?? null);
+        $this->assertArrayNotHasKey('currency', $rows['cy'], 'a campaign that states no currency must not be given one');
     }
 
     /**

@@ -195,17 +195,21 @@ final class RegistrationReviewQueueTest extends TestCase
     /** A reviewer's decision about one application outranks the plan it was made against. */
     public function test_a_reviewer_can_waive_a_gate_for_one_application(): void
     {
-        config(['accounts.registration.default' => ['requires_approval' => true, 'requires_payment' => true]]);
-        $request = $this->pending();
+        config(['accounts.registration.default' => ['requires_mobile' => true, 'requires_approval' => true, 'requires_payment' => false]]);
+        $res = $this->apply(['email' => 'excused@a.test']);
+        $this->postJson('/api/v1/auth/registration/verify-email', ['token' => $this->verificationTokenFrom($res)])
+            ->assertOk()->assertJsonPath('data.registration.state', 'mobile_verification_required');
+        $request = RegistrationRequest::query()->whereRaw('lower(email) = ?', ['excused@a.test'])->firstOrFail();
         $reviewer = $this->reviewer();
 
         $this->actingAs($reviewer, 'sanctum')
             ->patchJson("/api/v1/admin/registrations/{$request->getKey()}", [
-                'requires_payment' => false,
-                'reason' => 'Migrating from an annual contract already paid off-platform.',
-            ])->assertOk()->assertJsonPath('data.policy.requires_payment', false);
+                'requires_mobile' => false,
+                'reason' => 'Verified by phone with the account manager.',
+            ])->assertOk()->assertJsonPath('data.policy.requires_mobile', false);
 
-        // …and only now does approving produce a workspace.
+        // …and only now does approving produce a workspace. Excusing a commercial gate is a scoped decision instead:
+        // see RegistrationDecisionTest.
         $this->actingAs($reviewer, 'sanctum')
             ->postJson("/api/v1/admin/registrations/{$request->getKey()}/approve")
             ->assertOk()->assertJsonPath('data.registration.state', 'active');
@@ -226,14 +230,13 @@ final class RegistrationReviewQueueTest extends TestCase
 
         $this->actingAs($reviewer, 'sanctum')
             ->patchJson("/api/v1/admin/registrations/{$request->getKey()}", [
-                'plan_code' => 'enterprise', 'discount_percent' => 25, 'trial_days' => 30,
+                'plan_code' => 'enterprise',
                 'reason' => 'Agreed with the sales team.',
             ])->assertOk();
 
         $concessions = RegistrationRequest::findOrFail($request->getKey())->review_concessions;
         $this->assertSame('Agreed with the sales team.', $concessions['reason']);
         $this->assertSame($reviewer->id, $concessions['decided_by']);
-        $this->assertSame(25, $concessions['discount_percent']);
         $this->assertSame('enterprise', RegistrationRequest::findOrFail($request->getKey())->plan_code);
     }
 

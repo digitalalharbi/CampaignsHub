@@ -10,7 +10,6 @@ use App\Domains\Metrics\Actions\UpsertDailyMetrics;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Notifications\Mail\AlertBundleMail;
-use App\Domains\Notifications\Providers\MessageProvider;
 use App\Domains\Notifications\Services\AlertDispatcher;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
@@ -22,6 +21,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
+use Tests\Support\ConfiguredAlertEmailProvider;
 use Tests\TestCase;
 
 /**
@@ -118,6 +119,35 @@ final class AlertDispatchTest extends TestCase
                 && str_contains($detail, 'داخلي')
                 && str_contains($detail, 'لا يوقف كامبينز هب العرض');
         });
+    }
+
+    /** EMAIL-GAPS — the alert sweep goes around `TransactionalMailer`, so it asks the gate itself. */
+    public function test_an_unsubscribed_person_gets_no_bundle_and_every_finding_says_why(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedSpendAgainstAnInternalLimit();
+        DB::table('mail_unsubscribes')->insert(['id' => (string) Str::uuid(), 'tenant_id' => (string) $this->tenant->id, 'recipient_hash' => hash('sha256', 'ops@alerts.test'), 'scope' => 'alerts']);
+
+        $counts = app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        $this->assertGreaterThan(0, $counts['unsubscribed'] ?? 0);
+        Mail::assertNothingSent();
+    }
+
+    /** One bundle is one message against the allowance, however many findings it carries. */
+    public function test_a_bundle_counts_once_and_past_the_limit_it_is_refused(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedSpendAgainstAnInternalLimit();
+        config(['mail.daily_limit_per_tenant' => 1]);
+        DB::table('mail_daily_usage')->insert(['tenant_id' => (string) $this->tenant->id, 'day' => Carbon::now('UTC')->toDateString(), 'used' => 1]);
+
+        $counts = app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        $this->assertGreaterThan(0, $counts['limit_reached'] ?? 0);
+        Mail::assertNothingSent();
     }
 
     /**
@@ -254,6 +284,49 @@ final class AlertDispatchTest extends TestCase
                 && str_contains($m->items[0]['title'], 'معدل النقر')
                 && $m->items[0]['context'] === 'مشروع';
         });
+    }
+
+    /**
+     * ALERT-MAIL-DATED-BARS-001 — the card the Owner approved (2026-11-12), locked: the metric and its % change as the title,
+     * before/after bars that NAME their days (never «الفترة السابقة / الآن»), the numbered action chips in order, and the one
+     * button into the platforms.
+     */
+    public function test_the_performance_alert_card_keeps_the_approved_layout_with_dated_bars(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedFallingCtr();
+
+        app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        Mail::assertSent(AlertBundleMail::class, function (AlertBundleMail $m): bool {
+            $html = html_entity_decode($m->render());
+            $text = preg_replace('/\s+/u', ' ', strip_tags($html));
+            $this->assertMatchesRegularExpression('/معدل النقر نزل\s*\S*\d+%/u', $text, 'title: the metric and its % change');
+            $this->assertStringContainsString('data-viz="before_now"', $html, 'the before/after bars');
+            $this->assertStringContainsString('أمس: 6 أغسطس 2026', $text, 'the «before» bar names its day');
+            $this->assertStringContainsString('اليوم (جاري): 7 أغسطس 2026', $text, 'the «after» bar names its day');
+            $this->assertStringNotContainsString('الفترة السابقة', $text, 'never the vague «previous period»');
+            $this->assertStringContainsString('data-block="steps"', $html, 'the numbered action chips');
+            $this->assertMatchesRegularExpression('/1<\/span>\s*راجع المحتوى.*2<\/span>\s*جدّد الأقل أداءً/us', $html, '1 راجع المحتوى ← 2 جدّد الأقل أداءً');
+            $this->assertStringContainsString('افتح المنصات داخل النظام', $text);
+
+            return true;
+        });
+    }
+
+    /** ALERT-MAIL-DATED-BARS-001 — a project that did not deliver in the period gets no performance card. */
+    public function test_a_project_that_did_not_deliver_gets_no_performance_card(): void
+    {
+        Mail::fake();
+        $this->withConfiguredEmail();
+        $this->seedFallingCtr();
+        DB::table('daily_metrics')->where('metric_date', '2026-08-07')->whereIn('metric_key', ['spend', 'impressions'])->update(['value' => 0]);
+
+        $counts = app(AlertDispatcher::class)->sweep($this->user, (string) $this->tenant->id, Carbon::parse('2026-08-07'));
+
+        $this->assertSame(0, $counts['sent'] ?? 0);
+        Mail::assertNothingSent();
     }
 
     /**
@@ -399,31 +472,5 @@ final class AlertDispatchTest extends TestCase
 
         $this->assertSame(2, $counts['sent'], 'one project’s alert was swallowed by the other’s cooldown');
         $this->assertSame(2, DB::table('digest_sends')->where('kind', 'alert')->distinct()->count('period_key'));
-    }
-}
-
-/**
- * A stand-in for a real, credentialed provider.
- *
- * Wired through `config('providers.channels.email')` rather than by mocking `ProviderRegistry`,
- * because the registry is `final` — and because routing the fake through the real registry is what
- * proves the honest «awaiting credentials» mapping is the thing being exercised.
- */
-final class ConfiguredAlertEmailProvider implements MessageProvider
-{
-    public function channel(): string
-    {
-        return 'email';
-    }
-
-    public function isConfigured(): bool
-    {
-        return true;
-    }
-
-    /** @param  array<string,mixed>  $payload */
-    public function send(string $destination, array $payload): array
-    {
-        return ['status' => 'sent', 'provider_message_id' => 'alert-ack', 'error' => null];
     }
 }

@@ -1,14 +1,19 @@
+import { DetailPanel } from '@/components/fit/DetailPanel'
+import { AgencyFit, FitPanel, useMeasuredPage } from '@/components/fit/AgencyFit'
+import { FitPaged } from '@/components/fit/FitPaged'
+import { Pager } from '@/components/fit/Pager'
 import { OpsHubBar } from '@/features/ops/OpsHubBar'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { FlaskConical, Pencil, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import { Bot, FlaskConical, Pencil, Play, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import {
   deleteRule, dryRunRule, getCatalog, getSummary, listActions, listChanges, listRules, runRuleNow, toggleRule,
-  type AutomationRule, type DryRunResult,
+  type AutomationRule, type DryRunResult, type RuleInput,
 } from './api'
 import { RuleBuilder } from './RuleBuilder'
-import { LEVEL_WORDS, MODE_WORDS, RESULT_WORDS, STATUS_WORDS, actionWord, conditionsSentence, statusWord } from './ruleCopy'
+import { agentDraft, availableAgents } from './readyAgents'
+import { LEVEL_WORDS, MODE_WORDS, RESULT_WORDS, STATUS_WORDS, actionWord, conditionsSentence, readingText, statusWord } from './ruleCopy'
 import { Badge } from '@/components/ui/Badge'
 import { Num } from '@/components/ui/Num'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +27,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { useAuth } from '@/stores/auth'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
+import { confirmDialog } from '@/stores/dialogs'
 
 type Tab = 'rules' | 'history' | 'changes'
 
@@ -38,7 +44,10 @@ export function AutomationPage() {
   const portalTo = usePortalPath()
   const qc = useQueryClient()
   const [tab, setTab] = useState<Tab>('rules')
+  /* AF2 — under /agency the page fits the screen: tables page themselves and a dry run opens in a layer. */
+  const fit = useLocation().pathname.startsWith('/agency')
   const [editing, setEditing] = useState<AutomationRule | null | 'new'>(null)
+  const [draft, setDraft] = useState<RuleInput | null>(null)
   const [filter, setFilter] = useState<'all' | 'on' | 'off'>('all')
   const [q, setQ] = useState('')
   const [dry, setDry] = useState<{ rule: AutomationRule; results: DryRunResult[] } | null>(null)
@@ -52,10 +61,11 @@ export function AutomationPage() {
   const refresh = () => void qc.invalidateQueries({ queryKey: ['automation'] })
   const toggle = useMutation({ mutationFn: ({ id, on }: { id: string; on: boolean }) => toggleRule(p!, id, on), onSuccess: refresh })
   const remove = useMutation({ mutationFn: (id: string) => deleteRule(p!, id), onSuccess: refresh })
-  const run = useMutation({ mutationFn: (id: string) => runRuleNow(p!, id), onSuccess: refresh })
-  const dryRun = useMutation({ mutationFn: (r: AutomationRule) => dryRunRule(p!, r.id).then((d) => ({ rule: r, results: d.results })), onSuccess: setDry })
+  const run = useMutation({ meta: { feedback: 'none' }, mutationFn: (id: string) => runRuleNow(p!, id), onSuccess: refresh })
+  const dryRun = useMutation({ meta: { feedback: 'none' }, mutationFn: (r: AutomationRule) => dryRunRule(p!, r.id).then((d) => ({ rule: r, results: d.results })), onSuccess: setDry })
 
-  const title = ar ? 'القواعد الآلية' : 'Automated rules'
+  // NAV-TITLE-PARITY-001 — the page is called what the sidebar calls it.
+  const title = ar ? 'الأتمتة' : 'Automation'
   const purpose = ar
     ? 'قواعد تراقب الحملات على كل المنصات وتطلب التغيير وفق الوضع الذي تختاره: مراقبة، أو توصية للاعتماد، أو تنفيذ تلقائي حيث منحت الإذن.'
     : 'Rules that watch campaigns on every platform and ask for changes in the mode you choose: monitor, recommend for approval, or auto-execute where you granted it.'
@@ -69,7 +79,7 @@ export function AutomationPage() {
   const shown = (rules.data?.rules ?? []).filter((r) => (filter === 'all' || (filter === 'on') === r.enabled) && r.name.toLowerCase().includes(q.toLowerCase()))
 
   return (
-    <div className="space-y-4" data-testid="automation-page">
+    <AgencyFit className="space-y-4" testid="automation-page">
       <PageIntro title={title} purpose={purpose}
         badges={<Link to={portalTo('/agents/approvals')} className="text-xs font-semibold text-brand-700 hover:underline" data-testid="automation-approvals"><ShieldCheck size={13} className="me-1 inline" aria-hidden />{ar ? 'طلبات الموافقة' : 'Approvals'}</Link>} />
       <OpsHubBar />
@@ -100,11 +110,28 @@ export function AutomationPage() {
       </div>
 
       {failure && <p role="alert" className="text-sm text-danger" data-testid="automation-error">{toApiError(failure).message}</p>}
+      <FitPanel className="space-y-4">
 
       {tab === 'rules' && (
         <>
+          {/* OPS-READY-AGENTS-001 — ready agents: a filled-in rule, one tap away, in «توصية» mode until a person saves it. */}
+          {canManage && catalog.data && availableAgents(catalog.data).length > 0 && (
+            <section data-testid="automation-agents" className="space-y-1.5">
+              <h2 className="flex items-center gap-1.5 text-sm font-bold text-text-primary"><Bot size={15} aria-hidden />{ar ? 'وكلاء جاهزون' : 'Ready agents'}</h2>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {availableAgents(catalog.data).map((a) => (
+                  <button key={a.key} type="button" data-testid={`automation-agent-${a.key}`} onClick={() => { setDraft(agentDraft(a, ar)); setEditing('new') }}
+                    className="flex w-60 shrink-0 flex-col items-start gap-1 rounded-xl border border-border bg-surface p-3 text-start transition-colors hover:border-brand-500 focus-visible:outline-2 focus-visible:outline-brand-500">
+                    <span className="text-sm font-semibold text-text-primary">{ar ? a.ar : a.en}</span>
+                    <span className="line-clamp-2 text-xs text-text-secondary">{ar ? a.descAr : a.descEn}</span>
+                    <span className="mt-auto text-xs font-bold text-brand-700">{ar ? 'جهّز القاعدة' : 'Set it up'}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
           <div className="flex flex-wrap items-center gap-2">
-            {canManage && <Button size="sm" onClick={() => setEditing('new')} disabled={!catalog.data} data-testid="automation-new"><Plus size={14} /> {ar ? 'قاعدة جديدة' : 'Create new rule'}</Button>}
+            {canManage && <Button size="sm" onClick={() => { setDraft(null); setEditing('new') }} disabled={!catalog.data} data-testid="automation-new"><Plus size={14} /> {ar ? 'قاعدة جديدة' : 'Create new rule'}</Button>}
             <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} aria-label={ar ? 'تصفية' : 'Filter'} className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm" data-testid="automation-filter">
               <option value="all">{ar ? 'كل القواعد' : 'All rules'}</option>
               <option value="on">{ar ? 'المفعّلة' : 'On'}</option>
@@ -119,8 +146,11 @@ export function AutomationPage() {
           )}
           {shown.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full min-w-[860px] text-sm" data-testid="automation-rules">
-                <thead className="bg-surface-secondary text-start text-xs text-text-secondary">
+              <PagedTable
+                className="w-full min-w-[860px] text-sm"
+                testid="automation-rules"
+                ar={ar}
+                head={<thead className="bg-surface-secondary text-start text-xs text-text-secondary">
                   <tr>
                     <th className="px-3 py-2 text-start">{ar ? 'تشغيل' : 'On/off'}</th>
                     <th className="px-3 py-2 text-start">{ar ? 'القاعدة' : 'Rule'}</th>
@@ -130,9 +160,8 @@ export function AutomationPage() {
                     <th className="px-3 py-2 text-start">{ar ? 'آخر نتيجة' : 'Last run result'}</th>
                     <th className="px-3 py-2"><span className="sr-only">{ar ? 'إجراءات' : 'Actions'}</span></th>
                   </tr>
-                </thead>
-                <tbody>
-                  {shown.map((r) => (
+                </thead>}
+                rows={shown.map((r) => (
                     <tr key={r.id} className="border-t border-border align-top" data-testid={`automation-rule-${r.id}`}>
                       <td className="px-3 py-2.5">
                         <input type="checkbox" role="switch" aria-checked={r.enabled} checked={r.enabled} disabled={toggle.isPending} onChange={(e) => toggle.mutate({ id: r.id, on: e.target.checked })} aria-label={ar ? 'تشغيل القاعدة' : 'Rule on'} className="h-4 w-4 accent-brand-600" data-testid={`automation-toggle-${r.id}`} />
@@ -157,17 +186,17 @@ export function AutomationPage() {
                           <IconButton label={ar ? 'تجربة دون تنفيذ' : 'Dry run'} onClick={() => dryRun.mutate(r)} testid={`automation-dry-${r.id}`}><FlaskConical size={15} /></IconButton>
                           <IconButton label={ar ? 'تشغيل الآن' : 'Run now'} onClick={() => run.mutate(r.id)} testid={`automation-run-${r.id}`}><Play size={15} /></IconButton>
                           <IconButton label={ar ? 'تعديل' : 'Edit'} onClick={() => setEditing(r)} testid={`automation-edit-${r.id}`}><Pencil size={15} /></IconButton>
-                          <IconButton label={ar ? 'حذف' : 'Delete'} onClick={() => { if (window.confirm(ar ? 'حذف القاعدة؟' : 'Delete this rule?')) remove.mutate(r.id) }} testid={`automation-delete-${r.id}`}><Trash2 size={15} /></IconButton>
+                          <IconButton label={ar ? 'حذف' : 'Delete'} onClick={async () => { if (await confirmDialog({ title: ar ? 'احذف القاعدة؟' : 'Delete this rule?', confirmLabel: ar ? 'احذف' : 'Delete', danger: true })) remove.mutate(r.id) }} testid={`automation-delete-${r.id}`}><Trash2 size={15} /></IconButton>
                         </div>
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
+              />
             </div>
           )}
 
-          {dry && (
+          {dry && (fit ? (
+            <DetailPanel open onClose={() => setDry(null)} title={dry.rule.name} closeLabel={ar ? 'إغلاق' : 'Close'} testid="automation-dry-panel">
             <section className="rounded-xl border border-border p-3" data-testid="automation-dry-results">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h3 className="text-sm font-bold text-text-primary">{ar ? `تجربة «${dry.rule.name}» — لم يتغير شيء` : `Dry run of «${dry.rule.name}» — nothing changed`}</h3>
@@ -178,14 +207,51 @@ export function AutomationPage() {
                   {dry.results.map((x) => (
                     <li key={`${x.provider}-${x.external_id}`} className="flex flex-wrap items-center justify-between gap-2 py-1.5" data-testid="automation-dry-row">
                       <span className="min-w-0 truncate font-semibold text-text-primary">{platformLabel(x.provider, ar)} · {x.name ?? x.external_id}</span>
-                      <span className="text-text-secondary" dir="ltr">{Object.entries(x.metrics).map(([k, v]) => `${k}: ${typeof v === 'number' ? Math.round(v * 100) / 100 : v ?? '—'}`).join(' · ')}</span>
+                      {x.readings && x.readings.length > 0 ? (
+                        <span className="flex flex-wrap gap-x-3 text-text-secondary" data-testid="automation-dry-readings">
+                          {x.readings.map((r) => (
+                            <span key={`${r.metric}-${r.window_days}`}>{ar ? r.name_ar : r.name_en}: <bdi dir={ar ? 'rtl' : 'ltr'} className="font-semibold text-text-primary">{readingText(r, ar)}</bdi></span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-text-secondary" dir="ltr">{Object.entries(x.metrics).map(([k, v]) => `${k}: ${typeof v === 'number' ? Math.round(v * 100) / 100 : v ?? '—'}`).join(' · ')}</span>
+                      )}
                       <Badge tone={x.matched ? 'warning' : 'neutral'}>{statusWord(x.status, ar)}</Badge>
+                      {x.reason && <p className="basis-full text-text-muted" data-testid="automation-dry-reason">{x.reason.ar}</p>}
                     </li>
                   ))}
                 </ul>
               )}
             </section>
-          )}
+            </DetailPanel>
+          ) : (
+            <section className="rounded-xl border border-border p-3" data-testid="automation-dry-results">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-text-primary">{ar ? `تجربة «${dry.rule.name}» — لم يتغير شيء` : `Dry run of «${dry.rule.name}» — nothing changed`}</h3>
+                <button type="button" className="text-xs text-text-secondary hover:underline" onClick={() => setDry(null)}>{ar ? 'إغلاق' : 'Close'}</button>
+              </div>
+              {dry.results.length === 0 ? <p className="text-xs text-text-muted">{ar ? 'لا كائنات في نطاق القاعدة.' : 'No objects in the rule scope.'}</p> : (
+                <ul className="divide-y divide-border text-xs">
+                  {dry.results.map((x) => (
+                    <li key={`${x.provider}-${x.external_id}`} className="flex flex-wrap items-center justify-between gap-2 py-1.5" data-testid="automation-dry-row">
+                      <span className="min-w-0 truncate font-semibold text-text-primary">{platformLabel(x.provider, ar)} · {x.name ?? x.external_id}</span>
+                      {x.readings && x.readings.length > 0 ? (
+                        <span className="flex flex-wrap gap-x-3 text-text-secondary" data-testid="automation-dry-readings">
+                          {x.readings.map((r) => (
+                            <span key={`${r.metric}-${r.window_days}`}>{ar ? r.name_ar : r.name_en}: <bdi dir={ar ? 'rtl' : 'ltr'} className="font-semibold text-text-primary">{readingText(r, ar)}</bdi></span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-text-secondary" dir="ltr">{Object.entries(x.metrics).map(([k, v]) => `${k}: ${typeof v === 'number' ? Math.round(v * 100) / 100 : v ?? '—'}`).join(' · ')}</span>
+                      )}
+                      <Badge tone={x.matched ? 'warning' : 'neutral'}>{statusWord(x.status, ar)}</Badge>
+                      {x.reason && <p className="basis-full text-text-muted" data-testid="automation-dry-reason">{x.reason.ar}</p>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          ))}
         </>
       )}
 
@@ -194,12 +260,13 @@ export function AutomationPage() {
           {history.isLoading && <Skeleton className="h-32" />}
           {history.data && history.data.actions.length === 0 && <p className="p-4 text-sm text-text-muted">{ar ? 'لم تتخذ القواعد أي إجراء بعد.' : 'The rules have not acted yet.'}</p>}
           {history.data && history.data.actions.length > 0 && (
-            <table className="w-full min-w-[820px] text-xs">
-              <thead className="bg-surface-secondary text-text-secondary"><tr>
+            <PagedTable
+              className="w-full min-w-[820px] text-xs"
+              ar={ar}
+              head={<thead className="bg-surface-secondary text-text-secondary"><tr>
                 {[ar ? 'الوقت' : 'Time', ar ? 'القاعدة' : 'Rule', ar ? 'الكائن' : 'Object', ar ? 'الإجراء' : 'Action', ar ? 'قبل → بعد' : 'Before → after', ar ? 'النتيجة' : 'Result'].map((h) => <th key={h} className="px-3 py-2 text-start">{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {history.data.actions.map((a) => {
+              </tr></thead>}
+              rows={history.data.actions.map((a) => {
                   const w = STATUS_WORDS[a.status]
                   return (
                     <tr key={a.id} className="border-t border-border align-top" data-testid="automation-history-row">
@@ -212,30 +279,47 @@ export function AutomationPage() {
                     </tr>
                   )
                 })}
-              </tbody>
-            </table>
+            />
           )}
         </div>
       )}
 
       {tab === 'changes' && (
-        <ul className="divide-y divide-border rounded-xl border border-border text-sm" data-testid="automation-changes">
-          {changes.isLoading && <li className="p-3"><Skeleton className="h-16" /></li>}
-          {changes.data?.changes.length === 0 && <li className="p-4 text-text-muted">{ar ? 'لا تغييرات بعد.' : 'No changes yet.'}</li>}
-          {changes.data?.changes.map((c, i) => (
-            <li key={`${c.rule_id}-${c.at}-${i}`} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2" data-testid="automation-change-row">
+        <FitPaged
+          items={changes.data?.changes ?? []}
+          itemHeight={44}
+          gap={0}
+          rowKey={(c) => `${c.rule_id}-${c.at}`}
+          ar={ar}
+          testid="automation-changes-fit"
+          render={(c) => (
+            <div className="flex h-full flex-wrap items-center justify-between gap-2 overflow-hidden border-b border-border px-3 py-2 text-sm" data-testid="automation-change-row">
               <span className="font-semibold text-text-primary">{c.rule ?? c.rule_id}</span>
               <span className="text-text-secondary">{CHANGE_WORDS[c.action] ? (ar ? CHANGE_WORDS[c.action].ar : CHANGE_WORDS[c.action].en) : c.action}</span>
               <span className="text-xs text-text-muted" dir="ltr">{c.at ? new Date(c.at).toLocaleString('en-GB', { hour12: false }) : ''}</span>
-            </li>
-          ))}
-        </ul>
+            </div>
+          )}
+          fallback={() => (
+            <ul className="divide-y divide-border rounded-xl border border-border text-sm" data-testid="automation-changes">
+                      {changes.isLoading && <li className="p-3"><Skeleton className="h-16" /></li>}
+                      {changes.data?.changes.length === 0 && <li className="p-4 text-text-muted">{ar ? 'لا تغييرات بعد.' : 'No changes yet.'}</li>}
+                      {changes.data?.changes.map((c, i) => (
+                        <li key={`${c.rule_id}-${c.at}-${i}`} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2" data-testid="automation-change-row">
+                          <span className="font-semibold text-text-primary">{c.rule ?? c.rule_id}</span>
+                          <span className="text-text-secondary">{CHANGE_WORDS[c.action] ? (ar ? CHANGE_WORDS[c.action].ar : CHANGE_WORDS[c.action].en) : c.action}</span>
+                          <span className="text-xs text-text-muted" dir="ltr">{c.at ? new Date(c.at).toLocaleString('en-GB', { hour12: false }) : ''}</span>
+                        </li>
+                      ))}
+                    </ul>
+          )}
+        />
       )}
 
+      </FitPanel>
       {editing !== null && catalog.data && (
-        <RuleBuilder projectId={p} catalog={catalog.data} rule={editing === 'new' ? null : editing} ar={ar} onClose={() => setEditing(null)} />
+        <RuleBuilder projectId={p} catalog={catalog.data} rule={editing === 'new' ? null : editing} draft={editing === 'new' ? draft : null} ar={ar} onClose={() => { setEditing(null); setDraft(null) }} />
       )}
-    </div>
+    </AgencyFit>
   )
 }
 
@@ -249,4 +333,26 @@ const CHANGE_WORDS: Record<string, { ar: string; en: string }> = {
 
 function IconButton({ label, onClick, children, testid }: { label: string; onClick: () => void; children: React.ReactNode; testid: string }) {
   return <button type="button" title={label} aria-label={label} onClick={onClick} data-testid={testid} className="rounded p-1.5 text-text-secondary hover:bg-surface-hover hover:text-text-primary">{children}</button>
+}
+
+/**
+ * AF2 — a plain table that pages itself to the screen on a fitted `/agency` page: as many rows as fit the panel, the
+ * rest a page away. Everywhere else — a phone, a short window, `/app` — every row is drawn, as it always was.
+ */
+function PagedTable({ head, rows, className, testid, ar }: { head: React.ReactNode; rows: React.ReactNode[]; className: string; testid?: string; ar: boolean }) {
+  const { ref, size } = useMeasuredPage(rows.length)
+  const [page, setPage] = useState(1)
+  const pages = size ? Math.max(1, Math.ceil(rows.length / size)) : 1
+  const current = Math.min(page, pages)
+  const shown = size ? rows.slice((current - 1) * size, current * size) : rows
+
+  return (
+    <div ref={ref}>
+      <table className={className} data-testid={testid}>
+        {head}
+        <tbody>{shown}</tbody>
+      </table>
+      {size !== undefined && pages > 1 && <Pager page={current} pages={pages} onPage={setPage} total={rows.length} ar={ar} testid={testid ? `${testid}-pager` : undefined} />}
+    </div>
+  )
 }

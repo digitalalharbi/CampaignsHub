@@ -1,0 +1,38 @@
+{
+  "key": "minimal",
+  "version": 1,
+  "label": {
+    "ar": "مينيمال",
+    "en": "Minimal"
+  },
+  "kind": "both",
+  "anchor": "bottom",
+  "blocks": [
+    {
+      "role": "logo",
+      "cols": 3,
+      "rows": 1,
+      "place": "live-top",
+      "align": "center"
+    },
+    {
+      "role": "hook",
+      "cols": 8,
+      "rows": 2,
+      "place": "calm",
+      "align": "center"
+    },
+    {
+      "role": "cta",
+      "cols": 5,
+      "rows": 1,
+      "place": "live-bottom",
+      "align": "center"
+    }
+  ],
+  "motion": [
+    "fade",
+    "rise"
+  ],
+  "detailCuts": 0
+}

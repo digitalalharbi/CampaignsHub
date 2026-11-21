@@ -14,11 +14,14 @@ use RuntimeException;
  * Three outcomes, and the two refusals are the interesting ones:
  *
  *   1. **A link already exists** → sign that user in. The only case that authenticates.
- *   2. **No link, but the email matches a local account** → REFUSE. This is the case everyone gets
+ *   2. **No link, but the email matches a local account** → REFUSE to sign in. This is the case everyone gets
  *      wrong. Treating a matching email as proof of ownership means anyone who can make a provider
  *      assert an address — including a provider that never verified it — takes over the local
  *      account that uses it. Linking is an action the account's owner performs from inside their
  *      own session, where they have already proven who they are.
+ *      The refusal is not a dead end: the callback keeps the verified profile in a short-lived pending link
+ *      (`PendingOAuthLink`) and the sign-in page asks for the proof — the account's password, or a link mailed to the
+ *      account's own address — before `link()` runs. Proof first, link second, always.
  *   3. **No link and no local account** → REFUSE. Signing in is not a way to register. The contract
  *      routes new accounts through the gated path (type → plan → verification → approval → payment),
  *      and a provider callback that quietly minted an active tenant would walk straight past all of
@@ -66,6 +69,8 @@ final class ResolveOAuthIdentity
                 self::LINK_REQUIRED,
                 'An account already uses this email address. Sign in with your password first, then connect '
                 .ucfirst($provider).' from your account settings.',
+                // Linking in place is offered ONLY for an address the provider verified; an unverified one is refused outright.
+                $profile['email_verified'] ? $existing->getKey() : null,
             );
         }
 

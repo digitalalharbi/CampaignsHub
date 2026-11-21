@@ -14,6 +14,7 @@ use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
@@ -74,7 +75,7 @@ final class MetaWebhookSignatureTest extends TestCase
 
         $this->deliver(self::LIVE, self::BODY, 'saas-secret-BBBB')->assertStatus(401);
         $this->deliver(self::SAAS, self::BODY, 'live-secret-AAAA')->assertStatus(401);
-        $this->assertDatabaseCount('integration_webhook_events', 0);
+        $this->assertNothingAcceptedOrKept();
     }
 
     public function test_unsigned_tampered_and_unknown_secret_deliveries_are_refused_on_both_endpoints(): void
@@ -89,7 +90,7 @@ final class MetaWebhookSignatureTest extends TestCase
                 'HTTP_X_HUB_SIGNATURE_256' => $this->sig(self::BODY, $url === self::LIVE ? 'live-secret-AAAA' : 'saas-secret-BBBB'),
             ], self::BODY.' ')->assertStatus(401);
         }
-        $this->assertDatabaseCount('integration_webhook_events', 0);
+        $this->assertNothingAcceptedOrKept();
     }
 
     public function test_with_the_saas_app_unconfigured_its_endpoint_refuses_everything_and_live_is_unaffected(): void
@@ -173,5 +174,16 @@ final class MetaWebhookSignatureTest extends TestCase
         $this->deliver(self::LIVE, self::BODY, 'live-secret-AAAA')->assertOk();
 
         $this->assertSame(2, IntegrationWebhookEvent::query()->count());
+    }
+
+    /**
+     * A refused delivery is never PROCESSED and never keeps its body. Main's webhook inbox (INTEG-WEBHOOK-ENGINE-001) does write one
+     * audit row per distinct refusal — status `rejected`, a hash of the body, no payload — so the invariant is stated on what matters:
+     * nothing was accepted, and no refused body was kept.
+     */
+    private function assertNothingAcceptedOrKept(): void
+    {
+        $this->assertSame(0, DB::table('integration_webhook_events')->where('status', '!=', 'rejected')->count(), 'a refused delivery was accepted');
+        $this->assertSame(0, DB::table('integration_webhook_events')->whereNotNull('payload')->count(), 'a refused delivery kept its body');
     }
 }

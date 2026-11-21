@@ -53,7 +53,7 @@ const METRIC_LABELS: Record<string, Pair> = {
   leads: { ar: 'العملاء المحتملون', en: 'Leads' },
   qualified_leads: { ar: 'المؤهلون', en: 'Qualified leads' },
   conversion_rate: { ar: 'معدل التحويل', en: 'Conversion rate' },
-  purchases: { ar: 'المشتريات', en: 'Purchases' },
+  purchases: { ar: 'الطلبات', en: 'Purchases' },
   revenue: { ar: 'الإيرادات', en: 'Revenue' },
   cost_per_result: { ar: 'تكلفة النتيجة', en: 'Cost per result' },
   installs: { ar: 'التثبيتات', en: 'Installs' },
@@ -100,10 +100,10 @@ export const funnelStageLabel = (stage: string, fallback: string, ar: boolean) =
 
 /** Page-level copy for the advertiser dashboard. */
 export const DASH_COPY = {
-  operationalView: { ar: 'لوحة التحكم — نظرة تشغيلية', en: 'Dashboard — operational view' },
+  operationalView: { ar: 'الرئيسية — نظرة تشغيلية', en: 'Dashboard — operational view' },
   objectiveViewPrefix: { ar: 'لوحة أداء حملات', en: 'Campaign performance —' },
   totalSpendHint: { ar: 'إجمالي الإنفاق عبر كل الأهداف', en: 'Total spend across every objective' },
-  pacingAhead: { ar: 'استهلاك أسرع من المخطط', en: 'spending ahead of plan' },
+  pacingAhead: { ar: 'صرف أسرع من المخطط', en: 'spending ahead of plan' },
   spendNoConversions: { ar: 'إنفاق مرتفع دون تحويلات', en: 'High spend, no conversions' },
 } as const
 

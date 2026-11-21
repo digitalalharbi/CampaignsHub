@@ -17,6 +17,7 @@ use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Tests\Concerns\BindsSeededAccounts;
 use Tests\TestCase;
 
 /**
@@ -31,6 +32,7 @@ use Tests\TestCase;
  */
 final class LiveReportContentAccountCeilingTest extends TestCase
 {
+    use BindsSeededAccounts;
     use RefreshDatabase;
 
     public function test_the_live_content_lists_stop_at_the_account_ceiling(): void
@@ -48,6 +50,7 @@ final class LiveReportContentAccountCeilingTest extends TestCase
         foreach ([['Inside', $granted, 'meta'], ['Outside', $other, 'tiktok']] as [$label, $account, $provider]) {
             $campaign = UnifiedCampaign::create(['project_id' => $project->id, 'name' => $label, 'status' => 'active', 'objective' => 'sales']);
             $campaigns[] = $campaign->id;
+            $this->bindSeededAccount($project->id, $account, $provider);
             foreach (['spend' => 100, 'impressions' => 5000, 'clicks' => 60, 'conversions' => 4] as $key => $value) {
                 DailyMetric::create([
                     'id' => (string) Str::uuid(), 'project_id' => $project->id, 'external_account_id' => $account,

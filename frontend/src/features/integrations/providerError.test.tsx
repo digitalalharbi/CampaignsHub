@@ -88,3 +88,69 @@ describe('the note on the card', () => {
     expect(raw).toHaveAttribute('dir', 'ltr')
   })
 })
+
+/**
+ * META-GRAPH-REFUSAL-001 — Meta's stored refusal is read by Meta's own code. The numbers inside a trace id
+ * or a subcode decide nothing: `A401x` is not a 401.
+ */
+describe('a Meta refusal, by its code', () => {
+  const read = (raw: string) => readProviderError(raw, 'en', 'meta')
+
+  it('sends a dead session to reconnect', () => {
+    const reading = read('Error validating access token: The session has been invalidated · code 190 · subcode 460 · trace AbC')
+    expect(reading?.category).toBe('authorisation_lost')
+    expect(reading?.actor).toBe('customer')
+    expect(reading?.message).toMatch(/Reconnect/)
+  })
+
+  it('sends a checkpointed person to facebook.com first', () => {
+    const reading = readProviderError('Checkpoint · code 190 · subcode 459', 'ar', 'meta')
+    expect(reading?.category).toBe('authorisation_checkpoint')
+    expect(reading?.message).toContain('facebook.com')
+  })
+
+  it('sends a missing grant to the account owner, not to reconnect, whatever the trace looks like', () => {
+    const reading = read('(#200) Ad account owner has NOT grant ads_management or ads_read permission · code 200 · trace A401x')
+    expect(reading?.category).toBe('permission_withdrawn')
+    expect(reading?.message).toContain('ads_read')
+    expect(reading?.message).not.toMatch(/Reconnect/)
+  })
+
+  it.each([
+    'User request limit reached · code 17 · subcode 2446079 · trace X',
+    'Application request limit reached · code 4',
+    'Too many calls · code 613 · subcode 1487742',
+    'There have been too many calls from this ad-account · code 80004',
+  ])('asks for nothing on a throttle: %s', (raw) => {
+    expect(read(raw)?.category).toBe('rate_limited')
+    expect(read(raw)?.actor).toBe('nobody')
+  })
+
+  it('tells an unreachable account apart from a refused grant', () => {
+    expect(read('Unsupported get request. Object with ID act_1 does not exist · code 100 · subcode 33')?.category).toBe('account_unreachable')
+  })
+
+  it('reads a code 100 that names a permission as the grant', () => {
+    expect(read('(#100) Missing Permission · code 100')?.category).toBe('permission_withdrawn')
+  })
+
+  it('owns a rejected parameter', () => {
+    const reading = read('Invalid parameter · Must specify True or False · code 100 · subcode 4834011')
+    expect(reading?.category).toBe('request_rejected')
+    expect(reading?.actor).toBe('product')
+  })
+
+  it('keeps a too-large page and a passing fault from reading as anyone’s to fix', () => {
+    expect(read("Please reduce the amount of data you're asking for · code 1")?.actor).toBe('nobody')
+    expect(read('An unknown error has occurred · code 1')?.category).toBe('platform_unavailable')
+  })
+
+  it('does not read Meta’s numbers on another platform’s refusal', () => {
+    expect(readProviderError('Something odd · code 190', 'en', 'tiktok')?.category).toBe('unclassified')
+  })
+
+  it('does not take a trace id for a status on any platform', () => {
+    expect(readProviderError('Something odd · trace A50344', 'en')?.category).toBe('unclassified')
+    expect(readProviderError('Something odd · request 401-99', 'en')?.category).toBe('unclassified')
+  })
+})

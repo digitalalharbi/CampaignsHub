@@ -1,6 +1,6 @@
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
 import { AboutThisData } from '@/features/content/AboutThisData'
-import { clientAbsence, mediaFitClass, posterSource, readPreview } from '@/features/content/adPreview'
+import { posterSource, readPreview } from '@/features/content/adPreview'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
@@ -18,6 +18,7 @@ import {
   type SharedObjectiveWinner,
 } from './sharedCreatives'
 import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
+import { AdPoster } from '@/features/content/AdPoster'
 import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
 import { CreativeCarousel } from '@/features/content/CreativeCarousel'
 import { imageLoading } from '@/features/content/format'
@@ -32,6 +33,8 @@ import { useUi } from '@/stores/ui'
 import type { CreativeCard, CreativeMetrics } from '@/features/content/api'
 import type { CreativePulse, FatigueAlert, PulseList } from '@/features/content/pulse'
 import { Num } from '@/components/ui/Num'
+import { PeriodText } from '@/components/ui/PeriodText'
+import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /** A winner card takes either shape; only `objective` distinguishes them, and only one of them has it. */
 type SharedWinner = SharedObjectiveWinner | SharedKindWinner
@@ -103,7 +106,7 @@ const COPY = {
     of: 'من',
     attribution: 'المصدر: ما أبلغت عنه المنصة الإعلانية',
     confidence: { high: 'ثقة عالية', medium: 'ثقة متوسطة', insufficient_data: 'بيانات غير كافية' },
-    severity: { warning: 'يحتاج انتباهًا', opportunity: 'فرصة', positive: 'تحسّن' },
+    severity: { warning: 'تنبيه', opportunity: 'فرصة', positive: 'تحسّن' },
     evidence: 'الأدلة',
     showing: 'المعروض',
     details: 'تفاصيل الإعلان',
@@ -281,7 +284,7 @@ export function SharedCreativeSection({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-heading text-lg font-extrabold tracking-tight">{t.heading}</h2>
         <p className="tnum flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-          <Num>{data.period.from} → {data.period.to}</Num>
+          <Num><PeriodText from={data.period.from} to={data.period.to} /></Num>
           {/*
             §17 — the client is the reader most likely to mistake a provider's silence for a fault.
 
@@ -746,9 +749,9 @@ function InsightList({
               {item.creative_name && <Pair k="" v={item.creative_name} />}
               {item.objective && <Pair k={t.objective} v={item.objective} />}
               {item.path && <Pair k={t.path} v={item.path} />}
-              {item.provider && <Pair k={t.platform} v={item.provider} />}
+              {item.provider && <Pair k={t.platform} v={providerLabel(item.provider, ar ? 'ar' : 'en')} />}
               {item.campaign_name && <Pair k={t.campaign} v={item.campaign_name} />}
-              <Pair k={t.period} v={`${item.period.from} → ${item.period.to}`} />
+              <Pair k={t.period} v={formatPeriodRange(item.period.from, item.period.to, ar ? 'ar' : 'en')} />
             </dl>
             {permissions.recommendations && (ar ? item.action_ar : item.action_en) && (
               <p className="mt-1.5 rounded bg-surface-secondary px-2 py-1 text-text-primary">
@@ -829,8 +832,18 @@ function SharedCreativeDetail({
   const data = detail.data
   const creative = data.creative
   const preview = creative.preview
-  const showing: 'video' | 'image' | 'none' =
-    preview.state !== 'available' ? 'none' : preview.video_url ? 'video' : preview.image_url ? 'image' : 'none'
+  /*
+    CREATIVE-VIEWER-FORMATS-001 — the viewer reads the ad through the canonical reader too.
+
+    It chose from the raw columns: a film when `video_url` was set (with `thumbnail_url` as its
+    poster, unfiltered), a picture only when `image_url` survived `localStill`. So an ad whose only
+    still was OUR copy in `thumbnail_url` — a TikTok image whose platform link is a short-lived
+    grant, a collection hero we cached — opened to a sentence while its tile showed the picture, and
+    a chat card opened to «no file» instead of its own words.
+  */
+  const reading = readPreview(preview, ar)
+  const still = posterSource(reading)
+  const showing: 'video' | 'image' | 'none' = reading.kind === 'video' ? 'video' : still !== null ? 'image' : 'none'
   const funnel = data.funnel
 
   return (
@@ -839,23 +852,23 @@ function SharedCreativeDetail({
 
       <div className="grid gap-3 rounded-xl border border-border bg-surface p-3">
         <div className="flex min-h-48 items-center justify-center overflow-auto rounded-lg bg-surface-secondary p-2">
-          {showing === 'video' && preview.video_url ? (
+          {reading.kind === 'video' ? (
             <CreativeVideoPlayer
               // Keyed by the creative, so opening another one builds a new player rather than
               // inheriting the last one's armed state and playback position.
               key={creative.id}
-              src={preview.video_url}
-              poster={preview.thumbnail_url}
+              src={reading.src}
+              poster={reading.poster}
               durationHint={creative.duration_seconds}
               // The platform's own shape: without it every film got a 16:9 box and a reel was a thin strip in it.
               aspect={preview.aspect ?? null}
               className="w-full max-w-2xl"
             />
-          ) : showing === 'image' && preview.image_url ? (
+          ) : still !== null ? (
             <img
-              src={preview.image_url}
+              src={still}
               alt={creative.name}
-              loading={imageLoading(preview.image_url)}
+              loading={imageLoading(still)}
               style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
               /*
                 CONTENT-VIEWER-PORTRAIT-001 §14 — the same room the library's viewer gives it.
@@ -868,9 +881,17 @@ function SharedCreativeDetail({
               }`}
             />
           ) : (
-            <p className="p-6 text-center text-xs text-text-muted">
-              {clientAbsence(readPreview(preview, ar), ar).sentence}
-            </p>
+            // The chat card's own words, or a typed cover naming the platform — the same answer the tile gave.
+            <AdPoster
+              preview={preview}
+              name={creative.name}
+              className="h-64 w-full max-w-md"
+              fit="contain"
+              testid="shared-creative-detail-poster"
+              textScale="stage"
+              forClient
+              provider={creative.provider}
+            />
           )}
         </div>
 
@@ -885,14 +906,31 @@ function SharedCreativeDetail({
           </div>
         )}
 
+        {/*
+          REPORT-OPENABLE-OPTIONS-001 (master task 10) — «تحميل الأصل» shown is a working control: the server set `can_download` from the
+          link's switch, and nothing drew it, so the option did nothing either way. Off, there is no control.
+        */}
+        {permissions.download && preview.can_download !== false && (reading.kind === 'video' ? reading.src : still) && (
+          <a
+            href={(reading.kind === 'video' ? reading.src : still) ?? undefined}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid="shared-creative-download"
+            className="justify-self-start rounded-lg border border-border px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-surface-hover"
+          >
+            {ar ? 'تحميل الإعلان' : 'Download the ad'}
+          </a>
+        )}
+
         <h3 className="font-heading text-base font-extrabold">{creative.name}</h3>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
           <Pair k={t.platform} v={providerLabel(creative.provider, locale)} />
           <Pair k={t.campaign} v={creative.campaign_name ?? t.notProvided} />
           <Pair k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} />
           <Pair k={t.path} v={marketingPathLabel(creative.path, locale)} />
-          <Pair k={t.period} v={`${data.period.from} → ${data.period.to}`} />
-          <Pair k={t.previousPeriod} v={`${data.previous_period.from} → ${data.previous_period.to}`} />
+          <Pair k={t.period} v={formatPeriodRange(data.period.from, data.period.to, ar ? 'ar' : 'en')} />
+          <Pair k={t.previousPeriod} v={formatPeriodRange(data.previous_period.from, data.previous_period.to, ar ? 'ar' : 'en')} />
           {/*
             Our clock was here too, twice, among the facts of one ad — «آخر مزامنة» and «آخر تحديث
             من المصدر». Removed for the same reason, and because sitting in a list of campaign facts
@@ -1071,51 +1109,31 @@ function CreativeTile({
   onDetails: () => void
 }) {
   const preview = creative.preview
-  /*
-    CONTENT-PREVIEW-FIT-001 §14 — the SAME resolver the library asks.
-
-    `thumbnail_url ?? image_url` skips what `readPreview` knows: a video whose poster is all that
-    arrived, a collection whose hero is a film, a catalog ad that is missing nothing. A client's deck
-    showing an empty tile for a creative the library draws is the divergence this whole unit is
-    about, and it was two expressions apart.
-  */
-  const image = posterSource(readPreview(preview, locale === 'ar'))
 
   return (
     <div className={`grid gap-1.5 rounded-xl border p-2 ${selected ? 'border-brand-500' : 'border-border'} bg-surface`}>
-      <button type="button" onClick={onOpen} className="block overflow-hidden rounded-lg bg-surface-secondary">
-        {image ? (
-          <img
-            src={image}
-            alt={creative.name}
-            // `loading="lazy"` on a data: URI never loads at all — see imageLoading().
-            loading={imageLoading(image)}
-            /*
-             * CONTENT-PREVIEW-SHAPES-001 — a story is 9:16 in the client's deck too.
-             *
-             * `aspect-square` cropped a vertical ad through its own subject on the one surface the
-             * client keeps. Where the platform stated no dimensions the square stands, because a
-             * guessed shape is a claim about the ad.
-             */
-            /*
-              CONTENT-COVER-FILL-001 — the client's deck and the library are ONE cover rule.
+      <button type="button" onClick={onOpen} data-testid="shared-creative-tile-open" className="block overflow-hidden rounded-lg bg-surface-secondary">
+        {/*
+          CREATIVE-VIEWER-FORMATS-001 — the client's library draws a cover through the SAME component
+          as the live link, not a second chain of `<img>`-or-a-sentence.
 
-              «One creative, one story» is why this changes with the library rather than after it. The
-              frame took the platform's stated shape, so a deck of mixed formats was a column of tiles
-              of different heights — the owner's «tall shape» — and the rule he gave is that a cover
-              holds a picture filling the whole of it.
-
-              The crop is the same crop the library accepts, and it is acceptable here for the same
-              reason: this card opens `AdPreviewDialog`, which contains, so the whole ad is one press
-              away for the client too.
-            */
-            className={`w-full aspect-square ${mediaFitClass(preview.aspect ?? null, preview.aspect ?? 'square', 'cover')}`}
-          />
-        ) : (
-          <span className="flex aspect-square w-full items-center justify-center px-2 text-center text-[11px] text-text-muted">
-            {clientAbsence(readPreview(preview, locale === 'ar'), locale === 'ar').short}
-          </span>
-        )}
+          This tile asked `posterSource`, which is null for a film without a still — every Snapchat
+          video and every collection whose top snap is a film — so the client's saved report printed
+          «Video» in a grey square where the live link, for the same ad, drew its first frame. And a
+          ChatGPT chat card, whose words are the creative, printed «no file». `AdPoster` holds the one
+          cover rule: the still, else the film's own first frame, else the chat card's own text, else
+          a typed cover naming the platform — never an empty box. The crop is the cover the library
+          accepts; the viewer one press away contains.
+        */}
+        <AdPoster
+          preview={preview}
+          name={creative.name}
+          className="aspect-square w-full"
+          fit="cover"
+          testid={`shared-creative-poster-${creative.id}`}
+          forClient
+          provider={creative.provider}
+        />
       </button>
       <p className="truncate text-xs font-semibold">{creative.name}</p>
       <p className="truncate text-[11px] text-text-secondary">

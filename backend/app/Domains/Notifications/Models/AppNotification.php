@@ -23,12 +23,14 @@ final class AppNotification extends Model
     protected $fillable = [
         'tenant_id', 'client_workspace_id', 'project_id', 'user_id', 'type', 'severity',
         'title', 'message', 'source', 'entity_type', 'entity_id', 'action_url', 'status',
-        'dedup_key', 'read_at', 'snoozed_until', 'resolved_at',
+        'dedup_key', 'title_ar', 'message_ar', 'read_at', 'snoozed_until', 'resolved_at',
+        'kind', 'repeat_count', 'last_seen_at',
     ];
 
     protected $casts = [
         'read_at' => 'datetime',
         'snoozed_until' => 'datetime',
         'resolved_at' => 'datetime',
+        'last_seen_at' => 'datetime',
     ];
 }

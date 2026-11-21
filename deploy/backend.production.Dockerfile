@@ -35,7 +35,15 @@ RUN apk add --no-cache \
         chromium nss freetype harfbuzz ca-certificates ttf-freefont font-noto-arabic \
         nodejs npm python3 py3-pikepdf
 
+# CREATIVE-VIDEO-FRAME-COVER-001 — `VideoFrameExtractor` takes ONE still frame from a creative's film when its
+# platform sent no still (or the still's link is dead), so every video has a cover of our own that does not
+# depend on a browser decoding a signed link. The task brief said `apt-get`; this base is Alpine, so the same
+# intent is `apk add --no-cache` (no index or package cache is left in the layer). `nice` is busybox's.
+RUN apk add --no-cache ffmpeg
+
 # `playwright-core` resolved from a location that EXISTS on a server.
+# NOTIF-V2-EXTERNAL-001 — `@resvg/resvg-js` beside it: the external emails' chart images (SVG → PNG 2x, prebuilt musl
+# binary, no browser). `scripts/chart-render.mjs` resolves it through REPORTS_REQUIRE_BASE like the report renderer.
 #
 # The default `require_base` points at `../frontend/package.json` — a developer's
 # checkout. A production backend image has no frontend tree, so the require would
@@ -44,7 +52,7 @@ RUN apk add --no-cache \
 RUN mkdir -p /opt/print \
     && cd /opt/print \
     && npm init -y >/dev/null \
-    && npm install --omit=dev --no-audit --no-fund playwright-core@1.61.1
+    && npm install --omit=dev --no-audit --no-fund playwright-core@1.61.1 @resvg/resvg-js@2.6.2
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -56,6 +64,9 @@ RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --opti
 COPY backend/ ./
 # UPLOAD-LIMITS-001 — PHP's 2 MB per-file default rejected ordinary screenshots.
 COPY backend/docker/php-uploads.ini /usr/local/etc/php/conf.d/zz-uploads.ini
+# PERF-BOOTSTRAP-001 — production OPcache: no per-request timestamp checks (a release is a new container), a roomier cache.
+# This image only; the development image and CI are untouched. See the file for each value and the rollback.
+COPY deploy/php-opcache.production.ini /usr/local/etc/php/conf.d/zz-opcache.ini
 RUN composer dump-autoload --optimize \
     && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache

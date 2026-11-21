@@ -52,7 +52,7 @@ describe('the chain behind one lead', () => {
           rungs: [
             { rung: 'creative', state: 'named', id: 'cr-9', name: 'Whitepaper', reason: null, reason_en: null },
             { rung: 'ad', state: 'not_offered', id: null, name: null, reason: 'المحتوى نفسه هو الإعلان في لينكدإن.', reason_en: 'In LinkedIn the creative IS the ad.' },
-            { rung: 'adset', state: 'not_offered', id: null, name: null, reason: 'لا تملك لينكدإن مستوى مجموعات إعلانية.', reason_en: 'LinkedIn has no ad-set level.' },
+            { rung: 'adset', state: 'not_offered', id: null, name: null, reason: 'لا تملك لينكدإن مستوى مجموعات.', reason_en: 'LinkedIn has no ad-group level.' },
             { rung: 'campaign', state: 'named', id: 'cmp-9', name: 'Enterprise Q3', reason: null, reason_en: null },
           ],
         })}
@@ -60,7 +60,7 @@ describe('the chain behind one lead', () => {
       />,
     )
 
-    expect(screen.getByTestId('lead-rung-adset')).toHaveTextContent('لا تملك لينكدإن مستوى مجموعات إعلانية.')
+    expect(screen.getByTestId('lead-rung-adset')).toHaveTextContent('لا تملك لينكدإن مستوى مجموعات.')
     expect(screen.queryByTestId('lead-rung-gap-adset')).not.toBeInTheDocument()
   })
 
@@ -134,7 +134,7 @@ describe('the chain behind one lead', () => {
               state: 'not_offered',
               id: null,
               name: null,
-              reason: 'لا تملك لينكدإن مستوى مجموعات إعلانية.',
+              reason: 'لا تملك لينكدإن مستوى مجموعات.',
               reason_en: 'LinkedIn has no separate ad-set level.',
             },
             { rung: 'campaign', state: 'named', id: 'cmp-9', name: 'Enterprise Q3', reason: null, reason_en: null },

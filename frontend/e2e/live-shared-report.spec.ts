@@ -25,7 +25,33 @@ test.describe('a client opens their live report', () => {
     // A real figure, not a zero and not a placeholder: the seeded store has spend in every window.
     const spend = report.locator('.tnum').first()
     await expect(spend).not.toHaveText(/^0$|^—$/)
-    await expect(spend).toContainText(/SAR/)
+    await expect(spend).toContainText(/SAR|ر\.س/)
+  })
+
+  // REPORT-FOOTER-FRESHNESS-001 (#938) — one time, at the end: no sync clock above the figures, none beside the refresh button.
+  test('states one update time, in the footer, and no per-platform sync clock', async ({ page }) => {
+    await page.goto(`${URL}?view=dashboard`)
+    await expect(page.getByTestId('live-report')).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('report-footer')).toBeVisible()
+    await expect(page.getByTestId('report-footer-meta')).toContainText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/)
+    await expect(page.getByTestId('data-freshness')).toHaveCount(0)
+    await expect(page.getByTestId('live-computed-at')).toHaveCount(0)
+  })
+
+  // LIVE-PLATFORM-CARD-ALIGN-001 — every card's colour bar sits on its top edge and every figure on one line, whichever card is selected.
+  test('the platform cards line up, the selected one included', async ({ page }) => {
+    await page.goto(URL)
+    await expect(page.getByTestId('exec-platform-card-all')).toBeVisible({ timeout: 20000 })
+
+    const offsets = await page.getByTestId('exec-platform-cards').locator('[role="tab"]').evaluateAll((cards) => cards.map((card) => {
+      const box = card.getBoundingClientRect()
+
+      return [card.children[0].getBoundingClientRect().top - box.top, card.querySelector('.tnum')!.getBoundingClientRect().top - box.top].map(Math.round)
+    }))
+
+    expect(offsets.length).toBeGreaterThan(1)
+    offsets.forEach((offset) => expect(offset).toEqual(offsets[0]))
+    expect(offsets[0][0]).toBeLessThanOrEqual(1)
   })
 
   /**
@@ -56,7 +82,9 @@ test.describe('a client opens their live report', () => {
     const before = await headline.innerText()
     await page.evaluate(() => { (window as unknown as { __kept: string }).__kept = 'survived' })
 
-    await page.getByTestId('live-range-7').click()
+    await page.getByTestId('live-range-picker-button').click()
+    await page.getByTestId('live-range-picker-preset-yesterday').click()
+    await page.getByTestId('live-range-picker-apply').click()
 
     await expect
       .poll(async () => headline.innerText(), { timeout: 20000 })

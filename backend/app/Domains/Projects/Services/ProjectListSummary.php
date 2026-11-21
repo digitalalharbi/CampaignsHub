@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domains\Projects\Services;
 
+use App\Domains\Integrations\Measurement\Ga4GapExplain;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -67,6 +69,7 @@ final class ProjectListSummary
         $bindings = $this->bindings($ids);
         $teams = $this->teams($ids);
         $campaigns = $this->campaigns($ids);
+        $ga4 = $this->ga4($projects);
 
         $out = [];
         foreach ($ids as $id) {
@@ -88,10 +91,61 @@ final class ProjectListSummary
                  */
                 'campaigns' => $campaigns[$id] ?? 0,
                 'attention' => $this->attention($b),
+                // GA4-HEALTH-001 — the store measurement's health beside the ad accounts': connected, last read, the gap.
+                'ga4' => $ga4[$id] ?? null,
             ];
         }
 
         return $out;
+    }
+
+    /**
+     * GA4-HEALTH-001 — per project that selected a GA4 property: `connected` (read lately), `stale` (not read for
+     * two days), or `failed` (its latest measurement run failed); when it was last read; and the platforms' claimed
+     * conversions against GA4's for the last thirty days as a share (cached a quarter of an hour: it is a match, not a
+     * column). The share is withheld (null) rather than guessed, and any failure leaves the chip without it.
+     *
+     * @param  Collection<int,Project>  $projects
+     * @return array<string,array{state:string,last_read_at:?string,gap_share:?float}>
+     */
+    private function ga4(Collection $projects): array
+    {
+        $ids = $projects->map(static fn (Project $p): string => (string) $p->getKey())->all();
+        $rows = DB::table('project_integration_bindings as b')
+            ->join('external_accounts as a', 'a.id', '=', 'b.external_account_id')
+            ->whereIn('b.project_id', $ids)->where('b.provider', 'ga4')->where('b.is_active', true)
+            ->get(['b.project_id', 'b.tenant_id', 'a.last_synced_at', 'a.provider_connection_id']);
+        $out = [];
+        foreach ($rows as $r) {
+            $failed = DB::table('integration_sync_runs')->where('type', 'measurement')->where('provider_connection_id', $r->provider_connection_id)
+                ->orderByDesc('started_at')->value('status') === 'failed';
+            $last = $r->last_synced_at === null ? null : Carbon::parse((string) $r->last_synced_at);
+            $state = $failed ? 'failed' : ($last === null || $last->lt(Carbon::now()->subHours(self::STALE_AFTER_HOURS)) ? 'stale' : 'connected');
+            $out[(string) $r->project_id] = [
+                'state' => $state,
+                'last_read_at' => $last?->toIso8601String(),
+                'gap_share' => $this->gapShare((string) $r->tenant_id, (string) $r->project_id),
+            ];
+        }
+
+        return $out;
+    }
+
+    private function gapShare(string $tenantId, string $projectId): ?float
+    {
+        $cached = Cache::remember('ga4-gap-share|'.$tenantId.'|'.$projectId.'|'.Carbon::today()->toDateString(), 900, static function () use ($tenantId, $projectId): ?float {
+            try {
+                $g = app(Ga4GapExplain::class)->build($tenantId, $projectId, Carbon::today()->subDays(30), Carbon::today()->subDay(), internal: false);
+
+                return ($g['state'] ?? null) === 'ready' ? ($g['headline']['gap_share'] ?? null) : null;
+            } catch (\Throwable) {
+                return null;
+            }
+        });
+
+        // The Redis cache store keeps a number as its bare text and hands it back as a string on the next read
+        // (Laravel leaves numeric values unserialised), so the declared type is restored here, not trusted from the store.
+        return is_numeric($cached) ? (float) $cached : null;
     }
 
     /**

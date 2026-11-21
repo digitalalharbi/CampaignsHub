@@ -18,11 +18,13 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
+use Tests\Concerns\KeepsStoredCopies;
 use Tests\TestCase;
 
 /** Recommendation approval lifecycle: only approved reaches a client; transitions gated + audited. */
 final class ReportAnnotationTest extends TestCase
 {
+    use KeepsStoredCopies;
     use RefreshDatabase;
 
     private Tenant $tenant;
@@ -92,5 +94,19 @@ final class ReportAnnotationTest extends TestCase
         $this->getJson("/api/v1/projects/{$this->project->id}/reports/{$this->report->id}/annotations")->assertOk();
         $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$this->report->id}/annotations/{$ann->id}/status", ['status' => 'approved'])
             ->assertForbidden();
+    }
+
+    /** REPORT-SNAPSHOT-PROTECT-001 — deciding a recommendation rebuilds the client copy without a second question, and keeps the one it replaces. */
+    public function test_an_annotation_decision_asks_nothing_and_keeps_the_copy_it_replaces(): void
+    {
+        Sanctum::actingAs($this->owner);
+        $ann = $this->annotation('draft');
+        $original = $this->storeCopy((string) $this->report->id);
+
+        Queue::fake();
+        $this->postJson("/api/v1/projects/{$this->project->id}/reports/{$this->report->id}/annotations/{$ann->id}/status", ['status' => 'approved'])->assertOk();
+
+        Queue::assertPushed(GenerateReportJob::class, 1);
+        $this->assertCopyKeptThroughRebuild((string) $this->report->id, $original);
     }
 }

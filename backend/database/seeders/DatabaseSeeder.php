@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
 
         // 1c) Global subscription plan catalogue (starter/growth/scale) — structural, safe in production.
         $this->call(SubscriptionPlanSeeder::class);
+        $this->call(AddonSeeder::class);
 
         // 1d) Canonical platform taxonomy (definitions + options) — structural, idempotent, all environments.
         $this->call(TaxonomyEngineSeeder::class);
@@ -71,6 +72,9 @@ class DatabaseSeeder extends Seeder
             // 3a) Deterministic demo accounts for the THREE experiences (Operations Console / SaaS Workspace /
             //     Client Portal). Idempotent; must run AFTER DemoSeeder (it ensures the demo-agency logins).
             $this->call(DemoAccountsSeeder::class);
+
+            // ENSURE-PORTAL-SESSION-001 — the one account that spans two portals in two tenants, on purpose.
+            $this->call(DemoTwoPortalsSeeder::class);
         }
 
         // 3b) Heavy demo data (metrics/reports/creatives) — local/demo ONLY, never in `testing`
@@ -79,10 +83,15 @@ class DatabaseSeeder extends Seeder
         if (App::environment(['local', 'demo'])) {
             $this->call([
                 DemoAnalyticsSeeder::class,
-                DemoReportsSeeder::class,
                 // DEMO-001: the credential → connection → ad account → external campaign chain the
                 // analytics demo was missing, so the integration surfaces have real rows to show.
+                // BEFORE the reports: this is what selects the accounts, and a report generated while
+                // nothing is selected is a report of nothing under deny by default.
                 DemoIntegrationsSeeder::class,
+                // GA4-STORE-ANALYTICS-001 — the demo store's GA4 property (demo-labelled). BEFORE the reports, so the
+                // seeded saved report freezes its GA4 sections like a real one generated after a sync would.
+                DemoGa4Seeder::class,
+                DemoReportsSeeder::class,
             ]);
         }
 
@@ -139,6 +148,8 @@ class DatabaseSeeder extends Seeder
              * open from.
              */
             $this->call(DemoAdCreativeLinkSeeder::class);
+            // CREATIVE-PREVIEWS-001 — one demo creative per platform with a cover in our own store, as a synced one has.
+            $this->call(DemoCreativeCoversSeeder::class);
             // DEMO-COMMERCE — the merchant's ledger. AFTER `DemoIntegrationsSeeder`, because an order
             // can only carry a `utm_campaign` that names a real campaign once those exist; without
             // them every order would seed as unattributed and the store half of the funnel, and

@@ -10,6 +10,19 @@ const item = (over: Partial<MetricItem> = {}): MetricItem => ({
 })
 
 describe('MetricStrip', () => {
+  /** METRIC-GRID-FIT-001 — four cards sit on one row, never three and a lone fourth. */
+  it('fits the columns to the number of cards', () => {
+    const four = ['spend', 'impressions', 'clicks', 'ctr'].map((key) => item({ key, label: key }))
+    const { unmount } = render(<MetricStrip id="t" ar={false} primary={four} />)
+    expect(screen.getByTestId('t-metrics-grid').className).toContain('lg:grid-cols-4')
+    expect(screen.getByTestId('t-metrics-grid').className).not.toContain('lg:grid-cols-3')
+    unmount()
+
+    const three = ['spend', 'impressions', 'clicks'].map((key) => item({ key, label: key }))
+    render(<MetricStrip id="t" ar={false} primary={three} />)
+    expect(screen.getByTestId('t-metrics-grid').className).toContain('[&>*:first-child]:col-span-2')
+  })
+
   /**
    * The rule the whole file exists for: **an unreported metric is not a zero.**
    *

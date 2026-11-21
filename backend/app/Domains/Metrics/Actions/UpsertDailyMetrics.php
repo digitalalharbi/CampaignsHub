@@ -6,12 +6,17 @@ namespace App\Domains\Metrics\Actions;
 
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use App\Domains\Metrics\Models\DailyMetric;
+use App\Support\UnchangedRows;
 use Illuminate\Support\Carbon;
 
 /**
  * Idempotent bulk upsert into daily_metrics keyed by the natural key
  * (account, campaign, metric, date, attribution window). Re-running with the same or corrected
  * figures updates in place instead of duplicating — safe for re-sync and late-attribution reconciliation.
+ *
+ * PERF-RECOVERY-001 — a row whose every updatable column already holds the offered value is not
+ * written again ({@see UnchangedRows}), so `updated_at` is the moment a row's content last changed.
+ * That a sweep ran and what it received is the run's to say (`metric_sync_runs`), not each row's.
  */
 final class UpsertDailyMetrics
 {
@@ -27,9 +32,12 @@ final class UpsertDailyMetrics
         'sync_run_id', 'raw', 'is_demo', 'updated_at',
     ];
 
+    /** Says when, not what: left out of the comparison that decides whether a row is already stored. */
+    private const STAMPS = ['updated_at'];
+
     /**
      * @param  iterable<NormalizedMetric>  $metrics
-     * @return int number of rows written (inserted or updated)
+     * @return int number of rows now stored as offered (inserted, updated, or already there)
      */
     public function handle(iterable $metrics, int $chunkSize = 500): int
     {
@@ -44,8 +52,12 @@ final class UpsertDailyMetrics
 
         $written = 0;
         foreach (array_chunk($rows, $chunkSize) as $chunk) {
-            DailyMetric::withoutGlobalScopes()->upsert($chunk, self::UNIQUE_BY, self::UPDATE_COLUMNS);
             $written += count($chunk);
+            $chunk = UnchangedRows::drop('daily_metrics', $chunk, self::UNIQUE_BY, array_values(array_diff(self::UPDATE_COLUMNS, self::STAMPS)));
+
+            if ($chunk !== []) {
+                DailyMetric::withoutGlobalScopes()->upsert($chunk, self::UNIQUE_BY, self::UPDATE_COLUMNS);
+            }
         }
 
         return $written;

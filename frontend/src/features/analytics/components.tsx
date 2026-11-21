@@ -1,3 +1,5 @@
+import { useFitCompact } from '@/components/fit/AgencyFit'
+import { InfoTip } from '@/components/fit/InfoTip'
 import { StatCard } from '@/components/ui/StatCard'
 import { useId, type ReactNode } from 'react'
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -17,33 +19,8 @@ export const SERIES = {
   clicks: 'var(--teal)',
   neutral: 'var(--text-muted)',
 }
-/*
- * Platform identities, read from the token layer so each theme can state them.
- *
- * They were literals, and two of them — TikTok `#000000` and X `#111111` — were the brand's true
- * black. On the dark ground that is a donut slice you cannot see, a legend dot that reads as a hole
- * and a bar of zero apparent length, in every screen that draws a platform. The tokens keep the
- * exact brand value in light and swap in each brand's own light-on-dark mark for dark.
- */
-export const PLATFORM_COLORS: Record<string, string> = {
-  meta: 'var(--platform-meta)',
-  google: 'var(--platform-google)',
-  google_ads: 'var(--platform-google)',
-  tiktok: 'var(--platform-tiktok)',
-  snapchat: 'var(--platform-snapchat)',
-  x: 'var(--platform-x)',
-  linkedin: 'var(--platform-linkedin)',
-  /*
-   * ChatGPT Ads, from the same token pair as the rest — never a colour picked here.
-   *
-   * OpenAI's own mark is near-black on white, which is the exact problem the paragraph above
-   * describes for TikTok and X: on a dark ground it is a donut slice nobody can see. The token swaps
-   * to the light-on-dark mark, so the platform is legible in both themes without inventing a brand
-   * colour that is not theirs.
-   */
-  openai_ads: 'var(--platform-openai)',
-}
-export const platformColor = (p: string) => PLATFORM_COLORS[p] ?? 'var(--brand-500)'
+// The platform palette lives in `platformColor.ts` (no recharts) and is re-exported here for every existing import.
+export { PLATFORM_COLORS, platformColor } from './platformColor'
 
 /**
  * `calm` — CLIENT-REPORT-FRAMING-001: on the client's summary a movement against the objective is
@@ -69,7 +46,7 @@ export function TrendPill({ delta, invertGood = false, calm = false }: { delta: 
  * This was the third implementation of a labelled figure, and the widest-travelled: Analytics, the
  * dashboard strip and the client's own shared link all render it. It agreed with `StatCard` on the
  * idea and on nothing else — `p-4` against `p-4 sm:p-5`, a `text-sm` label against the product's
- * `text-[13px] font-semibold`, its own value class against `METRIC_VALUE_DENSE` — so a reader moving
+ * `text-xs font-semibold`, its own value class against `METRIC_VALUE_DENSE` — so a reader moving
  * from a client link to the campaign command centre met two designs of one object, and a row drawn by
  * both did not line up.
  *
@@ -158,9 +135,12 @@ export function Panel({
   children: ReactNode
   className?: string
 }) {
+  /* AF2 — on a fitted `/agency` page the panel is tighter and its description is an info tooltip beside the title. */
+  const compact = useFitCompact()
+
   return (
-    <section className={`flex flex-col rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] ${className}`}>
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <section className={`flex flex-col rounded-2xl border border-border bg-surface ${compact ? 'p-3' : 'p-5'} shadow-[var(--shadow-small)] ${className}`}>
+      <div className={`${compact ? 'mb-2' : 'mb-4'} flex items-start justify-between gap-3`}>
         {/*
           `min-w-0` on the text and `shrink-0` on the action, or the action loses.
           A flex item's minimum width is its content, so a two-word title with nowhere to wrap
@@ -168,8 +148,8 @@ export function Panel({
           that reads as two controls. The title wraps; the control does not.
         */}
         <div className="min-w-0">
-          <h3 className="text-base font-bold tracking-tight text-text-primary">{title}</h3>
-          {description && <p className="mt-0.5 text-sm text-text-secondary">{description}</p>}
+          <h3 className="flex items-center gap-1 text-base font-bold tracking-tight text-text-primary">{title}{compact && description && <InfoTip text={description} label={description} />}</h3>
+          {description && !compact && <p className="mt-0.5 text-sm text-text-secondary">{description}</p>}
         </div>
         {action && <div className="shrink-0 whitespace-nowrap">{action}</div>}
       </div>
@@ -313,6 +293,7 @@ export function RateTrend({
   loading,
   error,
   format,
+  headline,
 }: {
   title: string
   data: Array<Record<string, unknown>>
@@ -321,9 +302,15 @@ export function RateTrend({
   loading?: boolean
   error?: boolean
   format: (v: number) => string
+  /**
+   * RATE-TREND-HEADLINE-001 — Owner 2026-11-20: «ROAS 0.30× · CPA 0 $ … غير منطقية وسلبية». The printed figure was the
+   * LAST DAY's value — today's incomplete day, or a day that barely spent — under a card the reader takes for the period.
+   * The caller passes the period's own figure (the summary's, the KPI strip's); the last day is only a fallback.
+   */
+  headline?: number | null
 }) {
   const values = data.map((r) => r[dataKey]).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-  const latest = values.length > 0 ? values[values.length - 1] : null
+  const latest = headline !== undefined ? headline : (values.length > 0 ? values[values.length - 1] : null)
 
   return (
     <Panel title={title} loading={loading} error={error} empty={!loading && values.length === 0}>

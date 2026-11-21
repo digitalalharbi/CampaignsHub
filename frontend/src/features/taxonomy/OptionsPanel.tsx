@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ChevronDown, ChevronUp, GitMerge, MoreVertical, Pencil, Plus, Shuffle, Star, Ban,
 } from 'lucide-react'
-import * as LucideIcons from 'lucide-react'
+import { LucideByName } from '@/components/icons/LucideByName'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Switch } from '@/components/ui/Switch'
@@ -257,7 +257,7 @@ function OptionRow({
       )}
 
       <span
-        className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full text-[13px]"
+        className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full text-xs"
         style={{ backgroundColor: (opt.color ?? '#94a3b8') + '22', color: opt.color ?? undefined }}
         aria-hidden
       >
@@ -378,12 +378,6 @@ function RowMenu({
  */
 function OptionIcon({ name }: { name?: string | null }) {
   if (!name) return <span>●</span>
-  const pascal = name.split(/[-_ ]/).filter(Boolean).map((p) => p[0].toUpperCase() + p.slice(1)).join('')
-  const Icon = (LucideIcons as unknown as Record<string, unknown>)[pascal]
-  // Lucide icons are forwardRef objects, not plain functions.
-  const isComponent =
-    typeof Icon === 'function' || (typeof Icon === 'object' && Icon !== null && '$$typeof' in (Icon as object))
-  if (!isComponent) return <span>●</span>
-  const C = Icon as ComponentType<{ size?: number }>
-  return <C size={15} />
+
+  return <LucideByName name={name} fallback={<span>●</span>} render={(C) => <C size={15} />} />
 }

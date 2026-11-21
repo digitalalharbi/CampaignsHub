@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { AnalyticsPage } from './AnalyticsPage'
 import { renderWithProviders, signInWith, signOut } from '@/test/utils'
 import { useProject } from '@/stores/project'
@@ -51,30 +51,29 @@ describe('the dashboard and the analysis are different surfaces', () => {
   afterEach(() => signOut())
 
   /* The depth is the tabs. A dashboard that offers all twelve is the analysis wearing another name. */
-  it('the dashboard offers no analysis tab bar', async () => {
+  // OWNER 2026-11-19 — the dashboard and the analysis are ONE board named «التحليلات».
+  it('the dashboard route carries the same section bar as the analysis', async () => {
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
 
-    expect(await screen.findByTestId('dashboard-intro')).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /Platforms/i })).toBeNull()
-    expect(screen.queryByRole('tab', { name: /Budget/i })).toBeNull()
+    // ANALYTICS-REPORT-PARITY-001 — the sections are the /r/ report's tabs, by the same names.
+    for (const name of ['Summary', 'Performance', 'Platforms', 'Content', 'Website']) {
+      expect(await screen.findByRole('button', { name })).toBeInTheDocument()
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Performance' }))
+    expect(await screen.findByRole('tab', { name: /Budget/i })).toBeInTheDocument()
   })
 
   it('analytics keeps the whole tab bar', async () => {
     renderWithProviders(<AnalyticsPage />, { locale: 'en' })
 
-    expect(await screen.findByRole('tab', { name: /Platforms/i })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /Budget/i })).toBeInTheDocument()
+    // ANALYTICS-REPORT-PARITY-001 — the sections are the /r/ report's tabs, by the same names.
+    for (const name of ['Summary', 'Performance', 'Platforms', 'Content', 'Website']) {
+      expect(await screen.findByRole('button', { name })).toBeInTheDocument()
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Performance' }))
+    expect(await screen.findByRole('tab', { name: /Budget/i })).toBeInTheDocument()
   })
 
-  /* «What should I open next» is a door, not a dead end. */
-  it('the dashboard points at the analysis for the depth it does not carry', async () => {
-    renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
-
-    const link = await screen.findByTestId('dashboard-to-analytics')
-    expect(link).toHaveAttribute('href', expect.stringContaining('/app/analytics'))
-  })
-
-  /* Both surfaces keep their filters — «what is happening now» still has to be scoped. */
   it('the dashboard keeps its own filters', async () => {
     renderWithProviders(<AnalyticsPage surface="dashboard" />, { locale: 'en' })
 
@@ -98,7 +97,7 @@ describe('the dashboard and the analysis are different surfaces', () => {
 
     const overview = await screen.findByTestId('dashboard-overview')
 
-    expect(overview.textContent).toMatch(/Spend, results and revenue/i)
+    expect(overview.textContent).toMatch(/Spend, platform conversions and revenue/i)
     /* CTR appears here only as a rate-trend panel, so its presence is exactly the claim being made. */
     expect(overview.textContent).toMatch(/CTR/)
   })
@@ -109,7 +108,18 @@ describe('the dashboard and the analysis are different surfaces', () => {
 
     const overview = await screen.findByTestId('analytics-overview')
 
-    expect(overview.textContent).toMatch(/Spend, results and revenue/i)
+    expect(overview.textContent).toMatch(/Spend, platform conversions and revenue/i)
     expect(overview.textContent).toMatch(/CTR/)
+  })
+
+  /*
+   * ANALYTICS-REPORT-PARITY-001 — a link made before the regrouping still opens: `s_campaigns` and `s_funnel` land on
+   * the «لوحة الأداء» section that holds their panels now, and an old single-tab id still opens its own panel.
+   */
+  it.each([['s_campaigns'], ['s_funnel'], ['budget'], ['ads']])('the older link ?tab=%s opens «Performance»', async (tab) => {
+    renderWithProviders(<AnalyticsPage />, { locale: 'en', route: `/app/analytics?tab=${tab}` })
+
+    const pill = await screen.findByRole('button', { name: 'Performance' })
+    expect(pill).toHaveAttribute('aria-pressed', 'true')
   })
 })

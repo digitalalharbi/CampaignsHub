@@ -11,6 +11,7 @@ import { getCreativePulse, type CreativeMove, type CreativeWinner, type PathComp
 import { formatMetric, metricKind, metricLabel, metricState } from './metrics'
 import { formatMoneyReading, readMoney, type MoneyTotals } from '@/lib/money/contract'
 import { imageLoading } from './format'
+import { VideoPoster } from './VideoPoster'
 import {
   libraryQueryString,
   type CreativeCard,
@@ -88,7 +89,7 @@ const COPY = {
     findingsHint: 'ملاحظات مبنية على هذه الفترة ومقارنتها بالسابقة — المعروض من الإجمالي:',
     platform: 'المنصة',
     campaign: 'الحملة',
-    adSet: 'المجموعة الإعلانية',
+    adSet: 'المجموعة',
     ad: 'الإعلان',
     /*
      * ADS-TERMINOLOGY-001 draws a line here.
@@ -255,6 +256,8 @@ function isoDaysAgo(days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
+const EMPTY_FILTERS = { clients: [], projects: [], providers: [], objectives: [], kinds: [] }
+
 export function CreativePulseSection({ filters, projectId, libraryPath, axes = [] }: CreativePulseSectionProps) {
   const { locale } = useUi()
   const ar = locale === 'ar'
@@ -341,6 +344,8 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
   }
 
   const data = pulse.data
+  // A response without its filter options (an older server, a stub) offers none: every list below tolerates that.
+  const choices = { ...EMPTY_FILTERS, ...(data.filters ?? {}) } as LibraryFilterOptions
 
   return (
     <section className="flex flex-col gap-5" data-testid="creative-pulse">
@@ -383,7 +388,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.client_ids?.[0] ?? ''}
               onChange={(v) => narrow('client_ids', v)}
-              options={data.filters.clients.map((c) => ({ value: c.id, label: c.name }))}
+              options={(choices.clients ?? []).map((c) => ({ value: c.id, label: c.name }))}
             />
           )}
 
@@ -393,7 +398,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.project_ids?.[0] ?? ''}
               onChange={(v) => narrow('project_ids', v)}
-              options={data.filters.projects.map((p) => ({ value: p.id, label: p.name }))}
+              options={(choices.projects ?? []).map((p) => ({ value: p.id, label: p.name }))}
             />
           )}
 
@@ -403,7 +408,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.providers?.[0] ?? ''}
               onChange={(v) => narrow('providers', v)}
-              options={data.filters.providers.map((p) => ({ value: p, label: providerLabel(p, locale) }))}
+              options={(choices.providers ?? []).map((p) => ({ value: p, label: providerLabel(p, locale) }))}
             />
           )}
 
@@ -421,7 +426,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.objectives?.[0] ?? ''}
               onChange={(v) => narrow('objectives', v)}
-              options={data.filters.objectives.map((o) => ({
+              options={(choices.objectives ?? []).map((o) => ({
                 value: o.key,
                 label: canonicalObjectiveLabel(o.key as CanonicalObjectiveKey, ar ? 'ar' : 'en'),
               }))}
@@ -434,7 +439,7 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
               all={t.all}
               value={own.kinds?.[0] ?? ''}
               onChange={(v) => narrow('kinds', v)}
-              options={data.filters.kinds.map((k) => ({ value: k.key, label: KIND_LABEL(k.key, ar) }))}
+              options={(choices.kinds ?? []).map((k) => ({ value: k.key, label: KIND_LABEL(k.key, ar) }))}
             />
           )}
         </div>
@@ -449,9 +454,9 @@ export function CreativePulseSection({ filters, projectId, libraryPath, axes = [
         true and the reader could see neither the cause nor the cure. The same rule the folded filter
         bars already follow (SIMPLIFY-001) — a filter you cannot see must be stated beside its result.
       */}
-      <AppliedLine query={query} options={data.filters} t={t} locale={ar ? 'ar' : 'en'} />
+      <AppliedLine query={query} options={choices} t={t} locale={ar ? 'ar' : 'en'} />
 
-      {data.totals.creatives === 0 ? (
+      {(data.totals?.creatives ?? 0) === 0 ? (
         <p className="rounded-2xl border border-border bg-surface p-6 text-center text-sm text-text-muted">{t.empty}</p>
       ) : (
         <>
@@ -723,6 +728,24 @@ function Poster({ creative, label }: { creative: CreativeCard; label: string }) 
   const ar = useUi((s) => s.locale) === 'ar'
   const reading = readPreview(creative.preview, ar)
   const src = posterSource(reading)
+  const [filmFailed, setFilmFailed] = useState(false)
+
+  /*
+   * CREATIVE-VIEWER-FORMATS-001 — a film with no still is the commonest Snapchat shape, and its own
+   * first frame (metadata only, never a player) is its cover here as on every other surface.
+   */
+  if (!src && reading.kind === 'video' && !filmFailed) {
+    return (
+      <VideoPoster
+        src={reading.src}
+        testid="pulse-poster-first-frame"
+        cover="video-first-frame"
+        label={creative.name}
+        onUnavailable={() => setFilmFailed(true)}
+        className={`h-16 w-16 shrink-0 rounded-xl bg-surface-secondary ${mediaFitClass(creative.preview?.aspect ?? assetAspect(creative.width, creative.height, creative.aspect_ratio), 'square', 'thumb')}`}
+      />
+    )
+  }
 
   if (!src) {
     /*
