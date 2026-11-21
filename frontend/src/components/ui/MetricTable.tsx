@@ -189,9 +189,18 @@ export function MetricTable({
   footer,
   pageSize,
   testId,
+  nameMinWidth,
+  stickyEnd = false,
 }: {
   head: string[]
   rows: ReactNode[][]
+  /**
+   * CAMPAIGN-MANAGER-PRO-001 — the name column's floor (px), so a wide table squeezes the figures, never the name into
+   * four lines. And `stickyEnd`: the last column (an action, such as «إدارة») stays pinned to the table's end edge while
+   * the figures scroll sideways under it.
+   */
+  nameMinWidth?: number
+  stickyEnd?: boolean
   /**
    * REPORT-WEBSITE-TAB-001 (Owner, permanent: «جزء بسيط الجداول لكن ليست طويلة») — a fixed-size page of rows. The table keeps the
    * same height on every page (the last page is padded with empty rows) and the reader pages with Next / Previous; sorting
@@ -305,8 +314,9 @@ export function MetricTable({
               const align = i === 0 ? 'text-start' : 'text-center'
               const active = sort?.column === i
 
+              const pin = stickyEnd && i === head.length - 1 ? ' sticky end-0 z-10 bg-surface shadow-[inset_1px_0_0_var(--color-border)]' : ''
               return (
-                <th key={i} className={`px-2 py-2.5 font-semibold first:rounded-s-lg last:rounded-e-lg ${align}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                <th key={i} style={i === 0 && nameMinWidth ? { minWidth: nameMinWidth } : undefined} className={`px-2 py-2.5 font-semibold first:rounded-s-lg last:rounded-e-lg ${align}${pin}`} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}>
                   {values ? (
                     <button
                       type="button"
@@ -329,7 +339,7 @@ export function MetricTable({
         </thead>
         <tbody>
           {shown.map((rowIndex) => (
-            <MetricRow key={rowIndex} cells={rows[rowIndex]} exact={exact?.[rowIndex]} />
+            <MetricRow key={rowIndex} cells={rows[rowIndex]} exact={exact?.[rowIndex]} nameMinWidth={nameMinWidth} stickyEnd={stickyEnd} />
           ))}
           {Array.from({ length: padding }, (_, i) => (
             <tr key={`pad-${i}`} aria-hidden className="border-b border-border last:border-0"><td colSpan={head.length} className="py-2.5">&nbsp;</td></tr>
@@ -367,7 +377,7 @@ export function MetricTable({
  * cells array keeps its identity between renders wherever the caller memoises its rows, which
  * `DataMetricTable` does and the hand-built tables are asked to.
  */
-const MetricRow = memo(function MetricRow({ cells, exact }: { cells: ReactNode[]; exact: (string | null)[] | undefined }) {
+const MetricRow = memo(function MetricRow({ cells, exact, nameMinWidth, stickyEnd = false }: { cells: ReactNode[]; exact: (string | null)[] | undefined; nameMinWidth?: number; stickyEnd?: boolean }) {
   return (
     <tr className="border-b border-border last:border-0 even:bg-surface-secondary/30 hover:bg-surface-secondary">
       {cells.map((cell, j) => {
@@ -403,7 +413,9 @@ const MetricRow = memo(function MetricRow({ cells, exact }: { cells: ReactNode[]
              * still reads as «there is more here».
              */
             title={full ?? undefined}
+            style={j === 0 && nameMinWidth ? { minWidth: nameMinWidth } : undefined}
             className={`px-2 py-2.5 ${j === 0 ? 'text-start font-normal' : 'tnum text-center'}`
+              + (stickyEnd && j === cells.length - 1 ? ' sticky end-0 z-10 bg-surface shadow-[inset_1px_0_0_var(--color-border)]' : '')
               + (full === null ? '' : ' cursor-help underline decoration-dotted underline-offset-4')}
           >
             {cell}

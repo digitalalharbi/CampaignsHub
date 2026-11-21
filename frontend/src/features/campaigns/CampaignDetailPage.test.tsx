@@ -103,14 +103,14 @@ describe('CampaignDetailPage', () => {
     signInWith(['campaigns.view']) // can view, cannot pause
     const view = renderWithProviders(<CampaignDetailPage />, DETAIL_ROUTE)
     await screen.findByText('National Day')
-    expect(screen.queryByText('Pause')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('campaign-status-switch')).not.toBeInTheDocument()
 
     view.unmount()
     vi.mocked(campaignAction).mockResolvedValue({ ...active, status: 'paused' })
     signInWith(['campaigns.view', 'campaigns.pause'])
     renderWithProviders(<CampaignDetailPage />, DETAIL_ROUTE)
     await screen.findByText('National Day')
-    fireEvent.click(screen.getByText('Pause'))
+    fireEvent.click(screen.getByTestId('campaign-status-switch'))
     await waitFor(() => expect(campaignAction).toHaveBeenCalledWith('p1', 'c1', 'pause'))
   })
 
@@ -162,7 +162,7 @@ describe('CampaignDetailPage', () => {
     renderWithProviders(<CampaignDetailPage />, DETAIL_ROUTE)
     await screen.findByText('National Day')
 
-    fireEvent.click(screen.getByText('Activate'))
+    fireEvent.click(screen.getByTestId('campaign-status-switch'))
 
     expect(await screen.findByTestId('launch-success')).toBeInTheDocument()
     expect(screen.getByTestId('launch-success-at')).toHaveTextContent('2026-09-15')
@@ -175,7 +175,7 @@ describe('CampaignDetailPage', () => {
     renderWithProviders(<CampaignDetailPage />, DETAIL_ROUTE)
     await screen.findByText('National Day')
 
-    fireEvent.click(screen.getByText('Activate'))
+    fireEvent.click(screen.getByTestId('campaign-status-switch'))
 
     await waitFor(() => expect(activateCampaign).toHaveBeenCalledWith('p1', 'c1'))
     expect(screen.queryByTestId('launch-success')).not.toBeInTheDocument()
@@ -195,7 +195,7 @@ describe('CampaignDetailPage', () => {
     renderWithProviders(<CampaignDetailPage />, DETAIL_ROUTE)
     await screen.findByText('National Day')
 
-    const button = screen.getByText('Activate').closest('button')!
+    const button = screen.getByTestId('campaign-status-switch').closest('button')!
     fireEvent.click(button)
     fireEvent.click(button)
 

@@ -3,7 +3,11 @@ import { moneyExact } from '@/features/analytics/format'
 import { useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, Archive, Pause, Pencil, Play } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Archive, MoreHorizontal, Pencil, SlidersHorizontal } from 'lucide-react'
+import { ProviderMark } from '@/components/ProviderMark'
+import { Modal } from '@/components/ui/Modal'
+import { EntityTab } from '@/features/analytics/AnalyticsPage'
+import type { EntityRow } from '@/features/analytics/api'
 import {
   activateCampaign,
   archiveCampaign,
@@ -31,6 +35,7 @@ import {
   priorityTone,
   stageLabel,
   stageTone,
+  providerLabel,
 } from './labels'
 import { isDemoProvider } from './types'
 import {
@@ -71,7 +76,7 @@ import { PeriodText } from '@/components/ui/PeriodText'
  * «الإعدادات», and «المتابعة» gathers alerts, notes, reports and activity. Old `?tab=` links land on the tab that now
  * holds their content.
  */
-const TAB_KEYS = ['overview', 'platforms', 'creatives', 'audience', 'funnel', 'budget', 'structure', 'follow', 'settings'] as const
+const TAB_KEYS = ['overview', 'structure', 'creatives', 'audience', 'platforms', 'budget', 'funnel', 'follow', 'settings'] as const
 type TabKey = (typeof TAB_KEYS)[number]
 const TAB_MOVED: Record<string, TabKey> = {
   performance: 'overview', alerts: 'follow', reports: 'follow', activity: 'follow', notes: 'follow',
@@ -163,6 +168,9 @@ export function CampaignDetailPage() {
    * fire at — the moment is bound to the transition, not to the button.
    */
   const [launch, setLaunch] = useState<LaunchOutcome | null>(null)
+  /* CAMPAIGN-DETAIL-PRO-001 — the platform controls open over the page, from the header or from any ad-set row. */
+  const [managing, setManaging] = useState<{ externalId?: string } | null>(null)
+  const [more, setMore] = useState(false)
 
   /*
    * A second click inside the same tick must not post twice.
@@ -270,45 +278,76 @@ export function CampaignDetailPage() {
         <ArrowRight size={14} className="rtl:rotate-180" /> {cameFrom === null ? t('back_to_campaigns') : t('back_to_where_you_were')}
       </button>
 
-      {/* ===== Command-center header ===== */}
-      <Card className="space-y-3">
+      {/*
+        * CAMPAIGN-DETAIL-PRO-001 — Owner 2026-11-21: the campaign page reads like the platforms' own campaign view
+        * (Snapchat as the reference). One header: the platforms it runs on, its name and state, an on/off switch, the
+        * objective, and «إدارة على المنصة» as the first action; edit next to it and archive under «⋯».
+        */}
+      <Card className="space-y-3" data-testid="campaign-header">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-[var(--font-heading)] text-xl font-extrabold">{c.client_display_name || c.name}</h1>
-              <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
-              {c.stage && <Badge tone={stageTone(c.stage)}>{stageLabel(c.stage, locale)}</Badge>}
-              {c.performance_label && <Badge tone={performanceTone(c.performance_label)}>{performanceLabel(c.performance_label, locale)}</Badge>}
-              {c.priority && <Badge tone={priorityTone(c.priority)}>{priorityLabel(c.priority, locale)}</Badge>}
-              {isDemo && <Badge tone="warning">{t('demo_label')}</Badge>}
-              {c.needs_attention && (
-                <Badge tone="danger"><AlertTriangle size={12} className="me-1 inline" />{t('cmc_needs_attention')}</Badge>
-              )}
+          <div className="flex min-w-0 items-start gap-3">
+            {platforms.length > 0 && (
+              <span className="flex shrink-0 -space-x-1.5 pt-1 rtl:space-x-reverse" aria-label={locale === 'ar' ? 'المنصات' : 'Platforms'}>
+                {platforms.slice(0, 4).map((p) => <span key={p} className="rounded-lg bg-surface ring-2 ring-surface"><ProviderMark provider={p} size={24} /></span>)}
+              </span>
+            )}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="min-w-0 break-words font-[var(--font-heading)] text-xl font-extrabold">{c.client_display_name || c.name}</h1>
+                <Badge tone={campaignStatusTone(c.status)}>{campaignStatusLabel(c.status, locale)}</Badge>
+                {c.performance_label && <Badge tone={performanceTone(c.performance_label)}>{performanceLabel(c.performance_label, locale)}</Badge>}
+                {c.priority && <Badge tone={priorityTone(c.priority)}>{priorityLabel(c.priority, locale)}</Badge>}
+                {c.stage && <Badge tone={stageTone(c.stage)}>{stageLabel(c.stage, locale)}</Badge>}
+                {isDemo && <Badge tone="warning">{t('demo_label')}</Badge>}
+                {c.needs_attention && (
+                  <Badge tone="danger"><AlertTriangle size={12} className="me-1 inline" />{t('cmc_needs_attention')}</Badge>
+                )}
+              </div>
+              <p className="mt-1 text-sm text-text-secondary">
+                <span className="font-semibold text-text-primary">{objectiveLabel(c.objective, locale)}</span>
+                {platforms.length > 0 && <> · {platforms.map((p) => providerLabel(p, locale)).join(locale === 'ar' ? '، ' : ', ')}</>}
+                {c.client_display_name && c.client_display_name !== c.name && (
+                  <> · <span className="text-text-muted">{t('cmc_internal_name')}: {c.name}</span></>
+                )}
+              </p>
             </div>
-            <p className="mt-1 text-sm text-text-secondary">
-              {objectiveLabel(c.objective, locale)}
-              {c.client_display_name && c.client_display_name !== c.name && (
-                <> · <span className="text-text-muted">{t('cmc_internal_name')}: {c.name}</span></>
-              )}
-            </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {((canPause && c.status === 'active') || (canUpdate && c.status !== 'active' && c.status !== 'archived')) && (
+              <span className="inline-flex items-center gap-2 rounded-xl border border-border px-2.5 py-1.5 text-sm font-semibold" title={c.status === 'active' ? t('pause') : t('activate')}>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={c.status === 'active'}
+                  aria-label={c.status === 'active' ? t('pause') : t('activate')}
+                  data-testid="campaign-status-switch"
+                  disabled={statusMutation.isPending}
+                  onClick={() => transition(c.status === 'active' ? 'pause' : 'activate')}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${c.status === 'active' ? 'bg-brand-600' : 'bg-border-strong'}`}
+                >
+                  <span className={`inline-block size-4 rounded-full bg-white shadow transition-transform ${c.status === 'active' ? 'translate-x-[18px] rtl:-translate-x-[18px]' : 'translate-x-0.5 rtl:-translate-x-0.5'}`} />
+                </button>
+                {c.status === 'active' ? (locale === 'ar' ? 'تعمل' : 'On') : (locale === 'ar' ? 'متوقفة' : 'Off')}
+              </span>
+            )}
+            {platforms.length > 0 && (
+              <Button data-testid="campaign-manage-platform" onClick={() => setManaging({})}>
+                <SlidersHorizontal size={14} /> {locale === 'ar' ? 'إدارة على المنصة' : 'Manage on the platform'}
+              </Button>
+            )}
             {canUpdate && (
               <Button variant="secondary" onClick={() => setEditOpen(true)}><Pencil size={14} /> {t('edit')}</Button>
             )}
-            {canPause && c.status === 'active' && (
-              <Button variant="secondary" loading={statusMutation.isPending && statusMutation.variables === 'pause'}
-                onClick={() => transition('pause')}><Pause size={14} /> {t('pause')}</Button>
-            )}
-            {canUpdate && c.status !== 'active' && c.status !== 'archived' && (
-              <Button variant="secondary" loading={statusMutation.isPending && statusMutation.variables === 'activate'}
-                onClick={() => transition('activate')}><Play size={14} /> {t('activate')}</Button>
-            )}
             {canUpdate && (
-              <Button variant="ghost" loading={archiveMutation.isPending} onClick={() => archiveMutation.mutate()}>
-                <Archive size={14} /> {t('archive')}
-              </Button>
+              <span className="relative">
+                <Button variant="ghost" aria-label={locale === 'ar' ? 'المزيد' : 'More'} aria-expanded={more} onClick={() => setMore((m) => !m)} data-testid="campaign-more"><MoreHorizontal size={16} /></Button>
+                <div role="menu" hidden={!more} onClick={() => setMore(false)} className="absolute end-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-xl">
+                  <button type="button" role="menuitem" disabled={archiveMutation.isPending} onClick={() => archiveMutation.mutate()} className="flex w-full items-center gap-2 px-3 py-1.5 text-start text-sm text-danger hover:bg-danger/10">
+                    <Archive size={14} /> {t('archive')}
+                  </button>
+                </div>
+              </span>
             )}
           </div>
         </div>
@@ -358,6 +397,17 @@ export function CampaignDetailPage() {
             <DateRangePicker projectId={projectId} budgetHint testId="campaign-period-picker" />
           </div>
           <CampaignKpis campaign={c} projectId={projectId} range={range} />
+          {/* The platforms' campaign view lists its ad sets right under the figures: the same here, with «إدارة» on each row. */}
+          <div className="my-4" data-testid="campaign-overview-adsets">
+            <EntityTab
+              projectId={projectId}
+              range={range}
+              filters={{ campaign: [c.id] }}
+              level="ad_set"
+              part="table"
+              workspace={{ search: '', status: 'all', hidden: [], onManage: (row: EntityRow) => setManaging({ externalId: row.external_id }) }}
+            />
+          </div>
           <div className="my-4">
             <CardTitle>الملخص التنفيذي</CardTitle>
             <div className="mt-2"><CampaignExecutiveSummary campaign={c} projectId={projectId} range={range} locale={locale} /></div>
@@ -464,6 +514,13 @@ export function CampaignDetailPage() {
       */}
       <RelatedEntitiesPanel projectId={projectId} campaignId={campaignId} />
 
+      {managing && (
+        <Modal open onClose={() => setManaging(null)} title={locale === 'ar' ? `إدارة على المنصة: ${c.client_display_name || c.name}` : `Manage on the platform: ${c.client_display_name || c.name}`} size="lg">
+          <div data-testid="campaign-manage-dialog">
+            <CampaignControlPanel campaign={c} projectId={projectId} focusExternalId={managing.externalId} onOpenHistory={() => { setManaging(null); setTab('follow') }} />
+          </div>
+        </Modal>
+      )}
       <CampaignFormModal open={editOpen} onClose={() => setEditOpen(false)} projectId={projectId} campaign={c} />
       <LinkExternalModal open={linkOpen} onClose={() => setLinkOpen(false)} projectId={projectId} campaignId={campaignId} />
     </section>

@@ -35,7 +35,7 @@ async function createDraftCampaign(page: import('@playwright/test').Page): Promi
   const id = (await created.json()).data.id as string
 
   await page.goto(`/app/campaigns/${projectId}/${id}`)
-  await expect(page.getByRole('button', { name: /^Activate$|^تفعيل$/ })).toBeVisible({ timeout: 20000 })
+  await expect(page.getByRole('switch', { name: /^Activate$|^تفعيل$/ })).toBeVisible({ timeout: 20000 })
 
   return name
 }
@@ -44,7 +44,7 @@ test('a real launch is confirmed with the campaign, the moment, and the way on',
   const name = await createDraftCampaign(page)
   await switchToEnglish(page)
 
-  await page.getByRole('button', { name: /^Activate$|^تفعيل$/ }).click()
+  await page.getByRole('switch', { name: /^Activate$|^تفعيل$/ }).click()
 
   const moment = page.getByTestId('launch-success')
   await expect(moment).toBeVisible()
@@ -67,7 +67,7 @@ test('closing leaves a chip, and a reload does not celebrate again', async ({ pa
   await createDraftCampaign(page)
   await switchToEnglish(page)
 
-  await page.getByRole('button', { name: /^Activate$|^تفعيل$/ }).click()
+  await page.getByRole('switch', { name: /^Activate$|^تفعيل$/ }).click()
   await expect(page.getByTestId('launch-success')).toBeVisible()
 
   await page.getByTestId('launch-success-close').click()
@@ -87,7 +87,7 @@ test('the moment holds its shape in Arabic and at phone width', async ({ page })
   await page.setViewportSize({ width: 375, height: 812 })
   await createDraftCampaign(page)
 
-  await page.getByRole('button', { name: /^Activate$|^تفعيل$/ }).click()
+  await page.getByRole('switch', { name: /^Activate$|^تفعيل$/ }).click()
 
   const moment = page.getByTestId('launch-success')
   await expect(moment).toBeVisible()
@@ -115,7 +115,7 @@ test('a campaign that is live everywhere and one that is not do not look alike',
   const name = await createDraftCampaign(page)
   await switchToEnglish(page)
 
-  await page.getByRole('button', { name: /^Activate$|^تفعيل$/ }).click()
+  await page.getByRole('switch', { name: /^Activate$|^تفعيل$/ }).click()
   await expect(page.getByTestId('launch-success')).toBeVisible()
 
   /*
