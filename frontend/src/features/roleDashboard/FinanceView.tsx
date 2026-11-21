@@ -97,7 +97,7 @@ export function FinanceView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
       </div>
 
       {/* DELIVERY-STATE-001 — who is running and who stopped with money left. */}
-      <DeliveryPanel units={d.units} portal={portal} />
+      <DeliveryPanel rows={d.delivery} units={d.units} portal={portal} />
 
       {/* FINANCE-DASH-001 — the spend across the platforms, and every spend limit with what is left of it. */}
       <div className="grid gap-3 lg:grid-cols-2" data-testid="dash-finance-split">
