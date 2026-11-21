@@ -8,8 +8,10 @@ use App\Domains\Audit\AuditLogger;
 use App\Domains\Integrations\Catalogue\ProviderCatalogue;
 use App\Domains\Integrations\Configuration\ProviderConfigurationService;
 use App\Domains\Integrations\Configuration\ProviderProbe;
+use App\Domains\Integrations\MetaCandidate\MetaAppRegistry;
 use App\Domains\Integrations\MetaCandidate\MetaAppSwitchGuard;
 use App\Domains\Integrations\Models\ProviderConfiguration;
+use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ApiResponse;
@@ -345,6 +347,18 @@ final class PlatformProviderSettingsController extends Controller
         // Clearing the stored App ID hands Live to the environment's value (or to none): the same switch, the same guard.
         if ($key === 'client_id' && ($refusal = $this->refuseIfStrandingMeta($definition->key, config('ad_platforms.platforms.meta.client_id'))) !== null) {
             return $refusal;
+        }
+
+        // META-MULTI-APP-001 — the Live App Secret refreshes and proves every Live token; clearing it strands them as the App ID does.
+        if ($definition->key === 'meta' && $key === 'client_secret' && ($blocked = app(MetaAppRegistry::class)->removalBlockedBy(MetaCredentialProfile::Live)) !== null) {
+            $this->audit->log(action: 'platform.integration.meta.removal_refused', entityType: ProviderConfiguration::class, entityId: 'meta', after: $blocked);
+
+            return ApiResponse::error(
+                message: 'Connections still belong to the Live Meta app; clearing its secret would stop them syncing.',
+                errors: ['key' => [$blocked['reason']]],
+                status: 409,
+                meta: ['guard' => $blocked],
+            );
         }
 
         if (! $this->settings->forget($definition->key, $key)) {
