@@ -210,7 +210,7 @@ final class FundingLedgerTest extends TestCase
         $this->assertSame(1, DB::table('funding_spend_days')->where('project_id', $project->id)->count());
     }
 
-    /** BUDGET-LIVE-001 — a platform runs when it reported spend AND impressions in the last 3 days; anything older is stopped. */
+    /** BUDGET-LIVE-001 / DELIVERY-RULE-7D-001 — a platform runs when it spent in the last 7 days; anything older is stopped. */
     public function test_the_board_says_which_budgets_still_have_something_running(): void
     {
         $running = $this->project($this->client('Running'));
@@ -225,16 +225,18 @@ final class FundingLedgerTest extends TestCase
         };
         $metric($running, 'snapchat', 'spend', 1, 120);
         $metric($running, 'snapchat', 'impressions', 1, 9_000);
-        $metric($running, 'tiktok', 'spend', 1, 40);        // spend with no impressions is not «running»
-        $metric($stopped, 'meta', 'spend', 10, 300);         // spent, but not in the last 3 days
+        $metric($running, 'tiktok', 'spend', 1, 40);        // one riyal in the window is running (impressions are not required)
+        $metric($running, 'meta', 'impressions', 2, 500);   // shown but no spend in the window: not running
+        $metric($stopped, 'meta', 'spend', 10, 300);         // spent, but not in the last 7 days
         $metric($stopped, 'meta', 'impressions', 10, 20_000);
 
         $rows = collect($this->actingAs($this->finance, 'sanctum')->getJson('/api/v1/funding')->assertOk()->json('data'))->keyBy('project_id');
 
         $this->assertTrue($rows[$running->id]['delivering']);
-        $this->assertSame(['snapchat' => true, 'tiktok' => false], $rows[$running->id]['delivering_platforms']);
+        $this->assertSame(['meta' => false, 'snapchat' => true, 'tiktok' => true], $rows[$running->id]['delivering_platforms']);
         $this->assertFalse($rows[$stopped->id]['delivering']);
-        $this->assertSame([], $rows[$stopped->id]['delivering_platforms']);
+        // The platform it selects is listed, stopped — not left out.
+        $this->assertSame(['meta' => false], $rows[$stopped->id]['delivering_platforms']);
     }
 
     /** F09 — direct-pay projects carry no remaining; spend before the counted start is not deducted; a missing rate is never zero. */

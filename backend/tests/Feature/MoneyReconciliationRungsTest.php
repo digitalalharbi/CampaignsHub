@@ -177,6 +177,45 @@ final class MoneyReconciliationRungsTest extends TestCase
         $this->assertEqualsWithDelta(round((float) $summary['revenue'] / (float) $summary['spend'], 2), round((float) $summary['roas'], 2), 0.011);
     }
 
+    // ── ACCOUNTS-PULSE-001: running or stopped, read over the same scope as the account rung ───────────────
+
+    public function test_account_pulse_states_each_accounts_state_by_priority_over_the_same_scope_as_the_account_rung(): void
+    {
+        $this->seedWorld(withExcluded: true);
+
+        // meta_sar: the platform switched it off. snap_sar: the connection was lost. snap_usd: every campaign paused.
+        ExternalAccount::withoutGlobalScopes()->whereKey($this->accounts['meta_sar']->id)->update(['status' => 'inactive']);
+        ExternalAccount::withoutGlobalScopes()->whereKey($this->accounts['snap_sar']->id)->update(['access_lost_at' => now()]);
+        ExternalCampaign::withoutGlobalScopes()->where('external_account_id', $this->accounts['snap_usd']->id)->update(['status' => 'PAUSED']);
+
+        $pulse = collect($this->read('metrics/accounts/pulse')->json('data'))->keyBy('account_id');
+        $id = fn (string $k): string => (string) $this->accounts[$k]->id;
+
+        // The same accounts as the account rung, and none the project deselected or re-bound.
+        $this->assertEqualsCanonicalizing(array_map($id, $this->selected), $pulse->keys()->all());
+
+        $this->assertSame('disabled', $pulse[$id('meta_sar')]['state']);
+        // DELIVERY-RULE-7D-001 — the world spent in July: two campaigns the platform calls active, but no spend in 7 days.
+        $this->assertSame('stopped', $pulse[$id('meta_usd')]['state'], 'active on the platform is not running without spend in 7 days');
+        $this->assertSame(2, $pulse[$id('meta_usd')]['active_campaigns']);
+        $this->assertSame('error', $pulse[$id('snap_sar')]['state'], 'a lost connection is never hidden behind another state');
+        $this->assertSame('access_lost', $pulse[$id('snap_sar')]['sync_error']);
+        // Paused campaigns and no spend in the last 7 days (the world is in July): stopped, not running.
+        $this->assertSame('stopped', $pulse[$id('snap_usd')]['state']);
+        $this->assertSame(2, $pulse[$id('snap_usd')]['paused_campaigns']);
+
+        // One riyal spent today is running, by the same rule — a copy of one of its own July rows, moved to today.
+        $row = (array) DB::table('daily_metrics')->where('external_account_id', $this->accounts['meta_usd']->id)->where('metric_key', 'spend')->first();
+        unset($row['id']);
+        DB::table('daily_metrics')->insert(['id' => (string) \Illuminate\Support\Str::uuid(), 'metric_date' => now()->toDateString()] + $row);
+        $now = collect($this->read('metrics/accounts/pulse')->json('data'))->keyBy('account_id');
+        $this->assertSame('running', $now[$id('meta_usd')]['state']);
+
+        // One point per day of the window, in order.
+        $days = array_column($pulse[$id('meta_usd')]['daily'], 'date');
+        $this->assertSame(['2026-07-01', '2026-07-02', '2026-07-03', '2026-07-04', '2026-07-05', '2026-07-06', '2026-07-07'], $days);
+    }
+
     // ── 3. deselected, re-bound and unbound accounts ────────────────────────────────────────────────────
 
     public function test_a_deselected_and_a_rebound_account_are_excluded_at_every_rung(): void

@@ -1604,6 +1604,135 @@ final class MetricsAggregator
         return self::orderBySpendThen($rows, 'account_id');
     }
 
+    /**
+     * ACCOUNTS-PULSE-001 — is each ad account running or stopped, and what did its days look like.
+     *
+     * Owner, 2026-11-21: the accounts page read as a bare table — «شغالة والا واقفة» could not be answered from
+     * it. This is the one read behind the answer, in four grouped queries for the whole estate rather than one
+     * per account:
+     *
+     *  1. the daily series inside the chosen window (shape only — the money figures stay in `byAccount()`),
+     *  2. the last day each account spent, over the last 30 days whatever the window (silence is the question),
+     *  3. the platform campaigns under each account, normalised through {@see CampaignStatus::fromProvider()},
+     *  4. the account's own row: what the platform said about it and how its last data refresh went.
+     *
+     * The state is decided here, once, by priority: a broken connection is never hidden behind «stopped»,
+     * an account the platform switched off is never shown as merely quiet, and «running» is the one rule of
+     * the whole product (DELIVERY-RULE-7D-001): spend in the last 7 days — a campaign the platform still calls
+     * active but that spent nothing is not running. Nothing is guessed: an account the platform never
+     * described is judged on its campaigns and its spend alone.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function accountPulse(Carbon $from, Carbon $to): array
+    {
+        $daily = $this->base($from, $to)
+            ->select('daily_metrics.external_account_id as account_id', 'daily_metrics.provider', 'metric_date')
+            ->selectRaw(self::PIVOT['spend'].' AS spend, '.self::PIVOT['clicks'].' AS clicks, '.self::PIVOT['impressions'].' AS impressions')
+            ->groupBy('daily_metrics.external_account_id', 'daily_metrics.provider', 'metric_date')
+            ->orderBy('metric_date')
+            ->get();
+
+        $today = Carbon::today();
+        $lastSpend = $this->base($today->copy()->subDays(30), $today)
+            ->where('metric_key', 'spend')
+            ->where('value', '>', 0)
+            ->select('daily_metrics.external_account_id as account_id', 'daily_metrics.provider')
+            ->selectRaw('MAX(metric_date) AS last_date')
+            ->groupBy('daily_metrics.external_account_id', 'daily_metrics.provider')
+            ->get();
+
+        $out = [];
+        $key = static fn ($id, $provider): string => ((string) ($id ?? '')).'|'.(string) $provider;
+        $touch = static function (array &$out, string $k, $id, $provider): void {
+            $out[$k] ??= ['account_id' => $id === null ? null : (string) $id, 'provider' => (string) $provider, 'daily' => [], 'last_spend_date' => null];
+        };
+
+        foreach ($daily as $r) {
+            $k = $key($r->account_id, $r->provider);
+            $touch($out, $k, $r->account_id, $r->provider);
+            $out[$k]['daily'][] = [
+                'date' => Carbon::parse($r->metric_date)->toDateString(),
+                'spend' => round((float) $r->spend, 2),
+                'clicks' => (int) $r->clicks,
+                'impressions' => (int) $r->impressions,
+            ];
+        }
+        foreach ($lastSpend as $r) {
+            $k = $key($r->account_id, $r->provider);
+            $touch($out, $k, $r->account_id, $r->provider);
+            $out[$k]['last_spend_date'] = Carbon::parse($r->last_date)->toDateString();
+        }
+
+        $ids = array_values(array_filter(array_map(static fn (array $row) => $row['account_id'], $out)));
+
+        $campaigns = [];
+        if ($ids !== []) {
+            ExternalCampaign::query()
+                ->when($this->acrossProjects, fn ($q) => $q->withoutGlobalScope(ProjectScope::class))
+                ->whereIn('external_account_id', $ids)
+                ->whereNull('unlinked_at')
+                ->selectRaw('external_account_id, status, COUNT(*) AS n')
+                ->groupBy('external_account_id', 'status')
+                ->toBase()
+                ->get()
+                ->each(static function ($r) use (&$campaigns): void {
+                    $state = CampaignStatus::fromProvider($r->status === null ? null : (string) $r->status);
+                    $bucket = match ($state) {
+                        CampaignStatus::Active => 'active',
+                        CampaignStatus::Paused, CampaignStatus::Pending, CampaignStatus::Draft => 'paused',
+                        default => 'ended',
+                    };
+                    $campaigns[(string) $r->external_account_id][$bucket] = ($campaigns[(string) $r->external_account_id][$bucket] ?? 0) + (int) $r->n;
+                });
+        }
+
+        $accounts = $ids === [] ? collect() : ExternalAccount::withoutGlobalScopes()
+            ->whereIn('id', $ids)
+            ->get(['id', 'external_id', 'name', 'currency', 'timezone', 'status', 'access_lost_at', 'last_synced_at', 'last_sync_attempt_at', 'last_sync_error_category'])
+            ->keyBy('id');
+
+        // DELIVERY-RULE-7D-001 — «running» is the one rule: spend in the last 7 days ({@see DeliveryState}).
+        $recent = app(DeliveryState::class)->from();
+
+        foreach ($out as $k => $row) {
+            $a = $row['account_id'] === null ? null : $accounts->get($row['account_id']);
+            $c = $row['account_id'] === null ? [] : ($campaigns[$row['account_id']] ?? []);
+
+            $platformStatus = $a?->status === null ? null : strtolower((string) $a->status);
+            $switchedOff = $platformStatus !== null && preg_match('/inactive|disable|closed|suspend|cancel|removed|unsettled|risk/', $platformStatus) === 1;
+            $lastOk = $a?->last_synced_at;
+            $lastTry = $a?->last_sync_attempt_at;
+            $refreshFailed = $a !== null && $a->last_sync_error_category !== null && ($lastOk === null || ($lastTry !== null && $lastTry->greaterThan($lastOk)));
+            $connectionLost = $a?->access_lost_at !== null;
+            $spentRecently = $row['last_spend_date'] !== null && $row['last_spend_date'] >= $recent;
+
+            $state = match (true) {
+                $connectionLost || $refreshFailed => 'error',
+                $switchedOff => 'disabled',
+                $spentRecently => 'running',
+                default => 'stopped',
+            };
+
+            $out[$k] += [
+                'state' => $state,
+                'active_campaigns' => $c['active'] ?? 0,
+                'paused_campaigns' => $c['paused'] ?? 0,
+                'ended_campaigns' => $c['ended'] ?? 0,
+                'platform_status' => $platformStatus,
+                'external_id' => $a?->external_id,
+                // The account's own currency, as the platform names it — a label, not the unit of `daily` (that is the project's).
+                'account_currency' => $a?->currency,
+                'timezone' => $a?->timezone,
+                'last_synced_at' => $lastOk?->toIso8601String(),
+                'last_sync_attempt_at' => $lastTry?->toIso8601String(),
+                'sync_error' => $connectionLost ? 'access_lost' : ($refreshFailed ? (string) $a?->last_sync_error_category : null),
+            ];
+        }
+
+        return array_values($out);
+    }
+
     /** @return list<array<string, mixed>> one row per unified campaign (id/name/provider) ranked by spend. */
     /**
      * CAMPAIGN-020: side-by-side comparison of a chosen set of campaigns over one window.

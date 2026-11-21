@@ -250,13 +250,11 @@ final class RoleDashboardTest extends TestCase
     public function test_running_or_stopped_reaches_every_member_and_money_only_with_the_key(): void
     {
         $both = [(string) $this->alpha->id, (string) $this->beta->id];
-        $running = $this->campaign($this->alpha, 1000, 400, 100);
-        $this->campaign($this->beta, 5000, 200, 50);
-        DailyMetric::create([
-            'id' => (string) Str::uuid(), 'project_id' => $running->project_id, 'external_account_id' => (string) Str::uuid(),
-            'external_campaign_id' => (string) Str::uuid(), 'unified_campaign_id' => $running->id, 'provider' => 'meta',
-            'metric_key' => 'impressions', 'metric_date' => PeriodResolver::today()->subDay()->toDateString(), 'value' => 900,
-        ]);
+        $this->campaign($this->alpha, 1000, 400, 100);
+        $quiet = $this->campaign($this->beta, 5000, 200, 50);
+        // DELIVERY-RULE-7D-001 — Beta spent 12 days ago and nothing in the last 7: stopped, with budget left.
+        DailyMetric::query()->where('project_id', $quiet->project_id)
+            ->where('metric_date', '>=', PeriodResolver::today()->subDays(6)->toDateString())->delete();
 
         $blind = $this->member('blind', array_values(array_diff(WorkspaceRolePresets::all()[WorkspaceRolePresets::MEDIA_BUYER]['permissions'], ['budget.view', 'billing.view'])), $both);
         $b = collect($this->dash($blind)['delivery'])->keyBy('name');
@@ -264,6 +262,8 @@ final class RoleDashboardTest extends TestCase
         $this->assertTrue($b['Alpha']['delivering']);
         $this->assertSame(['meta' => true], $b['Alpha']['delivering_platforms']);
         $this->assertFalse($b['Beta']['delivering']);
+        $this->assertSame('running', $b['Alpha']['reason']);
+        $this->assertSame('no_spend', $b['Beta']['reason']);
         foreach ($b as $row) {
             $this->assertNull($row['budget']);
             $this->assertNull($row['remaining']);
@@ -273,6 +273,18 @@ final class RoleDashboardTest extends TestCase
         $f = collect($this->dash($finance)['delivery'])->keyBy('name');
         $this->assertEqualsWithDelta(1000.0, (float) $f['Alpha']['budget'], 0.01);
         $this->assertNotNull($f['Beta']['remaining']);
+
+        // DELIVERY-TODAY-001 — today's spend so far, from the budget's own ledger: refreshed today with nothing spent is a real 0.
+        $this->assertSame(0.0, (float) $f['Alpha']['today_spend']);
+        $this->assertNotNull($f['Alpha']['today_as_of']);
+        $alphaProject = Project::query()->where('client_workspace_id', $this->alpha->id)->firstOrFail();
+        $alphaCampaign = UnifiedCampaign::query()->where('project_id', $alphaProject->id)->firstOrFail();
+        $this->spend($alphaProject, $alphaCampaign, 0, 75);
+        app(FundingSpendRefresher::class)->refresh(ProjectFunding::query()->where('project_id', $alphaProject->id)->firstOrFail());
+        $f = collect($this->dash($finance)['delivery'])->keyBy('name');
+        $this->assertEqualsWithDelta(75.0, (float) $f['Alpha']['today_spend'], 0.01);
+        // Without the money key there is no figure at all.
+        $this->assertNull($b['Alpha']['today_spend']);
     }
 
     /** DASH-MANAGER-PERFORMANCE-001 — the manager reads every reachable campaign's performance, not only his own. */
