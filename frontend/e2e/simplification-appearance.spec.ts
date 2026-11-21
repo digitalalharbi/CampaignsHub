@@ -47,14 +47,15 @@ async function eachAppearance(page: Page, check: (where: string) => Promise<void
   }
 }
 
-const PAGES = [
+const PAGES: ReadonlyArray<{ id: string; path: string; storage: string; ready?: string }> = [
   { id: 'clients', path: '/agency/clients', storage: AUTH.owner },
   { id: 'tasks', path: '/agency/tasks', storage: AUTH.owner },
   { id: 'alerts', path: '/agency/alerts', storage: AUTH.owner },
-  { id: 'content', path: '/agency/content', storage: AUTH.owner },
+  // CONTENT-LIBRARY-SNAP-001 — the library has one search-and-filter row inside its table, not a separate filter bar.
+  { id: 'content', path: '/agency/content', storage: AUTH.owner, ready: 'creatives-table' },
   { id: 'reports', path: '/app/reports', storage: AUTH.advertiser },
   { id: 'files', path: '/app/files', storage: AUTH.advertiser },
-] as const
+]
 
 for (const p of PAGES) {
   test.describe(`${p.path} holds together in every appearance`, () => {
@@ -67,7 +68,7 @@ for (const p of PAGES) {
         await page.setViewportSize({ width: vp.width, height: vp.height })
         await page.goto(p.path)
 
-        await expect(page.getByTestId(`${p.id}-filters`)).toBeVisible({ timeout: 20000 })
+        await expect(page.getByTestId(p.ready ?? `${p.id}-filters`)).toBeVisible({ timeout: 20000 })
         // Measure the page that the reader gets, not the skeleton that precedes it.
         await page.waitForLoadState('networkidle')
 
