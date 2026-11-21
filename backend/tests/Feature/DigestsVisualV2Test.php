@@ -132,7 +132,8 @@ final class DigestsVisualV2Test extends TestCase
         $project = (new OperationalDigestMail(OperationalDigestModel::project($d['projects'][3], 'ar', 1), 'ar', 'م', 'daily', 'project', readOnly: true))->render();
         foreach ([$portfolio, $project] as $html) {
             $this->assertStringContainsString('data-block="kpis"', $html, 'performance stays');
-            $this->assertStringNotContainsString('يحتاج قرارك', $html, 'no decision list');
+            // DIGEST-PM-ACTIONS-001 — a project manager may read budget actions; never the old alert cards.
+            $this->assertStringNotContainsString('data-block="issue"', $html, 'no alert decision list');
             $this->assertStringNotContainsString('data-block="issue"', $html);
             $this->assertStringNotContainsString('data-block="linking"', $html, 'no connections block');
             $this->assertStringNotContainsString('افتح', $html, 'no button back into the product');

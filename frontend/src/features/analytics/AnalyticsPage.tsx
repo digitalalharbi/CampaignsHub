@@ -5,7 +5,8 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
 import { createContext, Fragment, type ReactNode, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeftRight, Eye, Gauge, GitCompareArrows, Globe, Image as ImageIcon, Layers, LayoutDashboard, ShieldCheck, Sparkles, type LucideIcon } from 'lucide-react'
+import { CopyId } from '@/components/ui/CopyId'
+import { ArrowLeftRight, Eye, Gauge, GitCompareArrows, Globe, Image as ImageIcon, Layers, LayoutDashboard, ShieldCheck, SlidersHorizontal, Sparkles, type LucideIcon } from 'lucide-react'
 import { fmtDate, fmtDateTime } from '@/lib/datetime'
 import {
   Bar,
@@ -3587,7 +3588,7 @@ export function EntityTab({ projectId, range, filters, level, workspace, part = 
           {row.name ?? row.external_id}
         </div>
       )}
-      <div className="text-xs text-text-secondary">{row.external_id}</div>
+      {workspace ? (row.external_id ? <CopyId value={row.external_id} className="text-text-muted" /> : null) : <div className="text-xs text-text-secondary">{row.external_id}</div>}
       </div>
     </div>,
     /*
@@ -3639,9 +3640,9 @@ export function EntityTab({ projectId, range, filters, level, workspace, part = 
               type="button"
               onClick={() => manage(row)}
               data-testid={`entity-manage-${row.entity_id}`}
-              className="rounded-lg border border-border px-2.5 py-1 text-xs font-bold text-brand-600 hover:border-brand-500 focus-visible:outline-2 focus-visible:outline-brand-500"
+              className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 py-1 text-xs font-bold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-2 focus-visible:outline-brand-500"
             >
-              {ar ? 'إدارة' : 'Manage'}
+              <SlidersHorizontal size={12} aria-hidden />{ar ? 'إدارة' : 'Manage'}
             </button>
           )
           /* Not linked to a campaign in this product: there is nothing here to authorise a change against. */

@@ -36,9 +36,36 @@ describe('ranked-by figure on a content card', () => {
     expect(screen.queryByText('Spend')).toBeNull()
   })
 
-  it('a card in a list with no basis is unchanged', () => {
-    render(<ContentTile content={ad} locale="en" currency="SAR" />)
-    expect(screen.queryByText('Clicks')).toBeNull()
+  // CONTENT-CARD-BY-OBJECTIVE-001 — Owner 2026-11-21: a traffic card states spend, clicks and click rate (it read spend alone).
+  it('a traffic card with no basis states spend and its clicks', () => {
+    render(<ContentTile content={{ ...ad, ctr: 0.012 } as ReportAd} locale="en" currency="SAR" />)
     expect(screen.getByText('Spend')).toBeTruthy()
+    expect(screen.getByText('Clicks')).toBeTruthy()
+    expect(screen.getByText('CTR')).toBeTruthy()
+  })
+})
+
+describe('content card by objective (CONTENT-CARD-BY-OBJECTIVE-001)', () => {
+  const salesAd = { name: 'Sale', provider: 'snapchat', content_key: 's1', spend: 300, purchases: 46, orders: 46, roas: 6.52, clicks: 756, ctr: 0.0238, conversions: 46, result_defined: false } as unknown as ReportAd
+
+  it('a sales card states spend, orders and return, not click rate', () => {
+    render(<ContentTile content={{ ...salesAd, card_family: 'sales' } as ReportAd} locale="en" currency="SAR" />)
+    expect(screen.getByText('Spend')).toBeTruthy()
+    expect(screen.getByText('Purchases')).toBeTruthy()
+    expect(screen.getByText('46')).toBeTruthy()
+    expect(screen.getByText('ROAS')).toBeTruthy()
+    expect(screen.queryByText('CTR')).toBeNull()
+  })
+
+  it('an X sales card with orders and no purchase count states its orders', () => {
+    const x = { name: 'Tweet', provider: 'x', content_key: 'x1', spend: 17, purchases: null, orders: 4, roas: null, clicks: 551, ctr: 0.0078, conversions: 4, result_defined: false, card_family: 'sales' } as unknown as ReportAd
+    render(<ContentTile content={x} locale="en" currency="USD" />)
+    expect(screen.getByText('Purchases')).toBeTruthy()
+    expect(screen.getByText('4')).toBeTruthy()
+  })
+
+  it('a row the server did not name reads as sales when it carries a return', () => {
+    render(<ContentTile content={salesAd} locale="en" currency="SAR" />)
+    expect(screen.getByText('ROAS')).toBeTruthy()
   })
 })

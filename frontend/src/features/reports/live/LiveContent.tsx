@@ -55,6 +55,21 @@ export function withRankedFigure(figures: { label: string; value: string; pendin
   return [{ label, value }, ...figures].slice(0, 3)
 }
 
+/**
+ * CONTENT-CARD-BY-OBJECTIVE-001 — Owner 2026-11-21: the card states its objective's figures (sales: spend, orders, return;
+ * traffic: spend, clicks, click rate). The server names the family; a row without one reads as sales when it carries orders or a
+ * return, and as traffic otherwise.
+ */
+export function cardFamily(content: ReportAd): string {
+  if (content.card_family) return content.card_family
+  const orders = (content as Record<string, unknown>).orders
+  const purchases = (content as Record<string, unknown>).purchases
+
+  return (typeof content.roas === 'number' && content.roas > 0) || (typeof orders === 'number' && orders > 0) || (typeof purchases === 'number' && purchases > 0)
+    ? 'sales'
+    : 'traffic'
+}
+
 export const ContentTile = memo(function ContentTile({
   content,
   locale,
@@ -76,7 +91,7 @@ export const ContentTile = memo(function ContentTile({
 }) {
   const ar = locale === 'ar'
   const provider = content.provider ? canonicalPlatform(content.provider) : null
-  const figures = withRankedFigure(figuresFor(content, ar, currency, { resultsOnly }), content, rankedBy, ar)
+  const figures = withRankedFigure(figuresFor(content, ar, currency, { resultsOnly, family: cardFamily(content) }), content, rankedBy, ar)
   const openable = onOpen !== undefined && !!content.content_key
 
   const body = (

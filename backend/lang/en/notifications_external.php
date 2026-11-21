@@ -8,8 +8,8 @@ declare(strict_types=1);
 return [
     'sender_via' => ':workspace via CampaignsHub',
     'subject' => [
-        'structure' => ':project — :workspace | :custom · CampaignsHub',
-        'digest_periodic' => 'Summary of :period',
+        'structure' => ':workspace — :custom — :project',
+        'digest_periodic' => 'Project summary: :period',
         'report_rerouted' => 'A report shared by the team',
         'digest_month_end' => 'Month summary: :highlight',
         'digest_month_start' => 'A new month begins',

@@ -23,6 +23,12 @@ import { ResponsiveList, type ListColumn } from '@/components/fit/ResponsiveList
 import { DetailPanel } from '@/components/fit/DetailPanel'
 import { useFitRows, useIsTablet } from '@/components/fit/useFitRows'
 import { ProviderMark } from '@/components/ProviderMark'
+import { ClientAvatar } from '@/features/agency/ClientScopeChip'
+import { listClientWorkspaces } from '@/features/projects/api'
+import { useBudgets, type BudgetRow } from '@/features/funding/fundingApi'
+import { useAuth } from '@/stores/auth'
+import { Num } from '@/components/ui/Num'
+import { money } from '@/features/analytics/format'
 
 function statusTone(s: string | null): string {
   switch (s) {
@@ -48,7 +54,7 @@ function SpendValue({ c, t }: { c: ClientCard; t: ReturnType<typeof useT> }) {
 }
 
 /** A card in the grid is this tall (px) and the grid's gap is 10 — read by `useFitRows`, so the count cannot drift from the CSS. */
-const CARD_HEIGHT = 112
+const CARD_HEIGHT = 136
 const GRID_GAP = 10
 
 /** Three across from `lg`, two from `md`, one below — the same breakpoints the grid classes below use. */
@@ -105,6 +111,20 @@ export function ClientsPortfolioPage() {
   const perPage = asCards ? Math.max(3, fit.rows * cols) : fit.rows
 
   const taxonomy = useQuery({ queryKey: ['app', 'clients', 'taxonomy'], queryFn: getTaxonomy, staleTime: 300_000 })
+  /*
+   * Owner 2026-11-21: the client cards carry the same picture as the project choice — the client's own logo and, for a
+   * reader who holds the money key, its approved budget across its projects (spent of approved, %, state).
+   */
+  const workspaces = useQuery({ queryKey: ['agency-scope', 'clients'], queryFn: listClientWorkspaces })
+  const canMoney = useAuth((st) => st.hasPermission('funding.view'))
+  const budgets = useBudgets(false, null, canMoney)
+  const extraOf = (id: string): CardExtra => {
+    const logo = (workspaces.data ?? []).find((w) => w.id === id)?.logo_url ?? null
+    const own = (budgets.data?.rows ?? []).filter((b) => b.client_workspace_id === id && !['void', 'no_budget', 'unset'].includes(b.status) && b.payment_mode !== 'credit')
+    const approved = own.reduce((a, b) => a + b.approved, 0)
+    const spent = own.reduce((a, b) => a + b.spent, 0)
+    return { logo, budget: own.length > 0 && approved > 0 ? { approved, spent, ratio: spent / approved, currency: own[0].currency, worst: worstOf(own) } : null }
+  }
   const statusTax = useTaxonomyOptions('client.status')
   const serviceLevelTax = useTaxonomyOptions('client.service_level')
   const industryTax = useTaxonomyOptions('client.industry')
@@ -195,7 +215,7 @@ export function ClientsPortfolioPage() {
       header: t('cc_col_client'),
       cell: (c) => (
         <div className="flex min-w-0 items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-brand-600"><Building2 size={16} aria-hidden /></span>
+          <ClientAvatar name={c.name} logo={extraOf(c.id).logo} size={32} />
           <Link to={portalTo(`/clients/${c.id}`)} title={c.name} className="min-w-0 truncate font-semibold text-brand-600 hover:underline">{c.name}</Link>
         </div>
       ),
@@ -317,7 +337,7 @@ export function ClientsPortfolioPage() {
             <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-surface p-10 text-center text-text-muted"><Users size={26} /> <span className="text-sm">{t('clients_empty')}</span></div>
           ) : asCards ? (
             <div data-testid="clients-cards" className="grid gap-2.5 md:grid-cols-2 lg:grid-cols-3">
-              {rows.map((c) => <ClientCardView key={c.id} c={c} t={t} lang={lang} />)}
+              {rows.map((c) => <ClientCardView key={c.id} c={c} t={t} lang={lang} extra={extraOf(c.id)} />)}
             </div>
           ) : (
             <ResponsiveList
@@ -326,7 +346,7 @@ export function ClientsPortfolioPage() {
               rowKey={(c) => c.id}
               columns={columns}
               onOpen={setOpened}
-              renderCard={(c) => <ClientCardView c={c} t={t} lang={lang} />}
+              renderCard={(c) => <ClientCardView c={c} t={t} lang={lang} extra={extraOf(c.id)} />}
             />
           )}
         </div>
@@ -402,7 +422,23 @@ function ClientDetail({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof useT
   )
 }
 
-function ClientCardView({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof useT>; lang: 'ar' | 'en' }) {
+type CardExtra = { logo: string | null; budget: { approved: number; spent: number; ratio: number; currency: string; worst: 'danger' | 'warning' | 'success' } | null }
+
+function worstOf(rows: BudgetRow[]): 'danger' | 'warning' | 'success' {
+  if (rows.some((b) => (b.remaining !== null && b.remaining <= 0) || (b.used_ratio ?? 0) >= 1)) return 'danger'
+  if (rows.some((b) => (b.used_ratio ?? 0) >= 0.8)) return 'warning'
+  return 'success'
+}
+
+const BUDGET_TONE = {
+  danger: { bar: 'bg-danger', text: 'text-danger', ar: 'تجاوز/انتهى', en: 'Over / spent' },
+  warning: { bar: 'bg-warning', text: 'text-warning', ar: 'قربت تخلص', en: 'Running low' },
+  success: { bar: 'bg-success', text: 'text-success', ar: 'ضمن الميزانية', en: 'Within budget' },
+} as const
+
+function ClientCardView({ c, t, lang, extra }: { c: ClientCard; t: ReturnType<typeof useT>; lang: 'ar' | 'en'; extra?: CardExtra }) {
+  const bud = extra?.budget ?? null
+  const tone = bud ? BUDGET_TONE[bud.worst] : null
   const portalTo = usePortalPath()
   return (
     /*
@@ -421,7 +457,7 @@ function ClientCardView({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof us
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-brand-600"><Building2 size={16} aria-hidden /></span>
+          {extra ? <ClientAvatar name={c.name} logo={extra.logo} size={32} /> : <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-primary-soft text-brand-600"><Building2 size={16} aria-hidden /></span>}
           <div className="min-w-0">
             <div title={c.name} className="truncate font-bold text-text-primary">{c.name}</div>
             {c.industry && <div className="truncate text-xs text-text-muted">{labelOf(INDUSTRY_LABELS, c.industry, lang)}</div>}
@@ -442,6 +478,17 @@ function ClientCardView({ c, t, lang }: { c: ClientCard; t: ReturnType<typeof us
           <SpendValue c={c} t={t} />
         </span>
       </div>
+      {bud && tone && (
+        <div data-testid="client-card-budget" className="flex items-center gap-2 text-xs">
+          <span className="min-w-0 flex-1">
+            <span className="block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+              <span className={`block h-full rounded-full ${tone.bar}`} style={{ width: `${Math.min(100, Math.round(bud.ratio * 100))}%` }} />
+            </span>
+          </span>
+          <span className="shrink-0 text-text-secondary"><Num>{money(bud.spent, bud.currency)}</Num> / <Num>{money(bud.approved, bud.currency)}</Num></span>
+          <span className={`shrink-0 font-bold ${tone.text}`} title={lang === 'ar' ? tone.ar : tone.en}><Num>{`${Math.round(bud.ratio * 100)}%`}</Num></span>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-2 text-xs text-text-muted">
         <span className="flex min-w-0 items-center gap-1">
           {c.data_sources.slice(0, 5).map((s) => <span key={s} title={s}><ProviderMark provider={s} size={18} /></span>)}
