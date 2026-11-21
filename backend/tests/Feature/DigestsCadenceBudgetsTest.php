@@ -426,7 +426,9 @@ final class DigestsCadenceBudgetsTest extends TestCase
 
         $html = MailGallery::render('digest-projects-daily', 'ar');
         $this->assertNotNull($html);
-        $this->assertLessThan(strpos($html, 'data-block="counts"'), strpos($html, 'data-block="budgets"'), 'budgets come before the heatmap counts');
+        // DIGEST-FIGURES-ONLY-001 — every project's card first, then the budgets; no heatmap counts any more.
+        $this->assertLessThan(strpos($html, 'data-block="budgets"'), strpos($html, 'data-block="portfolio-row"'), 'the project cards come before the budgets');
+        $this->assertStringNotContainsString('data-block="counts"', $html);
         $this->assertStringContainsString('ملخص المشاريع', $html);
     }
 
