@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, CheckCheck, Loader2, Paperclip, SendHorizontal } from 'lucide-react'
 import { useUi } from '@/stores/ui'
+import { fmtDate } from '@/lib/datetime'
 
 /**
  * CLIENT-CHAT-001 — the client's conversation, drawn as a chat: the client's own messages on one side, the team's on the
@@ -16,7 +17,7 @@ export interface ChatMessage {
   readAt?: string | null
 }
 
-const time = (iso: string, ar: boolean) => new Intl.DateTimeFormat(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { hour: '2-digit', minute: '2-digit', hour12: ar }).format(new Date(iso))
+const time = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 const dayKey = (iso: string) => iso.slice(0, 10)
 
 function dayLabel(iso: string, ar: boolean): string {
@@ -27,7 +28,7 @@ function dayLabel(iso: string, ar: boolean): string {
   if (same(d, today)) return ar ? 'اليوم' : 'Today'
   if (same(d, yesterday)) return ar ? 'أمس' : 'Yesterday'
 
-  return new Intl.DateTimeFormat(ar ? 'ar-SA-u-nu-latn-ca-gregory' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(d)
+  return fmtDate(iso)
 }
 
 export function ChatMessages({ messages, empty, team }: { messages: ChatMessage[]; empty: string; team: string }) {
@@ -63,7 +64,7 @@ export function ChatMessages({ messages, empty, team }: { messages: ChatMessage[
                 {!m.mine && <div className="mb-0.5 text-[11px] font-bold text-brand-600">{team}</div>}
                 <div dir="auto" className="whitespace-pre-wrap break-words leading-relaxed">{m.body}</div>
                 <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${m.mine ? 'text-white/75' : 'text-text-muted'}`}>
-                  {m.at && <span className="tnum">{time(m.at, ar)}</span>}
+                  {m.at && <span className="tnum">{time(m.at)}</span>}
                   {m.mine && (m.readAt
                     ? <CheckCheck size={14} aria-label={ar ? 'قُرئت' : 'Read'} data-testid="chat-read" className="text-sky-200" />
                     : <Check size={14} aria-label={ar ? 'أُرسلت' : 'Sent'} data-testid="chat-sent" />)}

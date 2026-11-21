@@ -76,7 +76,7 @@ export function ClientOverview(d: OverviewData) {
         <div className={`grid gap-3 ${rates === 1 ? '' : rates === 2 ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
           {has('roas') && <RateTrend title="ROAS" data={series.rows} dataKey="roas" color={SERIES.revenue} loading={ts.isLoading} error={ts.isError} format={(v: number) => ratio(v)} headline={periodRates(s.data?.current).roas} />}
           {has('cpa') && !r && <RateTrend title="CPA" data={series.rows} dataKey="cpa" color={SERIES.conversions} loading={ts.isLoading} error={ts.isError} format={(v: number) => money(v, chartCurrency)} headline={periodRates(s.data?.current).cpa} />}
-          {has('ctr') && <RateTrend title={ar ? 'نسبة النقر' : 'CTR'} data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} headline={periodRates(s.data?.current).ctr} />}
+          {has('ctr') && <RateTrend title={ar ? 'معدل النقر' : 'CTR'} data={series.rows} dataKey="ctr" color={SERIES.spend} loading={ts.isLoading} error={ts.isError} format={(v: number) => `${v.toFixed(2)}%`} headline={periodRates(s.data?.current).ctr} />}
         </div>
       )}
       {showMoney && !r
