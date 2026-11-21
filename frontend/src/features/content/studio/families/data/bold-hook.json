@@ -1,0 +1,31 @@
+{
+  "key": "bold-hook",
+  "version": 1,
+  "label": {
+    "ar": "عنوان جريء",
+    "en": "Bold hook"
+  },
+  "kind": "both",
+  "anchor": "top",
+  "blocks": [
+    {
+      "role": "hook",
+      "cols": 10,
+      "rows": 4,
+      "place": "calm",
+      "align": "center"
+    },
+    {
+      "role": "cta",
+      "cols": 6,
+      "rows": 1,
+      "place": "live-bottom",
+      "align": "center"
+    }
+  ],
+  "motion": [
+    "zoom-punch",
+    "rise"
+  ],
+  "detailCuts": 0
+}
