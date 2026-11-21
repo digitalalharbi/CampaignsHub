@@ -106,3 +106,30 @@ describe('one batch from one picture', () => {
     expect(batch.outputs[0]!.scene.direction).toBe('ltr')
   })
 })
+
+describe('the price and support blocks follow the copy', () => {
+  it('leaves them out when there is no support line, so no empty badge is drawn', () => {
+    const noPrice = { hook: 'عطر فاخر', message: 'جودة تستحق التجربة', cta: 'اطلب الآن' }
+    const batch = buildStudioBatch({ pixels: PICTURES.product, copy: noPrice, locale: 'ar', measure: approxMeasure })
+
+    for (const o of batch.outputs) {
+      expect(o.layers.some((l) => l.id === 'price' || l.id === 'support'), o.pick.family.key).toBe(false)
+      expect(o.scene.layers.filter((l) => l.fill !== null && l.lines.length === 0 && l.role !== 'surface'), o.pick.family.key).toEqual([])
+    }
+  })
+
+  it('keeps them when a support line exists', () => {
+    const batch = buildStudioBatch({ pixels: PICTURES.product, copy: { hook: 'عطر', message: 'جودة', cta: 'اطلب', support: '299 ر.س' }, locale: 'ar', measure: approxMeasure })
+
+    expect(batch.outputs.some((o) => o.layers.some((l) => l.id === 'price' || l.id === 'support'))).toBe(true)
+  })
+
+  it('warns, without blocking, when copy had to sit over the product', () => {
+    const big = image(360, 640, (x, y) => (((x - 180) / 150) ** 2 + ((y - 320) / 250) ** 2 <= 1 ? [212, 160, 23] : [30, 38, 52]))
+    const batch = buildStudioBatch({ pixels: big, copy: { hook: 'عطر فاخر', message: 'جودة تستحق التجربة', cta: 'اطلب الآن' }, locale: 'ar', measure: approxMeasure })
+
+    expect(batch.outputs.every((o) => o.hard.length === 0)).toBe(true)
+    expect(batch.outputs.some((o) => o.warnings.includes('text_over_product'))).toBe(true)
+  })
+})
+

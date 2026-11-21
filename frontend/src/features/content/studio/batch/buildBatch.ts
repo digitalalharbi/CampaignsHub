@@ -2,7 +2,7 @@ import { analyzeImage, type ImageAnalysis } from '../analysis/analyzeImage'
 import type { Pixels } from '../analysis/pixels'
 import { hardChecks, type HardFailure } from '../direction/hardChecks'
 import type { StudioCopy } from '../direction/copyRules'
-import type { Layer } from '../direction/safeZone'
+import { FORMATS, type Layer } from '../direction/safeZone'
 import { buildTimeline, type VideoTimeline } from '../direction/timeline'
 import { placeFamily } from '../families/placeFamily'
 import { pickBatch, type BatchPick } from '../families/selectBatch'
@@ -22,6 +22,8 @@ export interface BatchOutput {
   timeline: VideoTimeline | undefined
   /** Facts about the file: any entry means «cannot be saved until corrected». */
   hard: HardFailure[]
+  /** Things worth a look that do not block saving: for now, copy that sits over the product because the picture left no clear place. */
+  warnings: Array<'text_over_product'>
 }
 
 export interface StudioBatch {
@@ -56,12 +58,18 @@ export function buildStudioBatch(input: BuildBatchInput): StudioBatch {
   const tone: 'light' | 'dark' = analysis.classes.tone === 'dark' ? 'light' : 'dark'
 
   const outputs = picks.map((pick): BatchOutput => {
-    const layers = placeFamily(pick.family, analysis, '9x16', input.locale)
+    const skip = (input.copy.support ?? '').trim() === '' ? (['support', 'price'] as const) : []
+    const layers = placeFamily(pick.family, analysis, '9x16', input.locale, { skip })
     const timeline = pick.as === 'video' ? buildTimeline() : undefined
     const scene = buildScene({ family: pick.family, layers, copy: input.copy, tokens, format: '9x16', locale: input.locale, tone, measure: input.measure, timeline, beatsMs: input.beatsMs })
     const hard = hardChecks({ format: '9x16', layers, copy: input.copy, timeline, forbiddenWords: input.forbiddenWords })
 
-    return { as: pick.as, pick, layers, scene, timeline, hard }
+    const canvas = FORMATS['9x16']
+    const p = analysis.product
+    const box = { x: p.x * canvas.width, y: p.y * canvas.height, w: p.w * canvas.width, h: p.h * canvas.height }
+    const over = layers.some((l) => (l.kind === 'text' || l.kind === 'price') && l.rect.x < box.x + box.w && l.rect.x + l.rect.w > box.x && l.rect.y < box.y + box.h && l.rect.y + l.rect.h > box.y)
+
+    return { as: pick.as, pick, layers, scene, timeline, hard, warnings: over ? ['text_over_product'] : [] }
   })
 
   return { analysis, tokens, lint: lintTokens(tokens), outputs }
