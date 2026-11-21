@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { usePortalBase } from '@/app/portalPath'
-import { CalendarClock, FolderKanban, Megaphone, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FolderKanban, Megaphone, RefreshCw, Search } from 'lucide-react'
 import { listClientWorkspaces, listProjects, type Project } from './api'
 import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { useUi } from '@/stores/ui'
 import { Skeleton } from '@/components/ui/States'
 import { fmtDateTime } from '@/lib/datetime'
-import { Pager } from '@/components/fit/Pager'
-import { useFitRows } from '@/components/fit/useFitRows'
-import { useColumns } from '@/components/fit/useColumns'
 import { useAuth } from '@/stores/auth'
 import { useBudgets, type BudgetRow } from '@/features/funding/fundingApi'
 import { ClientAvatar } from '@/features/agency/ClientScopeChip'
@@ -38,20 +35,17 @@ export type ProjectChooserPurpose = 'campaigns' | 'analytics' | 'reports' | 'rec
 
 /**
  * PROJECT-CHOOSER-VISUAL-001 — Owner 2026-11-21: with «كل العملاء» chosen, every project-scoped page (campaigns, analytics,
- * reports, spend limits…) opens on this choice, and it was a list of names. Each card now carries the client's own logo,
- * the platforms' logos, the campaigns, how fresh its data is and — for a reader who holds the money key — a gauge of its
- * approved budget: spent of approved, what is left and its state. The figures are the budgets' own (`/funding`).
- *
- * A card is this tall and the grid's gap is 8px.
+ * reports, spend limits…) opens on this choice. It is a step, not a summary: one clear panel — «اختر المشروع», the task it
+ * is for, a search, and one row per project with the client's logo, the platforms' logos, the campaigns, how fresh its
+ * data is and, for a reader who holds the money key, a thin budget bar. A click picks it and the page carries on with it,
+ * the same shape as linking an integration (choose, then continue).
  */
-const CARD_HEIGHT = 156
-const CARD_GAP = 8
-
 /**
  * `fit` (AGENCY-FIT-001): inside a fitted page the choices are a page of whole rows that fit the screen, with a pager for
  * the rest. Without it the list is as it always was.
  */
 export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: ProjectChooserPurpose; fit?: boolean }) {
+  void fitted
   const ar = useUi((s) => s.locale) === 'ar'
   const { setCurrentProjectId } = useProject()
   const { setCurrentClientId } = useAgencyClient()
@@ -66,9 +60,7 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
   const projects = useQuery({ queryKey: ['projects', 'list'], queryFn: () => listProjects(false) })
   const canMoney = useAuth((st) => st.hasPermission('funding.view'))
   const budgets = useBudgets(false, null, agency && canMoney)
-  const cols = useColumns([[1024, 3], [640, 2]])
-  const fit = useFitRows({ rowHeight: CARD_HEIGHT + CARD_GAP, reserve: 0, min: 1, max: 12, fallback: 1000 })
-  const [page, setPage] = useState(1)
+  const [query, setQuery] = useState('')
 
   const rows: Row[] = useMemo(() => {
     const byClient = new Map((clients.data ?? []).map((c) => [c.id, c]))
@@ -117,13 +109,11 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
     'spend-limits': { ar: 'لعرض حدود إنفاقه وضبطها', en: 'to see and set its spend limits' },
   }[purpose]
 
-  const perPage = fitted && fit.locked ? Math.max(1, fit.rows * cols) : Number.MAX_SAFE_INTEGER
-  const pages = Math.max(1, Math.ceil(rows.length / perPage))
-  const current = Math.min(page, pages)
-  const pageRows = fitted && fit.locked ? rows.slice((current - 1) * perPage, current * perPage) : rows
+  const needle = query.trim().toLowerCase()
+  const shown = needle === '' ? rows : rows.filter((p) => `${p.name} ${p.client_name}`.toLowerCase().includes(needle))
 
   if (clients.isLoading || projects.isLoading) {
-    return <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+    return <div className="mx-auto w-full max-w-2xl space-y-2 py-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>
   }
 
   if (rows.length === 0) {
@@ -136,41 +126,62 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
     )
   }
 
+  const Chevron = ar ? ChevronLeft : ChevronRight
+
   return (
-    <section data-testid="project-chooser" aria-label={ar ? 'اختر مشروعًا' : 'Choose a project'} className={fitted ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-3'}>
-      <div>
-        <h2 className="text-base font-bold text-text-primary">{ar ? 'اختر مشروعًا' : 'Choose a project'}</h2>
-        <p className="mt-0.5 text-sm text-text-secondary">
-          {ar ? `كل مشروع مستقل — اختر واحدًا ${purposeWords.ar}.` : `Each project stands alone — pick one ${purposeWords.en}.`}
-        </p>
+    <section data-testid="project-chooser" aria-label={ar ? 'اختر المشروع' : 'Choose a project'} className="flex min-h-0 flex-1 items-start justify-center py-4 sm:py-8">
+      <div className="flex max-h-full w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-lg">
+        <div className="flex items-start gap-3 border-b border-border px-5 py-4">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand-500/10 text-brand-600" aria-hidden><FolderKanban size={20} /></span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-extrabold text-text-primary">{ar ? 'اختر المشروع' : 'Choose a project'}</h2>
+            <p className="mt-0.5 text-sm text-text-secondary">
+              {ar ? `كل مشروع مستقل — اختر واحدًا ${purposeWords.ar}.` : `Each project stands alone — pick one ${purposeWords.en}.`}
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-bold text-text-secondary"><Num>{String(rows.length)}</Num> {ar ? 'مشروع' : 'projects'}</span>
+        </div>
+        {rows.length > 6 && (
+          <div className="border-b border-border px-5 py-3">
+            <label className="flex items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2 focus-within:border-brand-500">
+              <Search size={15} className="shrink-0 text-text-muted" aria-hidden />
+              <input
+                data-testid="project-chooser-search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={ar ? 'ابحث باسم المشروع أو العميل' : 'Search by project or client'}
+                aria-label={ar ? 'ابحث باسم المشروع أو العميل' : 'Search by project or client'}
+                className="min-w-0 flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
+              />
+            </label>
+          </div>
+        )}
+        <ul className="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+          {shown.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                data-testid={`project-choice-${p.id}`}
+                onClick={() => choose(p)}
+                className="group flex w-full items-center gap-3 px-5 py-3 text-start transition hover:bg-brand-500/5 focus:outline-none focus-visible:bg-brand-500/5"
+              >
+                <ChoiceRow p={p} ar={ar} />
+                <Chevron size={18} className="shrink-0 text-text-muted transition group-hover:text-brand-600" aria-hidden />
+              </button>
+            </li>
+          ))}
+          {shown.length === 0 && <li className="px-5 py-6 text-center text-sm text-text-muted">{ar ? 'لا مشروع بهذا الاسم.' : 'No project by that name.'}</li>}
+        </ul>
       </div>
-      <div ref={fitted ? (fit.ref as never) : undefined} className={fitted ? 'min-h-0 flex-1' : undefined}>
-      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {pageRows.map((p) => (
-          <li key={p.id} className="min-w-0">
-            <button
-              type="button"
-              data-testid={`project-choice-${p.id}`}
-              onClick={() => choose(p)}
-              style={fitted ? { height: CARD_HEIGHT } : undefined}
-              className="group flex w-full flex-col rounded-2xl border border-border bg-surface p-3.5 text-start transition hover:-translate-y-0.5 hover:border-brand-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 motion-reduce:transform-none"
-            >
-              <ChoiceCard p={p} ar={ar} />
-            </button>
-          </li>
-        ))}
-      </ul>
-      </div>
-      {fitted && fit.locked && <Pager testid="project-chooser-pager" page={current} pages={pages} onPage={setPage} total={rows.length} ar={ar} hideWhenSingle />}
     </section>
   )
 }
 
 const TONE = {
-  danger: { ring: 'stroke-danger', chip: 'bg-danger/10 text-danger', bar: 'bg-danger' },
-  warning: { ring: 'stroke-warning', chip: 'bg-warning/10 text-warning', bar: 'bg-warning' },
-  success: { ring: 'stroke-success', chip: 'bg-success/10 text-success', bar: 'bg-success' },
-  neutral: { ring: 'stroke-border-strong', chip: 'bg-surface-secondary text-text-secondary', bar: 'bg-border-strong' },
+  danger: { text: 'text-danger', chip: 'bg-danger/10 text-danger', bar: 'bg-danger' },
+  warning: { text: 'text-warning', chip: 'bg-warning/10 text-warning', bar: 'bg-warning' },
+  success: { text: 'text-success', chip: 'bg-success/10 text-success', bar: 'bg-success' },
+  neutral: { text: 'text-text-secondary', chip: 'bg-surface-secondary text-text-secondary', bar: 'bg-border-strong' },
 } as const
 
 function budgetTone(b: BudgetRow): keyof typeof TONE {
@@ -198,80 +209,52 @@ function ago(iso: string | null, ar: boolean): string | null {
   return fmtDateTime(iso)
 }
 
-function Gauge({ ratio, tone }: { ratio: number | null; tone: keyof typeof TONE }) {
-  const size = 46
-  const r = size / 2 - 4
-  const c = 2 * Math.PI * r
-  const f = ratio === null ? 0 : Math.max(0, Math.min(1, ratio))
-  return (
-    <span className="relative inline-flex shrink-0" style={{ width: size, height: size }} data-testid="chooser-gauge">
-      <svg aria-hidden width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth="5" className="stroke-surface-secondary" />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth="5" strokeLinecap="round" className={`${TONE[tone].ring} transition-[stroke-dasharray] duration-700`} strokeDasharray={`${c * f} ${c}`} />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-text-primary">{ratio === null ? '—' : <Num>{`${Math.round(ratio * 100)}%`}</Num>}</span>
-    </span>
-  )
-}
-
 /** PROJECT-CHOOSER-VISUAL-001 — one project, as a card worth choosing from. */
-function ChoiceCard({ p, ar }: { p: Row; ar: boolean }) {
+function ChoiceRow({ p, ar }: { p: Row; ar: boolean }) {
   const b = p.budget
   const t = b ? budgetTone(b) : 'neutral'
   const credit = b?.payment_mode === 'credit'
   const synced = ago(p.synced_at, ar)
   const attention = p.summary?.attention ?? null
+  const pct = b && !credit && b.used_ratio !== null ? Math.round(b.used_ratio * 100) : null
 
   return (
     <>
-      <div className="flex items-start gap-2.5">
-        <ClientAvatar name={p.client_name || p.name} logo={p.client_logo} size={38} />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-extrabold text-text-primary group-hover:text-brand-600">{p.name}</div>
-          <div className="truncate text-xs text-text-secondary">{p.client_name && p.client_name !== p.name ? p.client_name : (p.client_name ? (ar ? 'عميل' : 'Client') : (ar ? 'بلا عميل' : 'No client'))}</div>
-          {b && <span data-testid={`chooser-budget-${p.id}`} className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${TONE[t].chip}`}>{budgetLabel(b, ar)}</span>}
+      <ClientAvatar name={p.client_name || p.name} logo={p.client_logo} size={36} />
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-extrabold text-text-primary group-hover:text-brand-600">{p.name}</span>
+          {b && <span data-testid={`chooser-budget-${p.id}`} className={`shrink-0 rounded-full px-2 py-px text-xs font-bold ${TONE[t].chip}`}>{budgetLabel(b, ar)}</span>}
           {!b && attention && (
-            <span className="mt-1 inline-flex rounded-full bg-warning/10 px-2 py-0.5 text-xs font-bold text-warning">
-              {attention === 'no_accounts' ? (ar ? 'بلا حسابات مربوطة' : 'No accounts linked') : attention === 'never_synced' ? (ar ? 'لم تصل بيانات بعد' : 'No data yet') : (ar ? 'البيانات قديمة' : 'Data is stale')}
+            <span className="shrink-0 rounded-full bg-warning/10 px-2 py-px text-xs font-bold text-warning">
+              {attention === 'no_accounts' ? (ar ? 'بلا حسابات' : 'No accounts') : attention === 'never_synced' ? (ar ? 'لا بيانات' : 'No data') : (ar ? 'بيانات قديمة' : 'Stale')}
             </span>
           )}
-        </div>
-        {b && !credit && <Gauge ratio={b.used_ratio} tone={t} />}
-      </div>
-
-      {b && (
-        <div className="mt-2 space-y-1">
-          <div className="flex items-baseline justify-between gap-2 text-xs">
-            <span className="text-text-muted">{ar ? 'الإنفاق' : 'Spend'}</span>
-            <span className="truncate font-bold text-text-primary">
-              <Num>{money(credit ? (b.to_date ?? b.spent) : b.spent, b.currency)}</Num>
-              {!credit && <span className="font-normal text-text-muted"> / <Num>{money(b.approved, b.currency)}</Num></span>}
-            </span>
-          </div>
-          {!credit && (
-            <span className="block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
-              <span className={`block h-full rounded-full ${TONE[t].bar}`} style={{ width: `${Math.round(Math.min(1, b.used_ratio ?? 0) * 100)}%` }} />
-            </span>
-          )}
-          <div className="flex items-center justify-between gap-2 text-xs">
-            {!credit && b.remaining !== null && <span className={b.remaining < 0 ? 'font-bold text-danger' : 'text-text-secondary'}>{ar ? 'المتبقي' : 'Left'} <Num>{money(b.remaining, b.currency)}</Num></span>}
-            {b.run_out_date && <span className="inline-flex items-center gap-1 text-text-muted" title={ar ? 'تاريخ النفاد بمعدل آخر 3 أيام' : 'Runs out at the last 3 days’ pace'}><CalendarClock size={11} aria-hidden /><Num>{b.run_out_date}</Num></span>}
-          </div>
-        </div>
-      )}
-
-      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2">
-        <span className="flex min-w-0 items-center gap-1" data-testid={`chooser-platforms-${p.id}`}>
-          {p.providers.slice(0, 6).map((pr) => <ProviderMark key={pr} provider={pr} size={18} />)}
-          {p.providers.length === 0 && <span className="text-xs text-text-muted">—</span>}
         </span>
-        <span className="flex shrink-0 items-center gap-2.5 text-xs text-text-muted">
-          {p.campaigns !== null && <span className="inline-flex items-center gap-1"><Megaphone size={11} aria-hidden /><Num>{String(p.campaigns)}</Num> {ar ? 'حملة' : 'campaigns'}</span>}
-          <span className="inline-flex items-center gap-1" title={p.synced_at ? fmtDateTime(p.synced_at) : undefined}>
-            <RefreshCw size={11} aria-hidden />{synced ?? (ar ? 'لم تصل بيانات بعد' : 'No data has arrived yet')}
+        <span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-text-muted">
+          <span className="truncate text-text-secondary">{p.client_name && p.client_name !== p.name ? p.client_name : (p.client_name ? (ar ? 'عميل' : 'Client') : (ar ? 'بلا عميل' : 'No client'))}</span>
+          {p.campaigns !== null && <span className="inline-flex shrink-0 items-center gap-1"><Megaphone size={10} aria-hidden /><Num>{String(p.campaigns)}</Num> {ar ? 'حملة' : 'campaigns'}</span>}
+          <span className="inline-flex shrink-0 items-center gap-1" title={p.synced_at ? fmtDateTime(p.synced_at) : undefined}>
+            <RefreshCw size={10} aria-hidden />{synced ?? (ar ? 'لم تصل بيانات بعد' : 'No data has arrived yet')}
           </span>
         </span>
-      </div>
+      </span>
+      <span className="hidden shrink-0 items-center gap-1 sm:flex" data-testid={`chooser-platforms-${p.id}`}>
+        {p.providers.slice(0, 5).map((pr) => <ProviderMark key={pr} provider={pr} size={16} />)}
+      </span>
+      {b && (
+        <span className="hidden w-28 shrink-0 text-xs md:block">
+          <span className="flex items-baseline justify-between gap-1">
+            <span className="truncate font-bold text-text-primary"><Num>{money(credit ? (b.to_date ?? b.spent) : b.spent, b.currency)}</Num></span>
+            {pct !== null && <span data-testid="chooser-gauge" className={`font-bold ${TONE[t].text}`}><Num>{`${pct}%`}</Num></span>}
+          </span>
+          {!credit && (
+            <span className="mt-1 block h-1 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+              <span className={`block h-full rounded-full ${TONE[t].bar}`} style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
+            </span>
+          )}
+        </span>
+      )}
     </>
   )
 }
