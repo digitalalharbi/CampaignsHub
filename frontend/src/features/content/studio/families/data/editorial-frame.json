@@ -1,0 +1,37 @@
+{
+  "key": "editorial-frame",
+  "version": 1,
+  "label": {
+    "ar": "إطار تحريري",
+    "en": "Editorial frame"
+  },
+  "kind": "image",
+  "anchor": "start-side",
+  "blocks": [
+    {
+      "role": "logo",
+      "cols": 3,
+      "rows": 1,
+      "place": "live-top",
+      "align": "start"
+    },
+    {
+      "role": "hook",
+      "cols": 5,
+      "rows": 4,
+      "place": "calm",
+      "align": "start"
+    },
+    {
+      "role": "cta",
+      "cols": 5,
+      "rows": 1,
+      "place": "live-bottom",
+      "align": "start"
+    }
+  ],
+  "motion": [
+    "fade"
+  ],
+  "detailCuts": 0
+}
