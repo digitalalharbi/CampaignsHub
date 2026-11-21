@@ -53,7 +53,7 @@ final class SpendSummaryMail extends Mailable
 
     public function title(bool $ar): string
     {
-        return ($ar ? 'ملخص الإنفاق' : 'Spend summary').' • '.DigestSchedule::periodWord($this->kind, $ar);
+        return ($ar ? 'ملخص الإنفاق' : 'Spend summary').($ar ? ' : ' : ': ').DigestSchedule::periodWord($this->kind, $ar);
     }
 
     public function envelope(): Envelope

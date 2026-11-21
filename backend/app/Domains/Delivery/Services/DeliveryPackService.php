@@ -292,13 +292,13 @@ final class DeliveryPackService
         $lines[] = $ar ? "مرحباً، تقرير أداء حملات {$workspace?->name} عن الفترة {$period}:" : "Hello — {$workspace?->name} campaign performance for {$period}:";
 
         if (isset($totals['conversions'])) {
-            $lines[] = ($ar ? '• النتائج: ' : '• Results: ').$num($totals['conversions']);
+            $lines[] = ($ar ? '— النتائج: ' : '— Results: ').$num($totals['conversions']);
         }
         if (isset($totals['impressions'])) {
-            $lines[] = ($ar ? '• مرات الظهور: ' : '• Impressions: ').$num($totals['impressions']);
+            $lines[] = ($ar ? '— مرات الظهور: ' : '— Impressions: ').$num($totals['impressions']);
         }
         if ($pack->includes('spend') && isset($totals['spend']) && ((int) ($totals['spend_withheld_rows'] ?? 0)) === 0) {
-            $lines[] = ($ar ? '• الإنفاق: ' : '• Spend: ').FundingMoney::withMark(number_format((float) $totals['spend'], 2, '.', ','), (string) ($data['currency'] ?? ReportingCurrency::DEFAULT));
+            $lines[] = ($ar ? '— الإنفاق: ' : '— Spend: ').FundingMoney::withMark(number_format((float) $totals['spend'], 2, '.', ','), (string) ($data['currency'] ?? ReportingCurrency::DEFAULT));
         }
 
         $steps = ReportAnnotation::withoutGlobalScopes()->where('report_id', $pack->report_id)

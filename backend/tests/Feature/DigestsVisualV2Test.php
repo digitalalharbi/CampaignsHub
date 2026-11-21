@@ -94,8 +94,10 @@ final class DigestsVisualV2Test extends TestCase
         }
         $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio'))->render();
         $this->assertSame(30, substr_count($html, 'data-block="portfolio-row"'));
-        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — coverage now lives in «ملخص الربط».
-        $this->assertStringContainsString('أرقامها محدّثة', $html);
+        // DIGEST-FIGURES-ONLY-001 — Owner 2026-11-21: the coverage count read a generic freshness state and flagged projects
+        // whose figures had arrived; it is gone. Every project is still in the mail once, as its card.
+        $this->assertStringNotContainsString('أرقامها محدّثة', $html);
+        $this->assertStringNotContainsString('data-block="heatmap"', $html);
     }
 
     public function test_the_ranking_is_global_and_nothing_is_dropped_silently(): void
@@ -114,9 +116,9 @@ final class DigestsVisualV2Test extends TestCase
         })($rank), 'every problem before every watch');
         $this->assertCount(OperationalDigestModel::TOP_ISSUES, $m['issues_shown']);
         $this->assertSame(count($issues) - OperationalDigestModel::TOP_ISSUES, $m['issues_more']);
+        // DIGEST-NO-DECISION-SECTION-001 — Owner 2026-11-21: the model keeps the ranked list; the mail no longer draws it.
         $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio'))->render();
-        $this->assertStringContainsString('+'.$m['issues_more'], $html);
-        $this->assertSame(OperationalDigestModel::TOP_ISSUES, substr_count($html, 'data-block="issue"'));
+        $this->assertSame(0, substr_count($html, 'data-block="issue"'));
         // Every issue's cell is a ! or ✕ in the matrix, so the capped detail hides nothing.
         $bad = array_sum(array_map(static fn (array $r): int => count(array_filter($r['cells'], static fn ($c): bool => $c !== null && in_array($c['state'], ['bad', 'watch'], true))), $m['heatmap']['rows']));
         $cellIssues = count(array_filter($issues, static fn (array $i): bool => $i['kind'] === 'cell'));
@@ -135,9 +137,10 @@ final class DigestsVisualV2Test extends TestCase
             $this->assertStringNotContainsString('data-block="linking"', $html, 'no connections block');
             $this->assertStringNotContainsString('افتح', $html, 'no button back into the product');
         }
-        // The normal reader keeps all of it.
+        // DIGEST-FIGURES-ONLY-001 — the normal reader gets the same figures; no decision cards for anyone any more.
         $normal = (new OperationalDigestMail(OperationalDigestModel::portfolio($d, 'ar', 'daily'), 'ar', 'م', 'daily', 'portfolio'))->render();
-        $this->assertStringContainsString('data-block="issue"', $normal);
+        $this->assertStringNotContainsString('data-block="issue"', $normal);
+        $this->assertSame(30, substr_count($normal, 'data-block="portfolio-row"'));
     }
 
     public function test_the_weekly_differs_from_the_daily_and_both_are_visual_not_prose(): void
@@ -145,9 +148,9 @@ final class DigestsVisualV2Test extends TestCase
         $d = DigestDemo::payload(30, 6);
         $daily = (new OperationalDigestMail(OperationalDigestModel::portfolio($d, 'ar', 'daily'), 'ar', 'م', 'daily', 'portfolio'))->render();
         $weekly = (new OperationalDigestMail(OperationalDigestModel::portfolio($d, 'ar', 'weekly'), 'ar', 'م', 'weekly', 'portfolio'))->render();
-        // DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — best and weakest per objective on EVERY rhythm (yesterday against the day before).
-        $this->assertStringContainsString('data-block="movers"', $daily);
-        $this->assertStringContainsString('data-block="movers"', $weekly);
+        // DIGEST-FIGURES-ONLY-001 — Owner 2026-11-21: «الأفضل والأقل» is removed (it listed a 0.63× ROAS as best for its rise).
+        $this->assertStringNotContainsString('data-block="movers"', $daily);
+        $this->assertStringNotContainsString('data-block="movers"', $weekly);
         foreach ([$daily, $weekly] as $html) {
             $this->assertStringNotContainsString('هذا ملخص', $html, 'no filler intro');
             $this->assertStringNotContainsString('GA4', $html);
@@ -157,7 +160,8 @@ final class DigestsVisualV2Test extends TestCase
         $pw = (new OperationalDigestMail($project, 'ar', 'م', 'weekly', 'project'))->render();
         $pd = (new OperationalDigestMail($project, 'ar', 'م', 'daily', 'project'))->render();
         $this->assertGreaterThan(substr_count($pd, 'font-size:9px'), substr_count($pw, 'font-size:9px'), 'the weekly labels its 7 bars with weekday letters');
-        $this->assertStringContainsString('data-block="platform-strip"', $pd);
+        // DIGEST-FIGURES-ONLY-001 — no ✓ ! ✕ platform strip and no state chip in the project mail.
+        $this->assertStringNotContainsString('data-block="platform-strip"', $pd);
     }
 
     public function test_a_per_project_ledger_key_fits_the_column(): void

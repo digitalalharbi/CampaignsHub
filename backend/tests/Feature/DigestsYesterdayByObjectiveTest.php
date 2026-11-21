@@ -449,7 +449,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
 
             return $m->scope === 'portfolio'
                 && $m->periodLabel === 'أمس: 11 نوفمبر 2026'
-                && str_contains((string) $m->envelope()->subject, 'ملخص المشاريع • أمس')
+                && str_contains((string) $m->envelope()->subject, 'ملخص المشاريع : أمس')
                 && str_contains($html, 'مقارنة باليوم اللي قبله')
                 && ! str_contains($html, 'آخر 7 أيام');
         });
@@ -477,7 +477,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
             $names[] = $m->model['name'];
             $this->assertSame('project', $m->scope, 'a separate mail per project, never a combined one');
             $this->assertSame('أمس: 11 نوفمبر 2026', $m->periodLabel);
-            $this->assertStringContainsString('ملخص المشروع • أمس', (string) $m->envelope()->subject);
+            $this->assertStringContainsString('ملخص المشروع : أمس', (string) $m->envelope()->subject);
             if ($m->model['name'] !== 'Spending') {
                 $this->assertSame('none', $m->model['state']);
                 $this->assertStringContainsString('ما فيه منصة إعلانية مربوطة بالمشروع', $m->render(), '«لا بيانات» with the reason the data proves');
@@ -511,14 +511,14 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $d = DigestDemo::payload(6, 4);
         foreach (['daily' => 'أمس', 'weekly' => 'الأسبوع الماضي', 'monthly' => 'الشهر الماضي'] as $kind => $word) {
             $mail = new OperationalDigestMail(OperationalDigestModel::portfolio($d, 'ar', $kind), 'ar', 'م', $kind, 'portfolio');
-            $this->assertStringContainsString('ملخص المشاريع • '.$word, (string) $mail->envelope()->subject);
-            $this->assertStringContainsString('ملخص المشاريع • '.$word, $mail->render());
+            $this->assertStringContainsString('ملخص المشاريع : '.$word, (string) $mail->envelope()->subject);
+            $this->assertStringContainsString('ملخص المشاريع : '.$word, $mail->render());
         }
     }
 
     // ── §4 — performance first, linking apart ───────────────────────────────
 
-    public function test_linking_health_is_its_own_section_after_the_decisions_and_never_one_of_them(): void
+    public function test_linking_health_is_its_own_section_after_the_performance_and_the_mail_has_no_decision_list(): void
     {
         $d = DigestDemo::payload(30, 6);
         $m = OperationalDigestModel::portfolio($d, 'ar', 'daily');
@@ -527,12 +527,57 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         }
         $this->assertNotSame([], $m['linking'], 'the demo has late and failed sources; they are reported in «ملخص الربط»');
         $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio', 'أمس: 11 نوفمبر 2026'))->render();
-        $decide = (int) strpos($html, 'يحتاج قرارك الآن');
         $link = (int) strpos($html, 'data-block="linking"');
-        $this->assertGreaterThan(0, $decide);
-        $this->assertGreaterThan($decide, $link, '«ملخص الربط» comes after the decisions');
-        $this->assertLessThan($decide, (int) strpos($html, 'data-block="kpis"'), 'performance first');
-        $this->assertStringNotContainsString('البيانات متأخرة', substr($html, $decide, $link - $decide), 'no stale-data card among the decisions');
+        $this->assertGreaterThan(0, $link);
+        $this->assertLessThan($link, (int) strpos($html, 'data-block="kpis"'), 'performance first, «ملخص الربط» after it');
+        // DIGEST-NO-DECISION-SECTION-001 — Owner 2026-11-21: the «يحتاج قرارك الآن» list is gone from the mail.
+        $this->assertStringNotContainsString('يحتاج قرارك', $html);
+    }
+
+    /**
+     * DIGEST-SUBJECT-FORMAT-001 — Owner 2026-11-21: «كامبينز هَب — ملخص المشروع : أمس — فورساتو». No «•», no «متابعة لحظية»,
+     * no verdict or decision count after the name; the same for the weekly and monthly rhythms.
+     */
+    public function test_the_project_subject_is_title_period_and_name_and_no_mail_carries_a_bullet(): void
+    {
+        $d = DigestDemo::payload(30, 6);
+        $m = OperationalDigestModel::project($d['projects'][0], 'ar', 1);
+        $mail = new OperationalDigestMail($m, 'ar', 'م', 'daily', 'project', 'أمس: 11 نوفمبر 2026');
+        $this->assertSame('كامبينز هَب — ملخص المشروع : أمس — '.$m['name'], (string) $mail->envelope()->subject);
+        $this->assertSame('كامبينز هَب — ملخص المشروع : الأسبوع الماضي — '.$m['name'], (string) (new OperationalDigestMail($m, 'ar', 'م', 'weekly', 'project'))->envelope()->subject);
+        $this->assertSame('كامبينز هَب — ملخص المشاريع : أمس', (string) (new OperationalDigestMail(OperationalDigestModel::portfolio($d, 'ar', 'daily'), 'ar', 'م', 'daily', 'portfolio'))->envelope()->subject);
+
+        $html = $mail->render();
+        $this->assertStringNotContainsString('•', $html);
+        $this->assertStringNotContainsString('يحتاج قرارك', $html);
+    }
+
+    /**
+     * DIGEST-FIGURES-ONLY-001 — Owner 2026-11-21: «ملخص المشاريع» carries a card for EVERY project, largest spend first, with
+     * figures only — no best/weakest, no state counts, no heatmap, no coverage count, no verdict chip.
+     */
+    public function test_the_projects_summary_has_one_figures_only_card_per_project_by_spend(): void
+    {
+        $d = DigestDemo::payload(12, 6);
+        $m = OperationalDigestModel::portfolio($d, 'ar', 'daily');
+        $this->assertCount(12, $m['cards']);
+        $this->assertCount(12, array_unique(array_column($m['cards'], 'id')));
+        $spends = array_map(static fn (array $c): float => (float) collect($m['projects'])->firstWhere('id', $c['id'])['raw']['totals']['spend'], $m['cards']);
+        $sorted = $spends;
+        rsort($sorted);
+        $this->assertSame($sorted, $spends, 'largest spend first');
+
+        $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio', 'أمس: 11 نوفمبر 2026'))->render();
+        $this->assertStringContainsString('ملخص كل مشروع', $html);
+        $this->assertSame(12, substr_count($html, 'data-block="portfolio-row"'));
+        foreach (['data-block="movers"', 'data-block="counts"', 'data-block="heatmap"', 'data-block="coverage"', 'أرقامها محدّثة', 'الأفضل والأقل', 'يحتاج قرارك'] as $gone) {
+            $this->assertStringNotContainsString($gone, $html, $gone);
+        }
+
+        $project = (new OperationalDigestMail(OperationalDigestModel::project($d['projects'][0], 'ar', 1), 'ar', 'م', 'daily', 'project'))->render();
+        foreach (['data-block="platform-strip"', 'data-block="content-top"', 'data-block="content-weak"', 'data-block="best-worst"'] as $gone) {
+            $this->assertStringNotContainsString($gone, $project, $gone);
+        }
     }
 
     // ── §7 — a cause only with evidence ─────────────────────────────────────
