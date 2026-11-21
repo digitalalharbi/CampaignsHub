@@ -52,7 +52,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
     private const COVERED = [
         'api/v1/client/approvals', 'api/v1/client/audience', 'api/v1/client/branding', 'api/v1/client/branding/logo', 'api/v1/client/campaigns', 'api/v1/client/files',
         'api/v1/client/invoices', 'api/v1/client/invoices/{invoice}', 'api/v1/client/invoices/{invoice}/pdf',
-        'api/v1/client/messages', 'api/v1/client/messages/{thread}', 'api/v1/client/overview', 'api/v1/client/projects/{project}/metrics/{name}',
+        'api/v1/client/messages', 'api/v1/client/messages/{thread}', 'api/v1/client/overview', 'api/v1/client/projects/{project}/content', 'api/v1/client/projects/{project}/metrics/{name}',
         'api/v1/client/quotes', 'api/v1/client/quotes/{quote}', 'api/v1/client/reports', 'api/v1/client/reports/{report}/view/{path?}', 'api/v1/client/requests',
         'api/v1/client/requests/{reference}', 'api/v1/client/requests/{reference}/files/{file}',
         'api/v1/client/requests/{reference}/journey', 'api/v1/client/session', 'api/v1/client/spaces', 'api/v1/client/team', 'api/v1/client/visibility',
@@ -151,7 +151,7 @@ final class ClientPortalIsolationProbeTest extends TestCase
             // PORTAL-FULL-REPORTS-001 — the other client's report, whole or in part, is never opened.
             "reports/{$t['report']}/view", "reports/{$t['report']}/view/live", "reports/{$t['report']}/view/creatives",
             // CLIENT-DASHBOARD-PARITY-001 — the other client's project figures are never read.
-            "projects/{$t['project']}/metrics/summary", "projects/{$t['project']}/metrics/campaigns",
+            "projects/{$t['project']}/metrics/summary", "projects/{$t['project']}/metrics/campaigns", "projects/{$t['project']}/content?from=2026-11-01&to=2026-11-20",
         ];
 
         foreach ($probes as $path) {

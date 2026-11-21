@@ -305,6 +305,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])->p
     Route::get('metrics/budget-platforms', [MetricsController::class, 'budgetPlatforms'])->middleware('project.can:budget.view')->name('metrics.budget-platforms');
     Route::get('metrics/budget-accounts', [MetricsController::class, 'budgetAccounts'])->middleware('project.can:budget.view')->name('metrics.budget-accounts');
     Route::get('metrics/freshness', [MetricsController::class, 'freshness'])->name('metrics.freshness');
+    // CLIENT-RESULTS-001 — the project's own Results, counted as its reports count them.
+    Route::get('metrics/results', [MetricsController::class, 'results'])->middleware('read.cache:60')->name('metrics.results');
     // DATE-RANGE-001 — the Riyadh dates of a named period, and per account which complete days of it have no figures.
     Route::get('metrics/period', [PeriodController::class, 'resolve'])->name('metrics.period');
     Route::get('metrics/period-coverage', [PeriodController::class, 'coverage'])->name('metrics.period-coverage');

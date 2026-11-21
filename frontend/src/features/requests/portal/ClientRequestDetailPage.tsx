@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { fmtDateTime } from '@/lib/datetime'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Bell, Check, CheckCircle2, Download, Loader2, Paperclip, Send, Sparkles } from 'lucide-react'
+import { ArrowLeft, Bell, Check, Download, FolderOpen, History, MessagesSquare, Paperclip, Sparkles } from 'lucide-react'
+import { ChatAttach, ChatComposer, ChatMessages } from './PortalChat'
 import { getPortalRequest, portalFileUrl, portalReply, portalStartUpload, portalUploadFile } from '../clientPortalApi'
 import { getPortalJourney, isOfframpStage, journeySteps, type PortalJourney } from './portalAccountApi'
 import { PortalShell } from './PortalShell'
@@ -43,14 +44,13 @@ export function ClientRequestDetailPage() {
   const journey = useQuery({ queryKey: ['client', 'journey', reference], queryFn: () => getPortalJourney(reference), retry: false })
   usePortalGuard(q.isError, q.error)
 
-  const [message, setMessage] = useState('')
   const [uploadToken, setUploadToken] = useState<string | null>(null)
   const [attached, setAttached] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
 
   const reply = useMutation({
-    mutationFn: () => portalReply(reference, message, uploadToken ?? undefined),
-    onSuccess: () => { setMessage(''); setUploadToken(null); setAttached([]); qc.invalidateQueries({ queryKey: ['client', 'request', reference] }) },
+    mutationFn: (message: string) => portalReply(reference, message, uploadToken ?? undefined),
+    onSuccess: () => { setUploadToken(null); setAttached([]); qc.invalidateQueries({ queryKey: ['client', 'request', reference] }) },
   })
 
   const onFile = async (file: File) => {
@@ -108,59 +108,54 @@ export function ClientRequestDetailPage() {
       <JourneySection journey={journey.data} loading={journey.isLoading} ar={ar} />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        {/* Timeline */}
-        <section className="lg:col-span-2 rounded-2xl border border-border bg-surface p-5">
-          <h2 className="mb-3 text-sm font-bold text-text-primary">{ar ? 'المسار' : 'Timeline'}</h2>
-          <ol className="relative ms-2 space-y-3 border-s border-border ps-4">
-            {d.timeline.length === 0 && <li className="text-sm text-text-muted">—</li>}
-            {d.timeline.map((t, i) => (
-              <li key={i} className="relative">
-                <span className="absolute -start-[22px] top-1 h-2 w-2 rounded-full bg-brand-500 ring-4 ring-surface" />
-                <div className="text-sm text-text-primary">{t.message ?? t.type}</div>
-                <div className="tnum text-[11px] text-text-muted">{t.at ? fmtDateTime(t.at) : ''}</div>
-              </li>
-            ))}
-          </ol>
-
-          {/* Messages */}
-          <h2 className="mb-3 mt-6 text-sm font-bold text-text-primary">{ar ? 'المحادثة' : 'Messages'}</h2>
-          <div className="space-y-2">
-            {d.comments.length === 0 && <p className="text-sm text-text-muted">{ar ? 'لا توجد رسائل بعد.' : 'No messages yet.'}</p>}
-            {d.comments.map((c, i) => (
-              <div key={i} className={`rounded-xl border border-border px-3 py-2 text-sm ${c.author === 'Client' ? 'bg-brand-primary-soft/40' : 'bg-surface-secondary'}`}>
-                <div className="tnum text-[11px] font-semibold text-text-secondary">{c.author === 'Client' ? (ar ? 'أنت' : 'You') : (ar ? 'الفريق' : 'Team')} · {c.at ? fmtDateTime(c.at) : ''}</div>
-                <div className="text-text-primary">{c.body}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Reply + upload */}
-          <form className="mt-3 grid gap-2" onSubmit={(e) => { e.preventDefault(); if (message.trim().length >= 2 && !uploading) reply.mutate() }}>
-            <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} maxLength={2000}
-              placeholder={ar ? 'اكتب رسالتك للفريق…' : 'Write a message to the team…'} aria-label={ar ? 'رسالة' : 'Message'}
-              className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm outline-none focus:border-brand-500" />
-            {attached.length > 0 && <div className="text-[11px] text-text-secondary">{ar ? 'مرفقات' : 'Attached'}: {attached.join('، ')}</div>}
-            <div className="flex items-center gap-2">
-              <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-secondary hover:text-text-primary">
-                {uploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />} {ar ? 'إرفاق ملف' : 'Attach'}
-                <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = '' }} />
-              </label>
-              <button type="submit" disabled={message.trim().length < 2 || uploading || reply.isPending} className="ms-auto flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
-                {reply.isPending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />} {ar ? 'إرسال' : 'Send'}
-              </button>
+        {/* CLIENT-CHAT-001 — the conversation, as a chat */}
+        <section className="rounded-2xl border border-border bg-surface p-4 sm:p-5 lg:col-span-2" data-testid="request-chat">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-600/15 text-brand-600"><MessagesSquare size={17} /></span>
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-text-primary">{ar ? 'المحادثة مع الفريق' : 'Conversation with the team'}</h2>
+              <p className="text-[11px] text-text-muted">{ar ? '✓ أُرسلت · ✓✓ قرأها الفريق' : '✓ sent · ✓✓ read by the team'}</p>
             </div>
-          </form>
+          </div>
+          <ChatMessages
+            team={ar ? 'الفريق' : 'Team'}
+            empty={ar ? 'ابدأ المحادثة مع فريقك — نردّ عليك هنا.' : 'Start the conversation — the team replies here.'}
+            messages={d.comments.map((c, i) => ({ id: String(i), mine: c.author === 'Client', body: c.body, at: c.at, readAt: c.read_by_team_at ?? null }))}
+          />
+          <ChatComposer
+            minLength={2}
+            sending={reply.isPending || uploading}
+            placeholder={ar ? 'اكتب رسالتك…' : 'Write a message…'}
+            onSend={(body) => reply.mutate(body)}
+            attach={<ChatAttach uploading={uploading} onFile={(f) => void onFile(f)} label={ar ? 'إرفاق ملف' : 'Attach a file'} />}
+            note={attached.length > 0 ? <div className="mb-1.5 flex flex-wrap gap-1.5">{attached.map((n) => <span key={n} className="inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] text-text-secondary"><Paperclip size={11} />{n}</span>)}</div> : undefined}
+          />
         </section>
 
-        {/* Sidebar: files + notifications */}
-        <aside className="grid gap-4">
+        <aside className="grid content-start gap-4">
+          {/* The request's history, in the client's language */}
+          <section className="rounded-2xl border border-border bg-surface p-5" data-testid="request-history">
+            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-bold text-text-primary"><History size={15} /> {ar ? 'سجل الطلب' : 'Request history'}</h2>
+            {d.timeline.length === 0 ? <p className="text-sm text-text-muted">{ar ? 'لا تحديثات بعد.' : 'No updates yet.'}</p> : (
+              <ol className="relative ms-2 space-y-3 border-s border-border ps-4">
+                {[...d.timeline].reverse().map((t, i) => (
+                  <li key={i} className="relative">
+                    <span className={`absolute -start-[22px] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-surface ${i === 0 ? 'bg-brand-500' : 'bg-border-strong'}`} />
+                    <div className={`text-sm ${i === 0 ? 'font-bold text-text-primary' : 'text-text-secondary'}`}>{(ar ? t.label_ar : t.label_en) ?? (ar ? 'تحديث على طلبك' : 'Your request was updated')}</div>
+                    <div className="tnum text-[11px] text-text-muted">{t.at ? fmtDateTime(t.at) : ''}</div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+
           <section className="rounded-2xl border border-border bg-surface p-5">
-            <h2 className="mb-3 text-sm font-bold text-text-primary">{ar ? 'الملفات' : 'Files'}</h2>
-            {d.files.length === 0 ? <p className="text-sm text-text-muted">{ar ? 'لا توجد ملفات.' : 'No files.'}</p> : (
+            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-bold text-text-primary"><FolderOpen size={15} /> {ar ? 'الملفات' : 'Files'}</h2>
+            {d.files.length === 0 ? <p className="text-sm text-text-muted">{ar ? 'لا توجد ملفات — أرفقها من المحادثة.' : 'No files — attach one from the conversation.'}</p> : (
               <ul className="space-y-1.5">
                 {d.files.map((f) => (
                   <li key={f.id}>
-                    <a href={portalFileUrl(d.reference, f.id)} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:border-brand-400">
+                    <a href={portalFileUrl(d.reference, f.id)} className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-sm hover:border-brand-400">
                       <span className="truncate text-text-primary">{f.name}</span>
                       <Download size={15} className="shrink-0 text-brand-600" />
                     </a>
@@ -170,22 +165,21 @@ export function ClientRequestDetailPage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-border bg-surface p-5">
-            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-bold text-text-primary"><Bell size={15} /> {ar ? 'الإشعارات' : 'Notifications'}</h2>
-            {d.notifications.length === 0 ? <p className="text-sm text-text-muted">—</p> : (
+          {d.notifications.length > 0 && (
+            <section className="rounded-2xl border border-border bg-surface p-5">
+              <h2 className="mb-3 flex items-center gap-1.5 text-sm font-bold text-text-primary"><Bell size={15} /> {ar ? 'التنبيهات المرسلة لك' : 'Updates sent to you'}</h2>
               <ul className="space-y-1.5 text-xs">
                 {d.notifications.map((n, i) => (
-                  <li key={i} className="flex items-center justify-between gap-2 rounded-lg bg-surface-secondary px-2.5 py-1.5">
-                    <span className="text-text-secondary">{n.event} · {n.channel}</span>
-                    <span className={n.status === 'sent' ? 'font-semibold text-success' : 'text-text-muted'}>
-                      {n.status === 'awaiting_provider_credentials' ? (ar ? 'بانتظار المزوّد' : 'awaiting provider') : n.status}
+                  <li key={i} className="flex items-center justify-between gap-2 rounded-xl bg-surface-secondary px-3 py-2">
+                    <span className="text-text-primary">{noticeLabel(n.event, ar)} <span className="text-text-muted">· {channelLabel(n.channel, ar)}</span></span>
+                    <span className={n.status === 'sent' ? 'inline-flex items-center gap-1 font-semibold text-success' : 'text-text-muted'}>
+                      {n.status === 'sent' && <Check size={12} />}{noticeStatus(n.status, ar)}
                     </span>
                   </li>
                 ))}
               </ul>
-            )}
-            <p className="mt-2 flex items-center gap-1 text-[11px] text-text-muted"><CheckCircle2 size={12} /> {ar ? 'تصلك التحديثات عبر البريد والواتساب عند تفعيل المزوّد.' : 'You’ll get email + WhatsApp updates once a provider is enabled.'}</p>
-          </section>
+            </section>
+          )}
         </aside>
       </div>
     </PortalShell>
@@ -197,8 +191,10 @@ function JourneySection({ journey, loading, ar }: { journey: PortalJourney | und
   if (loading) return <div className="mt-4 h-28 animate-pulse rounded-2xl bg-surface-secondary" />
   if (!journey) return null // journey endpoint unavailable — the header progress bar still conveys status honestly
 
-  const offramp = isOfframpStage(journey.stage)
-  const steps = journeySteps(journey.stage)
+  // CLIENT-CHAT-001 — a request the client has sent is never a «draft» to them: before the journey writes a stage, it is received.
+  const stage = ['draft', 'contact_verification'].includes(journey.stage) ? 'submitted' : journey.stage
+  const offramp = isOfframpStage(stage)
+  const steps = journeySteps(stage)
   const actions = journey.client_actions ?? []
 
   return (
@@ -206,13 +202,13 @@ function JourneySection({ journey, loading, ar }: { journey: PortalJourney | und
       <div className="mb-4 flex items-center justify-between gap-2">
         <h2 className="text-sm font-bold text-text-primary">{ar ? 'مسار الطلب' : 'Request journey'}</h2>
         <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
-          {offramp ? journey.stage_label : (STAGE_LABELS[journey.stage] ? (ar ? STAGE_LABELS[journey.stage].ar : STAGE_LABELS[journey.stage].en) : journey.stage_label)}
+          {offramp ? journey.stage_label : (STAGE_LABELS[stage] ? (ar ? STAGE_LABELS[stage].ar : STAGE_LABELS[stage].en) : journey.stage_label)}
         </span>
       </div>
 
       {offramp ? (
         <p className="rounded-xl bg-surface-secondary px-4 py-3 text-sm text-text-secondary">
-          {ar ? 'هذا الطلب خارج المسار الاعتيادي حالياً.' : 'This request is currently off the standard track.'} — {journey.stage_label}
+          {ar ? 'حالة الطلب الآن:' : 'Your request is now:'} <b className="text-text-primary">{journey.stage_label}</b>
         </p>
       ) : (
         <ol className="flex flex-wrap gap-x-1 gap-y-3">
@@ -255,4 +251,23 @@ function JourneySection({ journey, loading, ar }: { journey: PortalJourney | und
       )}
     </section>
   )
+}
+
+/** CLIENT-CHAT-001 — what each update sent to the client was, in the client's language. */
+const NOTICES: Record<string, [string, string]> = {
+  received: ['تأكيد استلام طلبك', 'Request received'],
+  info_requested: ['طلب معلومات منك', 'Information requested'],
+  team_reply: ['ردّ جديد من الفريق', 'New reply from the team'],
+  approved: ['الموافقة على طلبك', 'Request approved'],
+  in_progress: ['بدء العمل على طلبك', 'Work started'],
+  completed: ['اكتمال طلبك', 'Request completed'],
+}
+const noticeLabel = (event: string, ar: boolean) => (NOTICES[event] ? NOTICES[event][ar ? 0 : 1] : (ar ? 'تحديث على طلبك' : 'Request update'))
+const channelLabel = (channel: string, ar: boolean) => ({ email: ar ? 'البريد' : 'Email', whatsapp: ar ? 'واتساب' : 'WhatsApp', sms: ar ? 'رسالة نصية' : 'SMS' }[channel] ?? channel)
+function noticeStatus(status: string, ar: boolean): string {
+  if (status === 'sent') return ar ? 'وصلت' : 'Delivered'
+  if (status === 'failed') return ar ? 'لم تصل' : 'Not delivered'
+  if (status === 'awaiting_provider_credentials') return ar ? 'بانتظار تفعيل القناة' : 'Channel not enabled yet'
+
+  return ar ? 'قيد الإرسال' : 'Sending'
 }

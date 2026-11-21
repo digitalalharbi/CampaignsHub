@@ -6,6 +6,7 @@ namespace App\Domains\Metrics\Http\Controllers;
 
 use App\Domains\Campaigns\Enums\CampaignOutcome;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
+use App\Domains\Campaigns\Services\CampaignDestinations;
 use App\Domains\Commerce\Services\StoreFunnelService;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Fx\FxDisplay;
@@ -27,6 +28,8 @@ use App\Domains\Metrics\Support\EntityScope;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Context\ProjectContext;
+use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Support\ResultEvents;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Http\Controllers\Controller;
 use App\Support\ApiResponse;
@@ -1094,6 +1097,69 @@ final class MetricsController extends Controller
         $stored = $scoped->distinct()->pluck('metric_key')->map(fn ($k) => (string) $k)->all();
 
         return array_values(array_diff($stored, MetricsAggregator::readKeys()));
+    }
+
+    /**
+     * CLIENT-RESULTS-001 — the project's own Results, as its reports count them, for the dashboards.
+     *
+     * A project defines what a result is per platform and acquisition path (`meta.result_events`, else `meta.lead_events`):
+     * NASEL's is a native form lead or a landing completion. The platforms' generic `conversions` and the messaging `leads`
+     * are other things, and a dashboard that headlined them told a client 2 leads where the report told 899. This is the
+     * report's own counting (`ResultEvents::over`) over the same campaign rows, for the window and the one before it.
+     */
+    public function results(Request $request): JsonResponse
+    {
+        $this->authorizeView($request);
+        [$from, $to] = $this->range($request);
+        $project = Project::query()->find((string) app(ProjectContext::class)->projectId());
+        $events = ResultEvents::forProject($project, 'result_events', null);
+        if (! $events->configured()) {
+            $events = ResultEvents::forProject($project, 'lead_events', null);
+        }
+        if (! $events->configured()) {
+            return ApiResponse::success(['configured' => false]);
+        }
+
+        $len = $from->diffInDays($to) + 1;
+        $prevTo = $from->copy()->subDay();
+        $prevFrom = $prevTo->copy()->subDays($len - 1);
+        $read = function (Carbon $f, Carbon $t) use ($request, $events): array {
+            $rows = $this->scoped($request)->byCampaign($f, $t);
+            $ids = array_values(array_unique(array_map(static fn (array $r): string => (string) ($r['campaign_id'] ?? ''), $rows)));
+
+            $destinations = app(CampaignDestinations::class)->for($ids);
+            $out = $events->over($rows, $destinations);
+            // Each campaign's own Results under the same rule, for «the campaigns that brought the most results».
+            $byCampaign = [];
+            foreach ($rows as $row) {
+                $path = ResultEvents::pathOf($destinations[(string) ($row['campaign_id'] ?? '')] ?? null) ?? $events->pathOfName((string) ($row['campaign_name'] ?? ''));
+                $metric = $events->metricFor((string) ($row['provider'] ?? ''), $path);
+                if ($metric === null || ($row['reported'][$metric] ?? false) !== true || (float) ($row[$metric] ?? 0) <= 0) {
+                    continue;
+                }
+                $byCampaign[] = ['campaign_id' => (string) ($row['campaign_id'] ?? ''), 'campaign_name' => $row['campaign_name'] ?? null, 'provider' => (string) ($row['provider'] ?? ''), 'results' => round((float) $row[$metric], 2), 'metric' => $metric];
+            }
+            usort($byCampaign, static fn (array $a, array $b): int => $b['results'] <=> $a['results']);
+            $out['by_campaign'] = array_slice($byCampaign, 0, 10);
+
+            return $out;
+        };
+        $current = $read($from, $to);
+        $previous = $read($prevFrom, $prevTo);
+        $now = $current['total'];
+        $before = $previous['total'];
+
+        return ApiResponse::success([
+            'configured' => true,
+            'total' => $now,
+            'cost' => $current['cost'],
+            'previous_total' => $before,
+            'delta' => is_numeric($now) && is_numeric($before) && (float) $before != 0.0 ? round(((float) $now - (float) $before) / abs((float) $before), 4) : null,
+            'by_platform' => $current['by_platform'],
+            'by_path' => $current['by_path'],
+            'by_campaign' => $current['by_campaign'],
+            'events' => $current['events'],
+        ]);
     }
 
     /**

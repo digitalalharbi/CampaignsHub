@@ -210,8 +210,10 @@ final class RequestsController
         abort_unless($request->user()?->hasPermission('requests.view'), 403);
         $req = $this->find($id);
 
+        // CLIENT-CHAT-001 — the team opening the request has read the client's messages: the client sees ✓✓.
+        $req->comments()->where('visibility', 'client')->where('author_label', 'Client')->whereNull('read_by_team_at')->update(['read_by_team_at' => now()]);
         $comments = $req->comments()->orderBy('created_at')->get()
-            ->map(fn ($c) => ['id' => $c->id, 'visibility' => $c->visibility, 'author' => $c->author_label ?? 'Team', 'body' => $c->body, 'at' => optional($c->created_at)->toIso8601String()]);
+            ->map(fn ($c) => ['id' => $c->id, 'visibility' => $c->visibility, 'author' => $c->author_label ?? 'Team', 'body' => $c->body, 'at' => optional($c->created_at)->toIso8601String(), 'read_by_client_at' => optional($c->read_by_client_at)->toIso8601String()]);
         $events = $req->events()->orderByDesc('created_at')->limit(100)->get()
             ->map(fn ($e) => ['type' => $e->type, 'from' => $e->from_status, 'to' => $e->to_status, 'message' => $e->message, 'client_visible' => $e->is_client_visible, 'at' => optional($e->created_at)->toIso8601String()]);
         $files = $req->files()->whereNotNull('request_id')->get()

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Requests\Http\Controllers;
 
+use App\Domains\Agency\Services\RoleDashboardBuilder;
 use App\Domains\Audit\Models\AuditLog;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\Payment;
@@ -49,6 +50,7 @@ use App\Domains\Requests\Models\ExternalRequest;
 use App\Domains\Requests\Models\RequestComment;
 use App\Domains\Requests\Models\RequestEvent;
 use App\Domains\Requests\Models\RequestFile;
+use App\Domains\Requests\Models\RequestStatus;
 use App\Domains\Requests\Services\ClientPortalIdentity;
 use App\Domains\Requests\Services\ClientRequestCreator;
 use App\Domains\Requests\Services\ClientRequestManagerNotifier;
@@ -484,13 +486,21 @@ final class ClientPortalController
         $token = $this->requireSession($request);
         $req = $this->resolveOwnedRequest($token, $reference);
 
-        $timeline = $req->events()->where('is_client_visible', true)->orderBy('created_at')
+        /*
+         * CLIENT-CHAT-001 — the history reads in the client's language and leaves messages to the conversation: a «Client added a
+         * message» row beside the message itself was noise, and the stored English sentences are an engine's log, not the
+         * client's. Each row is named here, by its kind, in both languages.
+         */
+        $timeline = $req->events()->where('is_client_visible', true)->where('type', '!=', 'comment')->orderBy('created_at')
             ->get(['type', 'to_status', 'message', 'created_at'])
-            ->map(fn (RequestEvent $e) => ['type' => $e->type, 'status' => $e->to_status, 'message' => $e->message, 'at' => optional($e->created_at)->toIso8601String()]);
+            ->map(fn (RequestEvent $e) => ['type' => $e->type, 'status' => $e->to_status, 'message' => $e->message, 'label_ar' => $this->eventLabel($e, 'ar'), 'label_en' => $this->eventLabel($e, 'en'), 'at' => optional($e->created_at)->toIso8601String()]);
 
+        // The client opening its request has read the team's messages: the team sees ✓✓.
+        $req->comments()->where('visibility', 'client')->where(fn ($q) => $q->whereNull('author_label')->orWhere('author_label', '!=', 'Client'))
+            ->whereNull('read_by_client_at')->update(['read_by_client_at' => now()]);
         $comments = $req->comments()->where('visibility', 'client')->orderBy('created_at')
-            ->get(['author_label', 'body', 'created_at'])
-            ->map(fn (RequestComment $c) => ['author' => $c->author_label ?? 'Team', 'body' => $c->body, 'at' => optional($c->created_at)->toIso8601String()]);
+            ->get(['author_label', 'body', 'created_at', 'read_by_team_at'])
+            ->map(fn (RequestComment $c) => ['author' => $c->author_label ?? 'Team', 'body' => $c->body, 'at' => optional($c->created_at)->toIso8601String(), 'read_by_team_at' => optional($c->read_by_team_at)->toIso8601String()]);
 
         $files = $req->files()->where('is_client_visible', true)->whereNotNull('request_id')
             ->get(['id', 'original_name', 'size'])
@@ -1182,12 +1192,46 @@ final class ClientPortalController
         };
     }
 
+    /**
+     * GET /client/projects/{project}/content — CLIENT-CONTENT-001 (Owner 2026-11-21: «اظهر نظرة عامة وتحليلية للمحتويات»).
+     *
+     * The best and weakest content of one of the client's projects, ranked the way the report and the agency's home rank
+     * it (`RoleDashboardBuilder::content`). Needs the space's dashboard and content switches; money only where `spend` is on;
+     * a content's name only where the agency shows campaign names.
+     */
+    public function projectContent(Request $request, string $project): JsonResponse
+    {
+        $token = $this->requireSession($request);
+        $this->bindTenant($token);
+        abort_unless(Str::isUuid($project), 404);
+        $model = Project::query()->live()->whereKey($project)->whereIn('id', $this->ownedProjectIds($token, 'dashboard'))->first();
+        abort_if($model === null, 404);
+        $workspace = ClientWorkspace::query()->whereKey($model->client_workspace_id)->first();
+        abort_if($workspace === null, 404);
+        $visibility = PortalVisibility::visibilityFor($workspace);
+        abort_unless($visibility['content'] ?? false, 403, 'Not available for this space.');
+
+        $data = $request->validate(['from' => ['required', 'date_format:Y-m-d'], 'to' => ['required', 'date_format:Y-m-d', 'after_or_equal:from']]);
+        $from = Carbon::parse($data['from'])->startOfDay();
+        $to = Carbon::parse($data['to'])->startOfDay();
+        abort_if($from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
+
+        $content = app(RoleDashboardBuilder::class)->content([(string) $model->getKey()], $from, $to, (bool) ($visibility['spend'] ?? false));
+        $content = PortalMetricsFilter::apply($content, $visibility);
+        if (! ($visibility['campaign_names'] ?? false)) {
+            $content = PortalMetricsFilter::withoutKeys($content, ['name', 'campaign_name']);
+        }
+
+        return response()->json(['data' => $content]);
+    }
+
     /** CLIENT-DASHBOARD-PARITY-001 — the agency's metrics answers a client may read, by path. */
     private const PORTAL_METRICS = [
         'summary' => ['summary', null],
         'timeseries' => ['timeseries', null],
         'platforms' => ['platforms', null],
         'freshness' => ['freshness', null],
+        'results' => ['results', null],
         'funnel' => ['funnel', null],
         'objective-performance' => ['objectivePerformance', null],
         'platform-objectives' => ['platformObjectives', null],
@@ -1229,9 +1273,33 @@ final class ClientPortalController
         $payload = $response->getData(true);
         if (is_array($payload) && array_key_exists('data', $payload)) {
             $payload['data'] = PortalMetricsFilter::apply($payload['data'], $visibility);
+            // A campaign is named to the client only where the agency shows campaign names.
+            if (! ($visibility['campaign_names'] ?? false)) {
+                $payload['data'] = PortalMetricsFilter::withoutKeys($payload['data'], ['campaign_name', 'name']);
+            }
         }
 
         return response()->json($payload, $response->getStatusCode());
+    }
+
+    /** CLIENT-CHAT-001 — a client-visible history row, named in the reader's language from its kind. */
+    private function eventLabel(RequestEvent $e, string $locale): string
+    {
+        $ar = $locale === 'ar';
+        $stage = is_string($e->to_status) ? RequestStage::tryFrom($e->to_status) : null;
+        $status = null;
+        if ($e->type === 'status_changed' && is_string($e->to_status)) {
+            $status = RequestStatus::query()->where('key', $e->to_status)->first();
+        }
+
+        return match ($e->type) {
+            'created' => $ar ? 'تم استلام طلبك' : 'Your request was received',
+            'journey_transition' => $stage !== null ? ($ar ? 'انتقل طلبك إلى: '.$stage->labelAr() : 'Your request moved to: '.$stage->label()) : ($ar ? 'تحديث على طلبك' : 'Your request was updated'),
+            'status_changed' => $status !== null ? ($ar ? 'الحالة الآن: '.$status->name_ar : 'Status is now: '.$status->name_en) : ($ar ? 'تحديث على حالة طلبك' : 'Your request status was updated'),
+            'file_uploaded', 'file' => $ar ? 'أُضيف ملف' : 'A file was added',
+            'converted' => $ar ? 'بدأ تنفيذ طلبك' : 'Your request is now in delivery',
+            default => $ar ? 'تحديث على طلبك' : 'Your request was updated',
+        };
     }
 
     // ---- client-facing scoping + shapes ----
@@ -1733,6 +1801,8 @@ final class ClientPortalController
             'attachments' => $m->attachments,
             'created_at' => optional($m->created_at)->toIso8601String(),
             'read_by_client_at' => optional($m->read_by_client_at)->toIso8601String(),
+            // CLIENT-CHAT-001 — the client's own message shows ✓✓ once the team has read it.
+            'read_by_team_at' => optional($m->read_by_team_at)->toIso8601String(),
         ];
     }
 

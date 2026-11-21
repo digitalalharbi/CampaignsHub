@@ -14,7 +14,7 @@ namespace App\Domains\ClientWorkspaces\Services;
  */
 final class PortalMetricsFilter
 {
-    private const SPEND = ['spend', 'cpa', 'cpc', 'cpm', 'cpl', 'cpv', 'cost', 'budget'];
+    private const SPEND = ['spend', 'cpa', 'cpc', 'cpm', 'cpl', 'cpv', 'cpe', 'cpi', 'cpr', 'cost', 'budget'];
 
     private const REVENUE = ['revenue', 'roas', 'aov', 'purchase_value', 'conversion_value', 'conversions_value', 'profit', 'margin'];
 
@@ -34,6 +34,27 @@ final class PortalMetricsFilter
                 continue;
             }
             $out[$key] = self::apply($value, $visibility);
+        }
+
+        return $out;
+    }
+
+    /**
+     * The answer without the given keys, at every depth.
+     *
+     * @param  list<string>  $keys
+     */
+    public static function withoutKeys(mixed $data, array $keys): mixed
+    {
+        if (! is_array($data)) {
+            return $data;
+        }
+        $out = [];
+        foreach ($data as $k => $v) {
+            if (is_string($k) && in_array($k, $keys, true)) {
+                continue;
+            }
+            $out[$k] = self::withoutKeys($v, $keys);
         }
 
         return $out;

@@ -51,8 +51,9 @@ export const createPortalRequest = (body: NewPortalRequest) =>
   postData<{ reference: string; status: string; submitted_at: string | null }>('/client/requests', body)
 
 export interface PortalRequestDetail extends PortalRequestCard {
-  timeline: { type: string; status: string | null; message: string | null; at: string | null }[]
-  comments: { author: string; body: string; at: string | null }[]
+  timeline: { type: string; status: string | null; message: string | null; label_ar?: string; label_en?: string; at: string | null }[]
+  /** CLIENT-CHAT-001 — `read_by_team_at` on the client's own message: when the team read it (null: not yet). */
+  comments: { author: string; body: string; at: string | null; read_by_team_at?: string | null }[]
   files: { id: number; name: string; size: number }[]
   /** CLIENT-REPORT-ENTITY-BOUNDARY-001 — the project, never the campaign it was filed under. */
   result: { converted: boolean; project_name: string | null } | null

@@ -213,6 +213,8 @@ export interface PortalMessage {
   attachments: unknown
   created_at: string | null
   read_by_client_at: string | null
+  /** CLIENT-CHAT-001 — when the team read this message (the client's own message shows ✓✓). */
+  read_by_team_at?: string | null
 }
 
 export const listPortalThreads = async (): Promise<PortalList<PortalThread>> => {
