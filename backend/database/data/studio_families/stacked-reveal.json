@@ -1,0 +1,46 @@
+{
+  "key": "stacked-reveal",
+  "version": 1,
+  "label": {
+    "ar": "كتلة متدرجة",
+    "en": "Stacked reveal"
+  },
+  "kind": "both",
+  "anchor": "upper",
+  "blocks": [
+    {
+      "role": "logo",
+      "cols": 3,
+      "rows": 1,
+      "place": "live-top",
+      "align": "start"
+    },
+    {
+      "role": "hook",
+      "cols": 8,
+      "rows": 3,
+      "place": "calm",
+      "align": "start"
+    },
+    {
+      "role": "message",
+      "cols": 8,
+      "rows": 2,
+      "place": "calm",
+      "align": "start"
+    },
+    {
+      "role": "cta",
+      "cols": 6,
+      "rows": 1,
+      "place": "live-bottom",
+      "align": "start"
+    }
+  ],
+  "motion": [
+    "rise",
+    "mask-wipe-rtl",
+    "bar-grow-start"
+  ],
+  "detailCuts": 0
+}
