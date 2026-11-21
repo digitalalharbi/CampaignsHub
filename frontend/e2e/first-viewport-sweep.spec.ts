@@ -38,7 +38,8 @@ const SURFACES: Array<{ path: string; project?: boolean; projectPath?: boolean; 
   { path: '/agency/campaigns', project: true, firstScreen: ['campaigns-intro-kpis', 'campaigns-table-controls'] },
   // ANALYTICS-DAILY-MEASURE-001 — the analysis page opens on the daily chart; the overview follows it.
   { path: '/agency/analytics', project: true, firstScreen: ['analytics-filters', 'analytics-daily'] },
-  { path: '/agency/content', project: true, firstScreen: ['content-summary', 'content-filters'] },
+  // CONTENT-LIBRARY-SNAP-001 — the bare address is the library: its tabs and the creatives table answer the page's question.
+  { path: '/agency/content', project: true, firstScreen: ['library-tabs', 'creatives-table'] },
   { path: '/agency/reports', project: true, firstScreen: ['reports-hero-kpis', 'reports-filters'] },
   // INTEG-PROJECT-SPACE-001 — the centre is the selected project's space; without one it is the chooser.
   { path: '/agency/integrations', project: true, firstScreen: ['integrations-intro', 'connection-hub'] },

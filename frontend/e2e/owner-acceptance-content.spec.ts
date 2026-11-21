@@ -171,7 +171,7 @@ test.describe('the content surfaces the owner checked', () => {
   const ABSENT = /لا توجد بيانات|No data|غير متاح|Not provided/
 
   for (const [name, path, ready] of [
-    ['the library', '/agency/content', '[data-testid="content-summary"]'],
+    ['the library', '/agency/content?view=grid', '[data-testid="content-summary"]'],
     ['the groups page', '/agency/content/groups', 'main'],
     ['the Analytics content table', '/agency/analytics?tab=creative', 'main'],
   ] as const) {
