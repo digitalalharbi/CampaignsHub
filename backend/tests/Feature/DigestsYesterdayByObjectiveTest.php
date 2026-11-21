@@ -530,8 +530,8 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $link = (int) strpos($html, 'data-block="linking"');
         $this->assertGreaterThan(0, $link);
         $this->assertLessThan($link, (int) strpos($html, 'data-block="kpis"'), 'performance first, «ملخص الربط» after it');
-        // DIGEST-NO-DECISION-SECTION-001 — Owner 2026-11-21: the «يحتاج قرارك الآن» list is gone from the mail.
-        $this->assertStringNotContainsString('يحتاج قرارك', $html);
+        // DIGEST-NO-DECISION-SECTION-001 — the old alert-card list is gone; DIGEST-PM-ACTIONS-001 may bring back budget actions only.
+        $this->assertStringNotContainsString('data-block="issue"', $html);
     }
 
     /**
@@ -549,7 +549,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
 
         $html = $mail->render();
         $this->assertStringNotContainsString('•', $html);
-        $this->assertStringNotContainsString('يحتاج قرارك', $html);
+        $this->assertStringNotContainsString('data-block="issue"', $html);
     }
 
     /**
@@ -570,7 +570,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio', 'أمس: 11 نوفمبر 2026'))->render();
         $this->assertStringContainsString('ملخص كل مشروع', $html);
         $this->assertSame(12, substr_count($html, 'data-block="portfolio-row"'));
-        foreach (['data-block="movers"', 'data-block="counts"', 'data-block="heatmap"', 'data-block="coverage"', 'أرقامها محدّثة', 'الأفضل والأقل', 'يحتاج قرارك'] as $gone) {
+        foreach (['data-block="movers"', 'data-block="counts"', 'data-block="heatmap"', 'data-block="coverage"', 'أرقامها محدّثة', 'الأفضل والأقل', 'data-block="issue"'] as $gone) {
             $this->assertStringNotContainsString($gone, $html, $gone);
         }
 
@@ -578,6 +578,27 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         foreach (['data-block="platform-strip"', 'data-block="content-top"', 'data-block="content-weak"', 'data-block="best-worst"'] as $gone) {
             $this->assertStringNotContainsString($gone, $project, $gone);
         }
+    }
+
+    /**
+     * DIGEST-PM-ACTIONS-001 — Owner 2026-11-21: «يحتاج قرارك الآن» speaks to project management, from proven budget figures only.
+     */
+    public function test_budget_actions_are_written_for_project_management_and_only_when_proven(): void
+    {
+        $budget = static fn (float $b, float $s, ?float $projected = null): array => OperationalDigestModel::budget(['budget' => $b, 'spent' => $s, 'currency' => 'SAR', 'currencies' => 1, 'elapsed' => 0.5, 'pace' => $projected !== null ? $projected / $b : null, 'projected' => $projected], 'ar');
+        $m = new \ReflectionMethod(OperationalDigestModel::class, 'budgetActions');
+        $actions = $m->invoke(null, [
+            ['name' => 'Over'] + $budget(1000, 1200),
+            ['name' => 'Near'] + $budget(1000, 850),
+            ['name' => 'Fast'] + $budget(1000, 400, 1300),
+            ['name' => 'Calm'] + $budget(1000, 300, 700),
+            ['name' => 'Unpriced', 'state' => 'withheld'],
+        ], true);
+        $this->assertSame(['Over', 'Near', 'Fast'], array_column($actions, 'name'));
+        $this->assertStringContainsString('جدّد مع العميل', $actions[0]['text']);
+        $this->assertStringContainsString('قرّبت تخلص', $actions[1]['text']);
+        $this->assertStringContainsString('جدّد مع العميل', $actions[1]['text']);
+        $this->assertStringContainsString('بمعدل الصرف الحالي', $actions[2]['text']);
     }
 
     // ── §7 — a cause only with evidence ─────────────────────────────────────

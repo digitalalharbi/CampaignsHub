@@ -135,6 +135,41 @@ final class DigestsCadenceBudgetsTest extends TestCase
         Mail::assertNotSent(OperationalDigestMail::class);
     }
 
+    /**
+     * FINANCE-SPEND-ONLY-001 — Owner 2026-11-21: «استثني المالية من الاطلاع على الأداء». The finance role gets the spend summary
+     * even when its keys would open analytics and campaigns; the summary names the client, carries the notes and no performance.
+     */
+    public function test_the_finance_role_never_receives_performance_even_with_analytics_keys(): void
+    {
+        Mail::fake();
+        config([
+            'mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.provider.test', 'mail.mailers.smtp.username' => 'operator-login',
+            'providers.channels.email' => LaravelMailProvider::class,
+        ]);
+        app(TenantContext::class)->setTenantId($this->tenant->id);
+        $role = Role::query()->where('tenant_id', $this->tenant->id)->where('slug', \App\Domains\Access\Support\WorkspaceRolePresets::FINANCE)->first()
+            ?? Role::create(['tenant_id' => $this->tenant->id, 'name' => 'Finance', 'slug' => \App\Domains\Access\Support\WorkspaceRolePresets::FINANCE]);
+        $role->givePermissionTo('projects.view', 'projects.view.all', 'clients.view', 'clients.view_all', 'budget.view', 'budget.manage', 'analytics.view', 'campaigns.view');
+        $finance = User::create(['name' => 'Fin', 'email' => 'fin-role-'.uniqid().'@cad.test', 'password' => 'secret123']);
+        Membership::create(['tenant_id' => $this->tenant->id, 'user_id' => $finance->id, 'portal' => 'agency', 'status' => 'active']);
+        $finance->assignRole($role);
+        app(TenantContext::class)->forget();
+
+        $result = app(DigestDispatcher::class)->sendDaily($finance, (string) $this->tenant->id, Carbon::parse('2026-11-16'), 'ar', 'agency', null, true);
+
+        $this->assertSame('sent', $result);
+        Mail::assertSent(SpendSummaryMail::class, function (SpendSummaryMail $m): bool {
+            $html = $m->render();
+            $this->assertStringContainsString('data-block="mail-notes"', $html);
+            $this->assertStringContainsString('فواتير المنصات الرسمية هي المرجع النهائي', $html);
+            $this->assertStringNotContainsString('العائد', $html, 'no performance figure');
+
+            return true;
+        });
+        Mail::assertNotSent(OperationalDigestMail::class);
+        Mail::assertNotSent(DailyDigestMail::class);
+    }
+
     public function test_the_digest_sweep_is_pinned_to_riyadh(): void
     {
         $events = array_values(array_filter(app(Schedule::class)->events(), static fn ($e): bool => str_contains((string) $e->command, 'notifications:send-digests')));

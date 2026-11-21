@@ -79,6 +79,9 @@
         </table>
     @endforeach
 
+    {{-- DIGEST-PM-ACTIONS-001 — «يحتاج قرارك الآن» for project management: budget actions the figures prove. --}}
+    @include('mail.digest._actions', ['items' => $m['actions'] ?? [], 'ar' => $ar, 'startSide' => $startSide])
+
     {{-- 4. DIGESTS-CADENCE-BUDGETS-001 — the month's budget, spend, remaining and pace per project, and the total. --}}
     @include('mail.digest._budgets', ['bud' => $m['budgets']])
 
@@ -106,4 +109,5 @@
 
     @include('mail.partials.button', ['href' => $m['links']['dashboard'], 'label' => $ar ? 'افتح لوحة المتابعة' : 'Open the dashboard'])
     @endunless
+    @include('mail.digest._notes', ['ar' => $ar, 'sources' => array_column($m['mix'] ?? [], 'name')])
 </div>

@@ -83,7 +83,11 @@
         @endforelse
     @endif
 
-    {{-- DIGEST-NO-DECISION-SECTION-001 — Owner 2026-11-21: the «يحتاج قرارك الآن» list is removed from the mail. --}}
+    {{-- DIGEST-PM-ACTIONS-001 — the old alert list stays removed; «يحتاج قرارك الآن» returns as budget actions for project
+         management, never to a reader outside the platform. --}}
+    @unless ($external ?? false)
+        @include('mail.digest._actions', ['items' => $m['actions'] ?? [], 'ar' => $ar, 'startSide' => $startSide])
+    @endunless
     {{-- DIGESTS-CADENCE-BUDGETS-001 — the month's budget, spend, remaining and pace: one bar, three numbers, one chip. --}}
     @if (! empty($m['budget']))
         <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:2px 0 6px;">{{ $ar ? 'ميزانية الشهر' : 'This month’s budget' }}@if ($m['budget']['band']) <span data-chip="pace" style="display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:800; background-color:{{ $S::CELL[$m['budget']['tone']] }}; color:{{ $S::INK[$m['budget']['tone']] }};">{{ $S::GLYPH[$m['budget']['tone']] }} {{ $m['budget']['band_label'] }}</span>@endif</div>
@@ -121,4 +125,5 @@
     @include('mail.partials.button', ['href' => $m['links']['report'], 'label' => $t['open_report']])
 @endunless
 
+    @include('mail.digest._notes', ['ar' => $ar, 'sources' => $m['source_names'] ?? []])
 </div>
