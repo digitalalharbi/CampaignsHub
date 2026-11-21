@@ -151,12 +151,12 @@ export function SpendTrack({ platforms, used, red, tone, ar }: { platforms: RowP
 }
 
 /** Each platform's own mark: full colour with a green ring = شغّالة, grey and faded = واقفة; its colour line ties it to the bar. */
-export function PlatformMarks({ platforms, ar, testId = 'live-platforms' }: { platforms: RowPlatform[]; ar: boolean; testId?: string }) {
+export function PlatformMarks({ platforms, ar, testId = 'live-platforms', size = 16 }: { platforms: RowPlatform[]; ar: boolean; testId?: string; size?: number }) {
   if (platforms.length === 0) return null
   const ordered = [...platforms].sort((a, b) => Number(b.on === true) - Number(a.on === true))
 
   return (
-    <span className="flex flex-wrap items-center gap-2" data-testid={testId}>
+    <span className="flex shrink-0 flex-wrap items-center gap-1" data-testid={testId}>
       {ordered.map((p) => {
         const state = p.on === undefined ? null : p.on ? (ar ? 'شغّالة' : 'Running') : (ar ? 'واقفة' : 'Stopped')
         const money = p.part ? platformTip(p.part, ar) : providerLabel(p.provider, ar ? 'ar' : 'en')
@@ -166,12 +166,11 @@ export function PlatformMarks({ platforms, ar, testId = 'live-platforms' }: { pl
             title={[money, state].filter(Boolean).join(' · ')}
             data-testid={`live-platform-${p.provider}`}
             data-on={p.on === undefined ? undefined : p.on ? 'true' : 'false'}
-            className="relative inline-flex flex-col items-center gap-0.5"
+            className="relative inline-flex"
           >
-            <span className={`inline-flex rounded-md ring-2 ring-offset-1 ring-offset-[var(--surface)] ${p.on ? 'ring-success' : 'opacity-45 grayscale ring-border'}`}>
-              <ProviderMark provider={p.provider} size={20} />
+            <span className={`inline-flex rounded-md ring-[1.5px] ${p.on ? 'ring-success' : 'opacity-45 grayscale ring-border'}`}>
+              <ProviderMark provider={p.provider} size={size} />
             </span>
-            <span aria-hidden className="h-0.5 w-3.5 rounded-full" style={{ background: p.part ? p.color : 'transparent' }} />
             {state && <span className="sr-only">{`${providerLabel(p.provider, ar ? 'ar' : 'en')} · ${state}`}</span>}
           </span>
         )
@@ -241,7 +240,7 @@ function Fig({ label, children }: { label: { ar: string; en: string }; children:
 }
 
 /** The board's columns on a large screen: client · period · budget with its platforms · status. */
-const ROW_COLS = 'lg:grid-cols-[minmax(0,1.35fr)_10.25rem_minmax(0,3.6fr)_minmax(0,1.25fr)]'
+const ROW_COLS = 'lg:grid-cols-[minmax(0,1.5fr)_10.25rem_minmax(0,3fr)_minmax(10.5rem,1.2fr)]'
 
 /** The column titles of the board, over the rows (large screens; on a phone each figure names itself). */
 export function BoardHeader({ ar }: { ar: boolean }) {
@@ -277,7 +276,7 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
       onClick={onOpen}
       aria-current={active}
       data-testid={`budget-row-${row.project_id}`}
-      className={`grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 rounded-[10px] border px-2.5 py-1.5 text-start transition ${ROW_COLS} ${active ? 'border-brand-600 bg-surface' : 'border-border bg-surface hover:border-border-strong'}`}
+      className={`grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0 rounded-[10px] border px-2.5 py-0.5 text-start transition ${ROW_COLS} ${active ? 'border-brand-600 bg-surface' : 'border-border bg-surface hover:border-border-strong'}`}
     >
       <span className="flex min-w-0 items-center gap-1.5">
         <span
@@ -287,11 +286,11 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
         />
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-sm font-bold text-text-primary">{row.client_name}</span>
-            <LiveChip on={row.delivering} ar={ar} testId={`budget-live-${row.project_id}`} />
+            <span className="truncate text-sm font-bold text-text-primary" title={row.client_name ?? undefined}>{row.client_name}</span>
           </span>
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-xs text-text-muted">{row.project_name}</span>
+            <LiveChip on={row.delivering} ar={ar} testId={`budget-live-${row.project_id}`} />
+            <span className="truncate text-xs text-text-muted" title={row.project_name ?? undefined}>{row.project_name}</span>
             <ModeBadges row={row} ar={ar} />
           </span>
         </span>
@@ -320,7 +319,8 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
               platform in their colours, named «صُرف» so the percentage is never read as what is left. With no ceiling (بالأجل)
               the track is the spend itself, split by platform, with no percentage. */}
           {(used !== null || platforms.some((p) => p.part)) && (
-            <span className="mt-1 flex min-w-0 items-center gap-1.5" title={used === null ? undefined : `${ar ? 'صُرف' : 'Spent'} ${Math.round(used * 100)}% ${ar ? 'من الميزانية' : 'of the budget'}`}>
+            <span className="mt-0.5 flex min-w-0 items-center gap-1.5" title={used === null ? undefined : `${ar ? 'صُرف' : 'Spent'} ${Math.round(used * 100)}% ${ar ? 'من الميزانية' : 'of the budget'}`}>
+              <PlatformMarks platforms={platforms} ar={ar} />
               <SpendTrack platforms={platforms} used={used} red={red} tone={tone} ar={ar} />
               {used !== null && (
                 <>
@@ -331,11 +331,11 @@ export function BudgetBoardRow({ row, active, onOpen, ar }: { row: BudgetRow; ac
               {credit && row.ceiling !== null && <span className="shrink-0 whitespace-nowrap text-xs text-text-muted">{ar ? L.ceiling.ar : L.ceiling.en} <Money n={row.ceiling} currency="SAR" /></span>}
             </span>
           )}
-          <span className="mt-1.5"><PlatformMarks platforms={platforms} ar={ar} /></span>
+          {used === null && !platforms.some((p) => p.part) && platforms.length > 0 && <span className="mt-0.5"><PlatformMarks platforms={platforms} ar={ar} /></span>}
         </span>
       </span>
 
-      <span className="col-span-2 flex min-w-0 flex-wrap items-center justify-self-start gap-1.5 lg:col-span-1 lg:flex-col lg:items-end lg:justify-self-end">
+      <span className="col-span-2 flex min-w-0 flex-wrap items-center justify-self-start gap-1 lg:col-span-1 lg:justify-end lg:justify-self-end">
         <span title={ar ? STATUS_WHY[row.status].ar : STATUS_WHY[row.status].en} data-testid="row-status"><Badge tone={st.tone} className="whitespace-nowrap">{ar ? st.ar : st.en}</Badge></span>
         <PaceNote row={row} ar={ar} />
         {/* PROJECT-LIFECYCLE-001 §7 — what the spend excludes (no rate) and the old rate used, named; the drawer shows the full statement. */}

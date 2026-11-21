@@ -5,6 +5,7 @@ import { platformColor } from '@/lib/colors'
 import { platformLabel } from '@/lib/platforms'
 import { metricsCurrency, type RankedCampaign, type RoleDashboard } from './api'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, familyName, times, useBoxHeight, useFmt } from './parts'
+import { DeliveryPanel } from './delivery'
 
 const T = {
   ar: { mine: 'حملاتي', reach: 'الحملات المتاحة لك', spend: 'الإنفاق', results: 'النتائج', cost: 'التكلفة لكل نتيجة', roas: 'عائد الإنفاق', compare: 'مقارنة المنصات', share: 'توزيع الإنفاق', best: 'الأفضل', worst: 'الأضعف', nothing: 'لا توجد بيانات', active: 'نشطة', paused: 'متوقفة', draft: 'مسودة', objective: 'الهدف', none: 'بلا نتائج بعد' },
@@ -85,6 +86,9 @@ export function MarketerView({ d, portal }: { d: RoleDashboard; portal: 'agency'
           <Panel title={t.worst} to={`/${portal}/campaigns`} testId="dash-panel-worst"><Ranked items={d.worst ?? []} portal={portal} testId="dash-worst" f={f} /></Panel>
         </div>
       </div>
+
+      {/* DELIVERY-ALL-ROLES-001 — running or stopped concerns the marketer too; the money only with the money key. */}
+      <DeliveryPanel rows={d.delivery} units={d.units} portal={portal} />
 
       <StatusStrip>
         {camps && <Chip testId="dash-chip-active" to={`/${portal}/campaigns`} label={t.active} value={f.count(camps.active)} status="within" />}

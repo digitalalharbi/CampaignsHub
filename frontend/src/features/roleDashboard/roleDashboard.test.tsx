@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
-import type { DashboardUnit, RoleDashboard, WatchBoard } from './api'
+import type { DashboardUnit, DeliveryRow, RoleDashboard, WatchBoard } from './api'
 
 const state: { data: RoleDashboard | null; watch: WatchBoard | null } = { data: null, watch: null }
 vi.mock('./api', async (importOriginal) => ({
@@ -263,5 +263,34 @@ describe('ANALYTICS-POPUP-001 — Home opens the matching analytics section in a
   it('a card that is not an analytics matter (alerts) keeps its link', () => {
     page(base({}))
     expect(screen.getByTestId('dash-kpi-alerts')).toHaveAttribute('href', '/agency/alerts')
+  })
+})
+
+/** DELIVERY-ALL-ROLES-001 — running or stopped on every role's page; the money beside it only when the server sends it. */
+describe('running or stopped, merged with the budget, for every role', () => {
+  const delivery: DeliveryRow[] = [
+    { id: 'c1', kind: 'client' as const, name: 'Alpha', delivering: true, delivering_platforms: { meta: true, snapchat: false }, budget: 1000, spent: 700, remaining: 300, ratio: 0.7, currency: 'SAR' },
+    { id: 'c2', kind: 'client' as const, name: 'Beta', delivering: false, delivering_platforms: { tiktok: false }, budget: 500, spent: 100, remaining: 400, ratio: 0.2, currency: 'SAR' },
+  ]
+
+  for (const view of ['manager', 'pm', 'finance', 'marketer'] as const) {
+    it(`draws it on the ${view} page`, () => {
+      page(base({ view, delivery }))
+      const panel = screen.getByTestId('dash-panel-delivery')
+      expect(within(panel).getByTestId('dash-delivery-on')).toHaveTextContent('1')
+      expect(within(panel).getByTestId('dash-delivery-off')).toHaveTextContent('1')
+      expect(within(panel).getByTestId('dash-delivery-left-c2')).toBeInTheDocument()
+      const alpha = within(panel).getByTestId('dash-delivery-platforms-c1')
+      expect(within(alpha).getByTestId('live-platform-meta').dataset.on).toBe('true')
+      expect(within(alpha).getByTestId('live-platform-snapchat').dataset.on).toBe('false')
+    })
+  }
+
+  it('shows the state with no money for a member without the money key', () => {
+    page(base({ view: 'marketer', can_money: false, money: null, units: [], delivery: delivery.map((r) => ({ ...r, budget: null, spent: null, remaining: null, ratio: null })) }))
+    const panel = screen.getByTestId('dash-panel-delivery')
+    expect(within(panel).getByTestId('dash-delivery-c1')).toHaveTextContent('Alpha')
+    expect(within(panel).queryByTestId('dash-delivery-left-c2')).toBeNull()
+    expect(panel.textContent).not.toMatch(/400|300/)
   })
 })

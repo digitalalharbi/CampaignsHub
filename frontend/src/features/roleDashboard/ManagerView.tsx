@@ -10,6 +10,7 @@ import { days as countedDays } from '@/lib/counted'
 import { metricsCurrency, useDashboardPerformance, type DashboardUnit, type RoleDashboard } from './api'
 import { Chip, Kpi, Nothing, Panel, StatusStrip, useBoxHeight, useFmt } from './parts'
 import { PerformanceBlock } from './performance'
+import { DeliveryPanel } from './delivery'
 
 const T = {
   ar: { budget: 'الميزانية', spend: 'الإنفاق', remaining: 'المتبقي', active: 'حملات نشطة', alerts: 'التنبيهات', vsBudget: 'الإنفاق والميزانية', onPlan: 'على الخطة', offPlan: 'خارج الخطة', daily: 'الإنفاق اليومي', integrations: 'التكاملات', healthy: 'سليمة', review: 'تحتاج مراجعة', pending: 'قيد الإعداد', paused: 'متوقفة', critical: 'حرجة', open: 'مفتوحة', nothing: 'لا توجد بيانات', unmeasured: 'حملة بلا قياس', of: 'من الميزانية', barBudget: 'الميزانية', barSpent: 'الإنفاق', campaignBudgets: 'ميزانيات الحملات' },
@@ -103,6 +104,9 @@ export function ManagerView({ d, portal }: { d: RoleDashboard; portal: 'agency' 
       <div className="grid min-h-0 grid-cols-1 gap-2">
       {/* HOME-360-001 — one block, shared with the project manager's page (same query, deduplicated). */}
       <PerformanceBlock d={d} portal={portal} />
+
+      {/* DELIVERY-ALL-ROLES-001 — who is running and who stopped, with the budget beside it. */}
+      <DeliveryPanel rows={d.delivery} units={d.units} portal={portal} />
 
       {/* SHOW-AVAILABLE-001 — Owner 2026-11-20: «اعرض المتاح فقط». A panel with nothing to draw is not drawn; the rest share the row. */}
       {(barData.length > 0 || onPlan.length > 0 || offPlan.length > 0 || d.daily_spend.length >= 2) && (
