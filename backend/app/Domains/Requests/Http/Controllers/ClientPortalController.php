@@ -1217,10 +1217,9 @@ final class ClientPortalController
         abort_if($from->diffInDays($to) > 366, 422, 'Choose a period of at most a year.');
 
         $content = app(RoleDashboardBuilder::class)->content([(string) $model->getKey()], $from, $to, (bool) ($visibility['spend'] ?? false));
-        $content = PortalMetricsFilter::apply($content, $visibility);
-        if (! ($visibility['campaign_names'] ?? false)) {
-            $content = PortalMetricsFilter::withoutKeys($content, ['name', 'campaign_name']);
-        }
+        // Owner 2026-11-21: the client reads its content, never the agency's management names (ad and campaign names
+        // follow the agency's naming convention). The card shows the content itself, its platform and its figures.
+        $content = PortalMetricsFilter::withoutKeys(PortalMetricsFilter::apply($content, $visibility), ['name', 'campaign_name']);
 
         return response()->json(['data' => $content]);
     }
