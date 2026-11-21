@@ -44,5 +44,7 @@ test('analytics and reports show the same chooser on a fresh visit', async ({ pa
   await expect(page.getByTestId('project-chooser')).toBeVisible({ timeout: 20_000 })
 
   await page.goto('/agency/reports')
-  await expect(page.getByTestId('reports-need-project').getByTestId('project-chooser')).toBeVisible({ timeout: 20_000 })
+  // The choice is a popup rendered on <body> (Owner 2026-11-21), so it is no longer a child of the page's own block.
+  await expect(page.getByTestId('reports-need-project')).toHaveCount(1, { timeout: 20_000 })
+  await expect(page.getByTestId('project-chooser')).toBeVisible({ timeout: 20_000 })
 })

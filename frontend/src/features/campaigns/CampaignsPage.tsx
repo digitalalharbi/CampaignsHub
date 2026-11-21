@@ -2,6 +2,7 @@ import { comparableWindows } from '@/lib/coverage/contract'
 import { useEffect, useMemo, useState } from 'react'
 import { StatCard as SharedStatCard } from '@/components/ui/StatCard'
 import { PageIntro, DataFreshness, STALE_AFTER_HOURS } from '@/components/ui/PageIntro'
+import { DirectControlStrip } from './DirectControlStrip'
 import { listProjects } from '@/features/projects/api'
 import { excludedRows, portfolioBudget } from '@/lib/money/portfolioBudget'
 import { CampaignLink } from './CampaignLink'
@@ -975,6 +976,7 @@ export function CampaignsPage() {
           </>
         }
       />
+      <DirectControlStrip ar={ar} level="campaign" platforms={[...new Set((metricCampaigns.data ?? []).map((c) => String(c.provider ?? '')).filter(Boolean))].sort()} testid="direct-control-campaign" />
       <div className={fit ? 'flex flex-wrap items-center gap-x-3 gap-y-1' : 'contents'}>
         <FxCoverageNote fx={summary.data?.fx} ar={ar} />
         <FxSpendNote note={summary.data?.spend_reading} ar={ar} testId="campaigns-fx-spend-note" />

@@ -15,6 +15,7 @@ import { DateRangePicker } from '@/components/ui/DateRangePicker'
 import { entityColumnLabel, entityColumnPlan } from '@/features/analytics/entityObjectiveColumns'
 import { CampaignControlPanel } from './CampaignControlPanel'
 import { ManagementOverview } from './ManagementOverview'
+import { DirectControlStrip } from './DirectControlStrip'
 import { getCampaign } from './api'
 import type { CampaignRelevance } from './campaignRelevance'
 import { providerLabel } from './labels'
@@ -127,6 +128,7 @@ export function EntityWorkspacePage({ level }: { level: Level }) {
       {/* CAMPAIGN-LEVELS-001 — الحملات · المجموعات · الإعلانات, one strip, the query carried along. */}
       <LevelTabs />
       <PageIntro title={title} purpose={purpose} />
+      <DirectControlStrip ar={ar} platforms={platforms} level={level} testid={`direct-control-${level}`} />
 
       <FilterBar
         id={`entity-${level}`}

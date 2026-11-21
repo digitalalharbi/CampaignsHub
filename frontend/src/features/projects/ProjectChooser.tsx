@@ -8,6 +8,7 @@ import { useProject } from '@/stores/project'
 import { useAgencyClient } from '@/stores/agencyClient'
 import { useUi } from '@/stores/ui'
 import { Skeleton } from '@/components/ui/States'
+import { BodyPortal } from '@/components/ui/BodyPortal'
 import { fmtDateTime } from '@/lib/datetime'
 import { useAuth } from '@/stores/auth'
 import { useBudgets, type BudgetRow } from '@/features/funding/fundingApi'
@@ -132,10 +133,12 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
   const Chevron = ar ? ChevronLeft : ChevronRight
 
   return (
-    /*
-     * Owner 2026-11-21: a popup over the same page — the page stays where it is behind it, and the choice carries on in it.
-     * «×» or Escape leaves for the portal's home rather than leaving a page with nothing to show.
-     */
+    <BodyPortal>
+    {/*
+      Owner 2026-11-21: a popup over the same page — the page stays where it is behind it, and the choice carries on in it.
+      «×» or Escape leaves for the portal's home rather than leaving a page with nothing to show. It is rendered on
+      <body>, so the page's own box (a fitted page measures what hangs below it) never holds the popup's list.
+    */}
     <section
       data-testid="project-chooser"
       role="dialog"
@@ -190,6 +193,7 @@ export function ProjectChooser({ purpose, fit: fitted = false }: { purpose: Proj
         </ul>
       </div>
     </section>
+    </BodyPortal>
   )
 }
 
