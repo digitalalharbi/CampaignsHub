@@ -5,6 +5,7 @@ import { Num } from '@/components/ui/Num'
 import { FixedPageTable } from '@/components/ui/FixedPageTable'
 import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
+import { canonicalPlatform } from '@/lib/platforms'
 import { ChartCard, ConversionFunnelChart, hasFunnel, KpiSparkline } from '@/features/analytics/charts'
 import { money, num, percent } from '@/features/analytics/format'
 import { CHANNEL, DEVICE, donutRows, FUNNEL, KPI_LABEL, kpiText, productColumns, sessionColumns, UNPAID } from '@/features/analytics/ga4/Ga4StoreView'
@@ -435,12 +436,11 @@ export function Journey({ ar, platforms = [] }: { ar: boolean; platforms?: strin
  * 2. «من أين جاءت الطلبات»: every order the website recorded, one dot each, coloured by the path the website credited — the ads'
  *    last click, direct, referral, free, other. Every count is the server's; the dots add up to the website's own orders.
  */
-const FAMILY_PROVIDER: Record<string, string> = { meta: 'meta', facebook: 'meta', snapchat: 'snapchat', tiktok: 'tiktok', google: 'google', microsoft: 'microsoft' }
 
 export function fingerprintRows(data: MatchPayload): Array<{ platform: string; labelled: number; fingerprint: number }> {
   const by = new Map((data.platforms ?? []).map((p) => [p.platform, p.ga4?.sessions ?? 0]))
   return (data.evidence?.click_id_sessions ?? [])
-    .map((c) => ({ platform: FAMILY_PROVIDER[c.family] ?? c.family, labelled: by.get(FAMILY_PROVIDER[c.family] ?? c.family) ?? 0, fingerprint: Math.round(c.sessions) }))
+    .map((c) => ({ platform: canonicalPlatform(c.family), labelled: by.get(canonicalPlatform(c.family)) ?? 0, fingerprint: Math.round(c.sessions) }))
     .filter((r) => r.fingerprint > 0)
     .sort((a, b) => b.fingerprint - a.fingerprint)
 }
