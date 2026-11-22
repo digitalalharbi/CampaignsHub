@@ -105,6 +105,9 @@ test.describe('content format comparison', () => {
     await expect(slide.first()).toBeVisible({ timeout: 30000 })
     // ONE page per report, whatever the objectives (REPORT-FORMAT-COMPARE-COMPACT-001).
     await expect(slide).toHaveCount(1)
+    // FORMAT-COMPARE-REPORT-UNIFY-001 — on screen the page is the interactive reading (bars); the table is one click away.
+    await expect(slide.getByTestId('format-bars')).toBeVisible()
+    await slide.getByTestId('format-table-toggle').locator('summary').click()
     await expect(slide.getByTestId('format-table')).toBeVisible()
   })
 })
