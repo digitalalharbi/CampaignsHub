@@ -29,7 +29,7 @@ const METRIC_WORDS: Record<BarMetric, { ar: string; en: string }> = {
   cpm: { ar: 'CPM', en: 'CPM' },
   cpc: { ar: 'CPC', en: 'CPC' },
   conversion_rate: { ar: 'التحويل', en: 'CVR' },
-  roas: { ar: 'ROAS', en: 'ROAS' },
+  roas: { ar: 'معدل العائد', en: 'ROAS' },
   results: { ar: 'النتائج', en: 'Results' },
 }
 
