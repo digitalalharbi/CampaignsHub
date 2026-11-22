@@ -121,9 +121,8 @@ export function MediaLibrary({ folder, onFolder }: { folder: MediaFolder; onFold
               </button>
             </div>
             <div className="p-4">
-              {!projectId && <p className="py-10 text-center text-sm text-text-secondary">{t.noProject}</p>}
-              {projectId && list.isLoading && <p className="py-10 text-center text-sm text-text-secondary">{t.loading}</p>}
-              {projectId && !list.isLoading && items.length === 0 && <p className="py-10 text-center text-sm text-text-secondary" data-testid="media-empty">{t.noMedia}</p>}
+              {list.isLoading && <p className="py-10 text-center text-sm text-text-secondary">{t.loading}</p>}
+              {!list.isLoading && items.length === 0 && <p className="py-10 text-center text-sm text-text-secondary" data-testid="media-empty">{t.noMedia}</p>}
               {byDay.map(([day, group]) => (
                 <div key={day} className="mb-6 last:mb-0">
                   <p className="mb-3 text-sm font-bold text-text-primary"><Num>{fmtDate(day)}</Num> <span className="font-normal text-text-secondary">· {formatNumber(group.length)}</span></p>

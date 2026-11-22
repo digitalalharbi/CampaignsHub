@@ -26,3 +26,24 @@ export function deliveryOf(c: Pick<CreativeCard, 'status' | 'ad_delivered'>): 'd
   return c.ad_delivered ? 'delivering' : 'ended'
 }
 
+
+/**
+ * «In N campaigns · N delivering», the platforms' usage cell. Counted from the creative's own ads (the canonical relation); a creative
+ * whose ads were not sent still counts its one campaign. Never the campaign's raw name, which can carry a platform id.
+ */
+export function usageOf(c: Pick<CreativeCard, 'ads' | 'campaign_id' | 'status' | 'ad_delivered'>): { campaigns: number; running: number } {
+  const ads = c.ads ?? []
+  const campaigns = new Set(ads.map((a) => a.external_campaign_id).filter((id): id is string => !!id)).size || (c.campaign_id ? 1 : 0)
+  const running = ads.length > 0
+    ? ads.filter((a) => deliveryOf({ status: a.status ?? '', ad_delivered: false }) === 'delivering').length
+    : deliveryOf(c) === 'delivering' && campaigns > 0 ? 1 : 0
+
+  return { campaigns, running }
+}
+
+/** The day this creative first appeared; where the sync never recorded one, the earliest date it did record. */
+export function createdOf(c: Pick<CreativeCard, 'freshness'>): string | null {
+  const f = c.freshness
+
+  return f.first_seen_at ?? f.source_updated_at ?? f.last_synced_at ?? null
+}

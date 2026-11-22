@@ -43,13 +43,15 @@ describe('CONTENT-LIBRARY-SNAP-001 — the library', () => {
   })
 
   it('lists creatives with the platform columns, and the actions wake only on selection', async () => {
-    vi.mocked(listCreatives).mockResolvedValue(page([card(), card({ id: 'cr-2', name: 'Promo film', kind: 'video', status: 'PAUSED', campaign_name: null })]))
+    vi.mocked(listCreatives).mockResolvedValue(page([card(), card({ id: 'cr-2', name: 'Promo film', kind: 'video', status: 'PAUSED', campaign_id: null, campaign_name: null })]))
     renderWithProviders(<CreativesTable />)
     expect(await screen.findByText('Hero image')).toBeInTheDocument()
     for (const h of ['Creative name', 'Format', 'Platform', 'Status', 'Usage', 'Date created']) expect(screen.getByRole('columnheader', { name: h })).toBeInTheDocument()
     expect(screen.getByText('Delivering')).toBeInTheDocument()
     expect(screen.getByText('Paused')).toBeInTheDocument()
     expect(screen.getByText('Not in a campaign')).toBeInTheDocument()
+    expect(screen.getByTestId('creatives-usage-cr-1')).toHaveTextContent('In 1 campaign(s)')
+    expect(screen.queryByText('25Oct 2026 ــ Sale')).not.toBeInTheDocument()
     expect(screen.getByTestId('creatives-action-compare')).toBeDisabled()
     fireEvent.click(screen.getByRole('checkbox', { name: 'Hero image' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Promo film' }))
@@ -80,8 +82,8 @@ describe('CONTENT-LIBRARY-SNAP-001 — the library', () => {
         card({ id: 'c', name: 'Steady', metrics: metrics({ ctr: 0.02 }) }),
       ])))
     renderWithProviders(<CreativeInsights />)
-    const strong = await screen.findByTestId('insights-card-a')
-    expect(screen.queryByTestId('insights-card-b')).not.toBeInTheDocument()
+    const strong = await screen.findByTestId('insights-best-card-a')
+    expect(screen.queryByTestId('insights-best-card-b')).not.toBeInTheDocument()
     expect(strong).toHaveTextContent('3%')
     await waitFor(() => expect(strong).toHaveTextContent('200%'))
   })
