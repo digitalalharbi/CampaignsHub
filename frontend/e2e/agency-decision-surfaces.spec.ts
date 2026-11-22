@@ -20,7 +20,7 @@ test('recommendations: rail link, chooser on a fresh visit, a click lands on the
   await freshVisit(page, '/agency/recommendations')
   await expect(page.getByText('الصفحة غير موجودة')).toHaveCount(0)
   await openRail(page)
-  await expect(page.getByRole('link', { name: 'التوصيات' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'فرص التحسين' })).toBeVisible()
 
   const chooser = page.getByTestId('project-chooser')
   await expect(chooser).toBeVisible({ timeout: 20_000 })
