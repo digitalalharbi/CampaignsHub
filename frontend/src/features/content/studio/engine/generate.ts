@@ -54,13 +54,13 @@ export function profileOf(src: Pixels, sourceSize: { w: number; h: number }, bra
 
     return { plan, product, luma, edges }
   }
-  // A product that leaves less than 55% of the live height free above and below it cannot carry a hook, a line and a call without
+  // A product that leaves less than 60% of the live height free above and below it cannot carry a hook, a line and a call without
   // covering it: the picture then sits as a card on its own blurred copy, the way a designer would frame a full-bleed close-up.
   const liveH = SAFE.y1 - SAFE.y0
   const freeOf = (p: { y: number; h: number }) => Math.max(0, p.y - SAFE.y0) + Math.max(0, SAFE.y1 - (p.y + p.h))
   let built = build(false)
-  for (const cardH of [0.62, 0.52, 0.44]) {
-    if (freeOf(built.product) >= liveH * 0.55) break
+  for (const cardH of [0.62, 0.52, 0.44, 0.38]) {
+    if (freeOf(built.product) >= liveH * 0.6) break
     built = build(true, cardH)
   }
   const { plan, product, luma, edges } = built

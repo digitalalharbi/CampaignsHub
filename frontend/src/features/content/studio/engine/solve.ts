@@ -83,8 +83,8 @@ function cta(ctx: Context): El {
   const r = ctx.roles
 
   return ctx.ctaSticker
-    ? chip(ctx, 'cta', `↗ ${ctx.copy.cta}`, 46, '#FFFFFF', [255, 255, 255], '#141414', 22)!
-    : chip(ctx, 'cta', `${ctx.copy.cta}  ${ctx.locale === 'ar' ? '←' : '→'}`, 46, r.accent, r.accentRgb, r.onAccent, 999)!
+    ? chip(ctx, 'cta', `↗ ${ctx.copy.cta}`, 58, '#FFFFFF', [255, 255, 255], '#141414', 22)!
+    : chip(ctx, 'cta', `${ctx.copy.cta}  ${ctx.locale === 'ar' ? '←' : '→'}`, 58, r.accent, r.accentRgb, r.onAccent, 999)!
 }
 
 /** Stack blocks from a top edge, each aligned to the reading side (or centred). Returns the stacked elements. */
@@ -177,7 +177,7 @@ export function solve(g: Genome, ctx: Context): El[] {
   const { copy, roles } = ctx
   const hookPx = { 'bold-top-hook': 132, 'word-cascade': 140, 'number-hero': 96, 'minimal-center': 112 }[g.archetype as string] ?? 112
   const hook = (maxW = LIVE_W * 0.86) => textBlock(ctx, 'hook', copy.hook, hookPx, maxW, 'display', MIN_HOOK_PX)
-  const message = (maxW = LIVE_W * 0.86) => textBlock(ctx, 'message', copy.message, 56, maxW, 'text', MIN_SUB_PX)
+  const message = (maxW = LIVE_W * 0.86) => textBlock(ctx, 'message', copy.message, 58, maxW, 'text', MIN_SUB_PX)
   const support = () => (copy.support?.trim() ? chip(ctx, 'support', copy.support, 40, roles.panel, roles.panelRgb, roles.onPanel, 14) : null)
   const a = g.archetype
 
