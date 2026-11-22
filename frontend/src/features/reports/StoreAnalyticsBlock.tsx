@@ -1,5 +1,4 @@
-import { Badge } from '@/components/ui/Badge'
-import { StatCard, StatGrid } from '@/components/ui/StatCard'
+import { Globe, Store as StoreIcon, Unlink } from 'lucide-react'
 import { MetricLineChart } from '@/features/analytics/charts'
 import { money, num, percent } from '@/features/analytics/format'
 import { formatFixed } from '@/lib/numerals'
@@ -47,57 +46,101 @@ const CHANNEL: Record<string, { ar: string; en: string }> = {
   paid: { ar: 'مدفوع', en: 'Paid' }, organic: { ar: 'عضوي', en: 'Organic' }, direct: { ar: 'مباشر', en: 'Direct' }, referral: { ar: 'إحالة', en: 'Referral' }, other: { ar: 'أخرى', en: 'Other' },
 }
 
+const SEG_COLORS = ['var(--brand-600)', 'var(--teal)', 'var(--info)', 'var(--purple)', 'var(--warning)', 'var(--text-muted)']
+
+/** A small figure tile: label, value, an optional muted line — the report's compact tile (WEBSITE-VISUAL-001). */
+function Tile({ label, value, hint, accent }: { label: string; value: string; hint?: string; accent?: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-xl border border-border bg-surface px-3 py-2.5">
+      <span className="flex items-center gap-1.5 truncate text-[11px] font-semibold text-text-muted">{accent && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accent }} />}{label}</span>
+      <span className="tnum truncate text-lg font-extrabold leading-tight text-text-primary" dir="ltr">{value}</span>
+      {hint && <span className="tnum truncate text-[10px] text-text-muted">{hint}</span>}
+    </div>
+  )
+}
+
+/** One stacked bar with its legend: parts of a whole drawn, not listed. */
+function Stack({ testId, parts }: { testId: string; parts: Array<{ key: string; label: string; value: number; note?: string }> }) {
+  const shown = parts.filter((p) => p.value > 0)
+  const total = shown.reduce((a, p) => a + p.value, 0)
+  if (total === 0) return null
+
+  return (
+    <div data-testid={testId} className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+        {shown.map((p, i) => <span key={p.key} title={`${p.label} ${num(p.value)}`} style={{ width: `${(p.value / total) * 100}%`, background: SEG_COLORS[i % SEG_COLORS.length] }} />)}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {shown.map((p, i) => (
+          <span key={p.key} className="inline-flex items-center gap-1 text-[11px] text-text-secondary">
+            <span className="h-2 w-2 rounded-full" style={{ background: SEG_COLORS[i % SEG_COLORS.length] }} />{p.label}
+            <span className="tnum font-bold text-text-primary" dir="ltr">{p.note ?? num(p.value)}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function StoreAnalyticsBlock({ data, ar }: { data: StoreAnalyticsPayload; ar: boolean }) {
   const { store, site } = data
   const m = (n: number | null | undefined, c: string | null | undefined) => (n == null ? '—' : money(n, c ?? ''))
   const change = (c: Compared) => (c.change_pct === null ? undefined : `${c.change_pct >= 0 ? '+' : '−'}${percent(Math.abs(c.change_pct), 1)}`)
 
   return (
-    <section data-testid="store-analytics-section" className="min-w-0 space-y-4 rounded-2xl border border-border bg-surface p-4">
-      <div className="min-w-0">
+    <section data-testid="store-analytics-section" className="min-w-0 space-y-3 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <h3 className="font-bold text-text-primary">{ar ? data.title_ar : data.title_en}</h3>
-        <p data-testid="store-analytics-not-summed" className="mt-1 text-xs leading-relaxed text-text-secondary">{ar ? data.note_ar : data.note_en}</p>
+        {/* WEBSITE-VISUAL-001 — the «not added» rule as one chip, the sentence behind it on hover. */}
+        <span data-testid="store-analytics-not-summed" title={ar ? data.note_ar : data.note_en} className="inline-flex items-center gap-1.5 rounded-full bg-surface-secondary px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
+          <Unlink size={12} aria-hidden />{ar ? 'مصدران مستقلان · لا يُجمعان' : 'Two separate sources · not added'}
+        </span>
       </div>
 
       {store && (
-        <div data-testid="store-analytics-store" className="min-w-0 space-y-3">
-          <Badge tone="success">{ar ? store.label_ar : store.label_en}</Badge>
-          <StatGrid columns="grid-cols-2 lg:grid-cols-4">
-            <StatCard tone="success" label={ar ? 'صافي المبيعات' : 'Net sales'} value={<span dir="ltr">{m(store.sales.net.current, store.currency)}</span>} hint={change(store.sales.net)} />
-            <StatCard tone="brand" label={ar ? 'الطلبات' : 'Orders'} value={<span dir="ltr">{num(store.orders.live)}</span>} hint={ar ? `${num(store.orders.confirmed)} مؤكد · ${num(store.orders.cancelled)} ملغى · ${num(store.orders.refunded)} مسترد` : `${num(store.orders.confirmed)} confirmed · ${num(store.orders.cancelled)} cancelled · ${num(store.orders.refunded)} refunded`} />
-            <StatCard tone="info" label={ar ? 'متوسط قيمة الطلب' : 'Average order value'} value={<span dir="ltr">{m(store.averages.aov, store.currency)}</span>} hint={store.averages.items_per_order === null ? undefined : (ar ? `${formatFixed(store.averages.items_per_order, 2)} منتج للطلب` : `${formatFixed(store.averages.items_per_order, 2)} items per order`)} />
-            <StatCard tone="neutral" label={ar ? 'عملاء جدد · عائدون' : 'New · Returning'} value={<span dir="ltr">{num(store.customers.new)} · {num(store.customers.returning)}</span>} hint={store.customers.repeat_rate === null ? undefined : (ar ? `تكرار الشراء ${percent(store.customers.repeat_rate, 1)}` : `Repeat purchase ${percent(store.customers.repeat_rate, 1)}`)} />
-          </StatGrid>
+        <div data-testid="store-analytics-store" className="min-w-0 space-y-3 rounded-xl bg-surface-secondary/50 p-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-success"><StoreIcon size={14} aria-hidden />{ar ? store.label_ar : store.label_en}</span>
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <Tile accent="var(--success)" label={ar ? 'صافي المبيعات' : 'Net sales'} value={m(store.sales.net.current, store.currency)} hint={change(store.sales.net)} />
+            <Tile accent="var(--brand-600)" label={ar ? 'الطلبات' : 'Orders'} value={num(store.orders.live)} />
+            <Tile accent="var(--info)" label={ar ? 'متوسط قيمة الطلب' : 'Average order value'} value={m(store.averages.aov, store.currency)} hint={store.averages.items_per_order === null ? undefined : (ar ? `${formatFixed(store.averages.items_per_order, 2)} منتج للطلب` : `${formatFixed(store.averages.items_per_order, 2)} items per order`)} />
+            <Tile accent="var(--purple)" label={ar ? 'عملاء جدد · عائدون' : 'New · Returning'} value={`${num(store.customers.new)} · ${num(store.customers.returning)}`} hint={store.customers.repeat_rate === null ? undefined : (ar ? `تكرار الشراء ${percent(store.customers.repeat_rate, 1)}` : `Repeat purchase ${percent(store.customers.repeat_rate, 1)}`)} />
+          </div>
+          <Stack testId="store-analytics-orders" parts={[
+            { key: 'confirmed', label: ar ? 'مؤكد' : 'confirmed', value: store.orders.confirmed },
+            { key: 'cancelled', label: ar ? 'ملغى' : 'cancelled', value: store.orders.cancelled },
+            { key: 'refunded', label: ar ? 'مسترد' : 'refunded', value: store.orders.refunded },
+          ]} />
           {store.trend.length >= 2 && (
             <div data-testid="store-analytics-trend" className="min-w-0">
-              <MetricLineChart data={store.trend} height={200} series={[{ key: 'orders', name: ar ? 'الطلبات' : 'Orders', kind: 'num' }]} />
+              <MetricLineChart data={store.trend} height={160} series={[{ key: 'orders', name: ar ? 'الطلبات' : 'Orders', kind: 'num' }]} />
             </div>
           )}
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {store.top_products.length > 0 && (
-              <div className="min-w-0">
-                <h4 className="mb-1 text-xs font-bold text-text-secondary">{ar ? 'أفضل المنتجات' : 'Best products'}</h4>
-                <ul data-testid="store-analytics-products" className="space-y-1 text-sm">
-                  {store.top_products.map((p) => (
-                    <li key={p.name} className="flex min-w-0 items-baseline justify-between gap-3">
-                      <span className="min-w-0 truncate" dir="auto" title={p.name}>{p.name}</span>
-                      <span className="tnum shrink-0 text-text-secondary" dir="ltr">{num(p.orders)} · {m(p.revenue, store.currency)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {store.top_products.length > 0 && (() => {
+              const peak = Math.max(...store.top_products.map((p) => p.orders), 1)
+
+              return (
+                <div className="min-w-0">
+                  <h4 className="mb-1.5 text-xs font-bold text-text-secondary">{ar ? 'أفضل المنتجات' : 'Best products'}</h4>
+                  <ul data-testid="store-analytics-products" className="space-y-1.5 text-xs">
+                    {store.top_products.map((p) => (
+                      <li key={p.name} className="flex min-w-0 flex-col gap-0.5">
+                        <span className="flex items-baseline justify-between gap-3">
+                          <span className="min-w-0 truncate font-semibold" dir="auto" title={p.name}>{p.name}</span>
+                          <span className="tnum shrink-0 text-text-secondary" dir="ltr">{num(p.orders)} · {m(p.revenue, store.currency)}</span>
+                        </span>
+                        <span className="h-1.5 rounded-full bg-success/70" style={{ width: `${Math.max(4, (p.orders / peak) * 100)}%` }} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            })()}
             {store.evidence && store.evidence.length > 0 && (
               <div className="min-w-0">
-                <h4 className="mb-1 text-xs font-bold text-text-secondary">{ar ? 'كيف رُبطت الطلبات بمصادرها' : 'How orders tie to their sources'}</h4>
-                <ul data-testid="store-analytics-evidence" className="space-y-1 text-sm">
-                  {store.evidence.map((e) => (
-                    <li key={e.method} className="flex min-w-0 items-baseline justify-between gap-3">
-                      <span className="min-w-0 truncate">{ar ? e.label_ar : e.label_en}</span>
-                      <span className="tnum shrink-0 text-text-secondary" dir="ltr">{num(e.orders)} · {percent(e.share, 0)}</span>
-                    </li>
-                  ))}
-                </ul>
+                <h4 className="mb-1.5 text-xs font-bold text-text-secondary">{ar ? 'كيف رُبطت الطلبات بمصادرها' : 'How orders tie to their sources'}</h4>
+                <Stack testId="store-analytics-evidence" parts={store.evidence.map((e) => ({ key: e.method, label: ar ? e.label_ar : e.label_en, value: e.orders, note: `${num(e.orders)} · ${percent(e.share, 0)}` }))} />
               </div>
             )}
           </div>
@@ -108,23 +151,16 @@ export function StoreAnalyticsBlock({ data, ar }: { data: StoreAnalyticsPayload;
       )}
 
       {site && (
-        <div data-testid="store-analytics-site" className="min-w-0 space-y-3">
-          <Badge tone="info">{ar ? site.label_ar : site.label_en}</Badge>
-          <StatGrid columns="grid-cols-2 lg:grid-cols-4">
-            <StatCard tone="brand" label={ar ? 'الجلسات' : 'Sessions'} value={<span dir="ltr">{num(site.totals.sessions)}</span>} />
-            <StatCard tone="info" label={ar ? 'معدل التفاعل' : 'Engagement rate'} value={<span dir="ltr">{site.engagement_rate == null ? '—' : percent(site.engagement_rate, 1)}</span>} />
-            <StatCard tone="success" label={ar ? 'الطلبات' : 'Purchases'} value={<span dir="ltr">{num(site.totals.transactions)}</span>} />
-            <StatCard tone="neutral" label={ar ? 'إيراد الموقع' : 'Site revenue'} value={<span dir="ltr">{m(site.totals.revenue, site.currency)}</span>} />
-          </StatGrid>
+        <div data-testid="store-analytics-site" className="min-w-0 space-y-3 rounded-xl bg-surface-secondary/50 p-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-info"><Globe size={14} aria-hidden />{ar ? site.label_ar : site.label_en}</span>
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <Tile accent="var(--brand-600)" label={ar ? 'الجلسات' : 'Sessions'} value={num(site.totals.sessions)} />
+            <Tile accent="var(--info)" label={ar ? 'معدل التفاعل' : 'Engagement rate'} value={site.engagement_rate == null ? '—' : percent(site.engagement_rate, 1)} />
+            <Tile accent="var(--success)" label={ar ? 'الطلبات' : 'Purchases'} value={num(site.totals.transactions)} />
+            <Tile accent="var(--teal)" label={ar ? 'إيراد الموقع' : 'Site revenue'} value={m(site.totals.revenue, site.currency)} />
+          </div>
           {site.channels.length > 0 && (
-            <ul data-testid="store-analytics-channels" className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-5">
-              {site.channels.map((c) => (
-                <li key={c.class} className="min-w-0 rounded-lg bg-surface-hover px-2.5 py-2">
-                  <span className="block truncate text-xs text-text-muted">{CHANNEL[c.class]?.[ar ? 'ar' : 'en'] ?? c.class}</span>
-                  <span className="tnum font-bold" dir="ltr">{num(c.sessions)}</span>
-                </li>
-              ))}
-            </ul>
+            <Stack testId="store-analytics-channels" parts={site.channels.map((c) => ({ key: c.class, label: CHANNEL[c.class]?.[ar ? 'ar' : 'en'] ?? c.class, value: c.sessions ?? 0 }))} />
           )}
         </div>
       )}
