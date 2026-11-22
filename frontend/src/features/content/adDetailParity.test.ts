@@ -43,6 +43,14 @@ const OPENERS = [
   'src/features/content/CreativesPage.tsx',
   'src/features/content/CreativeDetailPage.tsx',
   'src/features/analytics/AnalyticsPage.tsx',
+]
+
+/**
+ * AD-ANALYSIS-VISUAL-001 (Owner 2026-11-22) — the client's saved report opens an ad exactly as the live link does: the report's
+ * own detail surface, `ReportAdDetail`, with the link's analysis inside it. Still one of the two canonical surfaces, not a third.
+ */
+const REPORT_OPENERS = [
+  'src/features/reports/LiveSharedReport.tsx',
   'src/features/reports/SharedCreativeSection.tsx',
 ]
 
@@ -72,6 +80,12 @@ describe('every surface that opens one ad', () => {
   for (const path of OPENERS) {
     it(`«${path.split('/').pop()}» opens the canonical popup`, () => {
       expect(sourceOf(path)).toContain('<AdPreviewDialog')
+    })
+  }
+
+  for (const path of REPORT_OPENERS) {
+    it(`«${path.split('/').pop()}» opens the report's canonical popup`, () => {
+      expect(sourceOf(path)).toContain('<ReportAdDetail')
     })
   }
 
