@@ -1,0 +1,39 @@
+{
+  "key": "detail-cuts",
+  "version": 1,
+  "label": {
+    "ar": "تفاصيل المنتج",
+    "en": "Detail cuts"
+  },
+  "kind": "video",
+  "anchor": "middle",
+  "blocks": [
+    {
+      "role": "hook",
+      "cols": 8,
+      "rows": 2,
+      "place": "calm",
+      "align": "center"
+    },
+    {
+      "role": "message",
+      "cols": 8,
+      "rows": 2,
+      "place": "calm",
+      "align": "center"
+    },
+    {
+      "role": "cta",
+      "cols": 6,
+      "rows": 1,
+      "place": "live-bottom",
+      "align": "center"
+    }
+  ],
+  "motion": [
+    "ken-burns",
+    "beat-cut",
+    "parallax"
+  ],
+  "detailCuts": 3
+}

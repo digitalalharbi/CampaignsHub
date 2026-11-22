@@ -116,7 +116,8 @@ final class FundingNotificationsTest extends TestCase
     {
         return AppNotification::query()->where('user_id', $user->id)->where('type', FundingNotifier::TYPE)
             ->when($openOnly, fn ($q) => $q->whereNull('resolved_at'))
-            ->orderBy('created_at')->pluck('entity_type')->all();
+            // Two notices raised in the same second tie on created_at; the order between them is not what is asserted.
+            ->orderBy('created_at')->orderBy('entity_type')->pluck('entity_type')->all();
     }
 
     public function test_an_added_budget_reaches_the_project_manager_and_team_not_the_person_who_added_it(): void
