@@ -7,6 +7,7 @@ import { buildTimeline, type VideoTimeline } from '../direction/timeline'
 import { placeFamily } from '../families/placeFamily'
 import { pickBatch, type BatchPick } from '../families/selectBatch'
 import { buildScene, type Scene } from '../motion/scene'
+import { LOOK_BY_FAMILY, type SceneStyle } from '../motion/look'
 import type { Measure } from '../motion/text'
 import { deriveTokens, lintTokens, type BrandKit, type DesignTokens, type LintIssue } from '../tokens/tokens'
 
@@ -49,6 +50,10 @@ export interface BuildBatchInput {
   scores?: Readonly<Record<string, number>>
   beatsMs?: ReadonlyArray<number>
   forbiddenWords?: ReadonlyArray<string>
+  /** CONTENT-LIBRARY-SNAP-001 — the enhancements chosen (sticker CTA, colour); the look itself comes from the family. */
+  style?: Omit<SceneStyle, 'look'>
+  /** «تحسينات النص»: several copies, one per output in turn, instead of the one copy on every design. */
+  variants?: ReadonlyArray<StudioCopy>
 }
 
 export function buildStudioBatch(input: BuildBatchInput): StudioBatch {
@@ -57,12 +62,14 @@ export function buildStudioBatch(input: BuildBatchInput): StudioBatch {
   const picks = pickBatch({ videos: input.videos ?? 3, images: input.images ?? 4, round: input.round, scores: input.scores })
   const tone: 'light' | 'dark' = analysis.classes.tone === 'dark' ? 'light' : 'dark'
 
-  const outputs = picks.map((pick): BatchOutput => {
-    const skip = (input.copy.support ?? '').trim() === '' ? (['support', 'price'] as const) : []
+  const outputs = picks.map((pick, i): BatchOutput => {
+    const copy = input.variants && input.variants.length > 0 ? input.variants[i % input.variants.length]! : input.copy
+    const skip = (copy.support ?? '').trim() === '' ? (['support', 'price'] as const) : []
     const layers = placeFamily(pick.family, analysis, '9x16', input.locale, { skip })
     const timeline = pick.as === 'video' ? buildTimeline() : undefined
-    const scene = buildScene({ family: pick.family, layers, copy: input.copy, tokens, format: '9x16', locale: input.locale, tone, measure: input.measure, timeline, beatsMs: input.beatsMs })
-    const hard = hardChecks({ format: '9x16', layers, copy: input.copy, timeline, forbiddenWords: input.forbiddenWords })
+    const built = buildScene({ family: pick.family, layers, copy, tokens, format: '9x16', locale: input.locale, tone, measure: input.measure, timeline, beatsMs: input.beatsMs })
+    const scene: Scene = { ...built, style: { look: LOOK_BY_FAMILY[pick.family.key] ?? 'glass', ...input.style } }
+    const hard = hardChecks({ format: '9x16', layers, copy, timeline, forbiddenWords: input.forbiddenWords })
 
     const canvas = FORMATS['9x16']
     const p = analysis.product

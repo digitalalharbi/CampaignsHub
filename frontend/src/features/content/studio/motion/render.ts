@@ -1,6 +1,7 @@
 import { protectedBands } from '../direction/safeZone'
 import { clamp01 } from './easing'
 import { recipeFor } from './recipes'
+import { drawScrim, drawStyledLayer } from './look'
 import type { Scene, SceneLayer } from './scene'
 
 /**
@@ -23,6 +24,16 @@ export interface Ctx2D {
   textAlign: 'left' | 'right' | 'center'
   textBaseline: 'alphabetic' | 'top' | 'middle'
   direction: 'rtl' | 'ltr'
+  /* CONTENT-LIBRARY-SNAP-001 — optional, so a recording stub in a test stays a valid context; a real canvas has them all. */
+  measureText?(text: string): { width: number }
+  roundRect?(x: number, y: number, w: number, h: number, r: number): void
+  fill?(): void
+  rotate?(angle: number): void
+  createLinearGradient?(x0: number, y0: number, x1: number, y1: number): { addColorStop(offset: number, color: string): void }
+  shadowColor?: string
+  shadowBlur?: number
+  shadowOffsetY?: number
+  filter?: string
 }
 
 export interface FrameOptions {
@@ -40,7 +51,14 @@ export function drawFrame(ctx: Ctx2D, scene: Scene, tMs: number, options: FrameO
   const still = scene.durationMs === 0
   const clipProgress = still ? 0 : clamp01(tMs / scene.durationMs)
 
-  options.drawBackground?.(ctx, clipProgress)
+  if (options.drawBackground) {
+    // «تأثيرات الفيديو»: a little more contrast and colour on the picture, never on the text.
+    const boost = scene.style?.colorBoost === true && 'filter' in ctx
+    if (boost) ctx.filter = 'contrast(1.08) saturate(1.18)'
+    options.drawBackground(ctx, clipProgress)
+    if (boost) ctx.filter = 'none'
+  }
+  drawScrim(ctx, scene, scene.style)
 
   for (const layer of scene.layers) {
     const p = progressOf(layer, tMs, still)
@@ -62,6 +80,11 @@ export function drawFrame(ctx: Ctx2D, scene: Scene, tMs: number, options: FrameO
       ctx.beginPath()
       ctx.rect(x, -layer.rect.h / 2, shown, layer.rect.h)
       ctx.clip()
+    }
+
+    if (scene.style && drawStyledLayer(ctx, layer, scene, scene.style, { display: options.displayFont, text: options.textFont })) {
+      ctx.restore()
+      continue
     }
 
     if (layer.fill !== null) {

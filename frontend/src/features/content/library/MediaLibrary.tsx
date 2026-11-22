@@ -54,6 +54,7 @@ export function MediaLibrary({ folder, onFolder }: { folder: MediaFolder; onFold
   const queryClient = useQueryClient()
   const fileInput = useRef<HTMLInputElement>(null)
   const [search, setSearch] = useState('')
+  const [dragging, setDragging] = useState(false)
 
   const list = useQuery({ queryKey: ['content-intake', 'media', projectId], queryFn: () => listIntake({ project: projectId }), enabled: folder === 'files' })
   const upload = useMutation({
@@ -111,7 +112,13 @@ export function MediaLibrary({ folder, onFolder }: { folder: MediaFolder; onFold
         {folder === 'drive' && <DriveSyncPanel />}
 
         {folder === 'files' && (
-          <section className="rounded-2xl border border-border bg-surface">
+          <section
+            className={`rounded-2xl border bg-surface ${dragging ? 'border-2 border-dashed border-brand-600' : 'border-border'}`}
+            data-testid="media-drop"
+            onDragOver={(e) => { if (projectId) { e.preventDefault(); setDragging(true) } }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); const f = [...e.dataTransfer.files].filter((x) => /^(image|video)\//.test(x.type)); if (f.length && projectId) upload.mutate(f) }}
+          >
             <div className="flex items-center gap-3 border-b border-border px-4 py-3">
               <Search size={18} className="shrink-0 text-text-muted" aria-hidden />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.searchMedia} aria-label={t.searchMedia} className="min-w-0 flex-1 bg-transparent text-base text-text-primary outline-none placeholder:text-text-muted" />
@@ -123,6 +130,7 @@ export function MediaLibrary({ folder, onFolder }: { folder: MediaFolder; onFold
             <div className="p-4">
               {list.isLoading && <p className="py-10 text-center text-sm text-text-secondary">{t.loading}</p>}
               {!list.isLoading && items.length === 0 && <p className="py-10 text-center text-sm text-text-secondary" data-testid="media-empty">{t.noMedia}</p>}
+              {dragging && <p className="py-4 text-center text-sm font-semibold text-brand-600">{t.dropHere}</p>}
               {byDay.map(([day, group]) => (
                 <div key={day} className="mb-6 last:mb-0">
                   <p className="mb-3 text-sm font-bold text-text-primary"><Num>{fmtDate(day)}</Num> <span className="font-normal text-text-secondary">· {formatNumber(group.length)}</span></p>

@@ -5,6 +5,7 @@ import type { Family, Role } from '../families/familySchema'
 import { fontSizes, MIN_PX, type DesignTokens } from '../tokens/tokens'
 import { snapToBeat } from './beats'
 import { fitText, type Measure } from './text'
+import type { SceneStyle } from './look'
 
 /**
  * CONTENT-STUDIO-001 batch 5 — the scene: everything the renderer needs to draw any frame, as plain data. The previewer draws it live
@@ -36,6 +37,8 @@ export interface Scene {
   layers: SceneLayer[]
   /** Layers whose copy did not fit at the smallest legible size: shorten the copy or enlarge the block. */
   overflow: string[]
+  /** CONTENT-LIBRARY-SNAP-001 — the look and the enhancements chosen; absent draws the plain layers. */
+  style?: SceneStyle
 }
 
 export interface BuildSceneInput {
