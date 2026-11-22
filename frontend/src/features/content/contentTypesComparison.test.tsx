@@ -241,6 +241,15 @@ describe('the report part — one comparison table (REPORT-FORMAT-COMPARE-TABLE-
     expect(screen.getByTestId('format-bar-video').textContent).not.toMatch(/\(\d+%\)/)
   })
 
+  // FORMAT-COMPARE-REPORT-UNIFY-001 — the report's page on screen is the same interactive reading; paper keeps the table.
+  it('the report page on screen draws the interactive bars, with the table one click away', () => {
+    renderWithProviders(<FormatComparisonSlide data={report(salesTable())} interactive />, { locale: 'ar' })
+    expect(screen.getByTestId('format-interactive')).toBeInTheDocument()
+    expect(screen.getByTestId('format-bar-video')).toHaveAttribute('data-winner', 'true')
+    expect(screen.getByTestId('format-table-toggle')).toBeInTheDocument()
+    expect(screen.getAllByText('مقارنة أنواع المحتوى')).toHaveLength(1)
+  })
+
   it('draws nothing where the server did not name the part', () => {
     renderWithProviders(<FormatComparisonReportBlock payload={{ ...report(salesTable()), report_sections: ['kpis'] }} ar />, { locale: 'ar' })
     expect(screen.queryByTestId('report-format-comparison')).toBeNull()

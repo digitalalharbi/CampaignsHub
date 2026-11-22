@@ -41,15 +41,21 @@ export function FormatComparisonReportBlock({ payload, ar, client }: { payload: 
   )
 }
 
-/** The deck's (and the PDF's) one page of the comparison: every objective of the report, as the strip. */
-export function FormatComparisonSlide({ data, ar = true }: { data: WithFormatComparison; ar?: boolean }) {
+/**
+ * The report's page of the comparison. On screen (the report's «صفحة» and «شرائح» views) it is the same interactive reading as the
+ * live link's «المحتوى» tab (FORMAT-COMPARE-REPORT-UNIFY-001, Owner 2026-11-22): figure chips, a bar per content type, the coverage
+ * line and the detailed table one click away. On paper (PDF/print, `interactive` off) nothing can be clicked, so it stays the table.
+ */
+export function FormatComparisonSlide({ data, ar = true, interactive = false }: { data: WithFormatComparison; ar?: boolean; interactive?: boolean }) {
   const block = data.content_format_comparison
   if (!block || !tableHasFigures(block, hidesMoney(data))) return null
 
   return (
     <div data-testid="slide-format-comparison">
       <h2 className="mb-3 text-2xl font-extrabold tracking-tight text-text-primary">{ar ? 'مقارنة أنواع المحتوى' : 'Content types'}</h2>
-      <FormatComparisonStrip data={block} ar={ar} client={hidesMoney(data)} title={false} />
+      {interactive
+        ? <FormatComparisonInteractive data={block} ar={ar} client={hidesMoney(data)} heading={false} framed={false} />
+        : <FormatComparisonStrip data={block} ar={ar} client={hidesMoney(data)} title={false} />}
     </div>
   )
 }
