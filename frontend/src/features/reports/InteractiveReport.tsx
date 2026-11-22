@@ -420,7 +420,7 @@ export function SlideBody({ slide, data, meta, paged = false }: {
     // CONTENT-FORMAT-COMPARISON-001 / REPORT-FORMAT-COMPARE-COMPACT-001 — «مقارنة أنواع المحتوى»: one compact page per report.
     case '__formats':
       return <FormatComparisonSlide data={data} interactive={!paged} />
-    case '__store_analytics': return <div><Title sub="من سجل المتجر والموقع، دون جمعهما">تحليلات المتجر والزيارات</Title><StoreAnalyticsBlock data={data.store_analytics as StoreAnalyticsPayload} ar /></div>
+    case '__store_analytics': return <div><Title>تحليلات المتجر والزيارات</Title><StoreAnalyticsBlock data={data.store_analytics as StoreAnalyticsPayload} ar /></div>
     case '__streams': return <div><Title sub="كما حدّدها فريق الحساب">الأداء حسب مسار العمل</Title><BusinessStreamsSection streams={data.business_streams} coverTotal={data.business_streams_cover_total === true} currency={data.currency} ar /></div>
     case 'cover': return <CoverSlide data={data} meta={meta} />
     case 'recommendations': return <RecommendationsSlide data={data} />
