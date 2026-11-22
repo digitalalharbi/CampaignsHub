@@ -8,10 +8,30 @@ import { AttributionMatchBlock } from '@/features/analytics/ga4/Ga4MatchBlock'
 import type { ClassificationRow, GapReasonsPayload, MatchPayload } from '@/features/analytics/ga4/matchTypes'
 import { ChartCard } from '@/features/analytics/charts'
 import { money, num, percent } from '@/features/analytics/format'
-import { useState } from 'react'
+import { lazy, Suspense, useState, type ComponentProps, type ComponentType } from 'react'
 import type { FixedColumn } from '@/components/ui/FixedPageTable'
 import { frozenBeforeWebsiteTab, sectionShown, type ReportSectionKey, type WithReportSections } from './reportSections'
-import { AttributionVisual, CompactTiles, GapStory, TablesVisual } from './WebsiteVisuals'
+import type * as Visuals from './WebsiteVisuals'
+
+/*
+ * The website visuals load in their own chunk, only when a website part is drawn: inside the shared
+ * report's first download they put `/r/` over its bundle budget (src/build/bundleBudget.ts). The
+ * print route waits for the same chunk (`loadWebsiteVisuals`) before it signals readiness.
+ */
+export const loadWebsiteVisuals = () => import('./WebsiteVisuals')
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function deferred<P extends Record<string, any>>(pick: (m: typeof Visuals) => ComponentType<P>, minHeight: number) {
+  const Lazy = lazy(() => loadWebsiteVisuals().then((m) => ({ default: pick(m) })))
+  return function Deferred(props: P) {
+    return <Suspense fallback={<div aria-hidden style={{ minHeight }} />}><Lazy {...(props as ComponentProps<typeof Lazy>)} /></Suspense>
+  }
+}
+
+const CompactTiles = deferred((m) => m.CompactTiles, 96)
+const AttributionVisual = deferred((m) => m.AttributionVisual, 240)
+const GapStory = deferred((m) => m.GapStory, 240)
+const TablesVisual = deferred((m) => m.TablesVisual, 240)
 
 /**
  * GA4-REPORT-SECTIONS-001 — the store reading inside a report: the live link and the saved report
