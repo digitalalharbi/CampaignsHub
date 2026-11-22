@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
-import { AcquisitionVisual, ClassificationVisual, CompactTiles, direction, fingerprintRows, GapStory, gapSegments, Journey, orderPaths, SiteEvidence, TablesVisual } from './WebsiteVisuals'
+import { AcquisitionVisual, ClassificationVisual, CompactTiles, direction, fingerprintRows, GapStory, gapSegments, AttributionStory, orderPaths, SiteEvidence, suspectPlatforms, TablesVisual } from './WebsiteVisuals'
 import type { MatchPayload } from '@/features/analytics/ga4/matchTypes'
 import type { StoreKpi } from '@/features/analytics/ga4/storeTypes'
 import type { GapReasonsPayload } from '@/features/analytics/ga4/matchTypes'
@@ -57,14 +57,6 @@ describe('WEBSITE-VISUAL-001 — the gap as two aligned bars', () => {
 })
 
 describe('the website visuals of WEBSITE-VISUAL-002', () => {
-  it('draws the journey: one order, read by the platform and by the website, and the four reasons as icons', () => {
-    renderWithProviders(<Journey ar platforms={['snapchat', 'meta', 'snapchat']} />, { locale: 'ar' })
-    expect(screen.getByTestId('journey-platform')).toHaveTextContent('طلب من الإعلان')
-    expect(screen.getByTestId('journey-site')).toHaveTextContent('مباشر')
-    expect(screen.getByTestId('journey-both')).toHaveTextContent('قراءتان صحيحتان')
-    expect(within(screen.getByTestId('journey-why')).getAllByRole('listitem')).toHaveLength(4)
-  })
-
   it('draws the visit as four large cards and sales and marketing as compact groups', () => {
     const k = (key: string, current: number): StoreKpi => ({ key, current, previous: null, change_pct: null, kind: 'count' } as unknown as StoreKpi)
     renderWithProviders(<CompactTiles ar={false} kpis={['revenue', 'sessions', 'checkouts', 'bounce_rate', 'transactions', 'users_daily_sum', 'engagement_rate'].map((x, i) => k(x, i + 1))} />, { locale: 'en' })
@@ -147,5 +139,39 @@ describe('the website’s own evidence (WEBSITE-VISUAL-003)', () => {
   it('draws nothing without evidence or orders', () => {
     const { container } = renderWithProviders(<SiteEvidence data={{ state: 'ready', basis: 'ga4', order_level: false, platforms: [] } as unknown as MatchPayload} ar />, { locale: 'ar' })
     expect(container.querySelector('[data-testid="site-evidence"]')).toBeNull()
+  })
+})
+
+describe('the attribution story (WEBSITE-VISUAL-004)', () => {
+  const basis = { orders: 103, ordersSource: 'site' as const, spendUsd: 3755.01, revenueUsd: 7100 }
+
+  it('reads the platforms’ sum as attributions per order, and the real effect as the confirmed floor to every order', () => {
+    renderWithProviders(<AttributionStory data={razzahMatch} ar={false} basis={basis} />, { locale: 'en' })
+    expect(screen.getByTestId('story-claimed')).toHaveTextContent('214')
+    expect(screen.getByTestId('story-orders')).toHaveTextContent('103')
+    expect(screen.getByTestId('story-per-order')).toHaveTextContent('×2.1')
+    expect(screen.getByTestId('story-range')).toHaveTextContent('45')
+    expect(screen.getByTestId('story-range-claimed')).toHaveTextContent('214')
+    expect(screen.getByTestId('story-direct')).toHaveTextContent('9,298')
+  })
+
+  it('judges on real orders: spend ÷ orders and revenue ÷ spend, beside the platforms’ own figures', () => {
+    renderWithProviders(<AttributionStory data={razzahMatch} ar={false} basis={basis} />, { locale: 'en' })
+    expect(screen.getByTestId('story-real-cpa')).toHaveTextContent('36')
+    expect(screen.getByTestId('story-real-roas')).toHaveTextContent('×1.89')
+  })
+
+  it('names a claim ten times the website’s measure as worth a duplicate-event check, and nothing else', () => {
+    expect(suspectPlatforms(razzahMatch)).toEqual([{ platform: 'snapchat', claimed: 90, measured: 6 }, { platform: 'tiktok', claimed: 64, measured: 6 }, { platform: 'meta', claimed: 17, measured: 1 }].filter((p) => p.claimed >= 20))
+    renderWithProviders(<AttributionStory data={razzahMatch} ar={false} basis={basis} />, { locale: 'en' })
+    expect(screen.getByTestId('story-check-snapchat')).toHaveTextContent('90 ↔ 6')
+    expect(screen.queryByTestId('story-check-google')).toBeNull()
+  })
+
+  it('counts the store’s orders when the store is connected, and draws no judgement without spend', () => {
+    renderWithProviders(<AttributionStory data={razzahMatch} ar basis={{ orders: 101, ordersSource: 'store', spendUsd: null, revenueUsd: null }} />, { locale: 'ar' })
+    expect(screen.getByTestId('story-orders')).toHaveTextContent('101')
+    expect(screen.getByTestId('story-ratio')).toHaveTextContent('طلبات المتجر')
+    expect(screen.queryByTestId('story-judge')).toBeNull()
   })
 })
