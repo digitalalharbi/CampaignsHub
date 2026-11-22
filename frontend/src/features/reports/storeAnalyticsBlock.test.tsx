@@ -22,7 +22,8 @@ const payload = (over: Partial<StoreAnalyticsPayload> = {}): StoreAnalyticsPaylo
 describe('the store and traffic section', () => {
   it('names each source, says they are not added, and states what is unattributed and withheld', () => {
     render(<StoreAnalyticsBlock data={payload({ site: { label_ar: 'ما قاسه الموقع (GA4)', label_en: 'Site-measured (GA4)', currency: 'USD', totals: { sessions: 900, users: null, transactions: 11, revenue: 700 }, engagement_rate: 0.5, channels: [{ class: 'paid', sessions: 500, purchases: 3 }] } })} ar={false} />)
-    expect(screen.getByTestId('store-analytics-not-summed')).toHaveTextContent('They are not added')
+    expect(screen.getByTestId('store-analytics-not-summed')).toHaveTextContent('not added')
+    expect(screen.getByTestId('store-analytics-not-summed').getAttribute('title')).toContain('They are not added')
     expect(screen.getByTestId('store-analytics-store')).toHaveTextContent('Store-confirmed')
     expect(screen.getByTestId('store-analytics-site')).toHaveTextContent('Site-measured (GA4)')
     expect(screen.getByTestId('store-analytics-evidence')).toHaveTextContent('Unattributed')
