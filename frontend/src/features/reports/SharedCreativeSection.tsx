@@ -132,7 +132,7 @@ const COPY = {
     winners: 'الأفضل أداءً',
     bestFor: 'الأفضل',
     health: 'حالة المحتوى',
-    spendNoResults: 'إنفاق بلا نتائج',
+    spendNoResults: 'إنفاق بدون نتائج',
   },
   en: {
     heading: 'Ad analysis',

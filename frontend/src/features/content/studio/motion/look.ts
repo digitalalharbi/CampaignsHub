@@ -1,5 +1,6 @@
 import type { Ctx2D } from './render'
 import type { Scene, SceneLayer } from './scene'
+import { DISPLAY_WEIGHT, TEXT_WEIGHT } from '../ui/fonts'
 
 /**
  * CONTENT-LIBRARY-SNAP-001 — how a design is dressed, beyond where its blocks sit.
@@ -79,7 +80,7 @@ export function drawStyledLayer(ctx: Ctx2D, layer: SceneLayer, scene: Scene, sty
   const w = layer.rect.w
   const h = layer.rect.h
   const family = layer.font === 'display' ? fonts.display : fonts.text
-  const weight = layer.font === 'display' ? 800 : 600
+  const weight = layer.font === 'display' ? DISPLAY_WEIGHT : TEXT_WEIGHT
   // Never wider than the block: the weight drawn is heavier than the one the placement measured, so the size is checked again here
   // against the real glyphs and brought down until the widest line (plus its padding) fits. A word is never cut at the canvas edge.
   let px = layer.fontPx

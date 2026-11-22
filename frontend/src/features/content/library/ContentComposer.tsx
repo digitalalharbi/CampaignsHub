@@ -17,6 +17,7 @@ import type { SceneStyle } from '../studio/motion/look'
 import type { Scene } from '../studio/motion/scene'
 import { canvasMeasure, loadPixels, type LoadedPicture } from '../studio/ui/loadPixels'
 import { StudioPreview } from '../studio/ui/StudioPreview'
+import { ensureFonts } from '../studio/ui/fonts'
 import { canExportVideo, renderImage, renderVideo } from '../studio/export/renderOutput'
 import { downloadBlob, zipFiles } from '../studio/export/zip'
 import { openStudioSession, saveStudioOutput } from '../studio/studioApi'
@@ -208,6 +209,17 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
     [picture, baseCopy.hook, baseCopy.message, baseCopy.cta, baseCopy.support, variants, enh.stickerCta, enh.videoFx, locale, measure, round], // eslint-disable-line react-hooks/exhaustive-deps
   )
 
+  // The design's fonts are fetched before the previews are trusted; when they arrive every canvas draws again in the real face.
+  const [fontsTick, setFontsTick] = useState(0)
+  const pairKey = batch?.tokens.fontPair.key
+  useEffect(() => {
+    if (!batch) return
+    let alive = true
+    void ensureFonts(batch.tokens.fontPair).then(() => { if (alive) setFontsTick((n) => n + 1) })
+
+    return () => { alive = false }
+  }, [pairKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (batch) setChosen(batch.outputs.map((o, i) => (o.hard.length === 0 ? i : -1)).filter((i) => i >= 0))
   }, [batch])
@@ -231,6 +243,7 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
     setFailedSave(false)
     const files: Array<{ name: string; blob: Blob }> = []
     try {
+      await ensureFonts(batch.tokens.fontPair)
       const session = await openStudioSession(projectId)
       let n = 0
       for (const o of outputs) {
@@ -293,7 +306,7 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
       scene = one.outputs.find((o) => o.pick.family.key === sample.pick.family.key)?.scene ?? one.outputs[0]!.scene
     }
 
-    return <StudioPreview scene={scene} bitmap={picture.bitmap} tokens={batch.tokens} showMargins={false} live={false} />
+    return <StudioPreview key={fontsTick} scene={scene} bitmap={picture.bitmap} tokens={batch.tokens} showMargins={false} live={false} />
   }
 
   const ENH: Array<{ key: EnhKey; state: 'on' | 'soon' | 'platform' | 'needs'; need?: string; art: 'design' | 'sizes' | 'comments' | 'catalog' }> = [
@@ -548,7 +561,7 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
                   <li key={`${o.as}-${o.pick.family.key}-${i}`}>
                     <button type="button" disabled={!ok} onClick={() => setChosen((c) => (on ? c.filter((x) => x !== i) : [...c, i]))} data-testid={`composer-design-${i}`}
                       className={`relative block w-full overflow-hidden rounded-xl border-2 ${on ? 'border-brand-600' : 'border-transparent'} disabled:opacity-60`}>
-                      <StudioPreview scene={o.scene} bitmap={picture?.bitmap ?? null} tokens={batch.tokens} showMargins={margins} live={o.as === 'video' && i < 3} />
+                      <StudioPreview key={`${i}-${fontsTick}`} scene={o.scene} bitmap={picture?.bitmap ?? null} tokens={batch.tokens} showMargins={margins} live={o.as === 'video' && i < 3} />
                       {on && <span className="absolute end-2 top-2 rounded-full bg-brand-600 p-1 text-white"><Check size={12} aria-hidden /></span>}
                     </button>
                     <p className="mt-1 flex items-center gap-2 text-xs"><b className="text-text-primary">{o.as === 'video' ? t.video : t.image}</b><span className={ok ? 'text-success' : 'text-danger'}>{ok ? t.ready : t.blocked}</span></p>
