@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { AppWindow, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, Check, Clock, Cookie, Copy, Equal, Eye, EyeOff, Fingerprint, Keyboard, Megaphone, MonitorSmartphone, MousePointerClick, RefreshCw, Route, Scale, Search, SearchCheck, Share2, ShoppingBag, Smartphone, Sparkles, Store, Tag, Target, HelpCircle, Users } from 'lucide-react'
+import { AppWindow, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, Check, Clock, Cookie, Copy, Equal, Eye, EyeOff, Fingerprint, Globe, Keyboard, Megaphone, MonitorSmartphone, MousePointerClick, RefreshCw, Route, Scale, Search, SearchCheck, Share2, ShoppingBag, Smartphone, Sparkles, Store, Tag, Target, HelpCircle, Users } from 'lucide-react'
 import { partIcon, ShareTiles } from './ShareTiles'
 import { Num } from '@/components/ui/Num'
 import { FixedPageTable } from '@/components/ui/FixedPageTable'
@@ -642,20 +642,31 @@ export function SimpleAnswer({ data, ar, basis }: { data: MatchPayload; ar: bool
         </div>
       </div>
 
-      {/* Why: one order, counted by several platforms. */}
-      <div data-testid="simple-why" className="flex flex-wrap items-center justify-center gap-3 rounded-xl bg-surface px-3 py-2.5">
-        <span className="flex items-center gap-1.5">
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-success/15 text-success"><ShoppingBag size={17} aria-hidden /></span>
-          <span className="tnum text-lg font-extrabold text-text-primary"><Num>1</Num></span>
-        </span>
-        <span className="text-lg font-extrabold text-text-muted" aria-hidden>=</span>
-        <span className="flex -space-x-1.5 rtl:space-x-reverse">
-          {platforms.slice(0, shown).map((p) => <span key={p.platform} className="grid h-9 w-9 place-items-center rounded-full border-2 border-surface bg-surface-secondary"><ProviderMark provider={p.platform} size={17} /></span>)}
-        </span>
-        <span data-testid="simple-per-order" className="text-sm font-extrabold text-text-primary">
-          {ar ? 'نفس الطلب تحسبه أكثر من منصة' : 'The same order, counted by several platforms'}
-          <span className="tnum ms-2 rounded-full bg-brand-600/15 px-2 py-0.5 text-brand-600"><Num>{`×${per.toFixed(1)}`}</Num></span>
-        </span>
+      {/* Why — the attribution, drawn: four small roads, an icon each, two or three words. Always visible. */}
+      <div data-testid="simple-why" className="flex flex-col gap-2">
+        <span className="text-center text-sm font-extrabold text-text-primary">{ar ? 'ليش الفرق؟' : 'Why the difference?'}</span>
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <WhyCard testId="simple-per-order" label={ar ? 'نفس الطلب تحسبه أكثر من منصة' : 'The same order, counted by several platforms'} chip={`×${per.toFixed(1)}`}>
+            <Bubble tone="var(--success)"><ShoppingBag size={16} aria-hidden /></Bubble>
+            <Road ar={ar} />
+            <span className="flex -space-x-1.5 rtl:space-x-reverse">{platforms.slice(0, shown).map((p) => <span key={p.platform} className="grid h-8 w-8 place-items-center rounded-full border-2 border-surface bg-surface-secondary"><ProviderMark provider={p.platform} size={15} /></span>)}</span>
+          </WhyCard>
+          <WhyCard testId="simple-why-view" label={ar ? 'شاف الإعلان بدون ما يضغط · المنصة تحسبه' : 'Saw the ad, never clicked · the platform counts it'}>
+            <Bubble tone="var(--brand-600)"><Eye size={16} aria-hidden /></Bubble>
+            <Road ar={ar} dashed />
+            <Bubble tone="var(--success)"><ShoppingBag size={16} aria-hidden /></Bubble>
+          </WhyCard>
+          <WhyCard testId="simple-why-window" label={ar ? 'اشترى بعد أيام · المنصة تحسبه' : 'Bought days later · the platform counts it'}>
+            <Bubble tone="var(--brand-600)"><Megaphone size={16} aria-hidden /></Bubble>
+            <span className="tnum flex flex-1 items-center gap-1 text-[10px] font-bold text-text-muted"><span className="h-0.5 flex-1 rounded-full bg-border-strong" /><Clock size={11} aria-hidden />{ar ? 'حتى ٣٠ يوم' : 'up to 30 days'}<span className="h-0.5 flex-1 rounded-full bg-border-strong" /></span>
+            <Bubble tone="var(--success)"><ShoppingBag size={16} aria-hidden /></Bubble>
+          </WhyCard>
+          <WhyCard testId="simple-why-last" label={ar ? 'الموقع يحسب آخر زيارة فقط' : 'The website counts the last visit only'}>
+            <Bubble tone="var(--teal)"><Keyboard size={16} aria-hidden /></Bubble>
+            <Road ar={ar} />
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Globe size={12} aria-hidden />{ar ? 'مباشر' : 'Direct'}</span>
+          </WhyCard>
+        </ul>
       </div>
 
       {/* How to judge: three figures. */}
@@ -678,6 +689,28 @@ export function SimpleAnswer({ data, ar, basis }: { data: MatchPayload; ar: bool
         )}
       </div>
     </div>
+  )
+}
+
+function WhyCard({ testId, label, chip, children }: { testId: string; label: string; chip?: string; children: ReactNode }) {
+  return (
+    <li data-testid={testId} className="flex flex-col items-center gap-2 rounded-xl bg-surface px-3 py-3 text-center">
+      <span className="flex w-full items-center justify-center gap-2">{children}</span>
+      <span className="text-[11px] font-bold leading-snug text-text-secondary">{label}{chip && <span className="tnum ms-1.5 rounded-full bg-brand-600/15 px-1.5 py-0.5 text-brand-600"><Num>{chip}</Num></span>}</span>
+    </li>
+  )
+}
+
+function Bubble({ tone, children }: { tone: string; children: ReactNode }) {
+  return <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full" style={{ background: `color-mix(in srgb, ${tone} 16%, transparent)`, color: tone }}>{children}</span>
+}
+
+function Road({ ar, dashed = false }: { ar: boolean; dashed?: boolean }) {
+  return (
+    <span className="flex flex-1 items-center text-text-muted" aria-hidden>
+      <span className={`h-0 flex-1 border-t-2 ${dashed ? 'border-dashed' : ''} border-border-strong`} />
+      {ar ? <ArrowLeft size={14} /> : <ArrowRight size={14} />}
+    </span>
   )
 }
 
