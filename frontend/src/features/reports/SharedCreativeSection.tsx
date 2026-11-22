@@ -129,6 +129,10 @@ const COPY = {
     destination: 'الرابط الوجهة',
     detailError: 'هذا الإعلان غير متاح في هذا الرابط.',
     notProvided: 'غير مُرسَل',
+    winners: 'الأفضل أداءً',
+    bestFor: 'الأفضل',
+    health: 'حالة المحتوى',
+    spendNoResults: 'إنفاق بلا نتائج',
   },
   en: {
     heading: 'Ad analysis',
@@ -194,6 +198,10 @@ const COPY = {
     destination: 'Destination URL',
     detailError: 'This ad is not available on this link.',
     notProvided: 'Not provided',
+    winners: 'Top performers',
+    bestFor: 'Best',
+    health: 'Content health',
+    spendNoResults: 'Spend without results',
   },
 }
 
@@ -340,17 +348,24 @@ export function SharedCreativeSection({
         <p className="rounded-xl border border-border bg-surface p-6 text-center text-sm text-text-secondary">{t.empty}</p>
       ) : (
         <>
-          <div className="grid gap-3 md:grid-cols-2">
-            <WinnerGroup title={t.bestByObjective} entries={data.best_by_objective} t={t} currency={currency} permissions={permissions} />
-            <div className="grid gap-3">
-              <WinnerGroup title={t.bestImage} entries={data.best_image} t={t} currency={currency} permissions={permissions} icon={<ImageIcon size={14} />} />
-              <WinnerGroup title={t.bestVideo} entries={data.best_video} t={t} currency={currency} permissions={permissions} icon={<Video size={14} />} />
-            </div>
-          </div>
+          {/*
+            AD-ANALYSIS-VISUAL-001 (Owner 2026-11-22) — the same reading as the live link's «المحتوى» tab: the ads
+            themselves, not lists of names. Each winner is its poster with what it won, the figure it won on and
+            the path it won inside; movers are posters with their change; fatigue is a bar of counts and faces.
+          */}
+          <WinnerCards
+            t={t}
+            currency={currency}
+            groups={[
+              { key: 'objective', title: t.bestByObjective, entries: data.best_by_objective },
+              { key: 'image', title: t.bestImage, entries: data.best_image, icon: <ImageIcon size={12} /> },
+              { key: 'video', title: t.bestVideo, entries: data.best_video, icon: <Video size={12} /> },
+            ]}
+          />
 
           <div className="grid gap-3 md:grid-cols-2">
-            <MoveList title={t.growing} icon={<TrendingUp size={14} className="text-success" />} list={data.fastest_growing} t={t} />
-            <MoveList title={t.declining} icon={<TrendingDown size={14} className="text-danger" />} list={data.declining} t={t} />
+            <MoveList title={t.growing} icon={<TrendingUp size={14} className="text-success" />} list={data.fastest_growing} t={t} tone="up" />
+            <MoveList title={t.declining} icon={<TrendingDown size={14} className="text-danger" />} list={data.declining} t={t} tone="down" />
           </div>
 
           <FatigueBlock data={data} t={t} currency={currency} permissions={permissions} />
@@ -521,61 +536,83 @@ function Picker({
 
 type Copy = (typeof COPY)['en']
 
-function WinnerGroup({
-  title,
-  entries,
+/** A ranking figure: the change of a mover, signed, as a whole percent. */
+const signedPct = (value: number) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.round(Math.abs(value) * 100)}%`
+
+function Poster({ creative, className, testid }: { creative: CreativeCard | null | undefined; className: string; testid?: string }) {
+  return (
+    <AdPoster
+      preview={creative?.preview}
+      name={creative?.name ?? '—'}
+      className={className}
+      fit="cover"
+      testid={testid}
+      forClient
+      provider={creative?.provider ?? null}
+    />
+  )
+}
+
+/**
+ * The winners as the ads themselves — one card per answer, the poster on top with what it won, then the
+ * figure it was decided on and the marketing path it was decided inside. A figure the link withholds is
+ * a quiet chip saying so, never a blank naming what was kept back.
+ */
+function WinnerCards({
+  groups,
   t,
   currency,
-  permissions,
-  icon,
 }: {
-  title: string
-  entries: SharedWinner[]
+  groups: Array<{ key: string; title: string; entries: SharedWinner[]; icon?: React.ReactNode }>
   t: Copy
   currency: string
-  permissions: CreativePermissions
-  icon?: React.ReactNode
 }) {
   const { locale } = useUi()
-
-  if (entries.length === 0) return null
+  const cards = groups.flatMap((g) => g.entries.map((entry, i) => ({ group: g, entry, i })))
+  if (cards.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-3">
-      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold">{icon}{title}</h3>
-      <ul className="grid gap-2">
-        {entries.map((entry, i) => {
+    <div className="grid gap-2" data-testid="shared-winners">
+      <h3 className="flex items-center gap-1.5 text-sm font-bold">{t.winners}</h3>
+      <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+        {cards.map(({ group, entry, i }) => {
           const creative = entry.creative
-          const metric = entry.metric
           const hidden = entry.value_hidden === true
+          const tag = 'objective' in entry && entry.objective
+            ? `${t.bestFor} · ${objectiveLabel(entry.objective, locale)}`
+            : group.title
+
           return (
-            <li key={i} className="rounded-lg border border-border p-2 text-xs">
-              <p className="truncate font-semibold">{creative?.name ?? '—'}</p>
-              <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-text-secondary">
-                {'objective' in entry && entry.objective && <Pair k={t.objective} v={entry.objective} />}
-                {entry.path && <Pair k={t.path} v={entry.path} />}
-                <Pair k={t.metric} v={metricLabel(metric, locale)} />
-                <Pair
-                  k={t.value}
-                  v={
-                    hidden
-                      ? t.hidden
-                      /*
-                       * The winning figure is money when the ranking metric is money, and then it
-                       * goes through the canonical reader — a ranking decided on spend printed «No
-                       * data» for its own winner on any account with an unconvertible currency.
-                       * `hidden` still wins: the link's own refusal is not a money state.
-                       */
-                      : figureText(creative?.metrics ?? null, metric, locale, currency)
-                  }
-                />
-                {creative?.provider && <Pair k={t.platform} v={providerLabel(creative.provider, locale)} />}
-                {creative?.campaign_name && <Pair k={t.campaign} v={creative.campaign_name} />}
-                {!permissions.spend && <Pair k="—" v="" />}
-              </dl>
-              {entry.low_evidence === true && (
-                <p className="mt-1 text-[11px] font-semibold text-warning">{t.thin}</p>
-              )}
+            <li key={`${group.key}-${i}`} data-testid={`winner-card-${group.key}`} className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+              <div className="relative">
+                <Poster creative={creative} className="aspect-[4/3] w-full" />
+                <span className="absolute start-2 top-2 inline-flex max-w-[90%] items-center gap-1 truncate rounded-full bg-success px-2 py-0.5 text-[11px] font-bold text-white shadow">
+                  {group.icon}{tag}
+                </span>
+              </div>
+              <div className="grid min-w-0 gap-2 p-3">
+                <div className="min-w-0">
+                  <p dir="auto" className="truncate text-sm font-bold text-text-primary">{creative?.name ?? '—'}</p>
+                  {creative?.provider && <p className="truncate text-[11px] text-text-muted">{providerLabel(creative.provider, locale)}</p>}
+                </div>
+                <dl className="grid grid-cols-2 gap-1.5 text-center">
+                  <div className="min-w-0 rounded-lg bg-surface-secondary px-2 py-1.5">
+                    <dt className="truncate text-[10px] text-text-muted">{metricLabel(entry.metric, locale)}</dt>
+                    <dd className="tnum truncate text-sm font-extrabold text-text-primary">
+                      {hidden
+                        ? <span className="text-[11px] font-semibold text-text-secondary">{t.hidden}</span>
+                        : <Num>{figureText(creative?.metrics ?? null, entry.metric, locale, currency)}</Num>}
+                    </dd>
+                  </div>
+                  <div className="min-w-0 rounded-lg bg-surface-secondary px-2 py-1.5">
+                    <dt className="truncate text-[10px] text-text-muted">{t.path}</dt>
+                    <dd className="truncate text-sm font-bold text-text-primary">{entry.path ? marketingPathLabel(entry.path, locale) : '—'}</dd>
+                  </div>
+                </dl>
+                {entry.low_evidence === true && (
+                  <p className="rounded-md bg-warning/10 px-2 py-1 text-[11px] font-semibold text-warning">{t.thin}</p>
+                )}
+              </div>
             </li>
           )
         })}
@@ -601,46 +638,64 @@ function Pair({ k, v }: { k: string; v: string }) {
   )
 }
 
+/** Movers as posters with their change on them — the arrow always, the number only where the link shows it. */
 function MoveList({
   title,
   icon,
   list,
   t,
+  tone,
 }: {
   title: string
   icon: React.ReactNode
   list: PulseList<SharedCreativeMove>
   t: Copy
+  tone: 'up' | 'down'
 }) {
   const { locale } = useUi()
+  if (list.items.length === 0) return null
+  const chip = tone === 'up' ? 'bg-success' : 'bg-danger'
+  const Arrow = tone === 'up' ? TrendingUp : TrendingDown
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-3">
-      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold">{icon}{title}</h3>
-      {list.items.length === 0 ? (
-        <p className="text-xs text-text-muted">—</p>
-      ) : (
-        <ul className="grid gap-1.5">
-          {list.items.map((move, i) => {
-            const creative = move.creative
-            return (
-              <li key={i} className="flex items-baseline justify-between gap-2 text-xs">
-                <span className="min-w-0 flex-1 truncate">{creative?.name ?? '—'}</span>
-                <span className="tnum shrink-0 text-text-secondary" dir="ltr">
-                  {metricLabel(move.metric, locale)}{' '}
-                  {move.value_hidden === true ? t.hidden : pct(move.change)}
+    <div className="rounded-2xl border border-border bg-surface p-3" data-testid={`shared-moves-${tone}`}>
+      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold">
+        {icon}{title}
+        {list.total > list.shown && <span className="tnum ms-auto text-[11px] font-normal text-text-muted"><Num>{`${list.shown} ${t.of} ${list.total}`}</Num></span>}
+      </h3>
+      <ul className="grid grid-cols-3 gap-2">
+        {list.items.map((move, i) => {
+          const creative = move.creative
+          const hidden = move.value_hidden === true || move.change === null || move.change === undefined
+
+          return (
+            <li key={i} className="min-w-0" title={hidden ? `${metricLabel(move.metric, locale)} — ${t.hidden}` : undefined}>
+              <div className="relative overflow-hidden rounded-lg">
+                <Poster creative={creative} className="aspect-square w-full" />
+                <span className={`tnum absolute bottom-1 start-1 inline-flex items-center gap-0.5 rounded-full ${chip} px-1.5 py-0.5 text-[10px] font-bold text-white shadow`} dir="ltr">
+                  <Arrow size={10} aria-hidden />
+                  {!hidden && <Num>{signedPct(move.change as number)}</Num>}
                 </span>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      {list.total > list.shown && (
-        <p className="mt-1 text-[11px] text-text-muted" dir="ltr">{list.shown} {t.of} {list.total}</p>
-      )}
+              </div>
+              <p dir="auto" className="mt-1 truncate text-[11px] font-semibold text-text-primary">{creative?.name ?? '—'}</p>
+              <p className="truncate text-[10px] text-text-muted">{metricLabel(move.metric, locale)}</p>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
+
+/** A fatigue signal's own words: the metric it moved on, never the engine's key. */
+function signalLabel(key: string, t: Copy, locale: 'ar' | 'en'): string {
+  if (key === 'spend_without_results') return t.spendNoResults
+  return metricLabel(key.replace(/_(decay|down|up)$/, ''), locale)
+}
+
+type Signal = { key: string; direction: string; change: number }
+const isSignal = (s: unknown): s is Signal =>
+  typeof s === 'object' && s !== null && typeof (s as Signal).key === 'string' && typeof (s as Signal).change === 'number'
 
 function FatigueBlock({
   data,
@@ -659,14 +714,48 @@ function FatigueBlock({
   // One reader for the money, so this figure cannot disagree with the operator's copy of it.
   const spendAtRisk = readMoney(fatigue.spend_at_risk, 'spend', currency ?? null, ar)
 
+  const buckets = [
+    { key: 'fatigued', title: t.fatigued, list: fatigue.fatigued, bar: 'bg-danger', text: 'text-danger', border: 'border-danger/40' },
+    { key: 'watch', title: t.watch, list: fatigue.watch, bar: 'bg-warning', text: 'text-warning', border: 'border-warning/40' },
+    { key: 'insufficient', title: t.insufficient, list: fatigue.insufficient_data, bar: 'bg-text-muted', text: 'text-text-secondary', border: 'border-border' },
+  ]
+  const total = buckets.reduce((sum, b) => sum + b.list.total, 0)
+
   return (
-    <div className="grid gap-3 md:grid-cols-3">
-      <Bucket title={t.fatigued} list={fatigue.fatigued} tone="danger" />
-      <Bucket title={t.watch} list={fatigue.watch} tone="warning" />
-      <Bucket title={t.insufficient} list={fatigue.insufficient_data} tone="muted" />
+    <div className="grid gap-3">
+      {total > 0 && (
+        <div className="rounded-2xl border border-border bg-surface p-3" data-testid="fatigue-overview">
+          <h3 className="mb-2 text-sm font-bold">{t.health}</h3>
+          <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
+            {buckets.filter((b) => b.list.total > 0).map((b) => (
+              <span key={b.key} className={`${b.bar} h-full`} style={{ width: `${(b.list.total / total) * 100}%` }} />
+            ))}
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            {buckets.map((b) => (
+              <div key={b.key} className={`rounded-xl border ${b.border} p-2.5`}>
+                <h4 className="mb-2 flex items-baseline justify-between text-xs font-bold">
+                  <span className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${b.bar}`} aria-hidden />{b.title}</span>
+                  <span className={`tnum text-lg font-extrabold ${b.text}`} dir="ltr"><Num>{String(b.list.total)}</Num></span>
+                </h4>
+                {b.list.items.length > 0 && (
+                  <ul className="grid grid-cols-4 gap-1.5">
+                    {b.list.items.slice(0, 4).map((c) => (
+                      <li key={c.id} className="min-w-0" title={c.name}>
+                        <Poster creative={c} className="aspect-square w-full rounded-md" />
+                        <p dir="auto" className="mt-0.5 truncate text-[10px] text-text-secondary">{c.name}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {fatigue.alerts.items.length > 0 && (
-        <div className="rounded-xl border border-danger/40 bg-danger/5 p-3 md:col-span-3" data-testid="fatigue-alerts">
+        <div className="rounded-2xl border border-danger/40 bg-danger/5 p-3" data-testid="fatigue-alerts">
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-danger">
             <AlertTriangle size={14} /> {t.alerts}
             {/*
@@ -681,38 +770,36 @@ function FatigueBlock({
               </span>
             )}
           </h3>
-          <ul className="grid gap-1.5">
-            {fatigue.alerts.items.map((alert: FatigueAlert, i: number) => (
-              <li key={i} className="text-xs">
-                <b className="font-semibold">{alert.creative?.name ?? '—'}</b>
-                {/* The EVIDENCE, beside the verdict — «fatigued» with nothing behind it is a label. */}
-                {(ar ? alert.note_ar : alert.note_en) && (
-                  <span className="text-text-secondary"> — {ar ? alert.note_ar : alert.note_en}</span>
-                )}
-              </li>
-            ))}
+          <ul className="grid gap-2 md:grid-cols-2">
+            {fatigue.alerts.items.map((alert: FatigueAlert, i: number) => {
+              const signals = (alert.signals as unknown[]).filter(isSignal)
+              const note = ar ? alert.note_ar : alert.note_en
+
+              return (
+                <li key={i} className="flex min-w-0 items-start gap-2.5 rounded-xl border border-danger/20 bg-surface p-2">
+                  <Poster creative={alert.creative} className="h-14 w-14 shrink-0 rounded-lg" />
+                  <div className="grid min-w-0 flex-1 gap-1.5">
+                    <b dir="auto" className="truncate text-xs font-semibold">{alert.creative?.name ?? '—'}</b>
+                    {/* The EVIDENCE, beside the verdict — «fatigued» with nothing behind it is a label. */}
+                    {signals.length > 0 ? (
+                      <div className="flex flex-wrap gap-1" data-testid="fatigue-signals">
+                        {signals.map((s) => (
+                          <span key={s.key} className={`tnum inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.direction === 'worse' ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>
+                            {signalLabel(s.key, t, locale)}
+                            <span dir="ltr"><Num>{signedPct(s.change)}</Num></span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : note ? (
+                      <p className="text-[11px] text-text-secondary">{note}</p>
+                    ) : null}
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}
-    </div>
-  )
-}
-
-function Bucket({ title, list, tone }: { title: string; list: { items: CreativeCard[]; total: number }; tone: string }) {
-  const border = tone === 'danger' ? 'border-danger/40' : tone === 'warning' ? 'border-warning/40' : 'border-border'
-
-  return (
-    <div className={`rounded-xl border ${border} bg-surface p-3`}>
-      <h3 className="mb-1.5 flex items-baseline justify-between text-sm font-bold">
-        {title}
-        <span className="tnum text-xs text-text-secondary" dir="ltr">{list.total}</span>
-      </h3>
-      <ul className="grid gap-1 text-xs text-text-secondary">
-        {list.items.slice(0, 4).map((c) => (
-          <li key={c.id} className="truncate">{c.name}</li>
-        ))}
-        {list.items.length === 0 && <li className="text-text-muted">—</li>}
-      </ul>
     </div>
   )
 }

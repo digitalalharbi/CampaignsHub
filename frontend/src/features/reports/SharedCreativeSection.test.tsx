@@ -300,7 +300,7 @@ describe('SharedCreativeSection', () => {
   it('gives the summary the answers and the detailed report the library as well', async () => {
     render('executive_summary')
 
-    await screen.findByText('Best ad per objective')
+    await screen.findByText('Top performers')
     expect(screen.queryByTestId('shared-creative-library')).toBeNull()
     // The library endpoint is not even called for a summary link.
     expect(mockLibrary).not.toHaveBeenCalled()
@@ -313,11 +313,13 @@ describe('SharedCreativeSection', () => {
   it('states the metric and the marketing path behind each winner', async () => {
     render('detailed')
 
-    await screen.findByText('Best ad per objective')
+    await screen.findByText('Top performers')
 
-    const labels = screen.getAllByText('Metric used:')
-    expect(labels.length).toBeGreaterThanOrEqual(3)
-    expect(screen.getAllByText('Marketing path:').length).toBeGreaterThanOrEqual(2)
+    // AD-ANALYSIS-VISUAL-001 — each winner is a card: what it won, the figure it won on, and the path it won inside.
+    expect(screen.getAllByTestId(/^winner-card-/)).toHaveLength(3)
+    expect(screen.getAllByText('Marketing path').length).toBeGreaterThanOrEqual(3)
+    expect(screen.getByTestId('winner-card-video')).toHaveTextContent('Best video')
+    expect(screen.getByTestId('winner-card-video')).toHaveTextContent('CPM')
     // Best video was decided on CPM inside the awareness path — never on the sales metric. The name
     // appears in the winner card and again in the library below it, so both are accepted.
     expect(screen.getAllByText('Brand film').length).toBeGreaterThan(0)
@@ -345,6 +347,52 @@ describe('SharedCreativeSection', () => {
     const alerts = await screen.findByTestId('fatigue-alerts')
     expect(alerts.textContent).toContain('Tired banner')
     expect(alerts.textContent).toContain('Click-through fell while frequency rose.')
+  })
+
+  /** AD-ANALYSIS-VISUAL-001 — a fatigue alert's evidence is chips in the reader's words, never the engine's keys. */
+  it('draws fatigue signals as labelled chips, not raw keys', async () => {
+    const base = summary()
+    mockSummary.mockResolvedValue(
+      summary({
+        fatigue: {
+          ...base.fatigue,
+          alerts: {
+            items: [{ ...base.fatigue.alerts.items[0], signals: [{ key: 'cpa', direction: 'worse', change: 1.35 }, { key: 'ctr_decay', direction: 'worse', change: -0.26 }, { key: 'spend_without_results', direction: 'worse', change: 0.27 }] }],
+            total: 1,
+            shown: 1,
+          },
+        },
+      }),
+    )
+    render('executive_summary')
+
+    const chips = await screen.findByTestId('fatigue-signals')
+    expect(chips.textContent).toContain('+135%')
+    expect(chips.textContent).toContain('Spend without results')
+    expect(chips.textContent).not.toMatch(/cpa|ctr_decay|spend_without_results/)
+  })
+
+  /** A mover whose figure the link withholds keeps its arrow and loses only the number. */
+  it('draws movers as posters with their change, and a withheld change as the arrow alone', async () => {
+    mockSummary.mockResolvedValue(
+      summary({
+        declining: {
+          items: [
+            { creative: card({ id: 'cr-9', name: 'Falling ad' }), metric: 'roas', change: null, current: null, previous: null, value_hidden: true } as never,
+            { creative: card({ id: 'cr-8', name: 'Softer ad' }), metric: 'ctr', change: -0.4, current: 0.01, previous: 0.02 } as never,
+          ],
+          total: 7,
+          shown: 2,
+        },
+      }),
+    )
+    render('executive_summary')
+
+    const down = await screen.findByTestId('shared-moves-down')
+    expect(down.textContent).toContain('Falling ad')
+    expect(down.textContent).toContain('−40%')
+    expect(down.textContent).not.toContain('Not shown on this link')
+    expect(down.textContent).toContain('2 of 7')
   })
 
   /** A withheld figure is not drawn as a labelled blank naming what is being kept back. */
@@ -451,7 +499,7 @@ describe('SharedCreativeSection', () => {
     render('detailed', 'ar')
 
     expect(await screen.findByText('تحليل الإعلان')).toBeTruthy()
-    expect(screen.getByText('أفضل إعلان لكل هدف')).toBeTruthy()
+    expect(screen.getByText('الأفضل أداءً')).toBeTruthy()
   })
 
   // ---- §15.6, the client's own creative page ---------------------------------------------------
