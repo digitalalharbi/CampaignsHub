@@ -3,19 +3,20 @@ import { H, OVERSIZE, W } from './constants'
 /**
  * CREATIVE-ENGINE-001 — `fit_916` from the reference, as a plan the canvas executes: never stretch. Within 30% of 9:16 the picture is
  * cover-cropped around its focus; further off it sits whole on a blurred, darkened copy of itself (blur-fill). The target is the
- * 1.12× camera canvas, and the focus is returned in its coordinates.
+ * 1.12× camera canvas, and the focus is returned in its coordinates. `framed` forces the blur-fill card even near 9:16: used when
+ * the product fills the frame so fully that no band is left for the words.
  */
 export type FitPlan =
-  | { mode: 'cover'; target: { w: number; h: number }; crop: { x: number; y: number; w: number; h: number }; focus: { x: number; y: number } }
-  | { mode: 'blur'; target: { w: number; h: number }; fg: { x: number; y: number; w: number; h: number }; focus: { x: number; y: number } }
+  | { mode: 'cover'; target: { w: number; h: number }; source: { w: number; h: number }; crop: { x: number; y: number; w: number; h: number }; focus: { x: number; y: number } }
+  | { mode: 'blur'; target: { w: number; h: number }; source: { w: number; h: number }; fg: { x: number; y: number; w: number; h: number }; focus: { x: number; y: number } }
 
-export function fitPlan(sw: number, sh: number, focus: { x: number; y: number }): FitPlan {
+export function fitPlan(sw: number, sh: number, focus: { x: number; y: number }, framed = false, cardH = 0.62): FitPlan {
   const tw = Math.trunc(W * OVERSIZE)
   const th = Math.trunc(H * OVERSIZE)
   const tr = tw / th
   const sr = sw / sh
 
-  if (Math.abs(sr - tr) / tr < 0.3) {
+  if (!framed && Math.abs(sr - tr) / tr < 0.3) {
     let box: [number, number, number, number]
     if (sr > tr) {
       const nw = sh * tr
@@ -30,16 +31,17 @@ export function fitPlan(sw: number, sh: number, focus: { x: number; y: number })
     return {
       mode: 'cover',
       target: { w: tw, h: th },
+      source: { w: sw, h: sh },
       crop: { x: box[0], y: box[1], w: box[2] - box[0], h: box[3] - box[1] },
       focus: { x: (focus.x * sw - box[0]) / (box[2] - box[0]), y: (focus.y * sh - box[1]) / (box[3] - box[1]) },
     }
   }
 
-  const s = Math.min(tw / sw, (th * 0.62) / sh)
+  const s = Math.min(tw / sw, (th * cardH) / sh)
   const fw = Math.trunc(sw * s)
   const fh = Math.trunc(sh * s)
   const ox = Math.trunc((tw - fw) / 2)
-  const oy = Math.trunc(th * 0.45 - fh / 2)
+  const oy = Math.trunc(th * (cardH < 0.62 ? 0.47 : 0.45) - fh / 2)
 
-  return { mode: 'blur', target: { w: tw, h: th }, fg: { x: ox, y: oy, w: fw, h: fh }, focus: { x: (ox + focus.x * fw) / tw, y: (oy + focus.y * fh) / th } }
+  return { mode: 'blur', target: { w: tw, h: th }, source: { w: sw, h: sh }, fg: { x: ox, y: oy, w: fw, h: fh }, focus: { x: (ox + focus.x * fw) / tw, y: (oy + focus.y * fh) / th } }
 }
