@@ -2,15 +2,16 @@ import { ArrowUpLeft, ArrowUpRight, Globe } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { FixedPageTable } from '@/components/ui/FixedPageTable'
 import { Num } from '@/components/ui/Num'
-import { Ga4Acquisition, Ga4Gap, Ga4Series, Ga4Tables, Ga4TileGroups, Ga4Tiles, KPI_LABEL, kpiText, productColumns, sessionColumns } from '@/features/analytics/ga4/Ga4StoreView'
+import { Ga4Acquisition, Ga4Gap, Ga4Series, Ga4Tiles, KPI_LABEL, kpiText, productColumns, sessionColumns } from '@/features/analytics/ga4/Ga4StoreView'
 import type { Ga4AcquisitionSection, Ga4GapSection, Ga4OverviewSection, Ga4TablesSection, StoreProductRow, StoreSessionRow, StoreTableKey } from '@/features/analytics/ga4/storeTypes'
-import { AttributionMatchBlock, GapReasonsBlock } from '@/features/analytics/ga4/Ga4MatchBlock'
+import { AttributionMatchBlock } from '@/features/analytics/ga4/Ga4MatchBlock'
 import type { ClassificationRow, GapReasonsPayload, MatchPayload } from '@/features/analytics/ga4/matchTypes'
 import { ChartCard } from '@/features/analytics/charts'
 import { money, num, percent } from '@/features/analytics/format'
 import { useState } from 'react'
 import type { FixedColumn } from '@/components/ui/FixedPageTable'
 import { frozenBeforeWebsiteTab, sectionShown, type ReportSectionKey, type WithReportSections } from './reportSections'
+import { AttributionVisual, CompactTiles, GapStory, TablesVisual } from './WebsiteVisuals'
 
 /**
  * GA4-REPORT-SECTIONS-001 — the store reading inside a report: the live link and the saved report
@@ -84,20 +85,25 @@ export function Ga4ReportBlocks({ payload, ar, parts = WEBSITE_PARTS, pageSize =
       )}
       {overview && (
         <div data-testid="report-ga4-overview" className="flex min-w-0 flex-col gap-4">
-          {/* Owner, permanent: big headline cards first, their small sub-cards under them, then the charts. */}
-          <Ga4TileGroups kpis={overview.kpis} ar={ar} />
+          {/* WEBSITE-VISUAL-001 (Owner 2026-11-22) — small tiles, visits then sales, six to a row; then the chart. */}
+          <CompactTiles kpis={overview.kpis} ar={ar} />
           <Ga4Series series={overview.series} currency={overview.currency} ar={ar} />
         </div>
       )}
       {acquisition && <div data-testid="report-ga4-acquisition" className="min-w-0"><Ga4Acquisition channels={acquisition.channels} devices={acquisition.devices} channelsMeta={acquisition.channels_meta} devicesMeta={acquisition.devices_meta} funnel={acquisition.funnel} ar={ar} /></div>}
-      {attribution && <div data-testid="report-ga4-attribution" className="min-w-0"><AttributionMatchBlock data={attribution} ar={ar} pageSize={pageSize} /></div>}
+      {attribution && <div data-testid="report-ga4-attribution" className="min-w-0"><AttributionVisual data={attribution} ar={ar} pageSize={pageSize} /></div>}
       {gap && <div data-testid="report-ga4-gap" className="min-w-0"><Ga4Gap gap={gap} ar={ar} /></div>}
-      {reasons && <div data-testid="report-ga4-reasons" className="min-w-0"><GapReasonsBlock data={reasons} ar={ar} /></div>}
+      {reasons && <div data-testid="report-ga4-reasons" className="min-w-0"><GapStory data={reasons} ar={ar} platforms={platformsOf(payload)} /></div>}
       {classification && <div data-testid="report-ga4-classification" className="min-w-0"><ClassificationBlock data={classification} ar={ar} pageSize={pageSize} /></div>}
-      {tables && <div data-testid="report-ga4-tables" className="min-w-0"><Ga4Tables tables={tables.tables} currency={tables.currency} ar={ar} pageSize={pageSize} /></div>}
+      {tables && <div data-testid="report-ga4-tables" className="min-w-0"><TablesVisual tables={tables.tables} currency={tables.currency} ar={ar} pageSize={pageSize} /></div>}
       {products && <div data-testid="report-ga4-products" className="min-w-0"><ChartCard title={ar ? 'المنتجات' : 'Products'}><FixedPageTable testId="ga4-products-table" ar={ar} pageSize={pageSize} rows={products.table.rows} rowKey={(r) => r.name} columns={productColumns(ar, products.currency)} initialSort={{ key: 'revenue', dir: 'desc' }} /></ChartCard></div>}
     </section>
   )
+}
+
+/** The ad platforms this report's website reading compares against, for the «one order, several platforms» picture. */
+function platformsOf(payload: WithGa4Sections): string[] {
+  return (payload.ga4_attribution?.platforms ?? []).map((p) => p.platform)
 }
 
 /** The tables part without its products table where the products part is drawn too. */
@@ -209,7 +215,7 @@ export function Ga4Slide({ slide, data, ar = true, paged = false }: { slide: { i
     case '__ga4_overview':
       return data.ga4_overview ? (
         <div data-testid="slide-ga4-overview">{head('__ga4_overview')}
-          <div className="flex flex-col gap-3"><Ga4Tiles kpis={data.ga4_overview.kpis} ar={ar} /><Ga4Series series={data.ga4_overview.series} currency={data.ga4_overview.currency} ar={ar} height={paged ? 190 : 260} /></div>
+          <div className="flex flex-col gap-3"><CompactTiles kpis={data.ga4_overview.kpis} ar={ar} /><Ga4Series series={data.ga4_overview.series} currency={data.ga4_overview.currency} ar={ar} height={paged ? 190 : 260} /></div>
         </div>
       ) : null
     case '__ga4_acquisition':
@@ -217,14 +223,14 @@ export function Ga4Slide({ slide, data, ar = true, paged = false }: { slide: { i
     case '__ga4_gap':
       return data.ga4_platform_gap ? <div data-testid="slide-ga4-gap">{head('__ga4_gap')}<Ga4Gap gap={data.ga4_platform_gap} ar={ar} /></div> : null
     case '__ga4_tables':
-      return data.ga4_tables ? <div data-testid="slide-ga4-tables">{head('__ga4_tables')}<Ga4Tables tables={withoutProducts(data.ga4_tables, !frozenBeforeWebsiteTab(data as { website_layout?: unknown }) && (data.report_sections as string[] | undefined)?.includes('ga4_products') === true && data.ga4_products != null)!.tables} currency={data.ga4_tables.currency} ar={ar} /></div> : null
+      return data.ga4_tables ? <div data-testid="slide-ga4-tables">{head('__ga4_tables')}<TablesVisual tables={withoutProducts(data.ga4_tables, !frozenBeforeWebsiteTab(data as { website_layout?: unknown }) && (data.report_sections as string[] | undefined)?.includes('ga4_products') === true && data.ga4_products != null)!.tables} currency={data.ga4_tables.currency} ar={ar} /></div> : null
     case '__ga4_pulse':
       // Only a snapshot frozen before the website tab has this page: it renders as it was frozen, its tiles and funnel included.
       return data.ga4_pulse ? <div data-testid="slide-ga4-pulse">{head('__ga4_pulse')}<div className="flex flex-col gap-3"><Ga4Tiles kpis={data.ga4_pulse.kpis} ar={ar} />{data.ga4_pulse.funnel.length > 0 && <Ga4Acquisition frozen channels={null} devices={null} funnel={data.ga4_pulse.funnel} ar={ar} />}</div></div> : null
     case '__ga4_attribution':
-      return data.ga4_attribution ? <div data-testid="slide-ga4-attribution">{head('__ga4_attribution')}<AttributionMatchBlock data={data.ga4_attribution} ar={ar} pageSize={paged ? 6 : 8} paged={paged} range={slide.range} /></div> : null
+      return data.ga4_attribution ? <div data-testid="slide-ga4-attribution">{head('__ga4_attribution')}{paged ? <AttributionMatchBlock data={data.ga4_attribution} ar={ar} pageSize={6} paged range={slide.range} /> : <AttributionVisual data={data.ga4_attribution} ar={ar} pageSize={8} />}</div> : null
     case '__ga4_reasons':
-      return data.ga4_gap_reasons ? <div data-testid="slide-ga4-reasons">{head('__ga4_reasons')}<GapReasonsBlock data={data.ga4_gap_reasons} ar={ar} /></div> : null
+      return data.ga4_gap_reasons ? <div data-testid="slide-ga4-reasons">{head('__ga4_reasons')}<GapStory data={data.ga4_gap_reasons} ar={ar} platforms={platformsOf(data)} /></div> : null
     case '__ga4_classification':
       return data.ga4_classification ? <div data-testid="slide-ga4-classification">{head('__ga4_classification')}<ClassificationBlock data={data.ga4_classification} ar={ar} pageSize={8} paged={paged} group={slide.id.split(':')[1]} range={slide.range} /></div> : null
     case '__ga4_products': {
