@@ -104,7 +104,7 @@ const GROUPS: Array<{
     title: ['التحليل', 'Analysis'],
     keys: [
       { key: 'insights', ar: 'التحليلات', en: 'Insights' },
-      { key: 'recommendations', ar: 'التوصيات', en: 'Recommendations' },
+      { key: 'recommendations', ar: 'فرص التحسين', en: 'Recommendations' },
     ],
   },
 ]

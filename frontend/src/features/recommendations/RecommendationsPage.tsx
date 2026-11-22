@@ -62,13 +62,13 @@ export function RecommendationsPage() {
 
   const t = ar
     ? {
-        title: 'التوصيات',
+        title: 'فرص التحسين',
         purpose: 'ما يستحق التنفيذ الآن — مجمَّعًا من حملات المشروع، بأولويته وصاحبه وما بُني عليه.',
         status: 'الحالة', priority: 'الأولوية', all: 'الكل',
         approve: 'اعتماد', review: 'مراجعة', reject: 'رفض', hide: 'إخفاء', details: 'التفاصيل', close: 'إغلاق',
         decisionFailed: 'تعذّر حفظ القرار.',
-        empty: 'لا توجد توصيات في هذا المشروع بعد.',
-        emptyFiltered: 'لا توجد توصيات تطابق هذه الفلاتر.',
+        empty: 'لا توجد فرص تحسين في هذا المشروع بعد.',
+        emptyFiltered: 'لا توجد فرص تحسين تطابق هذه الفلاتر.',
         noProject: 'اختر مشروعًا', noProjectBody: 'التوصيات مرتبطة بحملات المشروع — اختر مشروعًا لعرضها.',
         evidence: 'المستند', noEvidence: 'لم يُذكر ما بُنيت عليه', action: 'الإجراء المقترح',
         due: 'الاستحقاق', campaign: 'الحملة',

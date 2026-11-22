@@ -79,7 +79,7 @@ final class ReportStructure
         'ads' => ['ar' => 'الإعلانات والمواد', 'en' => 'Ads and media'],
         'links' => ['ar' => 'الروابط المختصرة', 'en' => 'Short links'],
         'findings' => ['ar' => 'النتائج', 'en' => 'Findings'],
-        'recommendations' => ['ar' => 'التوصيات', 'en' => 'Recommendations'],
+        'recommendations' => ['ar' => 'فرص التحسين', 'en' => 'Recommendations'],
     ];
 
     /**

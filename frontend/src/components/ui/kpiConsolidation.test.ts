@@ -32,6 +32,7 @@ const EXEMPT = {
   'src/features/reports/PrintDocument.tsx': 'the printed deck is a designed document with its own scale — a client sees it as a PDF, not as the app',
   'src/features/reports/PrintReport.tsx': 'the print route, for the same reason',
   'src/features/reports/InteractiveReport.tsx': 'the deck on screen, which must match the printed one exactly',
+  'src/features/reports/WebsiteVisuals.tsx': 'the report\'s «الموقع» part, drawn inside the deck (InteractiveReport slides) and the live link at the deck\'s own scale; its headline figures are the merchant\'s answer at a glance (Owner, WEBSITE-VISUAL-005)',
   'src/components/ui/StatCard.tsx': 'the shared card itself',
   'src/components/ui/MetricStrip.tsx': 'the strip, which is the shared card in its multi-metric form',
   'src/features/roleDashboard/parts.tsx': 'the role dashboards are ONE fixed-size screen (no scroll at 1366x768): every figure is a link that opens its page and the card must be compact, which the shared card — four reserved rows, not a link — cannot be',

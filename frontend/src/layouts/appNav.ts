@@ -85,7 +85,7 @@ export const appNavGroups: readonly NavGroup[] = [
     leaves: [
       { to: '/app/tasks', ar: 'المهام', en: 'Tasks', icon: ListChecks, ent: 'tasks' },
       { to: '/app/alerts', ar: 'التنبيهات', en: 'Alerts', icon: BellRing, ent: 'alerts' },
-      { to: '/app/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
+      { to: '/app/recommendations', ar: 'فرص التحسين', en: 'Recommendations', icon: Lightbulb, ent: 'analytics' },
       { to: '/app/agents/approvals', ar: 'الموافقات', en: 'Approvals', icon: ShieldCheck, ent: 'analytics' },
       { to: '/app/automation', ar: 'الأتمتة', en: 'Automation', icon: Workflow, ent: 'analytics' },
       { to: '/app/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, ent: 'analytics', end: true },

@@ -140,7 +140,7 @@ return [
             'tasks' => ':n للمتابعة',
             'budgets_ending' => ':n ميزانيات قاربت نهايتها',
             'no_budget' => ':n مشاريع بلا ميزانية',
-            'recommendations' => ':n توصيات بانتظار الاعتماد',
+            'recommendations' => ':n فرص تحسين بانتظار الاعتماد',
             'problems' => ':n مشاكل بيانات أو ربط',
             'external' => 'أمس: :sent أُرسلت، :held موقوفة، :unsub ألغت الاشتراك',
             'enough_until' => 'تكفي حتى :date',

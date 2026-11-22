@@ -90,7 +90,7 @@ export function buildFindings(rows: CampaignRow[], platforms: Array<{ provider: 
       if (multiple >= 1.2) {
         out.push({
           key: 'cost-spread', icon: Gauge, tone: multiple >= 2 ? 'warn' : 'info',
-          title: ar ? `فارق التكلفة — ${FAMILY[family]?.ar ?? family}` : `Cost spread — ${FAMILY[family]?.en ?? family}`,
+          title: ar ? `فرق تكلفة ${FAMILY[family]?.ar ?? family}` : `Cost spread — ${FAMILY[family]?.en ?? family}`,
           figure: `${multiple.toFixed(1)}×`,
           line: ar ? `«${name(dear.r)}» أغلى من «${name(cheap.r)}» على نفس الهدف` : `«${name(dear.r)}» costs more than «${name(cheap.r)}» on the same objective`,
           evidence: sorted.map((p) => ({ label: name(p.r), value: `${p.label} ${money(p.cpr, cur)}` })),
