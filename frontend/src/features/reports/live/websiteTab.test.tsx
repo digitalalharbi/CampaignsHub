@@ -223,14 +223,17 @@ describe('the «الموقع» tab', () => {
   })
 
   // WEBSITE-VISUAL-001 (Owner 2026-11-22) — small tiles, visits first then sales, every figure once.
-  it('draws the figures as compact tiles: visits first, then sales, every figure once', async () => {
+  it('draws the figures in two tiers: four large visit cards, then compact sales and marketing groups, every figure once', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     const website = await open('website')
 
     expect(within(website).getByTestId('ga4-tiles')).toHaveAttribute('data-layout', 'compact')
-    const ids = Array.from(website.querySelectorAll('[data-testid^="ga4-tile-"]')).map((n) => n.getAttribute('data-testid'))
-    expect(ids[0]).toBe('ga4-tile-sessions')
-    expect(ids.indexOf('ga4-tile-revenue')).toBeGreaterThan(ids.indexOf('ga4-tile-avg_session_seconds'))
+    const tiles = Array.from(website.querySelectorAll('[data-testid^="ga4-tile-"]'))
+    const ids = tiles.map((n) => n.getAttribute('data-testid'))
+    expect(ids.slice(0, 4)).toEqual(['ga4-tile-sessions', 'ga4-tile-users_daily_sum', 'ga4-tile-bounce_rate', 'ga4-tile-engagement_rate'])
+    expect(tiles.slice(0, 4).every((n) => n.getAttribute('data-tier') === 'primary')).toBe(true)
+    expect(within(website).getByTestId('ga4-tiles-sales')).toContainElement(within(website).getByTestId('ga4-tile-revenue'))
+    expect(within(website).getByTestId('ga4-tile-revenue')).toHaveAttribute('data-tier', 'secondary')
     expect(new Set(ids).size).toBe(ids.length)
   })
 })

@@ -45,7 +45,7 @@ const TONE: Record<string, 'brand' | 'info' | 'success' | 'neutral' | 'warning'>
   transactions: 'success', revenue: 'success', aov: 'success', conversion_rate: 'success', add_to_carts: 'neutral', checkouts: 'neutral',
 }
 
-const CHANNEL: Record<string, L> = {
+export const CHANNEL: Record<string, L> = {
   'Paid Social': { ar: 'اجتماعي مدفوع', en: 'Paid social' },
   'Paid Search': { ar: 'بحث مدفوع', en: 'Paid search' },
   'Paid Video': { ar: 'فيديو مدفوع', en: 'Paid video' },
@@ -65,7 +65,7 @@ const CHANNEL: Record<string, L> = {
   Unassigned: { ar: 'غير محدد القناة', en: 'No channel' },
   unclassified: { ar: 'غير مصنّف', en: 'Unclassified' },
 }
-const DEVICE: Record<string, L> = {
+export const DEVICE: Record<string, L> = {
   unclassified: { ar: 'غير مصنّف', en: 'Unclassified' }, mobile: { ar: 'جوال', en: 'Mobile' }, desktop: { ar: 'حاسوب', en: 'Desktop' }, tablet: { ar: 'لوحي', en: 'Tablet' }, 'smart tv': { ar: 'تلفاز', en: 'TV' },
 }
 export const UNPAID: Record<string, L> = {
@@ -100,7 +100,7 @@ export function IndirectPath({ items, ar, total }: { items: Array<{ key: string;
     </div>
   )
 }
-const FUNNEL: Record<string, L> = {
+export const FUNNEL: Record<string, L> = {
   sessions: { ar: 'الزيارات', en: 'Sessions' }, add_to_carts: { ar: 'السلة', en: 'Cart' }, checkouts: { ar: 'الدفع', en: 'Checkout' }, purchases: { ar: 'الشراء', en: 'Purchase' },
 }
 

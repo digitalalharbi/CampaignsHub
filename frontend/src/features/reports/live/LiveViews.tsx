@@ -34,7 +34,7 @@ import {
   TrendAndDistribution,
   useSpendCharting,
 } from './LiveSections'
-import { StoreAnalyticsBlock } from '../StoreAnalyticsBlock'
+import { StoreAnalyticsBlock } from '../StoreAnalyticsDeferred'
 import { Ga4ReportBlocks, ga4PartShown, WEBSITE_PARTS, WebsiteStrip, websiteHasContent } from '../Ga4ReportBlocks'
 import { FormatComparisonReportBlock } from '../FormatComparisonBlocks'
 import type { useLiveMetricReader } from './liveMetrics'
