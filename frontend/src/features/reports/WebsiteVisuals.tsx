@@ -9,6 +9,7 @@ import { canonicalPlatform } from '@/lib/platforms'
 import { ChartCard, ConversionFunnelChart, hasFunnel, KpiSparkline } from '@/features/analytics/charts'
 import { money, moneyExact, num, percent } from '@/features/analytics/format'
 import { countedAr } from '@/lib/counted'
+import { PLATFORM_ORDER } from '@/lib/platforms'
 
 const DAYS_AR = { one: 'يوم', two: 'يومان', few: 'أيام', many: 'يومًا' }
 import { CHANNEL, DEVICE, donutRows, FUNNEL, KPI_LABEL, kpiText, productColumns, sessionColumns, UNPAID } from '@/features/analytics/ga4/Ga4StoreView'
@@ -360,7 +361,9 @@ const DIR: Record<Direction, { label: L; icon: typeof Equal; tone: string }> = {
  */
 export interface AttributionBasis { orders: number | null; ordersSource: 'store' | 'site'; spendUsd: number | null; revenueUsd: number | null; currency?: string }
 
-const WINDOWS: Array<{ provider: string; days: number }> = [{ provider: 'snapchat', days: 28 }, { provider: 'tiktok', days: 7 }, { provider: 'meta', days: 7 }, { provider: 'google', days: 30 }]
+/** Each platform's default attribution window in days; the order comes from the canonical platform list. */
+const WINDOW_DAYS: Partial<Record<string, number>> = { snapchat: 28, tiktok: 7, meta: 7, google: 30 }
+const WINDOWS: Array<{ provider: string; days: number }> = PLATFORM_ORDER.flatMap((provider) => (WINDOW_DAYS[provider] ? [{ provider, days: WINDOW_DAYS[provider] }] : []))
 const UP_REASONS = [
   { key: 'dup', icon: Copy, label: { ar: 'نفس الطلب في أكثر من منصة', en: 'One order, several platforms' } },
   { key: 'view', icon: Eye, label: { ar: 'مشاهدة بلا نقرة', en: 'Viewed, not clicked' } },
