@@ -7,7 +7,7 @@ import { useUi } from '@/stores/ui'
 
 const SURFACES: Array<{ id: WidgetSurface; en: string; ar: string; hintEn: string; hintAr: string }> = [
   { id: 'dashboard', en: 'Dashboard', ar: 'لوحة المعلومات', hintEn: 'Shown beneath the Dashboard overview.', hintAr: 'تظهر أسفل نظرة لوحة المعلومات.' },
-  { id: 'analytics', en: 'Analytics', ar: 'التحليلات', hintEn: 'Shown on the Insights tab of Analytics.', hintAr: 'تظهر في تبويب «رؤى إضافية» بالتحليلات.' },
+  { id: 'analytics', en: 'Analytics', ar: 'التحليلات', hintEn: 'Shown on the Insights tab of Analytics.', hintAr: 'تظهر في تبويب «تحليلات إضافية» بالتحليلات.' },
   { id: 'report', en: 'Client links', ar: 'روابط العملاء', hintEn: 'What this project ALLOWS on a client link. Each link still shows nothing until its owner switches a widget on.', hintAr: 'ما يسمح به المشروع في رابط العميل. يبقى كل رابط بلا ودجات حتى يفعّلها صاحبه.' },
 ]
 
