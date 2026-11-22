@@ -7,7 +7,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { ChartCard, ConversionFunnelChart, hasFunnel, KpiSparkline } from '@/features/analytics/charts'
-import { money, num, percent } from '@/features/analytics/format'
+import { money, moneyExact, num, percent } from '@/features/analytics/format'
 import { CHANNEL, DEVICE, donutRows, FUNNEL, KPI_LABEL, kpiText, productColumns, sessionColumns, UNPAID } from '@/features/analytics/ga4/Ga4StoreView'
 import { matchColumns, platformRows, type MatchRow } from '@/features/analytics/ga4/Ga4MatchBlock'
 import type { ClassificationRow, GapReasonsPayload, MatchPayload } from '@/features/analytics/ga4/matchTypes'
@@ -473,7 +473,7 @@ export function AttributionStory({ data, ar, basis }: { data: MatchPayload; ar: 
           {realCpa !== null && (
             <div data-testid="story-real-cpa" className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
               <span className="flex flex-col"><span className="text-[11px] font-semibold text-text-muted">{ar ? 'تكلفة الطلب الفعلي' : 'Cost per real order'}</span><span className="tnum text-[10px] text-text-muted">{ar ? `الصرف ÷ ${ordersLabel}` : 'Spend ÷ orders'}</span></span>
-              <span className="flex flex-col items-end"><span className="tnum text-xl font-extrabold text-success"><Num>{money(realCpa, 'USD')}</Num></span>{claimedCpa !== null && <span className="tnum text-[10px] text-text-muted line-through"><Num>{money(claimedCpa, 'USD')}</Num></span>}</span>
+              <span className="flex flex-col items-end"><span className="tnum text-xl font-extrabold text-success"><Num>{moneyExact(realCpa, 'USD')}</Num></span>{claimedCpa !== null && <span className="tnum text-[10px] text-text-muted line-through"><Num>{moneyExact(claimedCpa, 'USD')}</Num></span>}</span>
             </div>
           )}
           {realRoas !== null && (
@@ -678,12 +678,12 @@ export function SimpleAnswer({ data, ar, basis }: { data: MatchPayload; ar: bool
         {cpa !== null && (
           <div data-testid="simple-cpa" className="flex flex-col items-center gap-0.5 rounded-xl bg-surface px-3 py-2.5">
             <span className="text-[11px] font-bold text-text-muted">{ar ? 'تكلفة الطلب' : 'Cost per order'}</span>
-            <span className="tnum text-2xl font-extrabold text-success"><Num>{money(cpa, 'USD')}</Num></span>
+            <span className="tnum text-2xl font-extrabold text-success"><Num>{moneyExact(cpa, 'USD')}</Num></span>
           </div>
         )}
         {roas !== null && (
           <div data-testid="simple-roas" className="flex flex-col items-center gap-0.5 rounded-xl bg-surface px-3 py-2.5">
-            <span className="text-[11px] font-bold text-text-muted">{ar ? 'كل ١ رجّع' : 'Each 1 returned'}</span>
+            <span className="text-[11px] font-bold text-text-muted">{ar ? 'معدل العائد' : 'Return'}</span>
             <span className="tnum text-2xl font-extrabold text-success"><Num>{`×${roas.toFixed(2)}`}</Num></span>
           </div>
         )}
@@ -786,7 +786,7 @@ export function AttributionVisual({ data, ar, pageSize = 8, basis }: { data: Mat
       </details>
 
       <details data-testid="match-table-toggle">
-        <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'عرض الجدول التفصيلي' : 'Show the detailed table'}</summary>
+        <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'التفاصيل' : 'Details'}</summary>
         <div className="mt-2">
           <FixedPageTable testId="match-table" ar={ar} pageSize={pageSize} rows={rows} rowKey={(r: MatchRow) => r.key}
             columns={matchColumns(ar, internal, () => undefined).map((c) => (c.key === 'name' ? { ...c, render: (r: MatchRow) => <span className="inline-flex items-center gap-2 font-semibold"><ProviderMark provider={r.platform} size={16} />{providerLabel(r.platform, ar ? 'ar' : 'en')}</span> } : c))}
@@ -901,7 +901,7 @@ function Tabs<K extends string>({ keys, active, label, onPick, testId, min = 2 }
 function Details({ testId, ar, children }: { testId: string; ar: boolean; children: ReactNode }) {
   return (
     <details data-testid={testId}>
-      <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'عرض الجدول التفصيلي' : 'Show the detailed table'}</summary>
+      <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'التفاصيل' : 'Details'}</summary>
       <div className="mt-2">{children}</div>
     </details>
   )
