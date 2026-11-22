@@ -1,4 +1,5 @@
-import { Globe, Store as StoreIcon, Unlink } from 'lucide-react'
+import { Globe, Link2, Store as StoreIcon, Unlink } from 'lucide-react'
+import { ShareTiles } from './ShareTiles'
 import { MetricLineChart } from '@/features/analytics/charts'
 import { money, num, percent } from '@/features/analytics/format'
 import { formatFixed } from '@/lib/numerals'
@@ -42,11 +43,11 @@ export interface StoreAnalyticsPayload {
   }
 }
 
+const ORDER_COLOR: Record<string, string> = { confirmed: 'var(--success)', cancelled: 'var(--danger)', refunded: 'var(--warning)' }
+
 const CHANNEL: Record<string, { ar: string; en: string }> = {
   paid: { ar: 'مدفوع', en: 'Paid' }, organic: { ar: 'عضوي', en: 'Organic' }, direct: { ar: 'مباشر', en: 'Direct' }, referral: { ar: 'إحالة', en: 'Referral' }, other: { ar: 'أخرى', en: 'Other' },
 }
-
-const SEG_COLORS = ['var(--brand-600)', 'var(--teal)', 'var(--info)', 'var(--purple)', 'var(--warning)', 'var(--text-muted)']
 
 /** A small figure tile: label, value, an optional muted line — the report's compact tile (WEBSITE-VISUAL-001). */
 function Tile({ label, value, hint, accent }: { label: string; value: string; hint?: string; accent?: string }) {
@@ -55,29 +56,6 @@ function Tile({ label, value, hint, accent }: { label: string; value: string; hi
       <span className="flex items-center gap-1.5 truncate text-[11px] font-semibold text-text-muted">{accent && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accent }} />}{label}</span>
       <span className="tnum truncate text-lg font-extrabold leading-tight text-text-primary" dir="ltr">{value}</span>
       {hint && <span className="tnum truncate text-[10px] text-text-muted">{hint}</span>}
-    </div>
-  )
-}
-
-/** One stacked bar with its legend: parts of a whole drawn, not listed. */
-function Stack({ testId, parts }: { testId: string; parts: Array<{ key: string; label: string; value: number; note?: string }> }) {
-  const shown = parts.filter((p) => p.value > 0)
-  const total = shown.reduce((a, p) => a + p.value, 0)
-  if (total === 0) return null
-
-  return (
-    <div data-testid={testId} className="flex min-w-0 flex-col gap-1.5">
-      <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
-        {shown.map((p, i) => <span key={p.key} title={`${p.label} ${num(p.value)}`} style={{ width: `${(p.value / total) * 100}%`, background: SEG_COLORS[i % SEG_COLORS.length] }} />)}
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1">
-        {shown.map((p, i) => (
-          <span key={p.key} className="inline-flex items-center gap-1 text-[11px] text-text-secondary">
-            <span className="h-2 w-2 rounded-full" style={{ background: SEG_COLORS[i % SEG_COLORS.length] }} />{p.label}
-            <span className="tnum font-bold text-text-primary" dir="ltr">{p.note ?? num(p.value)}</span>
-          </span>
-        ))}
-      </div>
     </div>
   )
 }
@@ -106,7 +84,7 @@ export function StoreAnalyticsBlock({ data, ar }: { data: StoreAnalyticsPayload;
             <Tile accent="var(--info)" label={ar ? 'متوسط قيمة الطلب' : 'Average order value'} value={m(store.averages.aov, store.currency)} hint={store.averages.items_per_order === null ? undefined : (ar ? `${formatFixed(store.averages.items_per_order, 2)} منتج للطلب` : `${formatFixed(store.averages.items_per_order, 2)} items per order`)} />
             <Tile accent="var(--purple)" label={ar ? 'عملاء جدد · عائدون' : 'New · Returning'} value={`${num(store.customers.new)} · ${num(store.customers.returning)}`} hint={store.customers.repeat_rate === null ? undefined : (ar ? `تكرار الشراء ${percent(store.customers.repeat_rate, 1)}` : `Repeat purchase ${percent(store.customers.repeat_rate, 1)}`)} />
           </div>
-          <Stack testId="store-analytics-orders" parts={[
+          <ShareTiles testId="store-analytics-orders" cols="grid-cols-3" colorOf={(k) => ORDER_COLOR[k] ?? 'var(--text-muted)'} parts={[
             { key: 'confirmed', label: ar ? 'مؤكد' : 'confirmed', value: store.orders.confirmed },
             { key: 'cancelled', label: ar ? 'ملغى' : 'cancelled', value: store.orders.cancelled },
             { key: 'refunded', label: ar ? 'مسترد' : 'refunded', value: store.orders.refunded },
@@ -140,7 +118,7 @@ export function StoreAnalyticsBlock({ data, ar }: { data: StoreAnalyticsPayload;
             {store.evidence && store.evidence.length > 0 && (
               <div className="min-w-0">
                 <h4 className="mb-1.5 text-xs font-bold text-text-secondary">{ar ? 'كيف رُبطت الطلبات بمصادرها' : 'How orders tie to their sources'}</h4>
-                <Stack testId="store-analytics-evidence" parts={store.evidence.map((e) => ({ key: e.method, label: ar ? e.label_ar : e.label_en, value: e.orders, note: `${num(e.orders)} · ${percent(e.share, 0)}` }))} />
+                <ShareTiles testId="store-analytics-evidence" cols="grid-cols-2" parts={store.evidence.map((e) => ({ key: e.method, label: ar ? e.label_ar : e.label_en, value: e.orders, icon: Link2 }))} />
               </div>
             )}
           </div>
@@ -160,7 +138,7 @@ export function StoreAnalyticsBlock({ data, ar }: { data: StoreAnalyticsPayload;
             <Tile accent="var(--teal)" label={ar ? 'إيراد الموقع' : 'Site revenue'} value={m(site.totals.revenue, site.currency)} />
           </div>
           {site.channels.length > 0 && (
-            <Stack testId="store-analytics-channels" parts={site.channels.map((c) => ({ key: c.class, label: CHANNEL[c.class]?.[ar ? 'ar' : 'en'] ?? c.class, value: c.sessions ?? 0 }))} />
+            <ShareTiles testId="store-analytics-channels" parts={site.channels.map((c) => ({ key: c.class, label: CHANNEL[c.class]?.[ar ? 'ar' : 'en'] ?? c.class, value: c.sessions ?? 0 }))} />
           )}
         </div>
       )}

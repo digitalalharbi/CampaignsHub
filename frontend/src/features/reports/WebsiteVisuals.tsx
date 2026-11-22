@@ -1,15 +1,16 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { ArrowDownRight, ArrowUpRight, Check, Clock, Equal, EyeOff, Megaphone, Route, ShoppingBag, Store, Tag, HelpCircle } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { ArrowDownRight, ArrowUpRight, CalendarDays, Check, CheckCheck, Clock, Equal, Eye, EyeOff, Globe, Keyboard, Megaphone, MonitorSmartphone, RefreshCw, Route, Search, Share2, ShieldOff, ShoppingBag, Smartphone, Store, Tag, HelpCircle, Users } from 'lucide-react'
+import { partIcon, ShareTiles } from './ShareTiles'
 import { Num } from '@/components/ui/Num'
 import { FixedPageTable } from '@/components/ui/FixedPageTable'
 import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
-import { KpiSparkline } from '@/features/analytics/charts'
+import { ChartCard, ConversionFunnelChart, hasFunnel, KpiSparkline } from '@/features/analytics/charts'
 import { money, num, percent } from '@/features/analytics/format'
-import { KPI_LABEL, kpiText, productColumns, sessionColumns, UNPAID } from '@/features/analytics/ga4/Ga4StoreView'
+import { CHANNEL, DEVICE, donutRows, FUNNEL, KPI_LABEL, kpiText, productColumns, sessionColumns, UNPAID } from '@/features/analytics/ga4/Ga4StoreView'
 import { matchColumns, platformRows, type MatchRow } from '@/features/analytics/ga4/Ga4MatchBlock'
-import type { GapReasonsPayload, MatchPayload } from '@/features/analytics/ga4/matchTypes'
-import type { StoreKpi, StoreProductRow, StoreSessionRow, StoreTableKey, StoreTables } from '@/features/analytics/ga4/storeTypes'
+import type { ClassificationRow, GapReasonsPayload, MatchPayload } from '@/features/analytics/ga4/matchTypes'
+import type { StoreBreakdownMeta, StoreFunnelStep, StoreKpi, StoreProductRow, StoreSlice, StoreSessionRow, StoreTableKey, StoreTables } from '@/features/analytics/ga4/storeTypes'
 
 /**
  * WEBSITE-VISUAL-001 (Owner 2026-11-22) — the report's «الموقع» reading, drawn instead of written.
@@ -26,39 +27,168 @@ const tx = (l: L, ar: boolean) => (ar ? l.ar : l.en)
 
 /* ───────────────────────────── compact tiles ───────────────────────────── */
 
-/** Visits first, then sales: twelve small tiles, six to a row, so each row is one family. */
-const TILE_ORDER = ['sessions', 'users_daily_sum', 'new_users', 'bounce_rate', 'engagement_rate', 'avg_session_seconds', 'revenue', 'transactions', 'aov', 'conversion_rate', 'add_to_carts', 'checkouts']
+/**
+ * WEBSITE-VISUAL-002 (Owner 2026-11-22) — «الأرقام كثيرة … بطاقات رئيسية للزيارات ومعدل الارتداد وبطاقات ثانوية للتسويق والمبيعات»:
+ * four large cards for the visit (with their trend), then two compact groups — sales, and the steps before it — each behind its icon.
+ */
+const PRIMARY = ['sessions', 'users_daily_sum', 'bounce_rate', 'engagement_rate']
+const SALES = ['revenue', 'transactions', 'aov', 'conversion_rate']
+const MARKETING = ['add_to_carts', 'checkouts', 'new_users', 'avg_session_seconds']
 const LOWER_IS_BETTER = new Set(['bounce_rate'])
-const TILE_COLOR: Record<string, string> = { revenue: 'var(--success)', transactions: 'var(--success)', aov: 'var(--success)', conversion_rate: 'var(--success)', bounce_rate: 'var(--warning)' }
+const TILE_COLOR: Record<string, string> = { bounce_rate: 'var(--warning)', engagement_rate: 'var(--info)' }
 
-export function CompactTiles({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
-  const ordered = [...kpis].sort((a, b) => (TILE_ORDER.indexOf(a.key) + 100) % 100 - (TILE_ORDER.indexOf(b.key) + 100) % 100)
+function Delta({ k }: { k: StoreKpi }) {
+  const c = k.change_pct
+  if (c === null || c === undefined || Math.abs(c) < 0.0005) return null
+  const good = LOWER_IS_BETTER.has(k.key) ? c < 0 : c > 0
+  const Icon = c > 0 ? ArrowUpRight : ArrowDownRight
 
   return (
-    <section data-testid="ga4-tiles" data-layout="compact" aria-label={ar ? 'مؤشرات الموقع' : 'Website KPIs'} className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-      {ordered.map((k) => {
-        const usd = k.kind === 'money' ? k.current_usd : undefined
-        const c = k.change_pct
-        const flat = c === null || c === undefined || Math.abs(c) < 0.0005
-        const good = !flat && (LOWER_IS_BETTER.has(k.key) ? (c as number) < 0 : (c as number) > 0)
-        const Icon = flat ? null : (c as number) > 0 ? ArrowUpRight : ArrowDownRight
+    <span data-testid={`ga4-delta-${k.key}`} className={`tnum inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-[10px] font-bold ${good ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+      <Icon size={10} aria-hidden /><Num>{percent(Math.abs(c), 0)}</Num>
+    </span>
+  )
+}
 
-        return (
-          <div key={k.key} data-testid={`ga4-tile-${k.key}`} className="flex min-w-0 flex-col gap-1 overflow-hidden rounded-xl border border-border bg-surface px-3 pb-1 pt-2.5">
+const value = (k: StoreKpi) => kpiText(k, k.current, k.kind === 'money' ? k.current_usd : undefined)
+
+export function CompactTiles({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
+  const by = new Map(kpis.map((k) => [k.key, k]))
+  const pick = (keys: string[]) => keys.map((k) => by.get(k)).filter((k): k is StoreKpi => k !== undefined)
+  const known = new Set([...PRIMARY, ...SALES, ...MARKETING])
+  const primary = pick(PRIMARY)
+  const groups = [
+    { key: 'sales', icon: ShoppingBag, color: 'var(--success)', label: { ar: 'المبيعات', en: 'Sales' }, items: pick(SALES) },
+    { key: 'marketing', icon: Megaphone, color: 'var(--brand-600)', label: { ar: 'التسويق', en: 'Marketing' }, items: [...pick(MARKETING), ...kpis.filter((k) => !known.has(k.key))] },
+  ].filter((g) => g.items.length > 0)
+
+  return (
+    <section data-testid="ga4-tiles" data-layout="compact" aria-label={ar ? 'مؤشرات الموقع' : 'Website KPIs'} className="flex min-w-0 flex-col gap-2.5">
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        {primary.map((k) => (
+          <div key={k.key} data-testid={`ga4-tile-${k.key}`} data-tier="primary" className="flex min-w-0 flex-col gap-1.5 overflow-hidden rounded-2xl border border-border bg-surface px-4 pb-1 pt-3">
             <div className="flex items-center justify-between gap-1">
               <span className="truncate text-xs font-semibold text-text-muted">{tx(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
-              {Icon && (
-                <span data-testid={`ga4-delta-${k.key}`} className={`tnum inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-xs font-bold ${good ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
-                  <Icon size={10} aria-hidden /><Num>{percent(Math.abs(c as number), 0)}</Num>
-                </span>
-              )}
+              <Delta k={k} />
             </div>
-            <span className="tnum truncate text-lg font-extrabold leading-tight text-text-primary"><Num>{kpiText(k, k.current, usd)}</Num></span>
-            {(k.trend?.length ?? 0) >= 2 ? <div className="-mx-3"><KpiSparkline points={(k.trend ?? []).map((p) => p.value)} height={26} color={TILE_COLOR[k.key]} /></div> : <div className="h-[26px]" />}
+            <span className="tnum truncate text-2xl font-extrabold leading-tight text-text-primary"><Num>{value(k)}</Num></span>
+            {(k.trend?.length ?? 0) >= 2 ? <div className="-mx-4"><KpiSparkline points={(k.trend ?? []).map((p) => p.value)} height={36} color={TILE_COLOR[k.key]} /></div> : <div className="h-[36px]" />}
           </div>
-        )
-      })}
+        ))}
+      </div>
+      <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
+        {groups.map((g) => (
+          <div key={g.key} data-testid={`ga4-tiles-${g.key}`} className="flex min-w-0 items-stretch gap-2 rounded-2xl border border-border bg-surface p-2">
+            <span title={tx(g.label, ar)} className="grid w-9 shrink-0 place-items-center rounded-xl" style={{ background: `color-mix(in srgb, ${g.color} 14%, transparent)`, color: g.color }}><g.icon size={16} aria-hidden /></span>
+            <div className="grid min-w-0 flex-1 grid-cols-2 gap-1.5 sm:grid-cols-4">
+              {g.items.map((k) => (
+                <div key={k.key} data-testid={`ga4-tile-${k.key}`} data-tier="secondary" className="flex min-w-0 flex-col gap-0.5 rounded-xl bg-surface-secondary/60 px-2.5 py-2">
+                  <span className="flex items-center justify-between gap-1">
+                    <span className="truncate text-[10px] font-semibold text-text-muted">{tx(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
+                    <Delta k={k} />
+                  </span>
+                  <span className="tnum truncate text-sm font-extrabold text-text-primary"><Num>{value(k)}</Num></span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
+  )
+}
+
+/* ───────────────────────────── channels, devices, funnel ───────────────────────────── */
+
+/**
+ * WEBSITE-VISUAL-002 — «القنوات والأجهزة النصوص شكلها مزعج»: the two donuts and their word legends become aligned tiles — a channel
+ * per tile with its icon, figure and share; a device per large icon with its share. Every figure is the server's; nothing is scaled.
+ * A breakdown that runs over the visits says so in one chip (the sentence on hover), as the donut did.
+ */
+function Coverage({ testId, meta, ar }: { testId: string; meta?: StoreBreakdownMeta | null; ar: boolean }) {
+  const over = meta?.over ?? 0
+  if (!meta || (meta.unclassified <= 0 && over <= 0 && !(meta.days_total > 0 && meta.days_covered < meta.days_total))) return null
+
+  return (
+    <div data-testid={`${testId}-coverage`} className="flex flex-wrap gap-1.5">
+      {meta.unclassified > 0 && <span className="tnum inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-bold text-warning"><HelpCircle size={10} aria-hidden />{ar ? 'غير مصنّف' : 'Unclassified'} <Num>{`${num(meta.unclassified)} · ${percent(meta.unclassified / (meta.total || 1), 0)}`}</Num></span>}
+      {meta.days_total > 0 && meta.days_covered < meta.days_total && <span className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-bold text-text-secondary"><CalendarDays size={10} aria-hidden /><Num>{`${meta.days_covered}/${meta.days_total}`}</Num></span>}
+      {over > 0 && (
+        <span data-testid={`${testId}-over`} title={ar ? 'التقارير تُحدَّث في أوقات مختلفة' : 'Reports refresh at different times'} className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-bold text-text-secondary">
+          <RefreshCw size={10} aria-hidden /><Num>{`+${num(over)}`}</Num>
+        </span>
+      )}
+    </div>
+  )
+}
+
+function Panel({ testId, title, icon, total, children, className = '' }: { testId: string; title: string; icon: ReactNode; total?: number; children: ReactNode; className?: string }) {
+  return (
+    <section className={`flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-4 ${className}`}>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="inline-flex items-center gap-1.5 text-sm font-extrabold text-text-primary">{icon}{title}</h3>
+        {total !== undefined && <span data-testid={`${testId}-total`} className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-bold text-text-primary"><Users size={12} aria-hidden /><Num>{num(total)}</Num></span>}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+export function AcquisitionVisual({ channels, devices, funnel, channelsMeta, devicesMeta, ar }: { channels: StoreSlice[] | null | undefined; devices: StoreSlice[] | null | undefined; funnel: StoreFunnelStep[]; channelsMeta?: StoreBreakdownMeta | null; devicesMeta?: StoreBreakdownMeta | null; ar: boolean }) {
+  const ch = channels ? donutRows(channels, CHANNEL, ar) : []
+  const dv = devices ? donutRows(devices, DEVICE, ar) : []
+  const chTotal = ch.reduce((a, r) => a + r.value, 0)
+  const dvTotal = dv.reduce((a, r) => a + r.value, 0)
+  const DEVICE_COLOR = ['var(--teal)', 'var(--info)', 'var(--purple)', 'var(--warning)', 'var(--text-muted)']
+
+  return (
+    <div data-testid="ga4-acquisition" className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-5">
+      <Panel testId="ga4-channels" title={ar ? 'القنوات' : 'Channels'} icon={<Route size={15} aria-hidden />} total={ch.length ? chTotal : undefined} className="lg:col-span-3">
+        {ch.length === 0 ? <span data-testid="ga4-channels-absent" className="text-xs text-text-muted">{ar ? 'غير متاح' : 'Unavailable'}</span> : (
+          <div data-testid="ga4-channels" data-slices={ch.length} className="flex flex-col gap-2">
+            <span className="sr-only"><Num>{num(chTotal)}</Num></span>
+            <ShareTiles parts={ch.map((r) => ({ key: r.key, label: r.name, value: r.value }))} cols="grid-cols-2 sm:grid-cols-3" tileTestId={(k) => `ga4-channel-${k}`} />
+            <Coverage testId="ga4-channels" meta={channelsMeta} ar={ar} />
+          </div>
+        )}
+      </Panel>
+      <Panel testId="ga4-devices" title={ar ? 'الأجهزة' : 'Devices'} icon={<Smartphone size={15} aria-hidden />} total={dv.length ? dvTotal : undefined} className="lg:col-span-2">
+        {dv.length === 0 ? <span data-testid="ga4-devices-absent" className="text-xs text-text-muted">{ar ? 'غير متاح' : 'Unavailable'}</span> : (
+          <div data-testid="ga4-devices" data-slices={dv.length} className="flex flex-col gap-3">
+            <span className="sr-only"><Num>{num(dvTotal)}</Num></span>
+            <ul className="grid grid-cols-2 gap-2">
+              {[...dv].sort((a, b) => b.value - a.value).map((r, i) => {
+                const Icon = partIcon(r.key)
+                const color = DEVICE_COLOR[i % DEVICE_COLOR.length]
+                const share = dvTotal > 0 ? r.value / dvTotal : 0
+
+                return (
+                  <li key={r.key} data-testid={`ga4-device-${r.key}`} title={`${r.name} ${num(r.value)}`} className={`flex min-w-0 items-center gap-3 rounded-xl border border-border px-3 py-2.5 ${i === 0 ? 'col-span-2' : ''}`}>
+                    <span className="grid shrink-0 place-items-center rounded-xl" style={{ width: i === 0 ? 48 : 34, height: i === 0 ? 48 : 34, background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}><Icon size={i === 0 ? 24 : 16} aria-hidden /></span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-1">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="truncate text-[11px] font-semibold text-text-secondary">{r.name}</span>
+                        <span className={`tnum font-extrabold text-text-primary ${i === 0 ? 'text-2xl' : 'text-base'}`}><Num>{percent(share, 0)}</Num></span>
+                      </span>
+                      <span className="h-1.5 overflow-hidden rounded-full bg-surface-secondary"><span className="block h-full rounded-full" style={{ width: `${Math.max(3, share * 100)}%`, background: color }} /></span>
+                      <span className="tnum text-[10px] text-text-muted"><Num>{num(r.value)}</Num></span>
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+            <Coverage testId="ga4-devices" meta={devicesMeta} ar={ar} />
+          </div>
+        )}
+      </Panel>
+      {hasFunnel(funnel) && (
+        <ChartCard className="lg:col-span-5" title={ar ? 'قمع الموقع' : 'Website funnel'}>
+          <div data-testid="ga4-funnel">
+            <ConversionFunnelChart ar={ar} differLabel={ar ? 'تعريفات مختلفة' : 'Definitions differ'} stages={funnel.map((s) => ({ stage: s.stage, label: tx(FUNNEL[s.stage] ?? { ar: s.stage, en: s.stage }, ar), count: s.count, step_rate: s.step_rate, cost_per: null, exceeds_previous: s.exceeds_previous }))} />
+          </div>
+        </ChartCard>
+      )}
+    </div>
   )
 }
 
@@ -107,13 +237,13 @@ function Bar({ testId, icon, label, total, shared, segs, max, ar }: { testId: st
       <div className="flex min-w-0 items-center gap-2">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-secondary text-text-primary">{icon}</span>
         <span className="min-w-0">
-          <span className="block truncate text-xs font-semibold text-text-muted">{label}</span>
+          <span className="block truncate text-[11px] font-semibold text-text-muted">{label}</span>
           <span className="tnum block text-xl font-extrabold leading-none text-text-primary"><Num>{num(total)}</Num></span>
         </span>
       </div>
       <div className="flex h-9 w-full overflow-hidden rounded-xl bg-surface-secondary">
         {shared > 0 && (
-          <span data-testid={`${testId}-shared`} title={`${ar ? 'مشترك' : 'Shared'} ${num(shared)}`} className="tnum grid place-items-center text-xs font-bold text-white" style={{ width: w(shared), background: SHARED_COLOR }}>
+          <span data-testid={`${testId}-shared`} title={`${ar ? 'مشترك' : 'Shared'} ${num(shared)}`} className="tnum grid place-items-center text-[11px] font-bold text-white" style={{ width: w(shared), background: SHARED_COLOR }}>
             <span className="inline-flex items-center gap-1 truncate px-1"><Check size={12} aria-hidden /><Num>{num(shared)}</Num></span>
           </span>
         )}
@@ -123,7 +253,7 @@ function Bar({ testId, icon, label, total, shared, segs, max, ar }: { testId: st
 
           return (
             <span key={s.key} data-testid={`${testId}-seg-${s.key}`} title={`${tx(p.label, ar)} ${num(s.value)}`}
-              className="tnum grid place-items-center border-s-2 border-surface text-xs font-bold text-white" style={{ width: w(s.value), background: p.color }}>
+              className="tnum grid place-items-center border-s-2 border-surface text-[11px] font-bold text-white" style={{ width: w(s.value), background: p.color }}>
               <span className="inline-flex items-center gap-1 truncate px-1"><Icon size={12} aria-hidden /><Num>{num(s.value)}</Num></span>
             </span>
           )
@@ -164,7 +294,7 @@ export function GapStory({ data, ar, platforms = [] }: { data: GapReasonsPayload
           </span>
           <span className="relative grid h-11 w-11 place-items-center rounded-full bg-success/15 text-success">
             <ShoppingBag size={20} aria-hidden />
-            <span className="tnum absolute -top-1 -end-1 grid h-5 min-w-5 place-items-center rounded-full bg-success px-1 text-xs font-extrabold text-white"><Num>1</Num></span>
+            <span className="tnum absolute -top-1 -end-1 grid h-5 min-w-5 place-items-center rounded-full bg-success px-1 text-[10px] font-extrabold text-white"><Num>1</Num></span>
           </span>
           <span className="tnum rounded-full bg-brand-600/15 px-2 py-0.5 text-xs font-extrabold text-brand-600"><Num>{`×${logos.length}`}</Num></span>
         </div>
@@ -181,7 +311,7 @@ export function GapStory({ data, ar, platforms = [] }: { data: GapReasonsPayload
           const Icon = p.icon
 
           return (
-            <li key={`${l.key}-${'side' in l ? l.side : ''}`} data-testid={l.key === 'shared' ? 'gap-legend-shared' : `gap-reason-${l.key}`} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-text-secondary">
+            <li key={`${l.key}-${'side' in l ? l.side : ''}`} data-testid={l.key === 'shared' ? 'gap-legend-shared' : `gap-reason-${l.key}`} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
               <span className="grid h-4 w-4 place-items-center rounded-full text-white" style={{ background: p.color }}><Icon size={10} aria-hidden /></span>
               {tx(p.label, ar)}
               <span className="tnum font-extrabold text-text-primary"><Num>{num(l.value)}</Num></span>
@@ -212,6 +342,91 @@ const DIR: Record<Direction, { label: L; icon: typeof Equal; tone: string }> = {
 }
 
 /**
+ * WEBSITE-VISUAL-002 (Owner 2026-11-22) — «ليش جوجل أناليتكس ما يقرأ كل الطلبات؟ وهل مؤشرات المنصات خاطئة؟ … أحتاج إيصال الفكرة بشكل
+ * إبداعي ومقنع … ويعزز الموثوقية». One customer's journey, drawn: the ad is seen, the customer comes back later by another road, and buys.
+ * The platform counts the order inside its attribution window; the website files the same visit under the road it came by. Two correct
+ * readings of one order, from two places — then the four mechanisms that make them differ, each as an icon. A schematic, not a figure:
+ * it states how each side counts, never how many orders either side «should» have.
+ */
+const RETURN_ROADS = [
+  { key: 'direct', icon: Keyboard, label: { ar: 'مباشر', en: 'Direct' } },
+  { key: 'search', icon: Search, label: { ar: 'بحث', en: 'Search' } },
+  { key: 'referral', icon: Share2, label: { ar: 'رابط', en: 'Link' } },
+  { key: 'device', icon: MonitorSmartphone, label: { ar: 'جهاز آخر', en: 'Other device' } },
+]
+const WHY = [
+  { key: 'window', icon: Clock, label: { ar: 'نافذة أيام', en: 'Days-long window' } },
+  { key: 'view', icon: Eye, label: { ar: 'مشاهدة بلا نقرة', en: 'View, no click' } },
+  { key: 'device', icon: MonitorSmartphone, label: { ar: 'جهاز آخر', en: 'Another device' } },
+  { key: 'privacy', icon: ShieldOff, label: { ar: 'منع التتبع', en: 'Tracking blocked' } },
+]
+
+export function Journey({ ar, platforms = [] }: { ar: boolean; platforms?: string[] }) {
+  const logos = [...new Set(platforms)].slice(0, 4)
+
+  return (
+    <div data-testid="attribution-journey" className="flex flex-col gap-3 rounded-xl border border-border bg-surface-secondary/40 p-3">
+      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><Route size={13} aria-hidden />{ar ? 'رحلة العميل' : 'The customer journey'}</span>
+
+      {/* The road: seen → came back later → bought. */}
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2" aria-label={ar ? 'شاهد الإعلان ثم عاد لاحقاً واشترى' : 'Saw the ad, came back later, bought'}>
+        <span data-testid="journey-seen" className="flex flex-col items-center gap-1">
+          <span className="flex -space-x-1.5 rtl:space-x-reverse">
+            {(logos.length ? logos : ['']).map((p) => <span key={p} className="grid h-8 w-8 place-items-center rounded-full border-2 border-surface bg-surface">{p ? <ProviderMark provider={p} size={16} /> : <Megaphone size={14} aria-hidden />}</span>)}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-text-secondary"><Eye size={11} aria-hidden />{ar ? 'شاهد الإعلان' : 'Saw the ad'}</span>
+          <span className="tnum rounded-full bg-brand-600/15 px-1.5 text-[10px] font-bold text-brand-600">{ar ? 'يوم 1' : 'Day 1'}</span>
+        </span>
+        <span className="relative flex items-center justify-center">
+          <span className="absolute inset-x-0 top-1/2 border-t-2 border-dashed border-border-strong" aria-hidden />
+          <span className="relative flex flex-wrap items-center justify-center gap-1 bg-transparent">
+            {RETURN_ROADS.map((r) => (
+              <span key={r.key} title={tx(r.label, ar)} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-semibold text-text-secondary"><r.icon size={11} aria-hidden />{tx(r.label, ar)}</span>
+            ))}
+          </span>
+        </span>
+        <span data-testid="journey-bought" className="flex flex-col items-center gap-1">
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-success/15 text-success"><ShoppingBag size={18} aria-hidden /></span>
+          <span className="text-[10px] font-bold text-text-secondary">{ar ? 'اشترى' : 'Bought'}</span>
+          <span className="tnum rounded-full bg-success/15 px-1.5 text-[10px] font-bold text-success">{ar ? 'يوم 12' : 'Day 12'}</span>
+        </span>
+      </div>
+
+      {/* The same order, read from two places. */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <div data-testid="journey-platform" className="flex items-center gap-2.5 rounded-xl border px-3 py-2" style={{ borderColor: 'color-mix(in srgb, var(--brand-600) 40%, transparent)' }}>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600/15 text-brand-600"><Megaphone size={15} aria-hidden /></span>
+          <span className="flex min-w-0 flex-col">
+            <span className="text-[11px] font-bold text-text-primary">{ar ? 'المنصة' : 'Platform'}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] text-text-secondary"><Clock size={10} aria-hidden />{ar ? 'شاهد أو نقر خلال نافذتها' : 'Seen or clicked within its window'}</span>
+          </span>
+          <span className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-600/15 px-2 py-0.5 text-[10px] font-extrabold text-brand-600"><Check size={11} aria-hidden />{ar ? 'طلب من الإعلان' : 'Ad order'}</span>
+        </div>
+        <div data-testid="journey-site" className="flex items-center gap-2.5 rounded-xl border px-3 py-2" style={{ borderColor: 'color-mix(in srgb, var(--teal) 40%, transparent)' }}>
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Globe size={15} aria-hidden /></span>
+          <span className="flex min-w-0 flex-col">
+            <span className="text-[11px] font-bold text-text-primary">{ar ? 'الموقع' : 'Website'}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] text-text-secondary"><Route size={10} aria-hidden />{ar ? 'يسجّل مصدر آخر زيارة' : 'Files the last visit’s source'}</span>
+          </span>
+          <span className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Keyboard size={11} aria-hidden />{ar ? 'مباشر' : 'Direct'}</span>
+        </div>
+      </div>
+      <span data-testid="journey-both" className="mx-auto inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-[11px] font-extrabold text-success"><CheckCheck size={13} aria-hidden />{ar ? 'طلب واحد · قراءتان صحيحتان' : 'One order · two correct readings'}</span>
+
+      {/* Why the two readings differ: four mechanisms, an icon each. */}
+      <ul data-testid="journey-why" className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        {WHY.map((w) => (
+          <li key={w.key} data-testid={`journey-why-${w.key}`} className="flex flex-col items-center gap-1 rounded-lg bg-surface px-2 py-2 text-center">
+            <span className="grid h-7 w-7 place-items-center rounded-full bg-surface-secondary text-text-secondary"><w.icon size={14} aria-hidden /></span>
+            <span className="text-[10px] font-semibold text-text-secondary">{tx(w.label, ar)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
  * «مطابقة الإسناد» as Thunder reads it: one row per platform, the platform's count and the website's on one scale, the measured
  * basket beside it, and a neutral direction chip. The indirect path is one stacked bar. The table stays one click away.
  */
@@ -223,13 +438,12 @@ export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPaylo
   const un = data.unattributed
   const indirect = [...(un?.classes ?? []).map((c) => ({ key: c.class, sessions: c.sessions ?? 0 })), ...(data.other_paid ? [{ key: 'other_paid', sessions: data.other_paid.ga4.sessions ?? 0 }] : [])].filter((i) => i.sessions > 0)
   const indirectTotal = indirect.reduce((a, b) => a + b.sessions, 0)
-  const COLORS = ['var(--brand-600)', 'var(--teal)', 'var(--info)', 'var(--purple)', 'var(--warning)', 'var(--text-muted)']
 
   return (
     <section data-testid="report-ga4-attribution-block" className="flex min-w-0 flex-col gap-4 rounded-2xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-extrabold text-text-primary">{ar ? 'المنصة مقابل الموقع' : 'Platform vs website'}</h3>
-        <span className="flex items-center gap-3 text-xs font-semibold text-text-muted">
+        <span className="flex items-center gap-3 text-[11px] font-semibold text-text-muted">
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--brand-600)' }} />{ar ? 'المنصة' : 'Platform'}</span>
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--teal)' }} />{ar ? 'الموقع' : 'Website'}</span>
         </span>
@@ -246,39 +460,31 @@ export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPaylo
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
                   <div className="h-3 rounded-full" style={{ width: w(r.claimed), background: 'var(--brand-600)' }} />
-                  <span className="tnum text-xs font-bold text-text-primary"><Num>{r.claimed === null ? '—' : num(r.claimed)}</Num></span>
+                  <span className="tnum text-[11px] font-bold text-text-primary"><Num>{r.claimed === null ? '—' : num(r.claimed)}</Num></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="h-3 rounded-full" style={{ width: w(r.ga4?.purchases), background: 'var(--teal)' }} />
-                  <span className="tnum text-xs font-bold text-text-primary"><Num>{r.ga4?.purchases == null ? '—' : num(r.ga4.purchases)}</Num></span>
+                  <span className="tnum text-[11px] font-bold text-text-primary"><Num>{r.ga4?.purchases == null ? '—' : num(r.ga4.purchases)}</Num></span>
                 </div>
               </div>
               <span className="flex flex-col items-end gap-1">
-                {D && <span data-testid={`match-dir-${r.key}`} data-direction={d} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${D.tone}`}><D.icon size={11} aria-hidden />{tx(D.label, ar)}</span>}
-                {r.ga4?.aov_usd != null && <span className="tnum text-xs text-text-muted"><ShoppingBag size={10} className="me-0.5 inline" aria-hidden /><Num>{money(r.ga4.aov_usd, 'USD')}</Num></span>}
+                {D && <span data-testid={`match-dir-${r.key}`} data-direction={d} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${D.tone}`}><D.icon size={11} aria-hidden />{tx(D.label, ar)}</span>}
+                {r.ga4?.aov_usd != null && <span className="tnum text-[10px] text-text-muted"><ShoppingBag size={10} className="me-0.5 inline" aria-hidden /><Num>{money(r.ga4.aov_usd, 'USD')}</Num></span>}
               </span>
             </li>
           )
         })}
       </ul>
 
+      <Journey ar={ar} platforms={rows.map((r) => r.platform)} />
+
       {indirectTotal > 0 && (
-        <div data-testid="indirect-path" className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-xs font-semibold text-text-muted">
-            <span className="inline-flex items-center gap-1"><Route size={12} aria-hidden />{ar ? 'مسار غير مباشر' : 'Indirect path'}</span>
-            <span className="tnum font-extrabold text-text-primary" data-testid="indirect-path-total"><Num>{num(indirectTotal)}</Num></span>
+        <div data-testid="indirect-path" className="flex flex-col gap-2 rounded-xl bg-surface-secondary/50 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><Route size={13} aria-hidden />{ar ? 'مسار غير مباشر' : 'Indirect path'}</span>
+            <span className="tnum inline-flex items-center gap-1 rounded-full bg-surface px-2.5 py-0.5 text-xs font-extrabold text-text-primary" data-testid="indirect-path-total"><Users size={12} aria-hidden /><Num>{num(indirectTotal)}</Num></span>
           </div>
-          <div className="flex h-3 w-full overflow-hidden rounded-full bg-surface-secondary">
-            {indirect.map((i, n) => <span key={i.key} data-testid={`indirect-${i.key}`} title={`${tx(UNPAID[i.key] ?? { ar: i.key, en: i.key }, ar)} ${num(i.sessions)}`} style={{ width: `${(i.sessions / indirectTotal) * 100}%`, background: COLORS[n % COLORS.length] }} />)}
-          </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
-            {indirect.map((i, n) => (
-              <span key={i.key} className="inline-flex items-center gap-1 text-xs text-text-secondary">
-                <span className="h-2 w-2 rounded-full" style={{ background: COLORS[n % COLORS.length] }} />{tx(UNPAID[i.key] ?? { ar: i.key, en: i.key }, ar)}
-                <span className="tnum font-bold text-text-primary"><Num>{num(i.sessions)}</Num></span>
-              </span>
-            ))}
-          </div>
+          <ShareTiles parts={indirect.map((i) => ({ key: i.key, label: tx(UNPAID[i.key] ?? { ar: i.key, en: i.key }, ar), value: i.sessions }))} cols="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" tileTestId={(k) => `indirect-${k}`} />
         </div>
       )}
 
@@ -302,79 +508,70 @@ const TABLE_LABEL: Record<StoreTableKey, L> = {
 const ORDER: StoreTableKey[] = ['sources', 'campaigns', 'landing_pages', 'products', 'countries']
 const FIRST: Record<string, L> = { sources: { ar: 'المصدر', en: 'Source' }, campaigns: { ar: 'الحملة', en: 'Campaign' }, landing_pages: { ar: 'الصفحة', en: 'Page' }, countries: { ar: 'الدولة', en: 'Country' } }
 
-type Metric = { key: string; label: L; kind: 'count' | 'rate' | 'money'; get: (r: StoreSessionRow | StoreProductRow) => number | null }
-const SESSION_METRICS: Metric[] = [
+type Kind = 'count' | 'rate' | 'money'
+type Metric<R> = { key: string; label: L; kind: Kind; get: (r: R) => number | null }
+type AnyRow = StoreSessionRow | StoreProductRow
+const SESSION_METRICS: Metric<AnyRow>[] = [
   { key: 'sessions', label: { ar: 'الزيارات', en: 'Sessions' }, kind: 'count', get: (r) => (r as StoreSessionRow).sessions },
   { key: 'purchases', label: { ar: 'الشراء', en: 'Orders' }, kind: 'count', get: (r) => (r as StoreSessionRow).purchases },
   { key: 'revenue', label: { ar: 'المبيعات', en: 'Sales' }, kind: 'money', get: (r) => (r as StoreSessionRow).revenue_usd ?? (r as StoreSessionRow).revenue },
   { key: 'conversion_rate', label: { ar: 'التحويل', en: 'CVR' }, kind: 'rate', get: (r) => (r as StoreSessionRow).conversion_rate },
 ]
-const PRODUCT_METRICS: Metric[] = [
+const PRODUCT_METRICS: Metric<AnyRow>[] = [
   { key: 'revenue', label: { ar: 'المبيعات', en: 'Sales' }, kind: 'money', get: (r) => (r as StoreProductRow).revenue_usd ?? (r as StoreProductRow).revenue },
   { key: 'purchased', label: { ar: 'المباع', en: 'Sold' }, kind: 'count', get: (r) => (r as StoreProductRow).purchased },
   { key: 'carts', label: { ar: 'السلة', en: 'Carts' }, kind: 'count', get: (r) => (r as StoreProductRow).carts },
   { key: 'views', label: { ar: 'المشاهدة', en: 'Views' }, kind: 'count', get: (r) => (r as StoreProductRow).views },
 ]
+const CLASS_METRICS: Metric<ClassificationRow>[] = [
+  { key: 'sessions', label: { ar: 'الزيارات', en: 'Sessions' }, kind: 'count', get: (r) => r.sessions ?? null },
+  { key: 'purchases', label: { ar: 'الشراء', en: 'Orders' }, kind: 'count', get: (r) => r.purchases ?? null },
+  { key: 'revenue', label: { ar: 'المبيعات', en: 'Sales' }, kind: 'money', get: (r) => r.revenue_usd ?? null },
+  { key: 'conversion_rate', label: { ar: 'التحويل', en: 'CVR' }, kind: 'rate', get: (r) => r.conversion_rate ?? null },
+]
 
 /**
- * The website's tables the way «مقارنة أنواع المحتوى» reads: a tab per table, a chip per figure, the top rows as bars with their
- * share, the best one marked — and the full sortable table behind «عرض الجدول التفصيلي».
+ * The bars every website table is drawn as (WEBSITE-VISUAL-001, Owner: «الجداول ممتازة … اعتمده في التقرير المحفوظ كذلك»): a chip per
+ * figure, the top rows as bars with their share, the best one marked. One component for the tables, the classification and the products.
  */
-export function TablesVisual({ tables, currency, ar, pageSize = 8, top = 8 }: { tables: StoreTables; currency: string | null | undefined; ar: boolean; pageSize?: number; top?: number }) {
-  const available = ORDER.filter((k) => (tables[k]?.rows.length ?? 0) > 0)
-  const [chosen, setChosen] = useState<StoreTableKey | null>(null)
-  const active = chosen !== null && available.includes(chosen) ? chosen : available[0]
-  const metrics = active === 'products' ? PRODUCT_METRICS : SESSION_METRICS
-  const usable = useMemo(() => metrics.filter((m) => (tables[active as StoreTableKey]?.rows ?? []).some((r) => m.get(r as never) !== null)), [metrics, tables, active])
+function RankBars<R>({ rows, metrics, name, sub, fmt, ar, top = 8, testId = 'ga4-table-bars', metricTestId = (k: string) => `ga4-table-metric-${k}` }: {
+  rows: R[]; metrics: Metric<R>[]; name: (r: R) => string; sub?: (r: R) => string | null | undefined; fmt: (v: number, kind: Kind) => string; ar: boolean; top?: number; testId?: string; metricTestId?: (k: string) => string
+}) {
+  const usable = metrics.filter((m) => rows.some((r) => m.get(r) !== null))
   const [metricKey, setMetricKey] = useState<string | null>(null)
-  if (active === undefined) return null
   const metric = usable.find((m) => m.key === metricKey) ?? usable[0]
-  const rows = (tables[active]?.rows ?? []) as Array<StoreSessionRow | StoreProductRow>
-  const bars = metric ? rows.map((r) => ({ r, v: metric.get(r) })).filter((b): b is { r: StoreSessionRow | StoreProductRow; v: number } => b.v !== null && b.v > 0).sort((a, b) => b.v - a.v).slice(0, top) : []
+  const bars = metric ? rows.map((r) => ({ r, v: metric.get(r) })).filter((b): b is { r: R; v: number } => b.v !== null && b.v > 0).sort((a, b) => b.v - a.v).slice(0, top) : []
   const peak = bars[0]?.v ?? 0
   const sum = rows.reduce((a, r) => a + (metric?.get(r) ?? 0), 0)
-  const fmt = (v: number) => (metric?.kind === 'money' ? money(v, rows.some((r) => (r as StoreSessionRow).revenue_usd != null) ? 'USD' : currency ?? '') : metric?.kind === 'rate' ? percent(v, 2) : num(v))
 
   return (
-    <section data-testid="ga4-tables-visual" className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-extrabold text-text-primary">{ar ? 'الجداول' : 'Tables'}</h3>
-        <div role="tablist" data-testid="ga4-table-tabs" className="inline-flex flex-wrap rounded-lg border border-border p-0.5 text-xs">
-          {available.map((k) => (
-            <button key={k} type="button" role="tab" aria-selected={k === active} data-testid={`ga4-table-tab-${k}`} onClick={() => { setChosen(k); setMetricKey(null) }}
-              className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${k === active ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
-              {tx(TABLE_LABEL[k], ar)}
-            </button>
-          ))}
-        </div>
-      </div>
-
+    <>
       <div role="tablist" aria-label={ar ? 'المؤشر' : 'Figure'} className="flex flex-wrap gap-1.5">
         {usable.map((m) => (
-          <button key={m.key} type="button" role="tab" aria-selected={metric?.key === m.key} data-testid={`ga4-table-metric-${m.key}`} onClick={() => setMetricKey(m.key)}
+          <button key={m.key} type="button" role="tab" aria-selected={metric?.key === m.key} data-testid={metricTestId(m.key)} onClick={() => setMetricKey(m.key)}
             className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${metric?.key === m.key ? 'border-brand-500 bg-brand-500/10 text-brand-600' : 'border-border text-text-secondary hover:bg-surface-hover'}`}>
             {tx(m.label, ar)}
           </button>
         ))}
       </div>
 
-      <ul data-testid="ga4-table-bars" className="flex flex-col gap-2">
+      <ul data-testid={testId} className="flex flex-col gap-2">
         {bars.map((b, i) => {
-          const name = (b.r as StoreSessionRow).name
-          const sub = (b.r as StoreSessionRow).sub
+          const n = name(b.r)
+          const s2 = sub?.(b.r)
           const share = metric?.kind !== 'rate' && sum > 0 ? b.v / sum : null
 
           return (
-            <li key={`${name}\u001f${sub ?? ''}`} className="flex flex-col gap-1">
+            <li key={`${n}\u001f${s2 ?? ''}`} className="flex flex-col gap-1">
               <div className="flex items-baseline justify-between gap-2 text-xs">
                 <span className="flex min-w-0 items-center gap-1.5 font-bold text-text-primary">
                   <span className="tnum w-4 shrink-0 text-text-muted"><Num>{String(i + 1)}</Num></span>
-                  <span dir="auto" className="truncate">{name}</span>
-                  {sub && <span dir="ltr" className="shrink-0 font-normal text-text-muted">{sub}</span>}
-                  {i === 0 && <span className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-xs font-bold text-success">{ar ? 'الأعلى' : 'Top'}</span>}
+                  <span dir="auto" className="truncate" title={n}>{n}</span>
+                  {s2 && <span dir="ltr" className="shrink-0 font-normal text-text-muted">{s2}</span>}
+                  {i === 0 && <span className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success">{ar ? 'الأعلى' : 'Top'}</span>}
                 </span>
                 <span className="tnum whitespace-nowrap font-bold text-text-primary">
-                  <Num>{fmt(b.v)}</Num>
+                  <Num>{fmt(b.v, metric!.kind)}</Num>
                   {share !== null && <span className="ms-1.5 font-normal text-text-muted"><Num>{`(${percent(share, 0)})`}</Num></span>}
                 </span>
               </div>
@@ -385,17 +582,83 @@ export function TablesVisual({ tables, currency, ar, pageSize = 8, top = 8 }: { 
           )
         })}
       </ul>
+    </>
+  )
+}
 
-      <details data-testid="ga4-table-toggle">
-        <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'عرض الجدول التفصيلي' : 'Show the detailed table'}</summary>
-        <div className="mt-2">
-          {active === 'products' ? (
-            <FixedPageTable key="products" testId="ga4-table" ar={ar} pageSize={pageSize} rows={tables.products?.rows ?? []} rowKey={(r) => r.name} columns={productColumns(ar, currency)} initialSort={{ key: 'revenue', dir: 'desc' }} />
-          ) : (
-            <FixedPageTable key={active} testId="ga4-table" ar={ar} pageSize={pageSize} rows={tables[active]?.rows ?? []} rowKey={(r) => `${r.name}\u001f${r.sub ?? ''}`} columns={sessionColumns(ar, currency, tx(FIRST[active], ar))} initialSort={{ key: 'sessions', dir: 'desc' }} />
-          )}
-        </div>
-      </details>
+function Tabs<K extends string>({ keys, active, label, onPick, testId, min = 2 }: { keys: K[]; active: K; label: (k: K) => string; onPick: (k: K) => void; testId: (k: K) => string; min?: number }) {
+  if (keys.length < min) return null
+
+  return (
+    <div role="tablist" className="inline-flex flex-wrap rounded-lg border border-border p-0.5 text-xs">
+      {keys.map((k) => (
+        <button key={k} type="button" role="tab" aria-selected={k === active} data-testid={testId(k)} onClick={() => onPick(k)}
+          className={`rounded-md px-2.5 py-1 font-semibold transition-colors ${k === active ? 'bg-brand-600 text-white' : 'text-text-secondary hover:bg-surface-hover'}`}>
+          {label(k)}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function Details({ testId, ar, children }: { testId: string; ar: boolean; children: ReactNode }) {
+  return (
+    <details data-testid={testId}>
+      <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'عرض الجدول التفصيلي' : 'Show the detailed table'}</summary>
+      <div className="mt-2">{children}</div>
+    </details>
+  )
+}
+
+/**
+ * The website's tables the way «مقارنة أنواع المحتوى» reads: a tab per table, a chip per figure, the top rows as bars with their
+ * share, the best one marked — and the full sortable table behind «عرض الجدول التفصيلي».
+ */
+export function TablesVisual({ tables, currency, ar, pageSize = 8, top = 8, title, testId = 'ga4-tables-visual' }: { tables: StoreTables; currency: string | null | undefined; ar: boolean; pageSize?: number; top?: number; title?: string; testId?: string }) {
+  const available = ORDER.filter((k) => (tables[k]?.rows.length ?? 0) > 0)
+  const [chosen, setChosen] = useState<StoreTableKey | null>(null)
+  const active = chosen !== null && available.includes(chosen) ? chosen : available[0]
+  if (active === undefined) return null
+  const rows = (tables[active]?.rows ?? []) as AnyRow[]
+  const usd = rows.some((r) => r.revenue_usd != null)
+  const fmt = (v: number, kind: Kind) => (kind === 'money' ? money(v, usd ? 'USD' : currency ?? '') : kind === 'rate' ? percent(v, 2) : num(v))
+
+  return (
+    <section data-testid={testId} className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-extrabold text-text-primary">{title ?? (ar ? 'الجداول' : 'Tables')}</h3>
+        <span data-testid="ga4-table-tabs"><Tabs keys={available} active={active} label={(k) => tx(TABLE_LABEL[k], ar)} onPick={setChosen} testId={(k) => `ga4-table-tab-${k}`} min={title ? 2 : 1} /></span>
+      </div>
+      <RankBars key={active} rows={rows} metrics={active === 'products' ? PRODUCT_METRICS : SESSION_METRICS} name={(r) => r.name} sub={(r) => (r as StoreSessionRow).sub} fmt={fmt} ar={ar} top={top} />
+      <Details testId="ga4-table-toggle" ar={ar}>
+        {active === 'products' ? (
+          <FixedPageTable key="products" testId="ga4-table" ar={ar} pageSize={pageSize} rows={tables.products?.rows ?? []} rowKey={(r) => r.name} columns={productColumns(ar, currency)} initialSort={{ key: 'revenue', dir: 'desc' }} />
+        ) : (
+          <FixedPageTable key={active} testId="ga4-table" ar={ar} pageSize={pageSize} rows={tables[active]?.rows ?? []} rowKey={(r) => `${r.name}\u001f${r.sub ?? ''}`} columns={sessionColumns(ar, currency, tx(FIRST[active], ar))} initialSort={{ key: 'sessions', dir: 'desc' }} />
+        )}
+      </Details>
+    </section>
+  )
+}
+
+const GROUP_TITLE: Record<string, L> = { channel: { ar: 'القنوات', en: 'Channels' }, platform: { ar: 'المنصات', en: 'Platforms' }, landing_page: { ar: 'الصفحات', en: 'Pages' } }
+
+/** «تصنيف» drawn like the tables: a tab per grouping, chips and bars; the grouping's own table one click away (`table`). */
+export function ClassificationVisual({ groups, ar, table }: { groups: Record<string, { rows: ClassificationRow[] }>; ar: boolean; table: (group: string) => ReactNode }) {
+  const keys = Object.keys(groups).filter((k) => (groups[k]?.rows?.length ?? 0) > 0)
+  const [chosen, setChosen] = useState<string | null>(null)
+  const active = chosen !== null && keys.includes(chosen) ? chosen : keys[0]
+  if (active === undefined) return null
+  const fmt = (v: number, kind: Kind) => (kind === 'money' ? money(v, 'USD') : kind === 'rate' ? percent(v, 2) : num(v))
+
+  return (
+    <section data-testid="ga4-classification-visual" className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-extrabold text-text-primary">{ar ? 'تصنيف' : 'Classify'}</h3>
+        <Tabs keys={keys} active={active} label={(k) => tx(GROUP_TITLE[k] ?? { ar: k, en: k }, ar)} onPick={setChosen} testId={(k) => `ga4-classification-tab-${k}`} />
+      </div>
+      <RankBars key={active} rows={groups[active].rows} metrics={CLASS_METRICS} name={(r) => r.label} fmt={fmt} ar={ar} testId="ga4-classification-bars" metricTestId={(k) => `ga4-classification-metric-${k}`} />
+      <Details testId="ga4-classification-toggle" ar={ar}>{table(active)}</Details>
     </section>
   )
 }

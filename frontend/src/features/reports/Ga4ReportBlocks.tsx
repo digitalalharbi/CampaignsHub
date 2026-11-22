@@ -32,6 +32,8 @@ const CompactTiles = deferred((m) => m.CompactTiles, 96)
 const AttributionVisual = deferred((m) => m.AttributionVisual, 240)
 const GapStory = deferred((m) => m.GapStory, 240)
 const TablesVisual = deferred((m) => m.TablesVisual, 240)
+const AcquisitionVisual = deferred((m) => m.AcquisitionVisual, 320)
+const ClassificationVisual = deferred((m) => m.ClassificationVisual, 240)
 
 /**
  * GA4-REPORT-SECTIONS-001 — the store reading inside a report: the live link and the saved report
@@ -110,13 +112,13 @@ export function Ga4ReportBlocks({ payload, ar, parts = WEBSITE_PARTS, pageSize =
           <Ga4Series series={overview.series} currency={overview.currency} ar={ar} />
         </div>
       )}
-      {acquisition && <div data-testid="report-ga4-acquisition" className="min-w-0"><Ga4Acquisition channels={acquisition.channels} devices={acquisition.devices} channelsMeta={acquisition.channels_meta} devicesMeta={acquisition.devices_meta} funnel={acquisition.funnel} ar={ar} /></div>}
+      {acquisition && <div data-testid="report-ga4-acquisition" className="min-w-0"><AcquisitionVisual channels={acquisition.channels} devices={acquisition.devices} channelsMeta={acquisition.channels_meta} devicesMeta={acquisition.devices_meta} funnel={acquisition.funnel} ar={ar} /></div>}
       {attribution && <div data-testid="report-ga4-attribution" className="min-w-0"><AttributionVisual data={attribution} ar={ar} pageSize={pageSize} /></div>}
       {gap && <div data-testid="report-ga4-gap" className="min-w-0"><Ga4Gap gap={gap} ar={ar} /></div>}
       {reasons && <div data-testid="report-ga4-reasons" className="min-w-0"><GapStory data={reasons} ar={ar} platforms={platformsOf(payload)} /></div>}
-      {classification && <div data-testid="report-ga4-classification" className="min-w-0"><ClassificationBlock data={classification} ar={ar} pageSize={pageSize} /></div>}
+      {classification && <div data-testid="report-ga4-classification" className="min-w-0"><ClassificationVisual groups={classification.groups} ar={ar} table={(g) => <ClassificationTable data={classification} group={g} ar={ar} pageSize={pageSize} />} /></div>}
       {tables && <div data-testid="report-ga4-tables" className="min-w-0"><TablesVisual tables={tables.tables} currency={tables.currency} ar={ar} pageSize={pageSize} /></div>}
-      {products && <div data-testid="report-ga4-products" className="min-w-0"><ChartCard title={ar ? 'المنتجات' : 'Products'}><FixedPageTable testId="ga4-products-table" ar={ar} pageSize={pageSize} rows={products.table.rows} rowKey={(r) => r.name} columns={productColumns(ar, products.currency)} initialSort={{ key: 'revenue', dir: 'desc' }} /></ChartCard></div>}
+      {products && <div data-testid="report-ga4-products" className="min-w-0"><TablesVisual testId="ga4-products-visual" title={ar ? 'المنتجات' : 'Products'} tables={{ products: products.table }} currency={products.currency} ar={ar} pageSize={pageSize} /></div>}
     </section>
   )
 }
@@ -183,6 +185,11 @@ function classificationColumns(ar: boolean, first: string): FixedColumn<Classifi
   ]
 }
 
+/** One grouping's full table: what «عرض الجدول التفصيلي» opens under the classification bars. */
+function ClassificationTable({ data, group, ar, pageSize }: { data: NonNullable<WithGa4Sections['ga4_classification']>; group: string; ar: boolean; pageSize: number }) {
+  return <FixedPageTable key={group} testId="ga4-classification-table" ar={ar} pageSize={pageSize} rows={data.groups[group]?.rows ?? []} rowKey={(r) => r.label} columns={classificationColumns(ar, ar ? GROUP_TITLE[group]?.ar ?? group : GROUP_TITLE[group]?.en ?? group)} initialSort={{ key: 'sessions', dir: 'desc' }} />
+}
+
 /** The grouping the saved report froze: a short tab per grouping, one fixed-size table under it. */
 export function ClassificationBlock({ data, ar, pageSize = 8, paged = false, group, range }: { data: NonNullable<WithGa4Sections['ga4_classification']>; ar: boolean; pageSize?: number; paged?: boolean; group?: string; range?: [number, number] }) {
   const keys = group && data.groups[group] ? [group] : Object.keys(data.groups)
@@ -239,6 +246,7 @@ export function Ga4Slide({ slide, data, ar = true, paged = false }: { slide: { i
         </div>
       ) : null
     case '__ga4_acquisition':
+      if (data.ga4_acquisition && !frozenBeforeWebsiteTab(data)) return <div data-testid="slide-ga4-acquisition">{head('__ga4_acquisition')}<AcquisitionVisual channels={data.ga4_acquisition.channels} devices={data.ga4_acquisition.devices} funnel={data.ga4_acquisition.funnel} channelsMeta={data.ga4_acquisition.channels_meta} devicesMeta={data.ga4_acquisition.devices_meta} ar={ar} /></div>
       return data.ga4_acquisition ? <div data-testid="slide-ga4-acquisition">{head('__ga4_acquisition')}<Ga4Acquisition channels={data.ga4_acquisition.channels} devices={data.ga4_acquisition.devices} funnel={data.ga4_acquisition.funnel} channelsMeta={data.ga4_acquisition.channels_meta} devicesMeta={data.ga4_acquisition.devices_meta} frozen={frozenBeforeWebsiteTab(data)} ar={ar} /></div> : null
     case '__ga4_gap':
       return data.ga4_platform_gap ? <div data-testid="slide-ga4-gap">{head('__ga4_gap')}<Ga4Gap gap={data.ga4_platform_gap} ar={ar} /></div> : null
@@ -252,11 +260,13 @@ export function Ga4Slide({ slide, data, ar = true, paged = false }: { slide: { i
     case '__ga4_reasons':
       return data.ga4_gap_reasons ? <div data-testid="slide-ga4-reasons">{head('__ga4_reasons')}<GapStory data={data.ga4_gap_reasons} ar={ar} platforms={platformsOf(data)} /></div> : null
     case '__ga4_classification':
+      if (data.ga4_classification && !paged) return <div data-testid="slide-ga4-classification"><ClassificationVisual groups={data.ga4_classification.groups} ar={ar} table={(g) => <ClassificationTable data={data.ga4_classification!} group={g} ar={ar} pageSize={8} />} /></div>
       return data.ga4_classification ? <div data-testid="slide-ga4-classification">{head('__ga4_classification')}<ClassificationBlock data={data.ga4_classification} ar={ar} pageSize={8} paged={paged} group={slide.id.split(':')[1]} range={slide.range} /></div> : null
     case '__ga4_products': {
       const rows = data.ga4_products?.table.rows ?? []
       const [from, to] = slide.range ?? [0, 8]
 
+      if (data.ga4_products && !paged) return <div data-testid="slide-ga4-products"><TablesVisual testId="ga4-products-visual" title={ar ? 'المنتجات' : 'Products'} tables={{ products: data.ga4_products.table }} currency={data.ga4_products.currency} ar={ar} /></div>
       return data.ga4_products ? <div data-testid="slide-ga4-products">{head('__ga4_products')}<FixedPageTable testId="ga4-print-table" ar={ar} pager={false} pageSize={8} rows={rows.slice(from, to)} rowKey={(r) => r.name} columns={productColumns(ar, data.ga4_products.currency)} /></div> : null
     }
     case '__ga4_table': {
