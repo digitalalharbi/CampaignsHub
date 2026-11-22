@@ -92,6 +92,8 @@ describe('the «الموقع» tab', () => {
     const where: Record<string, number> = {}
     for (const mode of ['summary', 'dashboard', 'platforms', 'content', 'tables', 'website']) {
       await open(mode)
+      // The website visuals load on demand: wait for them before counting that tab.
+      if (mode === 'website') await screen.findByTestId('ga4-table-tab-sources')
       // The tiles, the acquisition donuts, the attribution table and the sources table are the website's figures.
       where[mode] = ['ga4-tiles', 'ga4-channels', 'ga4-devices', 'ga4-funnel', 'ga4-table-tab-sources', 'ga4-gap'].reduce((n, id) => n + screen.queryAllByTestId(id).length, 0)
     }
@@ -131,7 +133,7 @@ describe('the «الموقع» tab', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     const website = await open('website')
 
-    const outside = within(website).getByTestId('indirect-path')
+    const outside = await within(website).findByTestId('indirect-path')
     expect(outside).toHaveTextContent('Indirect path')
     expect(within(outside).getByTestId('indirect-organic')).toHaveTextContent('Free')
     expect(website).not.toHaveTextContent(/Outside campaigns/i)
@@ -210,13 +212,14 @@ describe('the «الموقع» tab', () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     const website = await open('website')
 
+    expect(await within(website).findByTestId('ga4-table-tab-sources')).toBeInTheDocument()
     expect(within(website).getByTestId('report-ga4-attribution')).toBeInTheDocument()
     expect(within(website).queryByTestId('report-ga4-gap')).toBeNull()
     expect(within(website).getByTestId('report-ga4-products')).toBeInTheDocument()
     expect(within(website).getByTestId('ga4-table-tab-sources')).toBeInTheDocument()
     expect(within(website).queryByTestId('ga4-table-tab-products')).toBeNull()
     // The umbrella is drawn once.
-    expect(within(website).getAllByTestId('indirect-path')).toHaveLength(1)
+    expect(await within(website).findAllByTestId('indirect-path')).toHaveLength(1)
   })
 
   // WEBSITE-VISUAL-001 (Owner 2026-11-22) — small tiles, visits first then sales, every figure once.

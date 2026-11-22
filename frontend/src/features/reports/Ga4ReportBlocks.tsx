@@ -8,10 +8,24 @@ import { AttributionMatchBlock } from '@/features/analytics/ga4/Ga4MatchBlock'
 import type { ClassificationRow, GapReasonsPayload, MatchPayload } from '@/features/analytics/ga4/matchTypes'
 import { ChartCard } from '@/features/analytics/charts'
 import { money, num, percent } from '@/features/analytics/format'
-import { useState } from 'react'
+import { lazy, Suspense, useState, type ComponentProps, type ReactNode } from 'react'
 import type { FixedColumn } from '@/components/ui/FixedPageTable'
 import { frozenBeforeWebsiteTab, sectionShown, type ReportSectionKey, type WithReportSections } from './reportSections'
-import { AttributionVisual, CompactTiles, GapStory, TablesVisual } from './WebsiteVisuals'
+import type * as Visuals from './WebsiteVisuals'
+
+/*
+ * The «الموقع» tab's visuals load on demand: imported statically they pushed the public report route past its on-arrival budget
+ * (1,341,863 B against 1,327,600 B, deploy of 2a3bf4c1 failed at the build). Each one renders inside its own Suspense.
+ */
+const LazyAttribution = lazy(() => import('./WebsiteVisuals').then((m) => ({ default: m.AttributionVisual })))
+const LazyTiles = lazy(() => import('./WebsiteVisuals').then((m) => ({ default: m.CompactTiles })))
+const LazyGap = lazy(() => import('./WebsiteVisuals').then((m) => ({ default: m.GapStory })))
+const LazyTables = lazy(() => import('./WebsiteVisuals').then((m) => ({ default: m.TablesVisual })))
+const Wait = ({ children }: { children: ReactNode }) => <Suspense fallback={<div className="min-h-24" aria-busy="true" />}>{children}</Suspense>
+const AttributionVisual = (p: ComponentProps<typeof Visuals.AttributionVisual>) => <Wait><LazyAttribution {...p} /></Wait>
+const CompactTiles = (p: ComponentProps<typeof Visuals.CompactTiles>) => <Wait><LazyTiles {...p} /></Wait>
+const GapStory = (p: ComponentProps<typeof Visuals.GapStory>) => <Wait><LazyGap {...p} /></Wait>
+const TablesVisual = (p: ComponentProps<typeof Visuals.TablesVisual>) => <Wait><LazyTables {...p} /></Wait>
 
 /**
  * GA4-REPORT-SECTIONS-001 — the store reading inside a report: the live link and the saved report

@@ -41,10 +41,11 @@ describe('the GA4 parts of a report', () => {
     expect(none.container.querySelector('[data-testid="report-ga4"]')).toBeNull()
   })
 
-  it('draws no campaigns tab on a client link, because the server sent no campaigns table', () => {
+  it('draws no campaigns tab on a client link, because the server sent no campaigns table', async () => {
     renderWithProviders(<Ga4ReportBlocks payload={payload(ALL)} ar={false} />, { locale: 'en' })
 
-    expect(screen.getByTestId('ga4-table-tab-sources')).toBeInTheDocument()
+    // The website visuals load on demand (route budget), so the table arrives a tick after the frame.
+    expect(await screen.findByTestId('ga4-table-tab-sources')).toBeInTheDocument()
     expect(screen.queryByTestId('ga4-table-tab-campaigns')).toBeNull()
     expect(screen.getByTestId('report-ga4').textContent).not.toMatch(/spend|الإنفاق/i)
   })
