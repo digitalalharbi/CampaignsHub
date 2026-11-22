@@ -219,19 +219,15 @@ describe('the «الموقع» tab', () => {
     expect(within(website).getAllByTestId('indirect-path')).toHaveLength(1)
   })
 
-  it('leads with big headline cards and their small sub-cards: visits over users, new, bounce, engagement, duration; sales over orders, basket, conversion', async () => {
+  // WEBSITE-VISUAL-001 (Owner 2026-11-22) — small tiles, visits first then sales, every figure once.
+  it('draws the figures as compact tiles: visits first, then sales, every figure once', async () => {
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     const website = await open('website')
 
-    expect(within(website).getByTestId('ga4-tiles')).toHaveAttribute('data-layout', 'groups')
-    const visits = within(website).getByTestId('ga4-group-visits')
-    const sales = within(website).getByTestId('ga4-group-sales')
-    expect(visits.querySelector('[data-testid^="ga4-tile-"]')?.getAttribute('data-testid')).toBe('ga4-tile-sessions')
-    expect(sales.querySelector('[data-testid^="ga4-tile-"]')?.getAttribute('data-testid')).toBe('ga4-tile-revenue')
-    for (const k of ['users_daily_sum', 'new_users', 'bounce_rate', 'avg_session_seconds']) expect(within(visits).getByTestId(`ga4-tile-${k}`)).toBeInTheDocument()
-    for (const k of ['transactions', 'aov', 'conversion_rate']) expect(within(sales).getByTestId(`ga4-tile-${k}`)).toBeInTheDocument()
-    // Every figure once.
+    expect(within(website).getByTestId('ga4-tiles')).toHaveAttribute('data-layout', 'compact')
     const ids = Array.from(website.querySelectorAll('[data-testid^="ga4-tile-"]')).map((n) => n.getAttribute('data-testid'))
+    expect(ids[0]).toBe('ga4-tile-sessions')
+    expect(ids.indexOf('ga4-tile-revenue')).toBeGreaterThan(ids.indexOf('ga4-tile-avg_session_seconds'))
     expect(new Set(ids).size).toBe(ids.length)
   })
 })
