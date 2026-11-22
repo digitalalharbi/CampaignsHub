@@ -92,6 +92,8 @@ describe('the «الموقع» tab', () => {
     const where: Record<string, number> = {}
     for (const mode of ['summary', 'dashboard', 'platforms', 'content', 'tables', 'website']) {
       await open(mode)
+      // The website visuals load in a chunk of their own: wait for it on the tab that draws them.
+      if (mode === 'website') await screen.findByTestId('ga4-table-tab-sources')
       // The tiles, the acquisition donuts, the attribution table and the sources table are the website's figures.
       where[mode] = ['ga4-tiles', 'ga4-channels', 'ga4-devices', 'ga4-funnel', 'ga4-table-tab-sources', 'ga4-gap'].reduce((n, id) => n + screen.queryAllByTestId(id).length, 0)
     }
@@ -209,6 +211,7 @@ describe('the «الموقع» tab', () => {
     } as never)
     renderWithProviders(<LiveSharedReport token="tok" currency="SAR" form="detailed" />, { locale: 'en' })
     const website = await open('website')
+    await within(website).findByTestId('indirect-path')
 
     expect(within(website).getByTestId('report-ga4-attribution')).toBeInTheDocument()
     expect(within(website).queryByTestId('report-ga4-gap')).toBeNull()
