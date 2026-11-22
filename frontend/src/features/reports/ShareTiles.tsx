@@ -64,12 +64,12 @@ export function ShareTiles({ testId, parts, cols = 'grid-cols-2 sm:grid-cols-3 l
           <li key={p.key} data-testid={tileTestId?.(p.key)} title={`${p.label} ${num(p.value)}`} className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-border bg-surface px-3 py-2.5">
             <span className="flex min-w-0 items-center gap-1.5">
               <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}><Icon size={13} aria-hidden /></span>
-              <span className="truncate text-[11px] font-semibold text-text-secondary">{p.label}</span>
+              <span className="truncate text-xs font-semibold text-text-secondary">{p.label}</span>
             </span>
             <span className="tnum truncate text-lg font-extrabold leading-none text-text-primary" dir="ltr"><Num>{p.note ?? num(p.value)}</Num></span>
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-secondary"><span className="block h-full rounded-full" style={{ width: `${Math.max(3, share * 100)}%`, background: color }} /></span>
-              <span className="tnum w-8 shrink-0 text-end text-[10px] font-bold text-text-muted"><Num>{percent(share, 0)}</Num></span>
+              <span className="tnum w-8 shrink-0 text-end text-xs font-bold text-text-muted"><Num>{percent(share, 0)}</Num></span>
             </span>
           </li>
         )

@@ -44,7 +44,7 @@ function Delta({ k }: { k: StoreKpi }) {
   const Icon = c > 0 ? ArrowUpRight : ArrowDownRight
 
   return (
-    <span data-testid={`ga4-delta-${k.key}`} className={`tnum inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-[10px] font-bold ${good ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+    <span data-testid={`ga4-delta-${k.key}`} className={`tnum inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-xs font-bold ${good ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
       <Icon size={10} aria-hidden /><Num>{percent(Math.abs(c), 0)}</Num>
     </span>
   )
@@ -84,7 +84,7 @@ export function CompactTiles({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
               {g.items.map((k) => (
                 <div key={k.key} data-testid={`ga4-tile-${k.key}`} data-tier="secondary" className="flex min-w-0 flex-col gap-0.5 rounded-xl bg-surface-secondary/60 px-2.5 py-2">
                   <span className="flex items-center justify-between gap-1">
-                    <span className="truncate text-[10px] font-semibold text-text-muted">{tx(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
+                    <span className="truncate text-xs font-semibold text-text-muted">{tx(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
                     <Delta k={k} />
                   </span>
                   <span className="tnum truncate text-sm font-extrabold text-text-primary"><Num>{value(k)}</Num></span>
@@ -111,10 +111,10 @@ function Coverage({ testId, meta, ar }: { testId: string; meta?: StoreBreakdownM
 
   return (
     <div data-testid={`${testId}-coverage`} className="flex flex-wrap gap-1.5">
-      {meta.unclassified > 0 && <span className="tnum inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-bold text-warning"><HelpCircle size={10} aria-hidden />{ar ? 'غير مصنّف' : 'Unclassified'} <Num>{`${num(meta.unclassified)} · ${percent(meta.unclassified / (meta.total || 1), 0)}`}</Num></span>}
-      {meta.days_total > 0 && meta.days_covered < meta.days_total && <span className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-bold text-text-secondary"><CalendarDays size={10} aria-hidden /><Num>{`${meta.days_covered}/${meta.days_total}`}</Num></span>}
+      {meta.unclassified > 0 && <span className="tnum inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-bold text-warning"><HelpCircle size={10} aria-hidden />{ar ? 'غير مصنّف' : 'Unclassified'} <Num>{`${num(meta.unclassified)} · ${percent(meta.unclassified / (meta.total || 1), 0)}`}</Num></span>}
+      {meta.days_total > 0 && meta.days_covered < meta.days_total && <span className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-bold text-text-secondary"><CalendarDays size={10} aria-hidden /><Num>{`${meta.days_covered}/${meta.days_total}`}</Num></span>}
       {over > 0 && (
-        <span data-testid={`${testId}-over`} title={ar ? 'التقارير تُحدَّث في أوقات مختلفة' : 'Reports refresh at different times'} className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-bold text-text-secondary">
+        <span data-testid={`${testId}-over`} title={ar ? 'التقارير تُحدَّث في أوقات مختلفة' : 'Reports refresh at different times'} className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-bold text-text-secondary">
           <RefreshCw size={10} aria-hidden /><Num>{`+${num(over)}`}</Num>
         </span>
       )}
@@ -167,11 +167,11 @@ export function AcquisitionVisual({ channels, devices, funnel, channelsMeta, dev
                     <span className="grid shrink-0 place-items-center rounded-xl" style={{ width: i === 0 ? 48 : 34, height: i === 0 ? 48 : 34, background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}><Icon size={i === 0 ? 24 : 16} aria-hidden /></span>
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="flex items-baseline justify-between gap-2">
-                        <span className="truncate text-[11px] font-semibold text-text-secondary">{r.name}</span>
+                        <span className="truncate text-xs font-semibold text-text-secondary">{r.name}</span>
                         <span className={`tnum font-extrabold text-text-primary ${i === 0 ? 'text-2xl' : 'text-base'}`}><Num>{percent(share, 0)}</Num></span>
                       </span>
                       <span className="h-1.5 overflow-hidden rounded-full bg-surface-secondary"><span className="block h-full rounded-full" style={{ width: `${Math.max(3, share * 100)}%`, background: color }} /></span>
-                      <span className="tnum text-[10px] text-text-muted"><Num>{num(r.value)}</Num></span>
+                      <span className="tnum text-xs text-text-muted"><Num>{num(r.value)}</Num></span>
                     </span>
                   </li>
                 )
@@ -237,13 +237,13 @@ function Bar({ testId, icon, label, total, shared, segs, max, ar }: { testId: st
       <div className="flex min-w-0 items-center gap-2">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-secondary text-text-primary">{icon}</span>
         <span className="min-w-0">
-          <span className="block truncate text-[11px] font-semibold text-text-muted">{label}</span>
+          <span className="block truncate text-xs font-semibold text-text-muted">{label}</span>
           <span className="tnum block text-xl font-extrabold leading-none text-text-primary"><Num>{num(total)}</Num></span>
         </span>
       </div>
       <div className="flex h-9 w-full overflow-hidden rounded-xl bg-surface-secondary">
         {shared > 0 && (
-          <span data-testid={`${testId}-shared`} title={`${ar ? 'مشترك' : 'Shared'} ${num(shared)}`} className="tnum grid place-items-center text-[11px] font-bold text-white" style={{ width: w(shared), background: SHARED_COLOR }}>
+          <span data-testid={`${testId}-shared`} title={`${ar ? 'مشترك' : 'Shared'} ${num(shared)}`} className="tnum grid place-items-center text-xs font-bold text-white" style={{ width: w(shared), background: SHARED_COLOR }}>
             <span className="inline-flex items-center gap-1 truncate px-1"><Check size={12} aria-hidden /><Num>{num(shared)}</Num></span>
           </span>
         )}
@@ -253,7 +253,7 @@ function Bar({ testId, icon, label, total, shared, segs, max, ar }: { testId: st
 
           return (
             <span key={s.key} data-testid={`${testId}-seg-${s.key}`} title={`${tx(p.label, ar)} ${num(s.value)}`}
-              className="tnum grid place-items-center border-s-2 border-surface text-[11px] font-bold text-white" style={{ width: w(s.value), background: p.color }}>
+              className="tnum grid place-items-center border-s-2 border-surface text-xs font-bold text-white" style={{ width: w(s.value), background: p.color }}>
               <span className="inline-flex items-center gap-1 truncate px-1"><Icon size={12} aria-hidden /><Num>{num(s.value)}</Num></span>
             </span>
           )
@@ -294,7 +294,7 @@ export function GapStory({ data, ar, platforms = [] }: { data: GapReasonsPayload
           </span>
           <span className="relative grid h-11 w-11 place-items-center rounded-full bg-success/15 text-success">
             <ShoppingBag size={20} aria-hidden />
-            <span className="tnum absolute -top-1 -end-1 grid h-5 min-w-5 place-items-center rounded-full bg-success px-1 text-[10px] font-extrabold text-white"><Num>1</Num></span>
+            <span className="tnum absolute -top-1 -end-1 grid h-5 min-w-5 place-items-center rounded-full bg-success px-1 text-xs font-extrabold text-white"><Num>1</Num></span>
           </span>
           <span className="tnum rounded-full bg-brand-600/15 px-2 py-0.5 text-xs font-extrabold text-brand-600"><Num>{`×${logos.length}`}</Num></span>
         </div>
@@ -311,7 +311,7 @@ export function GapStory({ data, ar, platforms = [] }: { data: GapReasonsPayload
           const Icon = p.icon
 
           return (
-            <li key={`${l.key}-${'side' in l ? l.side : ''}`} data-testid={l.key === 'shared' ? 'gap-legend-shared' : `gap-reason-${l.key}`} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
+            <li key={`${l.key}-${'side' in l ? l.side : ''}`} data-testid={l.key === 'shared' ? 'gap-legend-shared' : `gap-reason-${l.key}`} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-text-secondary">
               <span className="grid h-4 w-4 place-items-center rounded-full text-white" style={{ background: p.color }}><Icon size={10} aria-hidden /></span>
               {tx(p.label, ar)}
               <span className="tnum font-extrabold text-text-primary"><Num>{num(l.value)}</Num></span>
@@ -374,21 +374,21 @@ export function Journey({ ar, platforms = [] }: { ar: boolean; platforms?: strin
           <span className="flex -space-x-1.5 rtl:space-x-reverse">
             {(logos.length ? logos : ['']).map((p) => <span key={p} className="grid h-8 w-8 place-items-center rounded-full border-2 border-surface bg-surface">{p ? <ProviderMark provider={p} size={16} /> : <Megaphone size={14} aria-hidden />}</span>)}
           </span>
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-text-secondary"><Eye size={11} aria-hidden />{ar ? 'شاهد الإعلان' : 'Saw the ad'}</span>
-          <span className="tnum rounded-full bg-brand-600/15 px-1.5 text-[10px] font-bold text-brand-600">{ar ? 'يوم 1' : 'Day 1'}</span>
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-text-secondary"><Eye size={11} aria-hidden />{ar ? 'شاهد الإعلان' : 'Saw the ad'}</span>
+          <span className="tnum rounded-full bg-brand-600/15 px-1.5 text-xs font-bold text-brand-600">{ar ? 'يوم 1' : 'Day 1'}</span>
         </span>
         <span className="relative flex items-center justify-center">
           <span className="absolute inset-x-0 top-1/2 border-t-2 border-dashed border-border-strong" aria-hidden />
           <span className="relative flex flex-wrap items-center justify-center gap-1 bg-transparent">
             {RETURN_ROADS.map((r) => (
-              <span key={r.key} title={tx(r.label, ar)} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-semibold text-text-secondary"><r.icon size={11} aria-hidden />{tx(r.label, ar)}</span>
+              <span key={r.key} title={tx(r.label, ar)} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-xs font-semibold text-text-secondary"><r.icon size={11} aria-hidden />{tx(r.label, ar)}</span>
             ))}
           </span>
         </span>
         <span data-testid="journey-bought" className="flex flex-col items-center gap-1">
           <span className="grid h-9 w-9 place-items-center rounded-full bg-success/15 text-success"><ShoppingBag size={18} aria-hidden /></span>
-          <span className="text-[10px] font-bold text-text-secondary">{ar ? 'اشترى' : 'Bought'}</span>
-          <span className="tnum rounded-full bg-success/15 px-1.5 text-[10px] font-bold text-success">{ar ? 'يوم 12' : 'Day 12'}</span>
+          <span className="text-xs font-bold text-text-secondary">{ar ? 'اشترى' : 'Bought'}</span>
+          <span className="tnum rounded-full bg-success/15 px-1.5 text-xs font-bold text-success">{ar ? 'يوم 12' : 'Day 12'}</span>
         </span>
       </div>
 
@@ -397,28 +397,28 @@ export function Journey({ ar, platforms = [] }: { ar: boolean; platforms?: strin
         <div data-testid="journey-platform" className="flex items-center gap-2.5 rounded-xl border px-3 py-2" style={{ borderColor: 'color-mix(in srgb, var(--brand-600) 40%, transparent)' }}>
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600/15 text-brand-600"><Megaphone size={15} aria-hidden /></span>
           <span className="flex min-w-0 flex-col">
-            <span className="text-[11px] font-bold text-text-primary">{ar ? 'المنصة' : 'Platform'}</span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-text-secondary"><Clock size={10} aria-hidden />{ar ? 'شاهد أو نقر خلال نافذتها' : 'Seen or clicked within its window'}</span>
+            <span className="text-xs font-bold text-text-primary">{ar ? 'المنصة' : 'Platform'}</span>
+            <span className="inline-flex items-center gap-1 text-xs text-text-secondary"><Clock size={10} aria-hidden />{ar ? 'شاهد أو نقر خلال نافذتها' : 'Seen or clicked within its window'}</span>
           </span>
-          <span className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-600/15 px-2 py-0.5 text-[10px] font-extrabold text-brand-600"><Check size={11} aria-hidden />{ar ? 'طلب من الإعلان' : 'Ad order'}</span>
+          <span className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-600/15 px-2 py-0.5 text-xs font-extrabold text-brand-600"><Check size={11} aria-hidden />{ar ? 'طلب من الإعلان' : 'Ad order'}</span>
         </div>
         <div data-testid="journey-site" className="flex items-center gap-2.5 rounded-xl border px-3 py-2" style={{ borderColor: 'color-mix(in srgb, var(--teal) 40%, transparent)' }}>
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Globe size={15} aria-hidden /></span>
           <span className="flex min-w-0 flex-col">
-            <span className="text-[11px] font-bold text-text-primary">{ar ? 'الموقع' : 'Website'}</span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-text-secondary"><Route size={10} aria-hidden />{ar ? 'يسجّل مصدر آخر زيارة' : 'Files the last visit’s source'}</span>
+            <span className="text-xs font-bold text-text-primary">{ar ? 'الموقع' : 'Website'}</span>
+            <span className="inline-flex items-center gap-1 text-xs text-text-secondary"><Route size={10} aria-hidden />{ar ? 'يسجّل مصدر آخر زيارة' : 'Files the last visit’s source'}</span>
           </span>
-          <span className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Keyboard size={11} aria-hidden />{ar ? 'مباشر' : 'Direct'}</span>
+          <span className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Keyboard size={11} aria-hidden />{ar ? 'مباشر' : 'Direct'}</span>
         </div>
       </div>
-      <span data-testid="journey-both" className="mx-auto inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-[11px] font-extrabold text-success"><CheckCheck size={13} aria-hidden />{ar ? 'طلب واحد · قراءتان صحيحتان' : 'One order · two correct readings'}</span>
+      <span data-testid="journey-both" className="mx-auto inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-extrabold text-success"><CheckCheck size={13} aria-hidden />{ar ? 'طلب واحد · قراءتان صحيحتان' : 'One order · two correct readings'}</span>
 
       {/* Why the two readings differ: four mechanisms, an icon each. */}
       <ul data-testid="journey-why" className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
         {WHY.map((w) => (
           <li key={w.key} data-testid={`journey-why-${w.key}`} className="flex flex-col items-center gap-1 rounded-lg bg-surface px-2 py-2 text-center">
             <span className="grid h-7 w-7 place-items-center rounded-full bg-surface-secondary text-text-secondary"><w.icon size={14} aria-hidden /></span>
-            <span className="text-[10px] font-semibold text-text-secondary">{tx(w.label, ar)}</span>
+            <span className="text-xs font-semibold text-text-secondary">{tx(w.label, ar)}</span>
           </li>
         ))}
       </ul>
@@ -443,7 +443,7 @@ export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPaylo
     <section data-testid="report-ga4-attribution-block" className="flex min-w-0 flex-col gap-4 rounded-2xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-extrabold text-text-primary">{ar ? 'المنصة مقابل الموقع' : 'Platform vs website'}</h3>
-        <span className="flex items-center gap-3 text-[11px] font-semibold text-text-muted">
+        <span className="flex items-center gap-3 text-xs font-semibold text-text-muted">
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--brand-600)' }} />{ar ? 'المنصة' : 'Platform'}</span>
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--teal)' }} />{ar ? 'الموقع' : 'Website'}</span>
         </span>
@@ -460,16 +460,16 @@ export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPaylo
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
                   <div className="h-3 rounded-full" style={{ width: w(r.claimed), background: 'var(--brand-600)' }} />
-                  <span className="tnum text-[11px] font-bold text-text-primary"><Num>{r.claimed === null ? '—' : num(r.claimed)}</Num></span>
+                  <span className="tnum text-xs font-bold text-text-primary"><Num>{r.claimed === null ? '—' : num(r.claimed)}</Num></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="h-3 rounded-full" style={{ width: w(r.ga4?.purchases), background: 'var(--teal)' }} />
-                  <span className="tnum text-[11px] font-bold text-text-primary"><Num>{r.ga4?.purchases == null ? '—' : num(r.ga4.purchases)}</Num></span>
+                  <span className="tnum text-xs font-bold text-text-primary"><Num>{r.ga4?.purchases == null ? '—' : num(r.ga4.purchases)}</Num></span>
                 </div>
               </div>
               <span className="flex flex-col items-end gap-1">
-                {D && <span data-testid={`match-dir-${r.key}`} data-direction={d} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${D.tone}`}><D.icon size={11} aria-hidden />{tx(D.label, ar)}</span>}
-                {r.ga4?.aov_usd != null && <span className="tnum text-[10px] text-text-muted"><ShoppingBag size={10} className="me-0.5 inline" aria-hidden /><Num>{money(r.ga4.aov_usd, 'USD')}</Num></span>}
+                {D && <span data-testid={`match-dir-${r.key}`} data-direction={d} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${D.tone}`}><D.icon size={11} aria-hidden />{tx(D.label, ar)}</span>}
+                {r.ga4?.aov_usd != null && <span className="tnum text-xs text-text-muted"><ShoppingBag size={10} className="me-0.5 inline" aria-hidden /><Num>{money(r.ga4.aov_usd, 'USD')}</Num></span>}
               </span>
             </li>
           )
@@ -568,7 +568,7 @@ function RankBars<R>({ rows, metrics, name, sub, fmt, ar, top = 8, testId = 'ga4
                   <span className="tnum w-4 shrink-0 text-text-muted"><Num>{String(i + 1)}</Num></span>
                   <span dir="auto" className="truncate" title={n}>{n}</span>
                   {s2 && <span dir="ltr" className="shrink-0 font-normal text-text-muted">{s2}</span>}
-                  {i === 0 && <span className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success">{ar ? 'الأعلى' : 'Top'}</span>}
+                  {i === 0 && <span className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-xs font-bold text-success">{ar ? 'الأعلى' : 'Top'}</span>}
                 </span>
                 <span className="tnum whitespace-nowrap font-bold text-text-primary">
                   <Num>{fmt(b.v, metric!.kind)}</Num>
