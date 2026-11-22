@@ -188,7 +188,7 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
 
   // Text → studio copies. The support line carries the price and/or the description, each only when its enhancement is on.
   // A price always carries its currency: a bare number typed here reads «199 ر.س».
-  const priced = /^[\d.,٠-٩]+$/.test(price.trim()) ? `${price.trim()} ${locale === 'ar' ? 'ر.س' : 'SAR'}` : price.trim()
+  const priced = /^[\d.,\u0660-\u0669]+$/.test(price.trim()) ? `${price.trim()} ${locale === 'ar' ? 'ر.س' : 'SAR'}` : price.trim()
   const support = [enh.details ? priced : '', enh.enhanceCta ? description.trim() : ''].filter(Boolean).join(' · ')
   const prims = primaries.map((s) => s.trim()).filter(Boolean)
   const heads = headlines.map((s) => s.trim()).filter(Boolean)
