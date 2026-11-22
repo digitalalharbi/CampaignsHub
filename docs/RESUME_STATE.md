@@ -1,4 +1,13 @@
-# CURRENT STATE — 2026-11-08 — main at 1769c5307 (#989), deployed; covers and viewer formats read on one real link
+# CURRENT STATE — 2026-11-22 — main at 545a36342 (#1264), deployed; main-red order closed
+
+- **Landed 2026-11-21/22:** #1260 (`b0334ec20`; digest/finance spend, alert-sweep baseline re-written row order only, agency-operator e2e updated to #1257's carry), #1254 (`c38a287ec`, studio batch 7: drawer), #1264 (`545a36342`, studio batch 8: storage). Deploy Production: run 44959829276 (#1260) and 44964721061 (#1264, first attempt failed on an SSH `dial tcp … i/o timeout`, `rerun --failed` succeeded). Site and api 200.
+- **Production read 2026-11-22 (read-only):** `/agency/content` loads signed in with real data (period `24 أكتوبر – 22 نوفمبر 2026`). The studio upload → drawer → save → draft chain was NOT exercised: it writes to a live client workspace. **BLOCKED_OPERATIONAL_EVIDENCE** until the Owner names a test project.
+- **Open:** gate firefox/webkit shard 2/5 failed on #1264's branch run (not required checks; logs unreachable during GitHub outage; reread before trusting). Batch 7's Save is not yet wired to batch 8's API.
+- **Owner decisions pending:** test project for the studio proof; auto-merge on PRs to stop lander refresh loops; HSTS/CSP and `X-Powered-By`; `metrics:renormalise-currency --apply`.
+
+## Earlier state — 2026-11-08
+
+# (snapshot) 2026-11-08 — main at 1769c5307 (#989), deployed; covers and viewer formats read on one real link
 
 - **Landed since 2026-11-05:** #973, #975, #976, #978, #979, #980, #981, #982, #983, #984, #985, #986, #989 (list and evidence in `docs/PROJECT_STATE.md`). Deploy Production run 42456226278 succeeded on `1769c5307`.
 - **Production read 2026-11-08 (read-only, one real link):** Meta 13/13 covers (was 0); TikTok 175 of 269 with our copy, 57 by first frame, 37 unavailable (26 Asset Library no data, 9 Spark nothing, 2 Spark no identity); Snapchat 657 of 658; Google 3 text ads; ChatGPT Ads 11 chat cards as text; Website tab English view reads the gap with no source named. Rows CREATIVE-PREVIEWS-001, CREATIVE-COVERS-COVERAGE-001, CREATIVE-VIEWER-FORMATS-001, CREATIVE-SYNC-MEDIA-001, CONTENT-FORMAT-COMPARISON-001, REPORT-WEBSITE-GAP-READING-001 stay IMPLEMENTED_NOT_VERIFIED, with the evidence and the gap written in each row. Not claimed: X, LinkedIn, ChatGPT or Google images, TikTok rows that returned nothing, the Arabic Website tab.
