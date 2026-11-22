@@ -5,7 +5,7 @@ export const LIB = {
     newContent: 'محتوى جديد',
     newFromStudio: 'إنشاء بالاستوديو',
     newUpload: 'رفع وسائط',
-    tabs: { creatives: 'المحتويات', insights: 'رؤى المحتوى', media: 'مكتبة الوسائط' },
+    tabs: { creatives: 'المحتويات', insights: 'تحليلات المحتوى', media: 'مكتبة الوسائط' },
     search: 'ابحث في المحتويات…',
     searchMedia: 'ابحث في الوسائط…',
     filter: 'تصفية',

@@ -153,7 +153,7 @@ export function FormatComparisonInteractive({ data, ar, client, heading = true, 
       </p>
 
       <details data-testid="format-table-toggle" className="group">
-        <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'عرض الجدول التفصيلي' : 'Show the detailed table'}</summary>
+        <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'التفاصيل' : 'Details'}</summary>
         <div className="mt-2">
           <FormatComparisonStrip data={data} ar={ar} client={client} title={false} />
         </div>

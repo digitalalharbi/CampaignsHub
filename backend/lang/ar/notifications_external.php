@@ -61,7 +61,7 @@ return [
     ],
     'metric' => [
         'spend' => 'الإنفاق', 'result' => 'النتائج', 'cost_per_result' => 'تكلفة النتيجة', 'purchases' => 'الطلبات', 'conversions' => 'التحويلات',
-        'revenue' => 'الإيرادات', 'roas' => 'العائد على الإنفاق', 'leads' => 'العملاء المحتملون', 'form_leads' => 'نماذج العملاء',
+        'revenue' => 'الإيرادات', 'roas' => 'معدل العائد', 'leads' => 'العملاء المحتملون', 'form_leads' => 'نماذج العملاء',
         'clicks' => 'النقرات', 'landing_page_views' => 'زيارات الصفحة', 'reach' => 'الوصول', 'impressions' => 'مرات الظهور', 'video_views' => 'المشاهدات',
         'installs' => 'التثبيتات', 'engagements' => 'التفاعلات', 'previous' => 'الفترة السابقة', 'change' => 'التغير', 'platform' => 'المنصة', 'share' => 'الحصة',
         'date' => 'التاريخ', 'campaign' => 'الحملة', 'objective' => 'الهدف',

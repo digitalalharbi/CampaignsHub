@@ -409,7 +409,7 @@ export function AnalyticsPage({ surface = 'analytics' }: { surface?: Surface } =
   const widgetLayout = useWidgetLayout(isAnalysis ? currentProjectId : null, 'analytics')
   const hasWidgetTab = isAnalysis && (widgetLayout.data?.widgets ?? []).some((w) => w.visible)
   const tab = isAnalysis ? urlTab : 'performance'
-  const sections = hasWidgetTab ? [...ANALYTICS_SECTIONS, { id: 'links', ar: 'رؤى إضافية', en: 'Insights', icon: Sparkles, members: ['links'] }] : ANALYTICS_SECTIONS
+  const sections = hasWidgetTab ? [...ANALYTICS_SECTIONS, { id: 'links', ar: 'تحليلات إضافية', en: 'Insights', icon: Sparkles, members: ['links'] }] : ANALYTICS_SECTIONS
   const sectionOf = (t0: string) => {
     const t = LEGACY_SECTION[t0] ?? t0
 

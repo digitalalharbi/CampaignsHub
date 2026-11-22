@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { AppWindow, ArrowDownRight, ArrowUpRight, CalendarDays, Check, Clock, Cookie, Copy, Equal, Eye, EyeOff, Fingerprint, Keyboard, Megaphone, MonitorSmartphone, MousePointerClick, RefreshCw, Route, Scale, Search, SearchCheck, Share2, ShoppingBag, Smartphone, Sparkles, Store, Tag, Target, HelpCircle, Users } from 'lucide-react'
+import { AppWindow, ArrowDownRight, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, Check, Clock, Cookie, Copy, Equal, Eye, EyeOff, Fingerprint, Globe, Keyboard, Megaphone, MonitorSmartphone, MousePointerClick, RefreshCw, Route, Scale, Search, SearchCheck, Share2, ShoppingBag, Smartphone, Sparkles, Store, Tag, Target, HelpCircle, Users } from 'lucide-react'
 import { partIcon, ShareTiles } from './ShareTiles'
 import { Num } from '@/components/ui/Num'
 import { FixedPageTable } from '@/components/ui/FixedPageTable'
@@ -7,7 +7,7 @@ import { ProviderMark } from '@/components/ProviderMark'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { ChartCard, ConversionFunnelChart, hasFunnel, KpiSparkline } from '@/features/analytics/charts'
-import { money, num, percent } from '@/features/analytics/format'
+import { money, moneyExact, num, percent } from '@/features/analytics/format'
 import { CHANNEL, DEVICE, donutRows, FUNNEL, KPI_LABEL, kpiText, productColumns, sessionColumns, UNPAID } from '@/features/analytics/ga4/Ga4StoreView'
 import { matchColumns, platformRows, type MatchRow } from '@/features/analytics/ga4/Ga4MatchBlock'
 import type { ClassificationRow, GapReasonsPayload, MatchPayload } from '@/features/analytics/ga4/matchTypes'
@@ -473,7 +473,7 @@ export function AttributionStory({ data, ar, basis }: { data: MatchPayload; ar: 
           {realCpa !== null && (
             <div data-testid="story-real-cpa" className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
               <span className="flex flex-col"><span className="text-[11px] font-semibold text-text-muted">{ar ? 'تكلفة الطلب الفعلي' : 'Cost per real order'}</span><span className="tnum text-[10px] text-text-muted">{ar ? `الصرف ÷ ${ordersLabel}` : 'Spend ÷ orders'}</span></span>
-              <span className="flex flex-col items-end"><span className="tnum text-xl font-extrabold text-success"><Num>{money(realCpa, 'USD')}</Num></span>{claimedCpa !== null && <span className="tnum text-[10px] text-text-muted line-through"><Num>{money(claimedCpa, 'USD')}</Num></span>}</span>
+              <span className="flex flex-col items-end"><span className="tnum text-xl font-extrabold text-success"><Num>{moneyExact(realCpa, 'USD')}</Num></span>{claimedCpa !== null && <span className="tnum text-[10px] text-text-muted line-through"><Num>{moneyExact(claimedCpa, 'USD')}</Num></span>}</span>
             </div>
           )}
           {realRoas !== null && (
@@ -520,7 +520,7 @@ export function fingerprintRows(data: MatchPayload): Array<{ platform: string; l
     .sort((a, b) => b.fingerprint - a.fingerprint)
 }
 
-const PATH_COLOR: Record<string, string> = { ads: 'var(--brand-600)', direct: 'var(--teal)', referral: 'var(--info)', organic: 'var(--success)', other: 'var(--text-muted)', other_paid: 'var(--purple)', unassigned: 'var(--warning)' }
+const PATH_COLOR: Record<string, string> = { ads: 'var(--warning)', direct: 'var(--teal)', referral: 'var(--info)', organic: 'var(--success)', other: 'var(--text-muted)', other_paid: 'var(--purple)', unassigned: 'var(--text-muted)' }
 const PATH_LABEL: Record<string, L> = { ads: { ar: 'إعلان · آخر نقرة', en: 'Ad · last click' }, ...UNPAID }
 const PATH_ICON: Record<string, typeof Megaphone> = { ads: Megaphone, direct: Keyboard, referral: Share2, organic: Search, other: HelpCircle, other_paid: Megaphone, unassigned: HelpCircle }
 
@@ -602,6 +602,119 @@ export function SiteEvidence({ data, ar }: { data: MatchPayload; ar: boolean }) 
 }
 
 /**
+ * WEBSITE-VISUAL-005 (Owner 2026-11-22) — «التاجر غير تقني … يحتاج إجابة واضحة بدون تعقيد ليش الفرق»: the answer at a glance.
+ * The platforms' counts flow into one bag of orders; one figure says why (each order is counted by about N platforms); three figures
+ * say how to judge (the real orders, the cost of one, the return). Everything technical is folded under «التفاصيل الفنية».
+ */
+export function SimpleAnswer({ data, ar, basis }: { data: MatchPayload; ar: boolean; basis?: AttributionBasis }) {
+  const platforms = (data.platforms ?? []).filter((p) => (p.claimed?.conversions ?? 0) > 0).sort((a, b) => (b.claimed?.conversions ?? 0) - (a.claimed?.conversions ?? 0))
+  const claimed = platforms.reduce((a, p) => a + (p.claimed?.conversions ?? 0), 0)
+  const orders = basis?.orders ?? orderPaths(data).reduce((a, p) => a + p.orders, 0)
+  if (claimed <= 0 || orders <= 0) return null
+  const fromStore = basis?.ordersSource === 'store' && basis.orders != null
+  const per = claimed / orders
+  const spend = basis?.spendUsd ?? null
+  const cpa = spend != null ? spend / orders : null
+  const roas = spend != null && spend > 0 && basis?.revenueUsd != null ? basis.revenueUsd / spend : null
+  const shown = Math.min(Math.max(2, Math.round(per)), 4)
+
+  return (
+    <div data-testid="simple-answer" className="flex flex-col gap-3 rounded-2xl border border-success/30 bg-success/5 p-4">
+      <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_auto_auto]">
+        {/* The platforms' counts … */}
+        <ul className="flex flex-wrap items-center justify-center gap-2 md:justify-start">
+          {platforms.map((p) => (
+            <li key={p.platform} className="tnum inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-sm font-extrabold text-text-primary">
+              <ProviderMark provider={p.platform} size={16} /><Num>{num(p.claimed?.conversions ?? 0)}</Num>
+            </li>
+          ))}
+        </ul>
+        {/* … flow into one bag of orders. */}
+        <span className="flex items-center justify-center gap-1 text-text-muted" aria-hidden>
+          <span className="h-0.5 w-6 rounded-full bg-border-strong" /><span className="h-0.5 w-3 rounded-full bg-border-strong" />{ar ? <ArrowLeft size={18} aria-hidden /> : <ArrowRight size={18} aria-hidden />}
+        </span>
+        <div className="flex items-center justify-center gap-3">
+          <span className="relative grid h-16 w-16 place-items-center rounded-2xl bg-success/15 text-success">{fromStore ? <Store size={30} aria-hidden /> : <ShoppingBag size={30} aria-hidden />}</span>
+          <span className="flex flex-col">
+            <span className="text-xs font-bold text-text-muted">{fromStore ? (ar ? 'طلبات متجرك' : 'Your store orders') : (ar ? 'طلبات موقعك' : 'Your website orders')}</span>
+            <span data-testid="simple-orders" className="tnum text-4xl font-extrabold leading-none text-text-primary"><Num>{num(orders)}</Num></span>
+          </span>
+        </div>
+      </div>
+
+      {/* Why — the attribution, drawn: four small roads, an icon each, two or three words. Always visible. */}
+      <div data-testid="simple-why" className="flex flex-col gap-2">
+        <span className="text-center text-sm font-extrabold text-text-primary">{ar ? 'ليش الفرق؟' : 'Why the difference?'}</span>
+        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <WhyCard testId="simple-per-order" label={ar ? 'نفس الطلب تحسبه أكثر من منصة' : 'The same order, counted by several platforms'} chip={`×${per.toFixed(1)}`}>
+            <Bubble tone="var(--success)"><ShoppingBag size={16} aria-hidden /></Bubble>
+            <Road ar={ar} />
+            <span className="flex -space-x-1.5 rtl:space-x-reverse">{platforms.slice(0, shown).map((p) => <span key={p.platform} className="grid h-8 w-8 place-items-center rounded-full border-2 border-surface bg-surface-secondary"><ProviderMark provider={p.platform} size={15} /></span>)}</span>
+          </WhyCard>
+          <WhyCard testId="simple-why-view" label={ar ? 'شاف الإعلان بدون ما يضغط · المنصة تحسبه' : 'Saw the ad, never clicked · the platform counts it'}>
+            <Bubble tone="var(--brand-600)"><Eye size={16} aria-hidden /></Bubble>
+            <Road ar={ar} dashed />
+            <Bubble tone="var(--success)"><ShoppingBag size={16} aria-hidden /></Bubble>
+          </WhyCard>
+          <WhyCard testId="simple-why-window" label={ar ? 'اشترى بعد أيام · المنصة تحسبه' : 'Bought days later · the platform counts it'}>
+            <Bubble tone="var(--brand-600)"><Megaphone size={16} aria-hidden /></Bubble>
+            <span className="tnum flex flex-1 items-center gap-1 text-[10px] font-bold text-text-muted"><span className="h-0.5 flex-1 rounded-full bg-border-strong" /><Clock size={11} aria-hidden />{ar ? 'حتى ٣٠ يوم' : 'up to 30 days'}<span className="h-0.5 flex-1 rounded-full bg-border-strong" /></span>
+            <Bubble tone="var(--success)"><ShoppingBag size={16} aria-hidden /></Bubble>
+          </WhyCard>
+          <WhyCard testId="simple-why-last" label={ar ? 'الموقع يحسب آخر زيارة فقط' : 'The website counts the last visit only'}>
+            <Bubble tone="var(--teal)"><Keyboard size={16} aria-hidden /></Bubble>
+            <Road ar={ar} />
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Globe size={12} aria-hidden />{ar ? 'مباشر' : 'Direct'}</span>
+          </WhyCard>
+        </ul>
+      </div>
+
+      {/* How to judge: three figures. */}
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="flex flex-col items-center gap-0.5 rounded-xl bg-surface px-3 py-2.5">
+          <span className="text-[11px] font-bold text-text-muted">{ar ? 'طلباتك الحقيقية' : 'Your real orders'}</span>
+          <span className="tnum text-2xl font-extrabold text-success"><Num>{num(orders)}</Num></span>
+        </div>
+        {cpa !== null && (
+          <div data-testid="simple-cpa" className="flex flex-col items-center gap-0.5 rounded-xl bg-surface px-3 py-2.5">
+            <span className="text-[11px] font-bold text-text-muted">{ar ? 'تكلفة الطلب' : 'Cost per order'}</span>
+            <span className="tnum text-2xl font-extrabold text-success"><Num>{moneyExact(cpa, 'USD')}</Num></span>
+          </div>
+        )}
+        {roas !== null && (
+          <div data-testid="simple-roas" className="flex flex-col items-center gap-0.5 rounded-xl bg-surface px-3 py-2.5">
+            <span className="text-[11px] font-bold text-text-muted">{ar ? 'معدل العائد' : 'Return'}</span>
+            <span className="tnum text-2xl font-extrabold text-success"><Num>{`×${roas.toFixed(2)}`}</Num></span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function WhyCard({ testId, label, chip, children }: { testId: string; label: string; chip?: string; children: ReactNode }) {
+  return (
+    <li data-testid={testId} className="flex flex-col items-center gap-2 rounded-xl bg-surface px-3 py-3 text-center">
+      <span className="flex w-full items-center justify-center gap-2">{children}</span>
+      <span className="text-[11px] font-bold leading-snug text-text-secondary">{label}{chip && <span className="tnum ms-1.5 rounded-full bg-brand-600/15 px-1.5 py-0.5 text-brand-600"><Num>{chip}</Num></span>}</span>
+    </li>
+  )
+}
+
+function Bubble({ tone, children }: { tone: string; children: ReactNode }) {
+  return <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full" style={{ background: `color-mix(in srgb, ${tone} 16%, transparent)`, color: tone }}>{children}</span>
+}
+
+function Road({ ar, dashed = false }: { ar: boolean; dashed?: boolean }) {
+  return (
+    <span className="flex flex-1 items-center text-text-muted" aria-hidden>
+      <span className={`h-0 flex-1 border-t-2 ${dashed ? 'border-dashed' : ''} border-border-strong`} />
+      {ar ? <ArrowLeft size={14} /> : <ArrowRight size={14} />}
+    </span>
+  )
+}
+
+/**
  * «مطابقة الإسناد» as Thunder reads it: one row per platform, the platform's count and the website's on one scale, the measured
  * basket beside it, and a neutral direction chip. The indirect path is one stacked bar. The table stays one click away.
  */
@@ -623,6 +736,8 @@ export function AttributionVisual({ data, ar, pageSize = 8, basis }: { data: Mat
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--teal)' }} />{ar ? 'الموقع' : 'Website'}</span>
         </span>
       </div>
+
+      <SimpleAnswer data={data} ar={ar} basis={basis} />
 
       <ul data-testid="match-bars" data-rows={rows.length} className="flex flex-col gap-3">
         {rows.map((r) => {
@@ -651,9 +766,12 @@ export function AttributionVisual({ data, ar, pageSize = 8, basis }: { data: Mat
         })}
       </ul>
 
-      <AttributionStory data={data} ar={ar} basis={basis} />
+      <details data-testid="attribution-technical" className="group flex flex-col gap-3">
+        <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'التفاصيل الفنية' : 'Technical details'}</summary>
+        <div className="mt-3 flex flex-col gap-3">
+          <AttributionStory data={data} ar={ar} basis={basis} />
 
-      <SiteEvidence data={data} ar={ar} />
+          <SiteEvidence data={data} ar={ar} />
 
       {indirectTotal > 0 && (
         <div data-testid="indirect-path" className="flex flex-col gap-2 rounded-xl bg-surface-secondary/50 p-3">
@@ -664,9 +782,11 @@ export function AttributionVisual({ data, ar, pageSize = 8, basis }: { data: Mat
           <ShareTiles parts={indirect.map((i) => ({ key: i.key, label: tx(UNPAID[i.key] ?? { ar: i.key, en: i.key }, ar), value: i.sessions }))} cols="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" tileTestId={(k) => `indirect-${k}`} />
         </div>
       )}
+        </div>
+      </details>
 
       <details data-testid="match-table-toggle">
-        <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'عرض الجدول التفصيلي' : 'Show the detailed table'}</summary>
+        <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'التفاصيل' : 'Details'}</summary>
         <div className="mt-2">
           <FixedPageTable testId="match-table" ar={ar} pageSize={pageSize} rows={rows} rowKey={(r: MatchRow) => r.key}
             columns={matchColumns(ar, internal, () => undefined).map((c) => (c.key === 'name' ? { ...c, render: (r: MatchRow) => <span className="inline-flex items-center gap-2 font-semibold"><ProviderMark provider={r.platform} size={16} />{providerLabel(r.platform, ar ? 'ar' : 'en')}</span> } : c))}
@@ -781,7 +901,7 @@ function Tabs<K extends string>({ keys, active, label, onPick, testId, min = 2 }
 function Details({ testId, ar, children }: { testId: string; ar: boolean; children: ReactNode }) {
   return (
     <details data-testid={testId}>
-      <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'عرض الجدول التفصيلي' : 'Show the detailed table'}</summary>
+      <summary className="cursor-pointer select-none text-xs font-semibold text-brand-600">{ar ? 'التفاصيل' : 'Details'}</summary>
       <div className="mt-2">{children}</div>
     </details>
   )

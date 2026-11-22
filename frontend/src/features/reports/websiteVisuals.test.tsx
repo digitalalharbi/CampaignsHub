@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
-import { AcquisitionVisual, ClassificationVisual, CompactTiles, direction, fingerprintRows, GapStory, gapSegments, AttributionStory, orderPaths, SiteEvidence, suspectPlatforms, TablesVisual } from './WebsiteVisuals'
+import { AcquisitionVisual, ClassificationVisual, CompactTiles, direction, fingerprintRows, GapStory, gapSegments, AttributionStory, SimpleAnswer, orderPaths, SiteEvidence, suspectPlatforms, TablesVisual } from './WebsiteVisuals'
 import type { MatchPayload } from '@/features/analytics/ga4/matchTypes'
 import type { StoreKpi } from '@/features/analytics/ga4/storeTypes'
 import type { GapReasonsPayload } from '@/features/analytics/ga4/matchTypes'
@@ -173,5 +173,27 @@ describe('the attribution story (WEBSITE-VISUAL-004)', () => {
     expect(screen.getByTestId('story-orders')).toHaveTextContent('101')
     expect(screen.getByTestId('story-ratio')).toHaveTextContent('طلبات المتجر')
     expect(screen.queryByTestId('story-judge')).toBeNull()
+  })
+})
+
+describe('the answer at a glance (WEBSITE-VISUAL-005)', () => {
+  it('shows the real orders, why the platforms count more, and the cost and return of one order', () => {
+    renderWithProviders(<SimpleAnswer data={razzahMatch} ar basis={{ orders: 103, ordersSource: 'site', spendUsd: 3755.01, revenueUsd: 7100 }} />, { locale: 'ar' })
+    expect(screen.getByTestId('simple-orders')).toHaveTextContent('103')
+    expect(screen.getByTestId('simple-per-order')).toHaveTextContent('نفس الطلب تحسبه أكثر من منصة')
+    expect(screen.getByTestId('simple-per-order')).toHaveTextContent('×2.1')
+    expect(screen.getByTestId('simple-cpa')).toHaveTextContent('36')
+    expect(screen.getByTestId('simple-roas')).toHaveTextContent('×1.89')
+    // The why, always visible: one order in several platforms, a view, a window of days, the website's last visit.
+    expect(screen.getByTestId('simple-why')).toHaveTextContent('ليش الفرق؟')
+    expect(screen.getByTestId('simple-why-view')).toHaveTextContent('بدون ما يضغط')
+    expect(screen.getByTestId('simple-why-window')).toHaveTextContent('حتى ٣٠ يوم')
+    expect(screen.getByTestId('simple-why-last')).toHaveTextContent('آخر زيارة')
+  })
+
+  it('says «متجرك» when the store is connected, and shows no cost without spend', () => {
+    renderWithProviders(<SimpleAnswer data={razzahMatch} ar basis={{ orders: 101, ordersSource: 'store', spendUsd: null, revenueUsd: null }} />, { locale: 'ar' })
+    expect(screen.getByTestId('simple-answer')).toHaveTextContent('طلبات متجرك')
+    expect(screen.queryByTestId('simple-cpa')).toBeNull()
   })
 })

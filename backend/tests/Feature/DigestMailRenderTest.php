@@ -380,7 +380,7 @@ final class DigestMailRenderTest extends TestCase
             ['id' => 'r1', 'title' => 'ارفع ميزانية المجموعة الأعلى', 'body' => 'هي الوحيدة تحت التكلفة المستهدفة.', 'priority' => 'high'],
         ];
         $html = $this->renderOf($with);
-        $this->assertStringNotContainsString('التوصيات المعتمدة', $html);
+        $this->assertStringNotContainsString('فرص التحسين المعتمدة', $html);
         $this->assertStringNotContainsString('ارفع ميزانية المجموعة الأعلى', $html);
     }
 

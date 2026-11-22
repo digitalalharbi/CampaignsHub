@@ -52,7 +52,7 @@ const copy = {
     brief_budgets_ending: 'ميزانيات قاربت نهايتها',
     brief_enough_until: 'تكفي حتى',
     brief_no_budget: 'بلا ميزانية للفترة',
-    brief_recommendations: 'توصيات بانتظار الاعتماد',
+    brief_recommendations: 'فرص تحسين بانتظار الاعتماد',
     brief_problems: 'مشاكل بيانات أو ربط',
     brief_external: 'أمس: رسائل خارجية',
     brief_sent: 'أُرسلت',
