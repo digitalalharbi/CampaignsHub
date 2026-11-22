@@ -3,6 +3,7 @@ import { frozenBeforeWebsiteTab, withDailyRecordsSlides, withEvidenceSlides, wit
 import { useParams, useSearchParams } from 'react-router-dom'
 import { getData } from '@/lib/api/client'
 import { loadWebsiteVisuals } from './Ga4ReportBlocks'
+import { loadStoreAnalytics } from './StoreAnalyticsDeferred'
 import { ATTENTION_SLIDE, SlideBody, type Meta, type ReportData, type Slide } from './InteractiveReport'
 import { PrintDocument } from './PrintDocument'
 import { PrintPlatformDrilldown } from './PrintPlatformDrilldowns'
@@ -157,6 +158,7 @@ export function PrintReport() {
       w.__REPORT_DATA_READY__ = true
       // The website slides draw from a chunk of their own; it is settled before anything is measured.
       await loadWebsiteVisuals().catch(() => {})
+      await loadStoreAnalytics().catch(() => {})
       const fonts = (document as Document & { fonts?: FontFaceSet }).fonts
       if (fonts?.ready) await fonts.ready.catch(() => {})
       await new Promise((r) => setTimeout(r, 500))
