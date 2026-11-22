@@ -215,7 +215,7 @@ function Spotlight({ block, kpi, currency, ar, note }: { block: ObjectiveFamilyB
       <div className="flex min-w-0 flex-col gap-2">
         <span className="text-xs font-semibold text-text-muted">{ar ? kpi.label_ar : kpi.label_en}</span>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="tnum text-3xl font-extrabold tracking-tight text-text-primary" title={kpi.state === 'reported' ? formatKpi(kpi, currency) : undefined}>
+          <span className="tnum text-xl font-extrabold tracking-tight sm:text-xl text-text-primary" title={kpi.state === 'reported' ? formatKpi(kpi, currency) : undefined}>
             <Num>{cardText(kpi, currency, ar)}</Num>
           </span>
           <Movement kpi={kpi} />
