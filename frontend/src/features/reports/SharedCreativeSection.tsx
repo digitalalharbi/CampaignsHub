@@ -440,7 +440,7 @@ export function SharedCreativeSection({
           ) : rows.length === 0 ? (
             <p className="rounded-xl border border-border bg-surface p-6 text-center text-sm text-text-secondary">{t.empty}</p>
           ) : (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            <div className={CARD_GRID}>
               {rows.map((creative) => (
                 <Tile key={creative.id} creative={creative} currency={currency} onOpen={openDetail} />
               ))}
@@ -521,6 +521,13 @@ function Picker({
 }
 
 type Copy = (typeof COPY)['en']
+
+/**
+ * AD-ANALYSIS-GRID-001 (Owner 2026-11-22) — four cards side by side (two on a phone), so every row is full and even: the ranked
+ * lists show their top four, and the content grid pages by 24, a whole number of rows.
+ */
+const ROW = 4
+const CARD_GRID = 'grid grid-cols-2 gap-3 md:grid-cols-4'
 
 /** A ranking figure: the change of a mover, signed, as a whole percent. */
 const signedPct = (value: number) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.round(Math.abs(value) * 100)}%`
@@ -623,8 +630,8 @@ function WinnerCards({
   return (
     <div className="grid gap-2" data-testid="shared-winners">
       <h3 className="flex items-center gap-1.5 text-sm font-bold">{t.winners}</h3>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-        {[...merged.values()].map((row, i) => (
+      <div className={CARD_GRID}>
+        {[...merged.values()].slice(0, ROW).map((row, i) => (
           <div key={row.creative.id} data-testid="winner-card" className="min-w-0">
             <Tile
               creative={row.creative}
@@ -680,15 +687,16 @@ function MoveList({
   const { locale } = useUi()
   if (list.items.length === 0) return null
   const Arrow = tone === 'up' ? TrendingUp : TrendingDown
+  const shown = list.items.slice(0, ROW)
 
   return (
     <div className="grid gap-2" data-testid={`shared-moves-${tone}`}>
       <h3 className="flex items-center gap-1.5 text-sm font-bold">
         {icon}{title}
-        {list.total > list.shown && <span className="tnum ms-auto text-[11px] font-normal text-text-muted"><Num>{`${list.shown} ${t.of} ${list.total}`}</Num></span>}
+        {list.total > shown.length && <span className="tnum ms-auto text-[11px] font-normal text-text-muted"><Num>{`${shown.length} ${t.of} ${list.total}`}</Num></span>}
       </h3>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-        {list.items.map((move, i) => {
+      <div className={CARD_GRID}>
+        {shown.map((move, i) => {
           const hidden = move.value_hidden === true || move.change === null || move.change === undefined
           const label = metricLabel(move.metric, locale)
 
