@@ -1,12 +1,10 @@
 import { canonicalObjectiveLabel, type CanonicalObjectiveKey } from '@/features/campaigns/canonicalObjectives'
 import { AboutThisData } from '@/features/content/AboutThisData'
-import { posterSource, readPreview } from '@/features/content/adPreview'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Image as ImageIcon, LayoutGrid, Lightbulb, Rows3, TrendingDown, TrendingUp, Video } from 'lucide-react'
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { AlertTriangle, Image as ImageIcon, Lightbulb, TrendingDown, TrendingUp, Video } from 'lucide-react'
 import {
-  compareSharedCreatives,
   getSharedCreative,
   getSharedCreativeSummary,
   getSharedCreatives,
@@ -17,11 +15,11 @@ import {
   type SharedKindWinner,
   type SharedObjectiveWinner,
 } from './sharedCreatives'
-import { AdPreviewDialog } from '@/features/content/AdPreviewDialog'
+import { Modal } from '@/components/ui/Modal'
+import { ContentTile } from './live/LiveContent'
+import type { ReportAd } from './ReportAdsSection'
+import { ReportAdDetail } from './ReportAdDetail'
 import { AdPoster } from '@/features/content/AdPoster'
-import { CreativeVideoPlayer } from '@/features/content/CreativeVideoPlayer'
-import { CreativeCarousel } from '@/features/content/CreativeCarousel'
-import { imageLoading } from '@/features/content/format'
 import { DataMetricTable, MetricTable, type SortValues } from '@/components/ui/MetricTable'
 import { formatMetric, metricLabel, metricState } from '@/features/content/metrics'
 import { creativeMoney } from '@/features/content/creativeMoney'
@@ -130,6 +128,13 @@ const COPY = {
     detailError: 'هذا الإعلان غير متاح في هذا الرابط.',
     notProvided: 'غير مُرسَل',
     winners: 'الأفضل أداءً',
+    allContent: 'كل المحتوى',
+    inPeriod: 'محتوى في هذه الفترة',
+    sortBy: 'ترتيب',
+    more: 'عرض المزيد',
+    remaining: 'بقي',
+    close: 'إغلاق',
+    sorts: { spend: 'الإنفاق', conversions: 'النتائج', clicks: 'النقرات', impressions: 'الظهور' },
     bestFor: 'الأفضل',
     health: 'حالة المحتوى',
     spendNoResults: 'إنفاق بدون نتائج',
@@ -199,6 +204,13 @@ const COPY = {
     detailError: 'This ad is not available on this link.',
     notProvided: 'Not provided',
     winners: 'Top performers',
+    allContent: 'All content',
+    inPeriod: 'creatives in this period',
+    sortBy: 'Sort',
+    more: 'Show more',
+    remaining: 'left',
+    close: 'Close',
+    sorts: { spend: 'Spend', conversions: 'Results', clicks: 'Clicks', impressions: 'Impressions' },
     bestFor: 'Best',
     health: 'Content health',
     spendNoResults: 'Spend without results',
@@ -231,7 +243,7 @@ export function SharedCreativeSection({
    * here rather than in each child for that reason alone.
    */
   const [filters, setFilters] = useState<SharedCreativeQuery>({})
-  const [view, setView] = useState<'grid' | 'list'>('grid')
+  const [sort, setSort] = useState<string>('')
 
   /*
    * §15.6 — the open creative lives in the ADDRESS, so the client's detail view survives a refresh.
@@ -251,9 +263,6 @@ export function SharedCreativeSection({
     else next.set('creative', id)
     setParams(next, { replace: false })
   }
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
-  const [selected, setSelected] = useState<string[]>([])
-  const [comparing, setComparing] = useState(false)
 
   const summary = useQuery({
     queryKey: ['shared-creative-summary', token, filters],
@@ -261,24 +270,40 @@ export function SharedCreativeSection({
     placeholderData: keepPreviousData,
   })
 
-  const library = useQuery({
-    queryKey: ['shared-creatives', token, filters],
-    queryFn: () => getSharedCreatives(token, { ...filters, per_page: 24 }, password),
+  /*
+   * AD-ANALYSIS-VISUAL-001 — «كل المحتوى», the live link's grid: the server's order (spend by default, or the reader's choice
+   * among the figures this link shows), 24 at a time with «عرض المزيد». A sort on a figure the link hides is ignored by the server.
+   */
+  const library = useInfiniteQuery({
+    queryKey: ['shared-creatives', token, filters, sort],
+    queryFn: ({ pageParam }) => getSharedCreatives(token, { ...filters, per_page: 24, page: pageParam, ...(sort ? { sort } : {}) }, password),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.page * last.per_page < last.total ? last.page + 1 : undefined),
     placeholderData: keepPreviousData,
     // The summary is the whole ceiling read as answers; the library is only asked for by the
     // detailed report, where the reader is actually going to page through cards.
     enabled: form === 'detailed',
   })
+  const firstPage = library.data?.pages[0]
 
-  const comparison = useQuery({
-    queryKey: ['shared-creative-comparison', token, selected, filters],
-    queryFn: () => compareSharedCreatives(token, selected, filters, password),
-    enabled: comparing && selected.length >= 2,
-  })
-
-  const permissions: CreativePermissions | undefined = summary.data?.permissions ?? library.data?.permissions
-  const rows = useMemo(() => library.data?.creatives ?? [], [library.data])
-  const available = summary.data?.available ?? library.data?.available
+  const permissions: CreativePermissions | undefined = summary.data?.permissions ?? firstPage?.permissions
+  const rows = useMemo(() => library.data?.pages.flatMap((p) => p.creatives) ?? [], [library.data])
+  const total = firstPage?.total ?? rows.length
+  /** Every card on the page by id, so the popup opens on the card the reader clicked without waiting for its detail. */
+  const knownCards = useMemo(() => {
+    const map = new Map<string, CreativeCard>()
+    const d = summary.data
+    const add = (c: CreativeCard | null | undefined) => { if (c && !map.has(c.id)) map.set(c.id, c) }
+    rows.forEach(add)
+    if (d) {
+      ;[...d.best_by_objective, ...d.best_image, ...d.best_video].forEach((w) => add(w.creative))
+      ;[...d.fastest_growing.items, ...d.declining.items].forEach((m) => add(m.creative))
+      ;[...d.fatigue.fatigued.items, ...d.fatigue.watch.items, ...d.fatigue.insufficient_data.items].forEach(add)
+      d.fatigue.alerts.items.forEach((a) => add(a.creative))
+    }
+    return map
+  }, [rows, summary.data])
+  const available = summary.data?.available ?? firstPage?.available
 
   if (summary.isLoading) return <Skeleton className="mt-6 h-64 w-full" />
   if (summary.isError) return <ErrorState title={t.error} error={summary.error} />
@@ -356,6 +381,7 @@ export function SharedCreativeSection({
           <WinnerCards
             t={t}
             currency={currency}
+            onOpen={openDetail}
             groups={[
               { key: 'objective', title: t.bestByObjective, entries: data.best_by_objective },
               { key: 'image', title: t.bestImage, entries: data.best_image, icon: <ImageIcon size={12} /> },
@@ -363,12 +389,12 @@ export function SharedCreativeSection({
             ]}
           />
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <MoveList title={t.growing} icon={<TrendingUp size={14} className="text-success" />} list={data.fastest_growing} t={t} tone="up" />
-            <MoveList title={t.declining} icon={<TrendingDown size={14} className="text-danger" />} list={data.declining} t={t} tone="down" />
+          <div className="grid gap-4">
+            <MoveList title={t.growing} icon={<TrendingUp size={14} className="text-success" />} list={data.fastest_growing} t={t} tone="up" currency={currency} onOpen={openDetail} />
+            <MoveList title={t.declining} icon={<TrendingDown size={14} className="text-danger" />} list={data.declining} t={t} tone="down" currency={currency} onOpen={openDetail} />
           </div>
 
-          <FatigueBlock data={data} t={t} currency={currency} permissions={permissions} />
+          <FatigueBlock data={data} t={t} currency={currency} permissions={permissions} onOpen={openDetail} />
 
           {permissions.insights && data.insights && data.insights.items.length > 0 && (
             <InsightList insights={data.insights} t={t} ar={ar} permissions={permissions} />
@@ -388,109 +414,69 @@ export function SharedCreativeSection({
 
       {form === 'detailed' && (
         <div className="grid gap-3" data-testid="shared-creative-library">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-bold">{t.library}</h3>
-            <div className="flex items-center gap-2">
-              {permissions.comparison && selected.length >= 2 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setComparing(true)}
-                    className="rounded-lg border border-brand-500 bg-[var(--brand-background)] px-2 py-1 text-xs font-semibold text-brand-700"
-                  >
-                    {t.compare} ({selected.length})
-                  </button>
-                  <button type="button" onClick={() => { setSelected([]); setComparing(false) }} className="text-xs text-text-secondary hover:underline">
-                    {t.clear}
-                  </button>
-                </>
-              )}
-              <div className="flex rounded-lg border border-border">
-                <button type="button" aria-label={t.grid} onClick={() => setView('grid')} className={`rounded-s-lg p-1.5 ${view === 'grid' ? 'bg-surface-hover' : ''}`}>
-                  <LayoutGrid size={14} />
-                </button>
-                <button type="button" aria-label={t.list} onClick={() => setView('list')} className={`rounded-e-lg p-1.5 ${view === 'list' ? 'bg-surface-hover' : ''}`}>
-                  <Rows3 size={14} />
-                </button>
-              </div>
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-bold">{t.allContent}</h3>
+              <p className="tnum text-xs text-text-muted"><Num>{`${total} ${t.inPeriod}`}</Num></p>
             </div>
+            <label className="flex items-center gap-1.5 text-xs">
+              <span className="text-text-muted">{t.sortBy}</span>
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+                aria-label={t.sortBy}
+                data-testid="shared-creative-sort"
+                className="rounded-lg border border-border bg-surface px-2 py-1 text-xs"
+              >
+                {(permissions.spend ? ['', 'conversions', 'clicks', 'impressions'] : ['conversions', 'clicks', 'impressions']).map((key) => (
+                  <option key={key} value={key}>{t.sorts[(key || 'spend') as keyof Copy['sorts']]}</option>
+                ))}
+              </select>
+            </label>
           </div>
 
-          {comparing && comparison.data && (
-            <div className="rounded-xl border border-border bg-surface p-3">
-              {!comparison.data.comparable && (
-                <p className="mb-2 text-xs font-semibold text-warning">
-                  {(ar ? comparison.data.reason_ar : comparison.data.reason) ?? t.notComparable}
-                </p>
-              )}
-              <div className="overflow-x-auto">
-                <CreativeComparisonTable creatives={comparison.data.creatives} currency={currency} locale={locale} />
-              </div>
-            </div>
-          )}
-
-          {openId !== null ? (
-            <SharedCreativeDetail
-              token={token}
-              password={password}
-              creativeId={openId}
-              filters={filters}
-              currency={currency}
-              permissions={permissions}
-              locale={locale}
-              t={t}
-              onBack={() => openDetail(null)}
-            />
-          ) : library.isLoading ? (
+          {library.isLoading ? (
             <Skeleton className="h-48 w-full" />
           ) : rows.length === 0 ? (
             <p className="rounded-xl border border-border bg-surface p-6 text-center text-sm text-text-secondary">{t.empty}</p>
-          ) : view === 'grid' ? (
-            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {rows.map((creative, index) => (
-                <li key={creative.id}>
-                  <CreativeTile
-                    creative={creative}
-                    currency={currency}
-                    locale={locale}
-                    t={t}
-                    selectable={permissions.comparison}
-                    selected={selected.includes(creative.id)}
-                    onSelect={() =>
-                      setSelected((s) => (s.includes(creative.id) ? s.filter((v) => v !== creative.id) : [...s, creative.id]))
-                    }
-                    onOpen={() => setViewerIndex(index)}
-                    onDetails={() => openDetail(creative.id)}
-                  />
-                </li>
-              ))}
-            </ul>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <CreativeComparisonTable creatives={rows} currency={currency} locale={locale} onOpen={(i) => setViewerIndex(i)} />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+              {rows.map((creative) => (
+                <Tile key={creative.id} creative={creative} currency={currency} onOpen={openDetail} />
+              ))}
             </div>
           )}
 
-          {openId === null && (
-            <p className="tnum text-xs text-text-muted">
-              <Num>{t.showing} {rows.length} {t.of} {library.data?.total ?? rows.length}</Num>
-            </p>
+          {library.hasNextPage && (
+            <button
+              type="button"
+              onClick={() => library.fetchNextPage()}
+              disabled={library.isFetchingNextPage}
+              data-testid="shared-creative-more"
+              className="tnum justify-self-start rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-surface-hover disabled:opacity-50"
+            >
+              <Num>{`${t.more} — ${t.remaining} ${Math.max(total - rows.length, 0)}`}</Num>
+            </button>
           )}
         </div>
       )}
 
       {/*
-        AD-PREVIEW-DEFAULT-001 — one popup, on the client's link too.
-
-        No `detailsTo`: a client holding a share link has no Content page to reach and no account to
-        reach it with, so the control the operator gets is simply absent here rather than present and
-        refusing. The media itself is the whole of what this surface owes them.
+        AD-ANALYSIS-VISUAL-001 — one popup for every card in this section, as on the live link: the ad itself, its figures, its copy,
+        its funnel and its platforms. Still addressed by `?creative=`, so a refresh or a forwarded link reopens it.
       */}
-      {viewerIndex !== null && rows[viewerIndex] && (
-        <AdPreviewDialog
-          creative={rows[viewerIndex]}
-          locale={ar ? 'ar' : 'en'}
-          onClose={() => setViewerIndex(null)}
+      {openId !== null && (
+        <SharedCreativeDetail
+          token={token}
+          password={password}
+          creativeId={openId}
+          filters={filters}
+          currency={currency}
+          permissions={permissions}
+          locale={locale}
+          t={t}
+          known={knownCards.get(openId) ?? null}
+          onBack={() => openDetail(null)}
         />
       )}
 
@@ -539,84 +525,119 @@ type Copy = (typeof COPY)['en']
 /** A ranking figure: the change of a mover, signed, as a whole percent. */
 const signedPct = (value: number) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.round(Math.abs(value) * 100)}%`
 
-function Poster({ creative, className, testid }: { creative: CreativeCard | null | undefined; className: string; testid?: string }) {
+/** The marketing path, in the card family the live link's tiles choose their figures by. */
+const FAMILY_OF_PATH: Record<string, string> = { conversion: 'sales', sales: 'sales', traffic: 'traffic', leads: 'leads', awareness: 'awareness', engagement: 'engagement', app: 'app', video: 'video' }
+
+/**
+ * AD-ANALYSIS-VISUAL-001 — a client creative, read as the live link's content row.
+ *
+ * The figures are the server's (already redacted for this link): a hidden metric is absent from `metrics`, so the tile simply
+ * does not build it. `content_key` is the creative's id, which is what makes the tile open this section's popup.
+ */
+function toReportAd(c: CreativeCard): ReportAd {
+  const m = (c.metrics ?? {}) as unknown as Record<string, unknown>
+
+  return {
+    ...m,
+    id: c.id,
+    content_key: c.id,
+    name: c.name,
+    provider: c.provider,
+    objective: c.objective,
+    preview: c.preview,
+    status: c.status,
+    card_family: FAMILY_OF_PATH[c.path] ?? null,
+    metrics: c.metrics,
+  } as ReportAd
+}
+
+/** The live link's content card, with what this list says about it laid over the cover. */
+function Tile({
+  creative,
+  currency,
+  onOpen,
+  rank,
+  chips = [],
+  note,
+}: {
+  creative: CreativeCard | null | undefined
+  currency: string
+  onOpen: (id: string) => void
+  rank?: number
+  chips?: Array<{ text: React.ReactNode; tone: 'success' | 'danger' | 'brand'; icon?: React.ReactNode }>
+  note?: string | null
+}) {
+  const { locale } = useUi()
+  const content = useMemo(() => (creative ? toReportAd(creative) : null), [creative])
+  if (!creative || !content) return null
+  const tone = { success: 'bg-success', danger: 'bg-danger', brand: 'bg-brand-600' }
+
   return (
-    <AdPoster
-      preview={creative?.preview}
-      name={creative?.name ?? '—'}
-      className={className}
-      fit="cover"
-      testid={testid}
-      forClient
-      provider={creative?.provider ?? null}
-    />
+    <div className="relative grid min-w-0 content-start gap-1" data-testid={`shared-tile-${creative.id}`}>
+      <ContentTile content={content} locale={locale} currency={currency || null} onOpen={() => onOpen(creative.id)} rank={rank} />
+      {chips.length > 0 && (
+        <div className="pointer-events-none absolute end-5 top-5 flex max-w-[70%] flex-col items-end gap-1">
+          {chips.map((chip, i) => (
+            <span key={i} className={`tnum inline-flex max-w-full items-center gap-1 truncate rounded-full ${tone[chip.tone]} px-2 py-0.5 text-[10px] font-bold text-white shadow`}>
+              {chip.icon}{chip.text}
+            </span>
+          ))}
+        </div>
+      )}
+      {note && <p className="rounded-md bg-warning/10 px-2 py-1 text-[11px] font-semibold text-warning">{note}</p>}
+    </div>
   )
 }
 
 /**
- * The winners as the ads themselves — one card per answer, the poster on top with what it won, then the
- * figure it was decided on and the marketing path it was decided inside. A figure the link withholds is
- * a quiet chip saying so, never a blank naming what was kept back.
+ * «الأفضل أداءً» — each winner once, as its live-link card, with every answer it won laid on its cover (an ad that is the best
+ * image AND the best for sales is one card with two badges, not two cards). Opens the popup like every card here.
  */
 function WinnerCards({
   groups,
   t,
   currency,
+  onOpen,
 }: {
   groups: Array<{ key: string; title: string; entries: SharedWinner[]; icon?: React.ReactNode }>
   t: Copy
   currency: string
+  onOpen: (id: string) => void
 }) {
   const { locale } = useUi()
-  const cards = groups.flatMap((g) => g.entries.map((entry, i) => ({ group: g, entry, i })))
-  if (cards.length === 0) return null
+  const merged = new Map<string, { creative: CreativeCard; badges: Array<{ text: string; icon?: React.ReactNode }>; thin: boolean; hidden: boolean }>()
+  for (const group of groups) {
+    for (const entry of group.entries) {
+      const creative = entry.creative
+      if (!creative) continue
+      const text = 'objective' in entry && entry.objective ? `${t.bestFor} · ${objectiveLabel(entry.objective, locale)}` : group.title
+      const row = merged.get(creative.id) ?? { creative, badges: [], thin: false, hidden: false }
+      row.badges.push({ text, icon: group.icon })
+      row.thin = row.thin || entry.low_evidence === true
+      row.hidden = row.hidden || entry.value_hidden === true
+      merged.set(creative.id, row)
+    }
+  }
+  if (merged.size === 0) return null
 
   return (
     <div className="grid gap-2" data-testid="shared-winners">
       <h3 className="flex items-center gap-1.5 text-sm font-bold">{t.winners}</h3>
-      <ul className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-        {cards.map(({ group, entry, i }) => {
-          const creative = entry.creative
-          const hidden = entry.value_hidden === true
-          const tag = 'objective' in entry && entry.objective
-            ? `${t.bestFor} · ${objectiveLabel(entry.objective, locale)}`
-            : group.title
-
-          return (
-            <li key={`${group.key}-${i}`} data-testid={`winner-card-${group.key}`} className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface">
-              <div className="relative">
-                <Poster creative={creative} className="aspect-[4/3] w-full" />
-                <span className="absolute start-2 top-2 inline-flex max-w-[90%] items-center gap-1 truncate rounded-full bg-success px-2 py-0.5 text-[11px] font-bold text-white shadow">
-                  {group.icon}{tag}
-                </span>
-              </div>
-              <div className="grid min-w-0 gap-2 p-3">
-                <div className="min-w-0">
-                  <p dir="auto" className="truncate text-sm font-bold text-text-primary">{creative?.name ?? '—'}</p>
-                  {creative?.provider && <p className="truncate text-[11px] text-text-muted">{providerLabel(creative.provider, locale)}</p>}
-                </div>
-                <dl className="grid grid-cols-2 gap-1.5 text-center">
-                  <div className="min-w-0 rounded-lg bg-surface-secondary px-2 py-1.5">
-                    <dt className="truncate text-[10px] text-text-muted">{metricLabel(entry.metric, locale)}</dt>
-                    <dd className="tnum truncate text-sm font-extrabold text-text-primary">
-                      {hidden
-                        ? <span className="text-[11px] font-semibold text-text-secondary">{t.hidden}</span>
-                        : <Num>{figureText(creative?.metrics ?? null, entry.metric, locale, currency)}</Num>}
-                    </dd>
-                  </div>
-                  <div className="min-w-0 rounded-lg bg-surface-secondary px-2 py-1.5">
-                    <dt className="truncate text-[10px] text-text-muted">{t.path}</dt>
-                    <dd className="truncate text-sm font-bold text-text-primary">{entry.path ? marketingPathLabel(entry.path, locale) : '—'}</dd>
-                  </div>
-                </dl>
-                {entry.low_evidence === true && (
-                  <p className="rounded-md bg-warning/10 px-2 py-1 text-[11px] font-semibold text-warning">{t.thin}</p>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+        {[...merged.values()].map((row, i) => (
+          <div key={row.creative.id} data-testid="winner-card" className="min-w-0">
+            <Tile
+              creative={row.creative}
+              currency={currency}
+              onOpen={onOpen}
+              rank={i + 1}
+              chips={row.badges.map((b) => ({ text: b.text, icon: b.icon, tone: 'success' as const }))}
+              note={row.thin ? t.thin : null}
+            />
+            {row.hidden && <p className="mt-1 text-[11px] text-text-muted">{t.hidden}</p>}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -638,51 +659,54 @@ function Pair({ k, v }: { k: string; v: string }) {
   )
 }
 
-/** Movers as posters with their change on them — the arrow always, the number only where the link shows it. */
+/** Movers as their live-link cards, the change on the cover — the arrow always, the number only where the link shows it. */
 function MoveList({
   title,
   icon,
   list,
   t,
   tone,
+  currency,
+  onOpen,
 }: {
   title: string
   icon: React.ReactNode
   list: PulseList<SharedCreativeMove>
   t: Copy
   tone: 'up' | 'down'
+  currency: string
+  onOpen: (id: string) => void
 }) {
   const { locale } = useUi()
   if (list.items.length === 0) return null
-  const chip = tone === 'up' ? 'bg-success' : 'bg-danger'
   const Arrow = tone === 'up' ? TrendingUp : TrendingDown
 
   return (
-    <div className="rounded-2xl border border-border bg-surface p-3" data-testid={`shared-moves-${tone}`}>
-      <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold">
+    <div className="grid gap-2" data-testid={`shared-moves-${tone}`}>
+      <h3 className="flex items-center gap-1.5 text-sm font-bold">
         {icon}{title}
         {list.total > list.shown && <span className="tnum ms-auto text-[11px] font-normal text-text-muted"><Num>{`${list.shown} ${t.of} ${list.total}`}</Num></span>}
       </h3>
-      <ul className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
         {list.items.map((move, i) => {
-          const creative = move.creative
           const hidden = move.value_hidden === true || move.change === null || move.change === undefined
+          const label = metricLabel(move.metric, locale)
 
           return (
-            <li key={i} className="min-w-0" title={hidden ? `${metricLabel(move.metric, locale)} — ${t.hidden}` : undefined}>
-              <div className="relative overflow-hidden rounded-lg">
-                <Poster creative={creative} className="aspect-square w-full" />
-                <span className={`tnum absolute bottom-1 start-1 inline-flex items-center gap-0.5 rounded-full ${chip} px-1.5 py-0.5 text-[10px] font-bold text-white shadow`} dir="ltr">
-                  <Arrow size={10} aria-hidden />
-                  {!hidden && <Num>{signedPct(move.change as number)}</Num>}
-                </span>
-              </div>
-              <p dir="auto" className="mt-1 truncate text-[11px] font-semibold text-text-primary">{creative?.name ?? '—'}</p>
-              <p className="truncate text-[10px] text-text-muted">{metricLabel(move.metric, locale)}</p>
-            </li>
+            <Tile
+              key={`${move.creative?.id ?? i}`}
+              creative={move.creative}
+              currency={currency}
+              onOpen={onOpen}
+              chips={[{
+                tone: tone === 'up' ? 'success' : 'danger',
+                icon: <Arrow size={10} aria-hidden />,
+                text: hidden ? label : <><span>{label}</span> <span dir="ltr"><Num>{signedPct(move.change as number)}</Num></span></>,
+              }]}
+            />
           )
         })}
-      </ul>
+      </div>
     </div>
   )
 }
@@ -702,11 +726,13 @@ function FatigueBlock({
   t,
   currency,
   permissions,
+  onOpen,
 }: {
   data: { fatigue: CreativePulse['fatigue'] }
   t: Copy
   currency: string
   permissions: CreativePermissions
+  onOpen: (id: string) => void
 }) {
   const { locale } = useUi()
   const fatigue = data.fatigue
@@ -741,9 +767,11 @@ function FatigueBlock({
                 {b.list.items.length > 0 && (
                   <ul className="grid grid-cols-4 gap-1.5">
                     {b.list.items.slice(0, 4).map((c) => (
-                      <li key={c.id} className="min-w-0" title={c.name}>
-                        <Poster creative={c} className="aspect-square w-full rounded-md" />
-                        <p dir="auto" className="mt-0.5 truncate text-[10px] text-text-secondary">{c.name}</p>
+                      <li key={c.id} className="min-w-0">
+                        <button type="button" onClick={() => onOpen(c.id)} title={c.name} className="block w-full min-w-0 text-start" data-testid={`fatigue-thumb-${c.id}`}>
+                          <AdPoster preview={c.preview} name={c.name} className="aspect-square w-full rounded-md" fit="cover" forClient provider={c.provider} />
+                          <p dir="auto" className="mt-0.5 truncate text-[10px] text-text-secondary">{c.name}</p>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -776,24 +804,30 @@ function FatigueBlock({
               const note = ar ? alert.note_ar : alert.note_en
 
               return (
-                <li key={i} className="flex min-w-0 items-start gap-2.5 rounded-xl border border-danger/20 bg-surface p-2">
-                  <Poster creative={alert.creative} className="h-14 w-14 shrink-0 rounded-lg" />
-                  <div className="grid min-w-0 flex-1 gap-1.5">
-                    <b dir="auto" className="truncate text-xs font-semibold">{alert.creative?.name ?? '—'}</b>
-                    {/* The EVIDENCE, beside the verdict — «fatigued» with nothing behind it is a label. */}
-                    {signals.length > 0 ? (
-                      <div className="flex flex-wrap gap-1" data-testid="fatigue-signals">
-                        {signals.map((s) => (
-                          <span key={s.key} className={`tnum inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${s.direction === 'worse' ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>
-                            {signalLabel(s.key, t, locale)}
-                            <span dir="ltr"><Num>{signedPct(s.change)}</Num></span>
-                          </span>
-                        ))}
-                      </div>
-                    ) : note ? (
-                      <p className="text-[11px] text-text-secondary">{note}</p>
-                    ) : null}
-                  </div>
+                <li key={i}>
+                  <button
+                    type="button"
+                    onClick={() => alert.creative && onOpen(alert.creative.id)}
+                    className="flex w-full min-w-0 items-start gap-2.5 rounded-xl border border-danger/20 bg-surface p-2 text-start transition-colors hover:border-danger/50"
+                  >
+                    <AdPoster preview={alert.creative?.preview} name={alert.creative?.name ?? '—'} className="h-16 w-16 shrink-0 rounded-lg" fit="cover" forClient provider={alert.creative?.provider ?? null} />
+                    <span className="grid min-w-0 flex-1 gap-1.5">
+                      <b dir="auto" className="truncate text-xs font-semibold">{alert.creative?.name ?? '—'}</b>
+                      {/* The EVIDENCE, beside the verdict — «fatigued» with nothing behind it is a label. */}
+                      {signals.length > 0 ? (
+                        <span className="flex flex-wrap gap-1" data-testid="fatigue-signals">
+                          {signals.map((sg) => (
+                            <span key={sg.key} className={`tnum inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${sg.direction === 'worse' ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}>
+                              {signalLabel(sg.key, t, locale)}
+                              <span dir="ltr"><Num>{signedPct(sg.change)}</Num></span>
+                            </span>
+                          ))}
+                        </span>
+                      ) : note ? (
+                        <span className="text-[11px] text-text-secondary">{note}</span>
+                      ) : null}
+                    </span>
+                  </button>
                 </li>
               )
             })}
@@ -872,6 +906,7 @@ function SharedCreativeDetail({
   permissions,
   locale,
   t,
+  known,
   onBack,
 }: {
   token: string
@@ -882,246 +917,158 @@ function SharedCreativeDetail({
   permissions: CreativePermissions
   locale: 'ar' | 'en'
   t: Copy
+  /** The card the reader clicked, so the popup opens on it at once; absent when the address alone named the ad. */
+  known?: CreativeCard | null
   onBack: () => void
 }) {
   const ar = locale === 'ar'
-  const [zoom, setZoom] = useState(1)
+  void permissions
 
   const detail = useQuery({
     queryKey: ['shared-creative-detail', token, creativeId, filters],
     queryFn: () => getSharedCreative(token, creativeId, filters, password),
   })
 
-  const back = (
-    <button type="button" onClick={onBack} className="text-xs font-semibold text-brand-700 underline-offset-2 hover:underline">
-      ← {t.backToLibrary}
-    </button>
-  )
+  const card: CreativeCard | null = (detail.data?.creative as unknown as CreativeCard | undefined) ?? known ?? null
+  const ad = useMemo(() => (card ? toReportAd(card) : null), [card])
 
-  if (detail.isLoading) {
+  /*
+   * AD-ANALYSIS-VISUAL-001 — the live link's popup, `ReportAdDetail`: the ad on its own stage (film, carousel, zoom and download
+   * as the link allows), its figures, then this link's analysis below — copy, figures, funnel and platforms. Before a card is
+   * known (an address opened cold) a small sheet says the ad is loading or is not on this link.
+   */
+  if (ad === null) {
     return (
-      <div className="grid gap-3">
-        {back}
-        <Skeleton className="h-64 w-full" />
-      </div>
-    )
-  }
-
-  if (detail.isError || !detail.data) {
-    return (
-      <div className="grid gap-3">
-        {back}
-        <ErrorState title={t.detailError} error={detail.error} />
-      </div>
+      <Modal open onClose={onBack} size="md" title={t.details}>
+        <div data-testid="shared-creative-detail">
+          {detail.isError ? <ErrorState title={t.detailError} error={detail.error} /> : <Skeleton className="h-64 w-full" />}
+        </div>
+      </Modal>
     )
   }
 
   const data = detail.data
-  const creative = data.creative
-  const preview = creative.preview
-  /*
-    CREATIVE-VIEWER-FORMATS-001 — the viewer reads the ad through the canonical reader too.
-
-    It chose from the raw columns: a film when `video_url` was set (with `thumbnail_url` as its
-    poster, unfiltered), a picture only when `image_url` survived `localStill`. So an ad whose only
-    still was OUR copy in `thumbnail_url` — a TikTok image whose platform link is a short-lived
-    grant, a collection hero we cached — opened to a sentence while its tile showed the picture, and
-    a chat card opened to «no file» instead of its own words.
-  */
-  const reading = readPreview(preview, ar)
-  const still = posterSource(reading)
-  const showing: 'video' | 'image' | 'none' = reading.kind === 'video' ? 'video' : still !== null ? 'image' : 'none'
-  const funnel = data.funnel
+  const creative = data?.creative
+  const funnel = data?.funnel
 
   return (
-    <div className="grid gap-4" data-testid="shared-creative-detail">
-      {back}
-
-      <div className="grid gap-3 rounded-xl border border-border bg-surface p-3">
-        <div className="flex min-h-48 items-center justify-center overflow-auto rounded-lg bg-surface-secondary p-2">
-          {reading.kind === 'video' ? (
-            <CreativeVideoPlayer
-              // Keyed by the creative, so opening another one builds a new player rather than
-              // inheriting the last one's armed state and playback position.
-              key={creative.id}
-              src={reading.src}
-              poster={reading.poster}
-              durationHint={creative.duration_seconds}
-              // The platform's own shape: without it every film got a 16:9 box and a reel was a thin strip in it.
-              aspect={preview.aspect ?? null}
-              className="w-full max-w-2xl"
-            />
-          ) : still !== null ? (
-            <img
-              src={still}
-              alt={creative.name}
-              loading={imageLoading(still)}
-              style={{ transform: `scale(${zoom})`, transformOrigin: 'center' }}
-              /*
-                CONTENT-VIEWER-PORTRAIT-001 §14 — the same room the library's viewer gives it.
-                A story held to 55vh is readable on a desktop and under a third of a phone's screen,
-                and a client opening a creative in their own report is judging the same ad as the
-                operator who opened it in the library.
-              */
-              className={`max-w-full object-contain transition-transform ${
-                (preview.aspect ?? null) === 'vertical' ? 'max-h-[78vh]' : 'max-h-[55vh]'
-              }`}
-            />
-          ) : (
-            // The chat card's own words, or a typed cover naming the platform — the same answer the tile gave.
-            <AdPoster
-              preview={preview}
-              name={creative.name}
-              className="h-64 w-full max-w-md"
-              fit="contain"
-              testid="shared-creative-detail-poster"
-              textScale="stage"
-              forClient
-              provider={creative.provider}
-            />
-          )}
-        </div>
-
-        {/* Zoom is drawn only when the link allows it — a hidden control whose shortcut still works
-            is a control that is merely invisible. */}
-        {showing === 'image' && permissions.image_zoom && (
-          <div className="flex items-center gap-1 text-xs">
-            <button type="button" onClick={() => setZoom((z) => Math.max(z - 0.25, 0.5))} className="rounded border border-border px-2 py-1">−</button>
-            <span className="tnum w-12 text-center" dir="ltr">{Math.round(zoom * 100)}%</span>
-            <button type="button" onClick={() => setZoom((z) => Math.min(z + 0.25, 4))} className="rounded border border-border px-2 py-1">+</button>
-            <button type="button" onClick={() => setZoom(1)} className="rounded border border-border px-2 py-1">100%</button>
-          </div>
-        )}
-
-        {/*
-          REPORT-OPENABLE-OPTIONS-001 (master task 10) — «تحميل الأصل» shown is a working control: the server set `can_download` from the
-          link's switch, and nothing drew it, so the option did nothing either way. Off, there is no control.
-        */}
-        {permissions.download && preview.can_download !== false && (reading.kind === 'video' ? reading.src : still) && (
-          <a
-            href={(reading.kind === 'video' ? reading.src : still) ?? undefined}
-            download
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="shared-creative-download"
-            className="justify-self-start rounded-lg border border-border px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-surface-hover"
-          >
-            {ar ? 'تحميل الإعلان' : 'Download the ad'}
-          </a>
-        )}
-
-        <h3 className="font-heading text-base font-extrabold">{creative.name}</h3>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
-          <Pair k={t.platform} v={providerLabel(creative.provider, locale)} />
-          <Pair k={t.campaign} v={creative.campaign_name ?? t.notProvided} />
-          <Pair k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} />
-          <Pair k={t.path} v={marketingPathLabel(creative.path, locale)} />
-          <Pair k={t.period} v={formatPeriodRange(data.period.from, data.period.to, ar ? 'ar' : 'en')} />
-          <Pair k={t.previousPeriod} v={formatPeriodRange(data.previous_period.from, data.previous_period.to, ar ? 'ar' : 'en')} />
-          {/*
-            Our clock was here too, twice, among the facts of one ad — «آخر مزامنة» and «آخر تحديث
-            من المصدر». Removed for the same reason, and because sitting in a list of campaign facts
-            implied they were campaign facts.
-          */}
-        </dl>
-      </div>
-
-      {/*
-        A carousel's cards, on the client's link too.
-        The server has already removed whatever this link withholds from each card — the copy is gone
-        from the payload, not merely undrawn, which is what §15.12 asks for.
-      */}
-      <CreativeCarousel preview={creative.preview} locale={locale} />
-
-      {/* The words on the creative — each field already removed by the server when withheld. */}
-      {(creative.copy?.headline || creative.copy?.body || creative.copy?.cta || creative.destination_url) && (
-        <div className="grid gap-1.5 rounded-xl border border-border bg-surface p-3 text-xs">
-          <h4 className="text-sm font-bold">{t.copy}</h4>
-          {creative.copy?.headline && <Pair k={t.headlineText} v={creative.copy.headline} />}
-          {creative.copy?.body && <Pair k={t.body} v={creative.copy.body} />}
-          {creative.copy?.cta && <Pair k={t.cta} v={creative.copy.cta} />}
-          {/* Text, never a link: it is an address chosen by whoever wrote the ad, and a report that
-              made it clickable would be offering to follow it on the reader's behalf. */}
-          {creative.destination_url && <Pair k={t.destination} v={creative.destination_url} />}
-        </div>
-      )}
-
-      <div className="overflow-x-auto rounded-xl border border-border">
-        <CreativeComparisonTable creatives={[creative as unknown as CreativeCard]} currency={currency} locale={locale} />
-      </div>
-
-      <div className="grid gap-2 rounded-xl border border-border bg-surface p-3">
-        <h4 className="text-sm font-bold">{t.funnel}</h4>
-        {/*
-          Through the primitive — TABLE-NUMERIC-ALIGNMENT-001.
-
-          Every column was `text-start`, so under RTL the figures hugged the right edge while the
-          report deck's platform table pushed its figures to the left. One client, two documents,
-          two answers to where a number belongs.
-
-          The cost column stays a NODE rather than a money kind, because it has three readings and
-          only one of them is a number: withheld by this link, never reported, or a real figure.
-          Collapsing the first two into the primitive's dash would tell the wrong story — «your
-          agency hid this» and «the platform never sent it» are not the same sentence.
-        */}
-        {!funnel || funnel.stages.length === 0 ? (
-          <p className="text-xs text-text-secondary">{t.funnelNone}</p>
+    <ReportAdDetail ad={ad} currency={currency || null} locale={locale} onClose={onBack}>
+      <div className="grid gap-3" data-testid="shared-creative-detail">
+        {detail.isLoading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : detail.isError || !data || !creative ? (
+          <ErrorState title={t.detailError} error={detail.error} />
         ) : (
-          <DataMetricTable
-            columns={[
-              { key: 'stage', label: t.stage, kind: 'text' },
-              { key: 'count', label: t.count, kind: 'number' },
-              { key: 'rate', label: t.rate, kind: 'text' },
-              { key: 'cost', label: t.costPer, kind: 'text' },
-            ]}
-            rows={funnel.stages.map((stage) => ({
-              stage: ar ? stage.label_ar : stage.label_en,
-              count: stage.count,
-              rate: <span dir="ltr">{pct(stage.rate_from_previous)}</span>,
-              cost: (
-                <span dir="ltr">
-                  {stage.cost_hidden
-                    ? t.notShown
-                    : stage.cost_per === null
-                      ? t.notProvided
-                      : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
-                </span>
-              ),
-            }))}
-          />
-        )}
-        {funnel && funnel.missing.length > 0 && (
-          <p className="text-[11px] text-text-muted">
-            {t.funnelMissing}: {funnel.missing.map((m) => (ar ? m.label_ar : m.label_en)).join('، ')}
-          </p>
+          <>
+            <div className="rounded-xl border border-border bg-surface p-3">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
+                <Pair k={t.platform} v={providerLabel(creative.provider, locale)} />
+                <Pair k={t.campaign} v={creative.campaign_name ?? t.notProvided} />
+                <Pair k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} />
+                <Pair k={t.path} v={marketingPathLabel(creative.path, locale)} />
+                <Pair k={t.period} v={formatPeriodRange(data.period.from, data.period.to, ar ? 'ar' : 'en')} />
+                <Pair k={t.previousPeriod} v={formatPeriodRange(data.previous_period.from, data.previous_period.to, ar ? 'ar' : 'en')} />
+                {/*
+                  Our clock was here too, twice, among the facts of one ad — «آخر مزامنة» and «آخر تحديث
+                  من المصدر». Removed for the same reason, and because sitting in a list of campaign facts
+                  implied they were campaign facts.
+                */}
+              </dl>
+            </div>
+
+            {/* The words on the creative — each field already removed by the server when withheld. */}
+            {(creative.copy?.headline || creative.copy?.body || creative.copy?.cta || creative.destination_url) && (
+              <div className="grid gap-1.5 rounded-xl border border-border bg-surface p-3 text-xs">
+                <h4 className="text-sm font-bold">{t.copy}</h4>
+                {creative.copy?.headline && <Pair k={t.headlineText} v={creative.copy.headline} />}
+                {creative.copy?.body && <Pair k={t.body} v={creative.copy.body} />}
+                {creative.copy?.cta && <Pair k={t.cta} v={creative.copy.cta} />}
+                {/* Text, never a link: it is an address chosen by whoever wrote the ad, and a report that
+                    made it clickable would be offering to follow it on the reader's behalf. */}
+                {creative.destination_url && <Pair k={t.destination} v={creative.destination_url} />}
+              </div>
+            )}
+
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <CreativeComparisonTable creatives={[creative as unknown as CreativeCard]} currency={currency} locale={locale} />
+            </div>
+
+            <div className="grid gap-2 rounded-xl border border-border bg-surface p-3">
+              <h4 className="text-sm font-bold">{t.funnel}</h4>
+              {/*
+                Through the primitive — TABLE-NUMERIC-ALIGNMENT-001.
+
+                Every column was `text-start`, so under RTL the figures hugged the right edge while the
+                report deck's platform table pushed its figures to the left. One client, two documents,
+                two answers to where a number belongs.
+
+                The cost column stays a NODE rather than a money kind, because it has three readings and
+                only one of them is a number: withheld by this link, never reported, or a real figure.
+                Collapsing the first two into the primitive's dash would tell the wrong story — «your
+                agency hid this» and «the platform never sent it» are not the same sentence.
+              */}
+              {!funnel || funnel.stages.length === 0 ? (
+                <p className="text-xs text-text-secondary">{t.funnelNone}</p>
+              ) : (
+                <DataMetricTable
+                  columns={[
+                    { key: 'stage', label: t.stage, kind: 'text' },
+                    { key: 'count', label: t.count, kind: 'number' },
+                    { key: 'rate', label: t.rate, kind: 'text' },
+                    { key: 'cost', label: t.costPer, kind: 'text' },
+                  ]}
+                  rows={funnel.stages.map((stage) => ({
+                    stage: ar ? stage.label_ar : stage.label_en,
+                    count: stage.count,
+                    rate: <span dir="ltr">{pct(stage.rate_from_previous)}</span>,
+                    cost: (
+                      <span dir="ltr">
+                        {stage.cost_hidden
+                          ? t.notShown
+                          : stage.cost_per === null
+                            ? t.notProvided
+                            : formatMetric({ kind: 'value', value: stage.cost_per }, 'cpa', locale, currency)}
+                      </span>
+                    ),
+                  }))}
+                />
+              )}
+              {funnel && funnel.missing.length > 0 && (
+                <p className="text-[11px] text-text-muted">
+                  {t.funnelMissing}: {funnel.missing.map((m) => (ar ? m.label_ar : m.label_en)).join('، ')}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-2 rounded-xl border border-border bg-surface p-3">
+              <h4 className="text-sm font-bold">{t.byPlatform}</h4>
+              {data.by_platform.length <= 1 ? (
+                <p className="text-xs text-text-secondary">{t.onePlatform}</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <CreativeComparisonTable
+                    creatives={data.by_platform.map((row, i) => ({
+                      ...(creative as unknown as CreativeCard),
+                      id: `${row.creative_id}-${i}`,
+                      name: providerLabel(row.provider, locale),
+                      provider: row.provider,
+                      metrics: row.metrics,
+                    }))}
+                    currency={currency}
+                    locale={locale}
+                  />
+                </div>
+              )}
+            </div>
+
+
+            <p className="text-xs text-text-muted">
+              {ar ? data.attribution.note_ar : data.attribution.note_en}
+            </p>
+          </>
         )}
       </div>
-
-      <div className="grid gap-2 rounded-xl border border-border bg-surface p-3">
-        <h4 className="text-sm font-bold">{t.byPlatform}</h4>
-        {data.by_platform.length <= 1 ? (
-          <p className="text-xs text-text-secondary">{t.onePlatform}</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <CreativeComparisonTable
-              creatives={data.by_platform.map((row, i) => ({
-                ...(creative as unknown as CreativeCard),
-                id: `${row.creative_id}-${i}`,
-                name: providerLabel(row.provider, locale),
-                provider: row.provider,
-                metrics: row.metrics,
-              }))}
-              currency={currency}
-              locale={locale}
-            />
-          </div>
-        )}
-      </div>
-
-      <p className="text-xs text-text-muted">
-        {ar ? data.attribution.note_ar : data.attribution.note_en}
-      </p>
-    </div>
+    </ReportAdDetail>
   )
 }
 
@@ -1159,97 +1106,6 @@ const figureText = (
     ? creativeMoney(metrics, key, currency, locale).text
     : formatMetric(metricState(metrics, key), key, locale, currency)
 
-/**
- * The figures a creative is entitled to, with spend FIXED ahead of the objective's own.
- *
- * `headline_metrics` answers «what is this creative JUDGED on», which is an objective question — an
- * awareness cut is headlined on impressions, reach and CPM. Spend is an operational fact and does
- * not depend on what the creative was bought for, so it leads, and the objective's metrics follow
- * it. Where the link hides spend the key is absent from both the payload and this list, so nothing
- * is printed and no labelled blank names what was withheld.
- */
-const figureKeys = (creative: CreativeCard, take: number): string[] => {
-  const chosen = creative.headline_metrics.filter((key) => key !== 'spend')
-
-  return moneyPermitted(creative.metrics, 'spend') ? ['spend', ...chosen.slice(0, take - 1)] : chosen.slice(0, take)
-}
-
-function CreativeTile({
-  creative,
-  currency,
-  locale,
-  t,
-  selectable,
-  selected,
-  onSelect,
-  onOpen,
-  onDetails,
-}: {
-  creative: CreativeCard
-  currency: string
-  locale: 'ar' | 'en'
-  t: Copy
-  selectable: boolean
-  selected: boolean
-  onSelect: () => void
-  onOpen: () => void
-  onDetails: () => void
-}) {
-  const preview = creative.preview
-
-  return (
-    <div className={`grid gap-1.5 rounded-xl border p-2 ${selected ? 'border-brand-500' : 'border-border'} bg-surface`}>
-      <button type="button" onClick={onOpen} data-testid="shared-creative-tile-open" className="block overflow-hidden rounded-lg bg-surface-secondary">
-        {/*
-          CREATIVE-VIEWER-FORMATS-001 — the client's library draws a cover through the SAME component
-          as the live link, not a second chain of `<img>`-or-a-sentence.
-
-          This tile asked `posterSource`, which is null for a film without a still — every Snapchat
-          video and every collection whose top snap is a film — so the client's saved report printed
-          «Video» in a grey square where the live link, for the same ad, drew its first frame. And a
-          ChatGPT chat card, whose words are the creative, printed «no file». `AdPoster` holds the one
-          cover rule: the still, else the film's own first frame, else the chat card's own text, else
-          a typed cover naming the platform — never an empty box. The crop is the cover the library
-          accepts; the viewer one press away contains.
-        */}
-        <AdPoster
-          preview={preview}
-          name={creative.name}
-          className="aspect-square w-full"
-          fit="cover"
-          testid={`shared-creative-poster-${creative.id}`}
-          forClient
-          provider={creative.provider}
-        />
-      </button>
-      <p className="truncate text-xs font-semibold">{creative.name}</p>
-      <p className="truncate text-[11px] text-text-secondary">
-        {providerLabel(creative.provider, locale)}
-        {creative.campaign_name ? ` · ${creative.campaign_name}` : ''}
-      </p>
-      <dl className="grid gap-0.5 text-[11px]">
-        {figureKeys(creative, 3).map((key) => (
-          <div key={key} className="flex justify-between gap-1">
-            <dt className="truncate text-text-muted">{metricLabel(key, locale)}</dt>
-            <dd className="tnum shrink-0 font-semibold">
-              <Num>{figureText(creative.metrics, key, locale, currency)}</Num>
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {/* The picture opens the viewer; this opens the analysis. Two questions, two affordances. */}
-      <button type="button" onClick={onDetails} className="text-start text-[11px] font-semibold text-brand-700 underline-offset-2 hover:underline">
-        {t.details}
-      </button>
-      {selectable && (
-        <label className="flex items-center gap-1.5 text-[11px] text-text-secondary">
-          <input type="checkbox" checked={selected} onChange={onSelect} className="h-3.5 w-3.5 accent-brand-600" />
-          {t.selected}
-        </label>
-      )}
-    </div>
-  )
-}
 
 /**
  * The list view, and the comparison, are the same table.

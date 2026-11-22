@@ -406,7 +406,8 @@ describe.each(LOCALES)('a client report states spend truthfully ($locale)', ({ l
    * their agency withheld, which is what `redactRow` removes the key to avoid.
    */
   it('prints no spend at all on a link that hides it', async () => {
-    mockSummary.mockResolvedValue(summary({ permissions: permissions({ spend: false, cpa: false, roas: false }) }))
+    // The server redacts every creative a hiding link returns, the summary's winners included — the fixture does the same.
+    mockSummary.mockResolvedValue(summary({ permissions: permissions({ spend: false, cpa: false, roas: false }), best_by_objective: [], best_image: [], best_video: [] }))
     mockLibrary.mockResolvedValue(page({
       creatives: [card({ metrics: redacted(), headline_metrics: ['impressions', 'reach'] })],
       permissions: permissions({ spend: false, cpa: false, roas: false }),

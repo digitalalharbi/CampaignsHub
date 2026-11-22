@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { SharedCreativeSection } from './SharedCreativeSection'
 import type { CreativeCard, CreativeMetrics } from '@/features/content/api'
 import type {
@@ -315,11 +315,12 @@ describe('SharedCreativeSection', () => {
 
     await screen.findByText('Top performers')
 
-    // AD-ANALYSIS-VISUAL-001 — each winner is a card: what it won, the figure it won on, and the path it won inside.
-    expect(screen.getAllByTestId(/^winner-card-/)).toHaveLength(3)
-    expect(screen.getAllByText('Marketing path').length).toBeGreaterThanOrEqual(3)
-    expect(screen.getByTestId('winner-card-video')).toHaveTextContent('Best video')
-    expect(screen.getByTestId('winner-card-video')).toHaveTextContent('CPM')
+    // AD-ANALYSIS-VISUAL-001 — each winner is its live-link card, once, with every answer it won on its cover:
+    // the same ad as best for sales and best image is ONE card with two badges.
+    const winners = screen.getAllByTestId('winner-card')
+    expect(winners).toHaveLength(2)
+    expect(winners[0]).toHaveTextContent('Best image')
+    expect(winners[1]).toHaveTextContent('Best video')
     // Best video was decided on CPM inside the awareness path — never on the sales metric. The name
     // appears in the winner card and again in the library below it, so both are accepted.
     expect(screen.getAllByText('Brand film').length).toBeGreaterThan(0)
@@ -514,7 +515,7 @@ describe('SharedCreativeSection', () => {
     mockDetail.mockResolvedValue(sharedDetail())
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
+    fireEvent.click((await within(await screen.findByTestId('shared-creative-library')).findAllByTestId('live-content-tile'))[0])
 
     expect(await screen.findByTestId('shared-creative-detail')).toBeTruthy()
     expect(mockDetail).toHaveBeenCalledWith('tok', 'cr-1', {}, undefined)
@@ -540,11 +541,11 @@ describe('SharedCreativeSection', () => {
     mockDetail.mockResolvedValue(sharedDetail())
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
+    fireEvent.click((await within(await screen.findByTestId('shared-creative-library')).findAllByTestId('live-content-tile'))[0])
     await screen.findByTestId('shared-creative-detail')
 
+    expect(await screen.findByText(/Stages this platform does not report/)).toHaveTextContent('Landing page views')
     expect(screen.getAllByText('Clicks').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Stages this platform does not report/)).toHaveTextContent('Landing page views')
   })
 
   /**
@@ -567,10 +568,10 @@ describe('SharedCreativeSection', () => {
     )
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
+    fireEvent.click((await within(await screen.findByTestId('shared-creative-library')).findAllByTestId('live-content-tile'))[0])
     await screen.findByTestId('shared-creative-detail')
 
-    expect(screen.getAllByText('Not shown on this link').length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Not shown on this link')).length).toBeGreaterThan(0)
   })
 
   /** A creative the link excludes is refused here too — the detail view is not a side door. */
@@ -578,7 +579,7 @@ describe('SharedCreativeSection', () => {
     mockDetail.mockRejectedValue(new Error('not found'))
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
+    fireEvent.click((await within(await screen.findByTestId('shared-creative-library')).findAllByTestId('live-content-tile'))[0])
 
     expect(await screen.findByText('This ad is not available on this link.')).toBeTruthy()
   })
@@ -590,7 +591,7 @@ describe('SharedCreativeSection', () => {
     mockLibrary.mockResolvedValue(page({ permissions: permissions({ image_zoom: false }) }))
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
+    fireEvent.click((await within(await screen.findByTestId('shared-creative-library')).findAllByTestId('live-content-tile'))[0])
     await screen.findByTestId('shared-creative-detail')
 
     expect(screen.queryByRole('button', { name: '100%' })).toBeNull()
@@ -601,13 +602,13 @@ describe('SharedCreativeSection', () => {
     mockDetail.mockResolvedValue(sharedDetail())
 
     render('detailed')
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Ad details' }))[0])
+    fireEvent.click((await within(await screen.findByTestId('shared-creative-library')).findAllByTestId('live-content-tile'))[0])
     await screen.findByTestId('shared-creative-detail')
 
-    fireEvent.click(screen.getByRole('button', { name: /Back to the ad library/ }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[0])
 
     await waitFor(() => expect(screen.queryByTestId('shared-creative-detail')).toBeNull())
-    expect(screen.getByText('Ad library')).toBeTruthy()
+    expect(screen.getByText('All content')).toBeTruthy()
   })
 })
 
@@ -657,18 +658,20 @@ describe('SharedCreativeSection covers every format', () => {
     render('detailed')
     await screen.findByTestId('shared-creative-library')
 
-    const frame = await screen.findByTestId('shared-creative-poster-cr-film-first-frame')
+    const frame = await within(await screen.findByTestId('shared-tile-cr-film')).findByTestId('live-content-poster-first-frame')
     expect(frame.getAttribute('src')).toBe(`${FILM}#t=0.1`)
-    expect(screen.getByTestId('shared-creative-poster-cr-chat-absent')).toHaveAttribute('data-cover', 'text-card')
-    expect(screen.getByTestId('shared-creative-poster-cr-chat-absent')).toHaveTextContent('Silver rings')
+    const chatCover = within(screen.getByTestId('shared-tile-cr-chat')).getByTestId('live-content-poster-absent')
+    expect(chatCover).toHaveAttribute('data-cover', 'text-card')
+    expect(chatCover).toHaveTextContent('Silver rings')
   })
 
   it('opens a cached still in the viewer instead of a sentence', async () => {
     mockDetail.mockResolvedValue(sharedDetail({ creative: { ...sharedDetail().creative, ...cached } as SharedCreativeDetail['creative'] }))
 
     render('detailed', 'en', '/reports/share/tok?creative=cr-cached')
-    const detail = await screen.findByTestId('shared-creative-detail')
+    await screen.findByTestId('shared-creative-detail')
 
-    expect(detail.querySelector('img[src="/media/covers/ab/cover.jpg"]')).not.toBeNull()
+    // AD-ANALYSIS-VISUAL-001 — the ad is drawn on the live link's popup stage, above the analysis.
+    expect(screen.getByTestId('report-ad-detail-stage').querySelector('img[src="/media/covers/ab/cover.jpg"]')).not.toBeNull()
   })
 })
