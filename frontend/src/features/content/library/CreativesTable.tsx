@@ -84,7 +84,7 @@ export function CreativesTable() {
 
   return (
     <section className="rounded-2xl border border-border bg-surface" data-testid="creatives-table">
-      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+      <div className="flex items-center gap-3 border-b border-border px-4 py-3" data-testid="content-filters-controls">
         <Search size={18} className="shrink-0 text-text-muted" aria-hidden />
         <input
           value={search}
@@ -96,7 +96,7 @@ export function CreativesTable() {
         />
         <div className="relative">
           <button type="button" onClick={() => setFilterOpen((o) => !o)} data-testid="creatives-filter" className="flex items-center gap-2 rounded-xl border border-border px-4 py-2 text-sm font-semibold text-text-primary hover:bg-surface-secondary">
-            <Filter size={16} aria-hidden />{t.filter}{providers.length + kinds.length > 0 ? ` (${formatNumber(providers.length + kinds.length)})` : ''}<ChevronDown size={14} aria-hidden />
+            <Filter size={16} aria-hidden /><span>{t.filter}{providers.length + kinds.length > 0 ? ` (${formatNumber(providers.length + kinds.length)})` : ''}</span><ChevronDown size={14} aria-hidden />
           </button>
           {filterOpen && (
             <div className="absolute end-0 top-full z-20 mt-2 w-64 rounded-xl border border-border bg-surface p-4 shadow-lg" data-testid="creatives-filter-panel">
