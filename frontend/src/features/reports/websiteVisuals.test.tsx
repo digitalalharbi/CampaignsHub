@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
-import { AcquisitionVisual, ClassificationVisual, CompactTiles, direction, GapStory, gapSegments, Journey, TablesVisual } from './WebsiteVisuals'
+import { AcquisitionVisual, ClassificationVisual, CompactTiles, direction, fingerprintRows, GapStory, gapSegments, Journey, orderPaths, SiteEvidence, TablesVisual } from './WebsiteVisuals'
+import type { MatchPayload } from '@/features/analytics/ga4/matchTypes'
 import type { StoreKpi } from '@/features/analytics/ga4/storeTypes'
 import type { GapReasonsPayload } from '@/features/analytics/ga4/matchTypes'
 
@@ -100,5 +101,51 @@ describe('the website visuals of WEBSITE-VISUAL-002', () => {
     expect(screen.getByTestId('ga4-products-visual')).toHaveTextContent('Products')
     expect(screen.queryByTestId('ga4-table-tab-products')).toBeNull()
     expect(within(screen.getByTestId('ga4-table-bars')).getAllByRole('listitem')[0]).toHaveTextContent('Ring')
+  })
+})
+
+/** Razzah Avenue, 15–21 Nov 2026, as the live link's attribution part states it. */
+const side = (s: number, o: number) => ({ sessions: s, purchases: o, revenue: null, revenue_usd: null, aov_usd: null, conversion_rate: null })
+const razzahMatch = {
+  state: 'ready', basis: 'ga4', order_level: false,
+  platforms: [
+    { platform: 'google', claimed: { conversions: 40, revenue_usd: null }, ga4: side(1969, 32), matched_share: null },
+    { platform: 'meta', claimed: { conversions: 17, revenue_usd: null }, ga4: side(1158, 1), matched_share: null },
+    { platform: 'openai_ads', claimed: { conversions: 3, revenue_usd: null }, ga4: null, matched_share: null },
+    { platform: 'snapchat', claimed: { conversions: 90, revenue_usd: null }, ga4: side(6670, 6), matched_share: null },
+    { platform: 'tiktok', claimed: { conversions: 64, revenue_usd: null }, ga4: side(995, 6), matched_share: null },
+  ],
+  other_paid: { ga4: side(646, 1) },
+  unattributed: { sessions: 13311, classes: [{ class: 'organic', ...side(162, 3) }, { class: 'direct', ...side(9298, 42) }, { class: 'referral', ...side(2971, 11) }, { class: 'other', ...side(234, 1) }] },
+  evidence: { click_id_sessions: [{ family: 'meta', sessions: 1396 }, { family: 'snapchat', sessions: 7049 }, { family: 'tiktok', sessions: 6227 }], id_pairs: 46 },
+} as unknown as MatchPayload
+
+describe('the website’s own evidence (WEBSITE-VISUAL-003)', () => {
+  it('sets the visits labelled as each platform beside the visits that arrived with its click id', () => {
+    expect(fingerprintRows(razzahMatch)).toEqual([
+      { platform: 'snapchat', labelled: 6670, fingerprint: 7049 },
+      { platform: 'tiktok', labelled: 995, fingerprint: 6227 },
+      { platform: 'meta', labelled: 1158, fingerprint: 1396 },
+    ])
+  })
+
+  it('splits the website’s orders by the path it credited, adding up to its own 103', () => {
+    const paths = orderPaths(razzahMatch)
+    expect(paths).toEqual([{ key: 'ads', orders: 45 }, { key: 'other_paid', orders: 1 }, { key: 'organic', orders: 3 }, { key: 'direct', orders: 42 }, { key: 'referral', orders: 11 }, { key: 'other', orders: 1 }])
+    expect(paths.reduce((a, p) => a + p.orders, 0)).toBe(103)
+  })
+
+  it('draws the fingerprint bars with the multiple, and one dot per order', () => {
+    renderWithProviders(<SiteEvidence data={razzahMatch} ar={false} />, { locale: 'en' })
+    expect(screen.getByTestId('evidence-times-tiktok')).toHaveTextContent('×6.3')
+    expect(screen.queryByTestId('evidence-times-snapchat')).toBeNull()
+    expect(screen.getByTestId('evidence-waffle')).toHaveAttribute('data-dots', '103')
+    expect(screen.getByTestId('evidence-orders-total')).toHaveTextContent('103')
+    expect(screen.getByTestId('evidence-path-direct')).toHaveTextContent('42')
+  })
+
+  it('draws nothing without evidence or orders', () => {
+    const { container } = renderWithProviders(<SiteEvidence data={{ state: 'ready', basis: 'ga4', order_level: false, platforms: [] } as unknown as MatchPayload} ar />, { locale: 'ar' })
+    expect(container.querySelector('[data-testid="site-evidence"]')).toBeNull()
   })
 })

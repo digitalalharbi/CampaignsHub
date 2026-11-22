@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowDownRight, ArrowUpRight, CalendarDays, Check, CheckCheck, Clock, Equal, Eye, EyeOff, Globe, Keyboard, Megaphone, MonitorSmartphone, RefreshCw, Route, Search, Share2, ShieldOff, ShoppingBag, Smartphone, Store, Tag, HelpCircle, Users } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, CalendarDays, Check, CheckCheck, Clock, Equal, Eye, EyeOff, Fingerprint, Globe, Keyboard, Megaphone, MonitorSmartphone, RefreshCw, Route, Search, Share2, ShieldOff, ShoppingBag, Smartphone, Store, Tag, HelpCircle, Users } from 'lucide-react'
 import { partIcon, ShareTiles } from './ShareTiles'
 import { Num } from '@/components/ui/Num'
 import { FixedPageTable } from '@/components/ui/FixedPageTable'
@@ -427,6 +427,106 @@ export function Journey({ ar, platforms = [] }: { ar: boolean; platforms?: strin
 }
 
 /**
+ * WEBSITE-VISUAL-003 (Owner 2026-11-22) — «مطابقة الإسناد … غير مقنعة، بحاجة لإقناع»: the proof, from the website's own records.
+ *
+ * 1. «بصمة الإعلان»: the visits the website labelled as each platform's ads, beside the visits that ARRIVED carrying that platform's
+ *    click id in their landing URL (GA4's landing query, parsed server-side: `evidence.click_id_sessions`). A visit with the ad's
+ *    click id came from the ad; when the website files it under «referral» or «direct», the label is the website's, not the visitor's.
+ * 2. «من أين جاءت الطلبات»: every order the website recorded, one dot each, coloured by the path the website credited — the ads'
+ *    last click, direct, referral, free, other. Every count is the server's; the dots add up to the website's own orders.
+ */
+const FAMILY_PROVIDER: Record<string, string> = { meta: 'meta', facebook: 'meta', snapchat: 'snapchat', tiktok: 'tiktok', google: 'google', microsoft: 'microsoft' }
+
+export function fingerprintRows(data: MatchPayload): Array<{ platform: string; labelled: number; fingerprint: number }> {
+  const by = new Map((data.platforms ?? []).map((p) => [p.platform, p.ga4?.sessions ?? 0]))
+  return (data.evidence?.click_id_sessions ?? [])
+    .map((c) => ({ platform: FAMILY_PROVIDER[c.family] ?? c.family, labelled: by.get(FAMILY_PROVIDER[c.family] ?? c.family) ?? 0, fingerprint: Math.round(c.sessions) }))
+    .filter((r) => r.fingerprint > 0)
+    .sort((a, b) => b.fingerprint - a.fingerprint)
+}
+
+const PATH_COLOR: Record<string, string> = { ads: 'var(--brand-600)', direct: 'var(--teal)', referral: 'var(--info)', organic: 'var(--success)', other: 'var(--text-muted)', other_paid: 'var(--purple)', unassigned: 'var(--warning)' }
+const PATH_LABEL: Record<string, L> = { ads: { ar: 'إعلان · آخر نقرة', en: 'Ad · last click' }, ...UNPAID }
+const PATH_ICON: Record<string, typeof Megaphone> = { ads: Megaphone, direct: Keyboard, referral: Share2, organic: Search, other: HelpCircle, other_paid: Megaphone, unassigned: HelpCircle }
+
+export function orderPaths(data: MatchPayload): Array<{ key: string; orders: number }> {
+  const ads = (data.platforms ?? []).reduce((a, p) => a + (p.ga4?.purchases ?? 0), 0)
+  const rest = [...(data.other_paid ? [{ key: 'other_paid', orders: data.other_paid.ga4.purchases ?? 0 }] : []), ...(data.unattributed?.classes ?? []).map((c) => ({ key: c.class, orders: c.purchases ?? 0 }))]
+  return [{ key: 'ads', orders: ads }, ...rest].map((p) => ({ ...p, orders: Math.round(p.orders) })).filter((p) => p.orders > 0)
+}
+
+export function SiteEvidence({ data, ar }: { data: MatchPayload; ar: boolean }) {
+  const prints = fingerprintRows(data)
+  const paths = orderPaths(data)
+  const orders = paths.reduce((a, p) => a + p.orders, 0)
+  if (prints.length === 0 && orders === 0) return null
+  const peak = prints.reduce((m, r) => Math.max(m, r.fingerprint, r.labelled), 0)
+  const per = orders > 240 ? Math.ceil(orders / 240) : 1
+  const dots = paths.flatMap((p) => Array.from({ length: Math.round(p.orders / per) }, () => p.key))
+
+  return (
+    <div data-testid="site-evidence" className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      {prints.length > 0 && (
+        <div data-testid="evidence-fingerprint" className="flex flex-col gap-3 rounded-xl border border-border bg-surface-secondary/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><Fingerprint size={14} aria-hidden />{ar ? 'بصمة الإعلان · من سجلّ الموقع' : 'The ad’s fingerprint · from the website’s log'}</span>
+          </div>
+          <span className="flex flex-wrap gap-3 text-[10px] font-semibold text-text-muted">
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: 'var(--teal)' }} />{ar ? 'صنّفها الموقع إعلاناً' : 'Labelled ad by the site'}</span>
+            <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: 'var(--brand-600)' }} />{ar ? 'وصلت بمعرّف نقرة الإعلان' : 'Arrived with the ad’s click id'}</span>
+          </span>
+          <ul className="flex flex-col gap-2.5">
+            {prints.map((r) => {
+              const times = r.labelled > 0 ? r.fingerprint / r.labelled : null
+              const w = (v: number) => `${peak > 0 ? Math.max(2, (v / peak) * 100) : 0}%`
+
+              return (
+                <li key={r.platform} data-testid={`evidence-fingerprint-${r.platform}`} className="grid grid-cols-[2rem_1fr_auto] items-center gap-2">
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-surface"><ProviderMark provider={r.platform} size={16} /></span>
+                  <span className="flex min-w-0 flex-col gap-1">
+                    <span className="flex items-center gap-2"><span className="h-2.5 rounded-full" style={{ width: w(r.labelled), background: 'var(--teal)' }} /><span className="tnum text-[11px] font-bold text-text-primary"><Num>{num(r.labelled)}</Num></span></span>
+                    <span className="flex items-center gap-2"><span className="h-2.5 rounded-full" style={{ width: w(r.fingerprint), background: 'var(--brand-600)' }} /><span className="tnum text-[11px] font-bold text-text-primary"><Num>{num(r.fingerprint)}</Num></span></span>
+                  </span>
+                  {times !== null && times >= 1.2 ? <span data-testid={`evidence-times-${r.platform}`} className="tnum rounded-full bg-brand-600/15 px-2 py-0.5 text-[11px] font-extrabold text-brand-600"><Num>{`×${times >= 10 ? Math.round(times) : times.toFixed(1)}`}</Num></span> : <span className="inline-flex items-center rounded-full bg-success/15 px-1.5 py-0.5 text-success"><Check size={11} aria-hidden /></span>}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+      {orders > 0 && (
+        <div data-testid="evidence-orders" className="flex flex-col gap-3 rounded-xl border border-border bg-surface-secondary/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><ShoppingBag size={14} aria-hidden />{ar ? 'من أين جاءت طلبات الموقع' : 'Where the website’s orders came from'}</span>
+            <span data-testid="evidence-orders-total" className="tnum rounded-full bg-surface px-2.5 py-0.5 text-xs font-extrabold text-text-primary"><Num>{num(orders)}</Num></span>
+          </div>
+          <div data-testid="evidence-waffle" data-dots={dots.length} className="flex flex-wrap gap-[3px]" aria-hidden>
+            {dots.map((k, i) => <span key={i} className="h-3 w-3 rounded-[3px]" style={{ background: PATH_COLOR[k] ?? 'var(--text-muted)' }} />)}
+          </div>
+          {per > 1 && <span className="tnum text-[10px] text-text-muted"><Num>{`■ = ${per}`}</Num></span>}
+          <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            {paths.map((p) => {
+              const Icon = PATH_ICON[p.key] ?? HelpCircle
+              const color = PATH_COLOR[p.key] ?? 'var(--text-muted)'
+
+              return (
+                <li key={p.key} data-testid={`evidence-path-${p.key}`} className="flex min-w-0 items-center gap-2 rounded-lg bg-surface px-2 py-1.5">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md" style={{ background: `color-mix(in srgb, ${color} 18%, transparent)`, color }}><Icon size={12} aria-hidden /></span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-[10px] font-semibold text-text-secondary">{tx(PATH_LABEL[p.key] ?? { ar: p.key, en: p.key }, ar)}</span>
+                    <span className="tnum text-sm font-extrabold leading-none text-text-primary"><Num>{num(p.orders)}</Num><span className="ms-1 text-[10px] font-bold text-text-muted"><Num>{percent(p.orders / orders, 0)}</Num></span></span>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * «مطابقة الإسناد» as Thunder reads it: one row per platform, the platform's count and the website's on one scale, the measured
  * basket beside it, and a neutral direction chip. The indirect path is one stacked bar. The table stays one click away.
  */
@@ -475,6 +575,8 @@ export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPaylo
           )
         })}
       </ul>
+
+      <SiteEvidence data={data} ar={ar} />
 
       <Journey ar={ar} platforms={rows.map((r) => r.platform)} />
 
