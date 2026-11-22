@@ -106,7 +106,7 @@ export function ApprovalsPage() {
       <AutonomyCard projectId={currentProjectId} ar={ar} />
 
       <p className="text-xs text-text-muted">
-        <Link to={portalTo('/recommendations')} className="font-semibold text-brand-700 hover:underline">{ar ? 'العودة إلى التوصيات' : 'Back to recommendations'}</Link>
+        <Link to={portalTo('/recommendations')} className="font-semibold text-brand-700 hover:underline">{ar ? 'العودة إلى فرص التحسين' : 'Back to recommendations'}</Link>
       </p>
     </div>
   )
