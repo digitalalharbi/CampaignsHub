@@ -184,6 +184,11 @@ describe('the answer at a glance (WEBSITE-VISUAL-005)', () => {
     expect(screen.getByTestId('simple-per-order')).toHaveTextContent('×2.1')
     expect(screen.getByTestId('simple-cpa')).toHaveTextContent('36')
     expect(screen.getByTestId('simple-roas')).toHaveTextContent('×1.89')
+    // The why, always visible: one order in several platforms, a view, a window of days, the website's last visit.
+    expect(screen.getByTestId('simple-why')).toHaveTextContent('ليش الفرق؟')
+    expect(screen.getByTestId('simple-why-view')).toHaveTextContent('بدون ما يضغط')
+    expect(screen.getByTestId('simple-why-window')).toHaveTextContent('حتى ٣٠ يوم')
+    expect(screen.getByTestId('simple-why-last')).toHaveTextContent('آخر زيارة')
   })
 
   it('says «متجرك» when the store is connected, and shows no cost without spend', () => {
