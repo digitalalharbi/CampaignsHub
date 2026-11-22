@@ -68,4 +68,23 @@ describe('CREATIVE-ENGINE-001 — generateBatch', () => {
   it('names the size of the design space', () => {
     expect(SPACE).toBeGreaterThan(1_000_000)
   })
+
+  it('a busy full-bleed picture with long copy still gets designs that keep every rule (never an empty step)', () => {
+    // High-contrast noise over the whole frame, a product filling most of it, and long text: the case the Owner hit on Production.
+    const w = 144, h = 256
+    const data = new Uint8ClampedArray(w * h * 4)
+    let s = 3
+    for (let i = 0; i < w * h; i++) { s = (s * 1103515245 + 12345) >>> 0; const v = (s >>> 16) & 255; data.set([v, 255 - v, (v * 3) & 255, 255], i * 4) }
+    const busy: Pixels = { width: w, height: h, data }
+    const long = { hook: 'عرض خاص لفترة محدودة على كل الخواتم الفضية الرجالية', message: 'صناعة يدوية من الفضة عيار 925 مع تغليف هدية فاخر وشحن سريع لكل مدن المملكة', cta: 'اطلب الآن', price: '199 ر.س' }
+    const res = generateBatch({ pixels: busy, sourceSize: { w: 1080, h: 1920 }, copy: long, measure, locale: 'ar', seed: 5 })
+    expect(res.candidates.length).toBeGreaterThanOrEqual(4)
+    for (const c of res.candidates) {
+      for (const e of c.elements.filter((x) => !x.decorative && x.role !== 'panel' && x.role !== 'scrim')) {
+        expect(e.box.y).toBeGreaterThanOrEqual(SAFE.y0 - 0.5)
+        expect(e.box.y + e.box.h).toBeLessThanOrEqual(SAFE.y1 + 0.5)
+      }
+      expect(c.elements.some((e) => e.role === 'cta')).toBe(true)
+    }
+  })
 })

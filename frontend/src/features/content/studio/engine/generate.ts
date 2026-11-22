@@ -23,13 +23,22 @@ import { eligible, ensureContrast, solve, type Box, type Copy, type El } from '.
  */
 export interface Profile { plan: FitPlan; product: Box; focus: { x: number; y: number }; tokens: ContentTokens; edges: Float32Array; luma: Float32Array }
 
-export interface Candidate { id: string; seed: number; genome: Genome; elements: El[]; score: number; minContrast: number; as: 'video' | 'image' }
+/**
+ * `profile` is the framing this design was solved on (a fallback pass may frame the picture smaller); `short` marks a design that
+ * carries the hook and the call only, because the full copy fitted nowhere on this picture.
+ */
+export interface Candidate { id: string; seed: number; genome: Genome; elements: El[]; score: number; minContrast: number; as: 'video' | 'image'; profile: Profile; short: boolean }
+
+/** The copy a short design draws: the hook and the call, without the supporting line, the badge or the price. */
+export function shortCopy(c: Copy): Copy {
+  return { hook: c.hook, message: '', cta: c.cta }
+}
 
 export interface Rejected { genome: Genome; reasons: string[] }
 
 export interface BatchResult { profile: Profile; candidates: Candidate[]; rejected: Rejected[]; considered: number }
 
-export function profileOf(src: Pixels, sourceSize: { w: number; h: number }, brand: Brand = {}): Profile {
+export function profileOf(src: Pixels, sourceSize: { w: number; h: number }, brand: Brand = {}, forceCard?: number): Profile {
   const small = downscaleTo(src, 96)
   const sal = saliency(small)
   const build = (framed: boolean, cardH = 0.62) => {
@@ -58,9 +67,9 @@ export function profileOf(src: Pixels, sourceSize: { w: number; h: number }, bra
   // covering it: the picture then sits as a card on its own blurred copy, the way a designer would frame a full-bleed close-up.
   const liveH = SAFE.y1 - SAFE.y0
   const freeOf = (p: { y: number; h: number }) => Math.max(0, p.y - SAFE.y0) + Math.max(0, SAFE.y1 - (p.y + p.h))
-  let built = build(false)
+  let built = forceCard ? build(true, forceCard) : build(false)
   for (const cardH of [0.62, 0.52, 0.44, 0.38]) {
-    if (freeOf(built.product) >= liveH * 0.6) break
+    if (forceCard || freeOf(built.product) >= liveH * 0.6) break
     built = build(true, cardH)
   }
   const { plan, product, luma, edges } = built
@@ -104,19 +113,34 @@ export function generateBatch(input: GenerateInput): BatchResult {
   const K = (input.videos ?? 4) + (input.images ?? 4)
   const passing: Array<Candidate & { _g: Genome }> = []
   const rejected: Rejected[] = []
-  const seen = new Set<string>()
   const pool = ARCHETYPES.filter((a) => eligible(a, input.copy))
   let considered = 0
 
-  for (let i = 0; i < 72; i++) {
-    const g = randomGenome(rand, input.lockArchetype ?? pool[i % pool.length])
-    const key = genomeKey(g)
-    if (seen.has(key)) continue
-    seen.add(key)
-    considered++
-    const r = solveOne(profile, g, input)
-    if (!r.ok) { rejected.push({ genome: g, reasons: r.reasons }); continue }
-    passing.push({ id: `${input.seed}-${i}`, seed: input.seed, genome: g, _g: g, elements: r.elements, score: r.score, minContrast: r.minContrast, as: 'image' })
+  const pass = (prof: Profile, copy: Copy, short: boolean, tag: string) => {
+    const seen = new Set<string>()
+    const own = ARCHETYPES.filter((a) => eligible(a, copy))
+    for (let i = 0; i < 72; i++) {
+      const g = randomGenome(rand, input.lockArchetype ?? own[i % own.length])
+      const key = genomeKey(g)
+      if (seen.has(key)) continue
+      seen.add(key)
+      considered++
+      const r = solveOne(prof, g, { ...input, copy })
+      if (!r.ok) { rejected.push({ genome: g, reasons: r.reasons }); continue }
+      passing.push({ id: `${input.seed}-${tag}${i}`, seed: input.seed, genome: g, _g: g, elements: r.elements, score: r.score, minContrast: r.minContrast, as: 'image', profile: prof, short })
+    }
+  }
+  const archetypes = () => new Set(passing.map((p) => p.genome.archetype)).size
+
+  // The full copy on the picture as framed. When too few designs pass, the picture is framed smaller as a card on its own blur, and
+  // last the supporting line is dropped (hook and call only): a picture with no calm area still gets designs that keep every rule,
+  // instead of an empty step (Owner 2026-11-22: «لا يوجد تصميم يحقق كل القواعد»).
+  pass(profile, input.copy, false, '')
+  const fallbacks: Array<{ card: number; short: boolean }> = [{ card: 0.44, short: false }, { card: 0.34, short: false }, { card: 0.44, short: true }, { card: 0.3, short: true }]
+  for (const f of fallbacks) {
+    if (archetypes() >= Math.min(K, pool.length)) break
+    const prof = profileOf(input.pixels, input.sourceSize, input.brand, f.card)
+    pass(prof, f.short ? shortCopy(input.copy) : input.copy, f.short, `${f.card}${f.short ? 's' : ''}-`)
   }
 
   // MMR: λ·quality + (1−λ)·distance to what is already chosen (and to the client's recent designs).
@@ -132,7 +156,8 @@ export function generateBatch(input: GenerateInput): BatchResult {
       if (usedArch && archLeft && !input.lockArchetype) continue
       const dChosen = chosen.length ? Math.min(...chosen.map((x) => distance(x.genome, c.genome))) : 1
       const dRecent = recent.length ? Math.min(...recent.map((r) => distance(r, c.genome))) : 1
-      const val = 0.6 * (c.score / 100) + 0.3 * dChosen + 0.1 * dRecent
+      // A design carrying the whole copy is preferred over a short one, and the as-framed picture over a smaller card.
+      const val = 0.6 * (c.score / 100) + 0.3 * dChosen + 0.1 * dRecent - (c.short ? 0.15 : 0) - (c.profile === profile ? 0 : 0.05)
       if (val > bestVal) { bestVal = val; best = c }
     }
     if (!best) break

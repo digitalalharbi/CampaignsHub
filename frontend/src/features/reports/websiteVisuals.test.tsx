@@ -187,7 +187,7 @@ describe('the answer at a glance (WEBSITE-VISUAL-005)', () => {
     // The why, always visible: one order in several platforms, a view, a window of days, the website's last visit.
     expect(screen.getByTestId('simple-why')).toHaveTextContent('ليش الفرق؟')
     expect(screen.getByTestId('simple-why-view')).toHaveTextContent('بدون ما يضغط')
-    expect(screen.getByTestId('simple-why-window')).toHaveTextContent('حتى ٣٠ يوم')
+    expect(screen.getByTestId('simple-why-window')).toHaveTextContent('حتى 30 يومًا')
     expect(screen.getByTestId('simple-why-last')).toHaveTextContent('آخر زيارة')
   })
 
