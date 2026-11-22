@@ -73,9 +73,12 @@ describe('objective analytics section', () => {
   it('draws one card per family and never a figure across them', () => {
     renderWithProviders(<ObjectiveAnalyticsSection section={section([awareness, leads])} currency="SAR" ar={false} />)
 
+    // OBJECTIVE-COMPACT-001 — one card, the objectives a switch at its head; one objective drawn at a time.
     expect(screen.getByTestId('objective-family-awareness')).toBeInTheDocument()
+    expect(screen.queryByTestId('objective-family-leads')).toBeNull()
+    fireEvent.click(screen.getByTestId('objective-tab-leads'))
     expect(screen.getByTestId('objective-family-leads')).toBeInTheDocument()
-    // CPM belongs to awareness only; the leads card has no CPM tile.
+    // CPM belongs to awareness only; the leads objective has no CPM figure.
     expect(within(screen.getByTestId('objective-family-leads')).queryByText('CPM')).toBeNull()
   })
 
@@ -84,11 +87,12 @@ describe('objective analytics section', () => {
 
     expect(screen.getByTestId('objective-kpi-leads-leads')).toHaveTextContent('0')
     expect(screen.getByTestId('objective-kpi-leads-leads')).toHaveAttribute('data-state', 'reported')
-    // OBJECTIVE-CARDS-PARITY-001 — an unavailable figure reads as the summary's cards read it: «Not available», never a 0.
-    expect(screen.getByTestId('objective-kpi-leads-cpl')).toHaveTextContent('Not available')
-    expect(screen.getByTestId('objective-kpi-leads-cpl')).toHaveAttribute('data-state', 'unavailable')
-    expect(screen.getByTestId('objective-kpi-awareness-reach')).toHaveTextContent('Not available')
+    // OBJECTIVE-COMPACT-001 — an unavailable figure takes no room: it is neither drawn as 0 nor as an empty card.
+    expect(screen.queryByTestId('objective-kpi-leads-cpl')).toBeNull()
+    expect(screen.queryByText('Not available')).toBeNull()
     expect(screen.queryByTestId('objective-kpi-leads-roas')).toBeNull()
+    fireEvent.click(screen.getByTestId('objective-tab-awareness'))
+    expect(screen.queryByTestId('objective-kpi-awareness-reach')).toBeNull()
   })
 
   it('draws each KPI as the summary does: movement where the server stated one, and the daily line of that very figure', () => {
@@ -96,7 +100,7 @@ describe('objective analytics section', () => {
     renderWithProviders(<ObjectiveAnalyticsSection section={section([withMove])} currency="SAR" ar={false} />)
 
     expect(screen.getByTestId('objective-kpi-leads-leads')).toHaveTextContent('48%')
-    expect(screen.getByTestId('objective-kpi-leads-cpl').textContent).not.toMatch(/%/)
+    expect(screen.getByTestId('objective-kpi-leads-spend').textContent).not.toMatch(/%/)
   })
 
   it('opens the family on its outcome, and a card is a switch: the spotlight reads that figure by platform and day (OBJECTIVE-CARDS-CREATIVE-001)', () => {
@@ -122,7 +126,7 @@ describe('objective analytics section', () => {
     expect(spot).toHaveAttribute('data-kpi', 'impressions')
     expect(screen.getByTestId('objective-kpi-awareness-impressions')).toHaveAttribute('aria-selected', 'true')
     // Impressions add up and every platform reported them: each platform carries its share.
-    expect(within(screen.getByTestId('objective-spotlight-platforms-awareness')).getByText('66.7%')).toBeInTheDocument()
+    expect(screen.getByTestId('objective-spotlight-platforms-awareness')).toHaveTextContent('67%')
     expect(screen.getByTestId('objective-trend-awareness')).toBeInTheDocument()
     // Spend's movement is neutral — neither good nor bad.
     expect(screen.getByTestId('objective-kpi-awareness-spend')).toHaveTextContent('+31%')
@@ -134,10 +138,9 @@ describe('objective analytics section', () => {
     expect(platforms.textContent?.indexOf('Meta') ?? -1).toBeLessThan(platforms.textContent?.search(/TikTok/) ?? -1)
     expect(platforms.textContent).not.toMatch(/%/)
 
-    // Reach: no platform sent it — said, not drawn as zero.
-    fireEvent.click(screen.getByTestId('objective-kpi-awareness-reach'))
-    expect(screen.getByTestId('objective-spotlight-platforms-awareness')).toHaveTextContent('No platform reported this figure')
-    expect(screen.queryByTestId('objective-trend-awareness')).toBeNull()
+    // Spend: no daily line of its own sent here beyond the trend's spend, and its platforms read without a «best».
+    fireEvent.click(screen.getByTestId('objective-kpi-awareness-spend'))
+    expect(screen.getByTestId('objective-spotlight-platforms-awareness').textContent).not.toMatch(/★/)
   })
 
   it('draws best and weakest only where the server ranked, platform then content', () => {
@@ -148,7 +151,8 @@ describe('objective analytics section', () => {
     expect(screen.getByTestId('objective-content-leaders-awareness-weakest')).toHaveTextContent('Teaser')
     // One candidate: no ranking card, not an empty one.
     expect(screen.queryByTestId('objective-platform-leaders-leads')).toBeNull()
-    expect(screen.getByTestId('objective-contribution-awareness')).toHaveTextContent('66.7%')
+    // The contribution reads as each platform's share of the outcome, in the spotlight, not as a separate bar.
+    expect(screen.queryByTestId('objective-contribution-awareness')).toBeNull()
   })
 
   it('does not name content on a link that does not publish it', () => {
