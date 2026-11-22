@@ -11,14 +11,17 @@ import { useUi } from '@/stores/ui'
 import { formatNumber } from '@/lib/numerals'
 import { mediaFitClass } from '../adPreview'
 import { intakeFileUrl, listIntake } from '../intake/api'
-import { buildStudioBatch, type BatchOutput } from '../studio/batch/buildBatch'
-import { countWords, LIMITS, type StudioCopy } from '../studio/direction/copyRules'
-import type { SceneStyle } from '../studio/motion/look'
-import type { Scene } from '../studio/motion/scene'
-import { canvasMeasure, loadPixels, type LoadedPicture } from '../studio/ui/loadPixels'
-import { StudioPreview } from '../studio/ui/StudioPreview'
+import { countWords, LIMITS } from '../studio/direction/copyRules'
+import { loadPixels, type LoadedPicture } from '../studio/ui/loadPixels'
 import { ensureFonts } from '../studio/ui/fonts'
-import { canExportVideo, renderImage, renderVideo } from '../studio/export/renderOutput'
+import { canExportVideo } from '../studio/export/renderOutput'
+import { EnginePreview } from '../studio/engine/EnginePreview'
+import { FAMILY_FOR, renderEngineImage, renderEngineVideo } from '../studio/engine/renderEngine'
+import { generateBatch, newSeed, profileOf, solveOne, type Candidate } from '../studio/engine/generate'
+import { genomeKey } from '../studio/engine/genome'
+import type { Copy } from '../studio/engine/solve'
+import type { PaintOptions } from '../studio/engine/paint'
+import { FONT_PAIRS } from '../studio/tokens/fontPairs'
 import { downloadBlob, zipFiles } from '../studio/export/zip'
 import { openStudioSession, saveStudioOutput } from '../studio/studioApi'
 import { CTA_OPTIONS, scoreText, strategies } from './textStrategies'
@@ -51,6 +54,8 @@ const T = {
     excellent: 'ممتاز', good: 'جيد', weak: 'يحتاج تحسين',
     designsHead: 'توليد المحتوى', designsHint: 'كل تصميم يُعرض كما سيُحفظ. اختر ما تريد حفظه.', newBatch: 'دفعة جديدة', margins: 'إظهار الهوامش',
     video: 'فيديو', image: 'صورة', ready: 'جاهز', blocked: 'فيه ملاحظة',
+    engineStats: '{passed} تصاميم من {considered} مرشح · {rejected} استُبعدت لمخالفة قاعدة',
+    nonePassed: 'لا يوجد تصميم يحقق كل القواعد على هذه الصورة. جرّب صورة فيها مساحة هادئة أو نصًا أقصر.',
     enhanceHead: 'تحسينات المحتوى', enhanceHint: 'كل التحسينات مقفلة افتراضيًا. ما يُفعّل منها يُرسم داخل التصميم نفسه، بدون أي ذكاء اصطناعي.',
     enh: {
       stickerCta: ['ملصق الدعوة', 'يحوّل الدعوة إلى ملصق أبيض بعلامة رابط بدل الزر الملوّن.'],
@@ -86,6 +91,8 @@ const T = {
     excellent: 'Excellent', good: 'Good', weak: 'Needs work',
     designsHead: 'Content generation', designsHint: 'Each design shows as it will be saved. Pick the ones to save.', newBatch: 'New batch', margins: 'Show margins',
     video: 'Video', image: 'Image', ready: 'Ready', blocked: 'Has a note',
+    engineStats: '{passed} designs from {considered} candidates · {rejected} dropped for breaking a rule',
+    nonePassed: 'No design meets every rule on this picture. Try one with a calm area, or shorter text.',
     enhanceHead: 'Content enhancements', enhanceHint: 'Every enhancement is off by default. The ones you switch on are drawn into the design itself, with no AI.',
     enh: {
       stickerCta: ['Sticker CTA', 'Turns the call to action into a white sticker with a link mark.'],
@@ -141,7 +148,6 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
   const projectId = useProject((s) => s.currentProjectId)
   const queryClient = useQueryClient()
   const fileInput = useRef<HTMLInputElement>(null)
-  const measure = useMemo(() => canvasMeasure('Cairo, Tajawal, sans-serif'), [])
 
   const [step, setStep] = useState<Step>('setup')
   const [product, setProduct] = useState('')
@@ -156,6 +162,7 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
   const [price, setPrice] = useState('')
   const [cta, setCta] = useState<string>(CTA_OPTIONS[locale][0])
   const [open, setOpen] = useState<string | null>(null)
+  const [seed, setSeed] = useState(() => newSeed('composer', 0))
   const [round, setRound] = useState(0)
   const [margins, setMargins] = useState(false)
   const [chosen, setChosen] = useState<number[]>([])
@@ -190,39 +197,65 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
   // Text → studio copies. The support line carries the price and/or the description, each only when its enhancement is on.
   // A price always carries its currency: a bare number typed here reads «199 ر.س».
   const priced = /^[\d.,\u0660-\u0669]+$/.test(price.trim()) ? `${price.trim()} ${locale === 'ar' ? 'ر.س' : 'SAR'}` : price.trim()
-  const support = [enh.details ? priced : '', enh.enhanceCta ? description.trim() : ''].filter(Boolean).join(' · ')
   const prims = primaries.map((s) => s.trim()).filter(Boolean)
   const heads = headlines.map((s) => s.trim()).filter(Boolean)
-  const copyAt = (i: number): StudioCopy => ({
+  const copyAt = (i: number): Copy => ({
     hook: heads[i % Math.max(1, heads.length)] ?? '',
     message: prims[i % Math.max(1, prims.length)] ?? '',
     cta,
-    ...(support ? { support } : {}),
+    ...(enh.enhanceCta && description.trim() ? { support: description.trim() } : {}),
+    ...(enh.details && priced ? { price: priced } : {}),
   })
   const variantCount = Math.max(heads.length, prims.length, 1)
-  const variants = useMemo(() => (enh.textImprove ? Array.from({ length: variantCount }, (_, i) => copyAt(i)) : undefined), [enh.textImprove, variantCount, primaries, headlines, cta, support]) // eslint-disable-line react-hooks/exhaustive-deps
   const baseCopy = copyAt(0)
-  const style: Omit<SceneStyle, 'look'> = { ctaSticker: enh.stickerCta, colorBoost: enh.videoFx }
 
-  const batch = useMemo(
-    () => (picture ? buildStudioBatch({ pixels: picture.pixels, copy: baseCopy, variants, style, locale, measure, round }) : null),
-    [picture, baseCopy.hook, baseCopy.message, baseCopy.cta, baseCopy.support, variants, enh.stickerCta, enh.videoFx, locale, measure, round], // eslint-disable-line react-hooks/exhaustive-deps
-  )
+  // The picture's profile decides the font pair; the pair is loaded before anything is measured or drawn.
+  const profile = useMemo(() => (picture ? profileOf(picture.pixels, { w: picture.bitmap.width, h: picture.bitmap.height }) : null), [picture])
+  const pair = useMemo(() => {
+    const tone = profile?.tokens.pair === 'bold' ? 'bold' : profile?.tokens.pair === 'soft' ? 'soft' : 'luxury'
 
-  // The design's fonts are fetched before the previews are trusted; when they arrive every canvas draws again in the real face.
+    return FONT_PAIRS.find((p) => p.tone === tone) ?? FONT_PAIRS[0]!
+  }, [profile])
   const [fontsTick, setFontsTick] = useState(0)
-  const pairKey = batch?.tokens.fontPair.key
   useEffect(() => {
-    if (!batch) return
     let alive = true
-    void ensureFonts(batch.tokens.fontPair).then(() => { if (alive) setFontsTick((n) => n + 1) })
+    void ensureFonts(pair).then(() => { if (alive) setFontsTick((n) => n + 1) })
 
     return () => { alive = false }
-  }, [pairKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pair])
+  const measure = useMemo(() => {
+    const c = document.createElement('canvas').getContext('2d')
+
+    return (text: string, px: number) => {
+      if (!c) return text.length * px * 0.5
+      c.font = `700 ${px}px "${pair.display}", sans-serif`
+      c.direction = locale === 'ar' ? 'rtl' : 'ltr'
+
+      return c.measureText(text).width
+    }
+  }, [pair, locale, fontsTick]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const engine = useMemo(() => {
+    if (!picture || !profile) return null
+    const res = generateBatch({ pixels: picture.pixels, sourceSize: { w: picture.bitmap.width, h: picture.bitmap.height }, copy: baseCopy, measure, locale, seed, profile, ctaSticker: enh.stickerCta })
+    if (!enh.textImprove || variantCount < 2) return res
+    // «تحسينات النص»: each design re-solved with its own text option; one that would break a rule keeps the first option.
+    const candidates = res.candidates.map((c, i) => {
+      const r = solveOne(res.profile, c.genome, { copy: copyAt(i), measure, locale, ctaSticker: enh.stickerCta })
+
+      return r.ok ? { ...c, elements: r.elements, score: r.score, minContrast: r.minContrast } : c
+    })
+
+    return { ...res, candidates }
+  }, [picture, profile, baseCopy.hook, baseCopy.message, baseCopy.cta, baseCopy.support, baseCopy.price, measure, locale, seed, enh.stickerCta, enh.textImprove, variantCount, primaries, headlines]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const paintOptions: PaintOptions | null = useMemo(() => (picture && profile
+    ? { plan: profile.plan, bitmap: picture.bitmap, focus: profile.focus, fonts: { display: `"${pair.display}", sans-serif`, text: `"${pair.text}", sans-serif` }, colorBoost: enh.videoFx, showMargins: margins }
+    : null), [picture, profile, pair, enh.videoFx, margins])
 
   useEffect(() => {
-    if (batch) setChosen(batch.outputs.map((o, i) => (o.hard.length === 0 ? i : -1)).filter((i) => i >= 0))
-  }, [batch])
+    if (engine) setChosen(engine.candidates.map((_, i) => i))
+  }, [engine])
 
   const facts = { product, price, description }
   const strats = useMemo(() => strategies(facts, locale), [product, price, description, locale]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -237,32 +270,33 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
   const baseName = `${dateStamp()} ــ ${product.trim() || 'Creative'}`
 
   const save = async () => {
-    if (!batch || !picture || !projectId) return
-    const outputs: BatchOutput[] = chosen.map((i) => batch.outputs[i]!).filter((o) => o.hard.length === 0)
-    setSaving({ done: 0, total: outputs.length })
+    if (!engine || !picture || !projectId || !paintOptions) return
+    const picked: Candidate[] = chosen.map((i) => engine.candidates[i]).filter((c): c is Candidate => !!c)
+    setSaving({ done: 0, total: picked.length })
     setFailedSave(false)
     const files: Array<{ name: string; blob: Blob }> = []
     try {
-      await ensureFonts(batch.tokens.fontPair)
+      await ensureFonts(pair)
       const session = await openStudioSession(projectId)
       let n = 0
-      for (const o of outputs) {
-        const asVideo = o.as === 'video' && canExportVideo()
-        const blob = asVideo ? await renderVideo(o.scene, picture.bitmap, batch.tokens) : await renderImage(o.scene, picture.bitmap, batch.tokens)
+      const opts = { ...paintOptions, showMargins: false }
+      for (const c of picked) {
+        const asVideo = c.as === 'video' && canExportVideo()
+        const blob = asVideo ? await renderEngineVideo(c.elements, c.genome, opts, locale) : await renderEngineImage(c.elements, c.genome, opts, locale)
         n += 1
-        const name = `${baseName} ــ ${asVideo ? 'Video' : 'Image'} ${n}`
-        const used = copyAt(enh.textImprove ? batch.outputs.indexOf(o) : 0)
+        const name = `${baseName} ــ ${asVideo ? 'VID' : 'IMG'}-${c.genome.archetype} ــ 9x16 ${n}`
+        const used = copyAt(enh.textImprove ? engine.candidates.indexOf(c) : 0)
         await saveStudioOutput(session.id, {
           file: blob, kind: asVideo ? 'video' : 'image', name,
-          familyKey: o.pick.family.key, familyVersion: o.pick.family.version,
+          familyKey: FAMILY_FOR[c.genome.archetype] ?? 'minimal', familyVersion: 1,
           hook: used.hook, message: used.message, cta: used.cta,
-          durationMs: asVideo ? o.scene.durationMs : null,
-          score: o.warnings.length === 0 ? 100 : 80,
-          tokens: { font_pair: batch.tokens.fontPair.key, accent: batch.tokens.colors.accent, surface: batch.tokens.colors.surface },
+          durationMs: asVideo ? 12000 : null,
+          score: c.score,
+          tokens: { engine: 'creative-engine-1', seed: c.seed, genome: genomeKey(c.genome), archetype: c.genome.archetype, min_contrast: Number(c.minContrast.toFixed(2)), font_pair: pair.key },
           conceptName: product.trim() || 'Creative',
         })
         files.push({ name: `${name}.${asVideo ? 'mp4' : 'png'}`, blob })
-        setSaving({ done: n, total: outputs.length })
+        setSaving({ done: n, total: picked.length })
       }
       void queryClient.invalidateQueries({ queryKey: ['content-intake'] })
       setSavedFiles(files)
@@ -294,19 +328,18 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
     </div>
   )
 
-  // The design every enhancement card previews: the first image design, re-dressed with that one enhancement switched on.
-  const sample = batch?.outputs.find((o) => o.as === 'image') ?? batch?.outputs[0]
+  // The design every enhancement card previews: the first image design, drawn again with that one enhancement switched on.
+  const sample = engine?.candidates.find((c) => c.as === 'image') ?? engine?.candidates[0]
   const previewWith = (key: EnhKey): ReactNode => {
-    if (!sample || !picture || !batch) return null
-    const s = { ...sample.scene.style!, ...(key === 'stickerCta' ? { ctaSticker: true } : {}), ...(key === 'videoFx' ? { colorBoost: true } : {}) }
-    let scene: Scene = { ...sample.scene, style: s }
-    if (key === 'textImprove' || key === 'details' || key === 'enhanceCta') {
-      const v = key === 'textImprove' ? copyAt(example) : { ...copyAt(0), support: key === 'details' ? priced : description.trim() }
-      const one = buildStudioBatch({ pixels: picture.pixels, copy: v, style: s, locale, measure, round, analysis: batch.analysis, tokens: batch.tokens, videos: 0, images: 4 })
-      scene = one.outputs.find((o) => o.pick.family.key === sample.pick.family.key)?.scene ?? one.outputs[0]!.scene
+    if (!sample || !engine || !paintOptions) return null
+    let elements = sample.elements
+    const copy = key === 'textImprove' ? copyAt(example) : key === 'details' ? { ...copyAt(0), price: priced } : key === 'enhanceCta' ? { ...copyAt(0), support: description.trim() } : copyAt(0)
+    if (key !== 'videoFx') {
+      const r = solveOne(engine.profile, sample.genome, { copy, measure, locale, ctaSticker: key === 'stickerCta' || enh.stickerCta })
+      if (r.ok) elements = r.elements
     }
 
-    return <StudioPreview key={fontsTick} scene={scene} bitmap={picture.bitmap} tokens={batch.tokens} showMargins={false} live={false} />
+    return <EnginePreview key={fontsTick} elements={elements} genome={sample.genome} options={{ ...paintOptions, colorBoost: key === 'videoFx' || enh.videoFx, showMargins: false }} video={false} locale={locale} />
   }
 
   const ENH: Array<{ key: EnhKey; state: 'on' | 'soon' | 'platform' | 'needs'; need?: string; art: 'design' | 'sizes' | 'comments' | 'catalog' }> = [
@@ -539,32 +572,36 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
           </section>
         )}
 
-        {!savedFiles && step === 'designs' && batch && (
+        {!savedFiles && step === 'designs' && engine && paintOptions && (
           <section>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="text-base font-bold text-text-primary">{t.designsHead}</h3>
                 <p className="mt-1 text-sm text-text-secondary">{t.designsHint}</p>
+                <p className="mt-1 text-xs text-text-muted" data-testid="composer-engine-stats"><Num>{t.engineStats.replace('{passed}', formatNumber(engine.candidates.length)).replace('{considered}', formatNumber(engine.considered)).replace('{rejected}', formatNumber(engine.rejected.length))}</Num></p>
               </div>
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary"><input type="checkbox" checked={margins} onChange={(e) => setMargins(e.target.checked)} />{t.margins}</label>
-                <Button variant="secondary" onClick={() => setRound((r) => r + 1)} data-testid="composer-new-batch">{t.newBatch}</Button>
+                <Button variant="secondary" onClick={() => { setRound((r) => r + 1); setSeed(newSeed(product || 'composer', round + 1)) }} data-testid="composer-new-batch">{t.newBatch}</Button>
               </div>
             </div>
             {!canExportVideo() && <p className="mt-2 text-xs text-text-secondary">{t.videoAsStill}</p>}
-            <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7" data-testid="composer-grid">
-              {batch.outputs.map((o, i) => {
-                const ok = o.hard.length === 0
+            {engine.candidates.length === 0 && <p className="mt-4 rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning" data-testid="composer-none-passed">{t.nonePassed}</p>}
+            <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="composer-grid">
+              {engine.candidates.map((c, i) => {
                 const on = chosen.includes(i)
 
                 return (
-                  <li key={`${o.as}-${o.pick.family.key}-${i}`}>
-                    <button type="button" disabled={!ok} onClick={() => setChosen((c) => (on ? c.filter((x) => x !== i) : [...c, i]))} data-testid={`composer-design-${i}`}
-                      className={`relative block w-full overflow-hidden rounded-xl border-2 ${on ? 'border-brand-600' : 'border-transparent'} disabled:opacity-60`}>
-                      <StudioPreview key={`${i}-${fontsTick}`} scene={o.scene} bitmap={picture?.bitmap ?? null} tokens={batch.tokens} showMargins={margins} live={o.as === 'video' && i < 3} />
+                  <li key={c.id}>
+                    <button type="button" onClick={() => setChosen((x) => (on ? x.filter((y) => y !== i) : [...x, i]))} data-testid={`composer-design-${i}`}
+                      className={`relative block w-full overflow-hidden rounded-xl border-2 ${on ? 'border-brand-600' : 'border-transparent'}`}>
+                      <EnginePreview key={`${c.id}-${fontsTick}`} elements={c.elements} genome={c.genome} options={paintOptions} video={c.as === 'video'} locale={locale} />
                       {on && <span className="absolute end-2 top-2 rounded-full bg-brand-600 p-1 text-white"><Check size={12} aria-hidden /></span>}
                     </button>
-                    <p className="mt-1 flex items-center gap-2 text-xs"><b className="text-text-primary">{o.as === 'video' ? t.video : t.image}</b><span className={ok ? 'text-success' : 'text-danger'}>{ok ? t.ready : t.blocked}</span></p>
+                    <p className="mt-1 flex items-center justify-between gap-2 text-xs">
+                      <span><b className="text-text-primary">{c.as === 'video' ? t.video : t.image}</b> <span className="text-text-secondary">{c.genome.archetype}</span></span>
+                      <span className="rounded-full bg-success-soft px-2 py-0.5 font-semibold text-success"><Num>{formatNumber(c.score)}</Num></span>
+                    </p>
                   </li>
                 )
               })}

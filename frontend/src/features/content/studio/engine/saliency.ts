@@ -4,8 +4,7 @@ import type { Pixels } from '../analysis/pixels'
  * CREATIVE-ENGINE-001 — `saliency_center` from the reference, extended to return the product's box as well as its centre.
  *
  * Importance = (|∂x| + |∂y|) × (0.5 + saturation), weighted by a centre prior exp(-d²/0.18). The centre is the importance-weighted
- * mean. The box is the smallest set of the most important pixels holding half of all importance, padded by 4%: the area no text or
- * shape may cover. Feed it a small copy (the reference reads 96px wide).
+ * mean. The box is the importance-weighted spread around it (±1.2σ), padded by 4%: the area no text or shape may cover. Feed it a small copy (the reference reads 96px wide).
  */
 export interface Saliency { cx: number; cy: number; box: { x: number; y: number; w: number; h: number } }
 
@@ -41,24 +40,20 @@ export function saliency(src: Pixels): Saliency {
   const cx = sx / t / w
   const cy = sy / t / h
 
-  // The box: the heaviest pixels until they hold half the importance.
-  const order = Array.from(m.keys()).sort((a, b) => m[b]! - m[a]!)
-  let acc = 0
-  let x0 = w
-  let y0 = h
-  let x1 = 0
-  let y1 = 0
-  for (const i of order) {
-    if (acc >= total * 0.5) break
-    acc += m[i]!
-    const x = i % w
-    const y = Math.floor(i / w)
-    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y)
+  // The box: the importance-weighted spread around the centre (±1.2σ on each axis), padded by 4%. A half-mass box of the heaviest
+  // pixels spread over every busy corner of a real photograph and left no room for text; the spread follows the product itself.
+  let vx = 0
+  let vy = 0
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = m[y * w + x]!
+    vx += v * (x / w - cx) ** 2
+    vy += v * (y / h - cy) ** 2
   }
-  if (x1 < x0) return { cx, cy, box: { x: 0.3, y: 0.3, w: 0.4, h: 0.4 } }
+  const sx2 = Math.sqrt(vx / t)
+  const sy2 = Math.sqrt(vy / t)
   const pad = 0.04
-  const bx = Math.max(0, x0 / w - pad)
-  const by = Math.max(0, y0 / h - pad)
+  const bx = Math.max(0, cx - 1.2 * sx2 - pad)
+  const by = Math.max(0, cy - 1.2 * sy2 - pad)
 
-  return { cx, cy, box: { x: bx, y: by, w: Math.min(1, (x1 + 1) / w + pad) - bx, h: Math.min(1, (y1 + 1) / h + pad) - by } }
+  return { cx, cy, box: { x: bx, y: by, w: Math.min(1, cx + 1.2 * sx2 + pad) - bx, h: Math.min(1, cy + 1.2 * sy2 + pad) - by } }
 }
