@@ -42,11 +42,12 @@ describe('the data-quality slide', () => {
     expect(screen.getAllByText(/آخر مزامنة/).length).toBeGreaterThan(0)
   })
 
-  it('shows the client which figures are missing, and nothing about our plumbing', () => {
+  /** Owner 2026-11-22: the «اكتمال الأرقام» notice was removed from client reports. */
+  it('shows the client no completeness notice, and nothing about our plumbing', () => {
     render(<SlideBody slide={slide} data={{ ...base, audience: 'client' } as never} meta={meta} />)
 
-    expect(screen.getByText(/اكتمال الأرقام/)).toBeInTheDocument()
-    expect(screen.getByText(/لم تصل هذه المؤشرات/)).toBeInTheDocument()
+    expect(screen.queryByText(/اكتمال الأرقام/)).toBeNull()
+    expect(screen.queryByText(/لم تصل هذه المؤشرات/)).toBeNull()
 
     expect(screen.queryAllByText(/آخر مزامنة/)).toEqual([])
     expect(screen.queryByText(/المنصات المرتبطة/)).toBeNull()
