@@ -89,7 +89,7 @@ export function OpsHubBar() {
     const chips: Chip[] = []
     if (canAlerts) chips.push({ key: 'alerts-list', to: '/alerts', label: ar ? 'التنبيهات' : 'Alerts', value: c ? String(c.open) : null, detail: null })
     if (canCampaigns) {
-      chips.push({ key: 'recommendations', to: '/recommendations', label: ar ? 'التوصيات' : 'Recommendations', value: null, detail: null })
+      chips.push({ key: 'recommendations', to: '/recommendations', label: ar ? 'فرص التحسين' : 'Recommendations', value: null, detail: null })
       chips.push({
         key: 'approvals', to: '/agents/approvals', label: ar ? 'الموافقات' : 'Approvals',
         value: pending === undefined ? null : String(pending),
