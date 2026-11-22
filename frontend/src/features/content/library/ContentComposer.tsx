@@ -211,11 +211,13 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
 
   // The picture's profile decides the font pair; the pair is loaded before anything is measured or drawn.
   const profile = useMemo(() => (picture ? profileOf(picture.pixels, { w: picture.bitmap.width, h: picture.bitmap.height }) : null), [picture])
+  // The first batch takes the pair that fits the picture's tone; each «دفعة جديدة» moves to the next pair, so the type changes too.
   const pair = useMemo(() => {
     const tone = profile?.tokens.pair === 'bold' ? 'bold' : profile?.tokens.pair === 'soft' ? 'soft' : 'luxury'
+    const start = Math.max(0, FONT_PAIRS.findIndex((p) => p.tone === tone))
 
-    return FONT_PAIRS.find((p) => p.tone === tone) ?? FONT_PAIRS[0]!
-  }, [profile])
+    return FONT_PAIRS[(start + round) % FONT_PAIRS.length]!
+  }, [profile, round])
   const [fontsTick, setFontsTick] = useState(0)
   useEffect(() => {
     let alive = true
@@ -228,10 +230,13 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
 
     return (text: string, px: number) => {
       if (!c) return text.length * px * 0.5
-      c.font = `700 ${px}px "${pair.display}", sans-serif`
       c.direction = locale === 'ar' ? 'rtl' : 'ltr'
+      // The wider of the two faces: the solver sizes every block with one measure, and neither face may overflow its box.
+      c.font = `${pair.displayWeight} ${px}px "${pair.display}", sans-serif`
+      const d = c.measureText(text).width
+      c.font = `${pair.textWeight} ${px}px "${pair.text}", sans-serif`
 
-      return c.measureText(text).width
+      return Math.max(d, c.measureText(text).width)
     }
   }, [pair, locale, fontsTick]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -250,7 +255,7 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
   }, [picture, profile, baseCopy.hook, baseCopy.message, baseCopy.cta, baseCopy.support, baseCopy.price, measure, locale, seed, enh.stickerCta, enh.textImprove, variantCount, primaries, headlines]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const paintOptions: PaintOptions | null = useMemo(() => (picture && profile
-    ? { plan: profile.plan, bitmap: picture.bitmap, focus: profile.focus, fonts: { display: `"${pair.display}", sans-serif`, text: `"${pair.text}", sans-serif` }, colorBoost: enh.videoFx, showMargins: margins }
+    ? { plan: profile.plan, bitmap: picture.bitmap, focus: profile.focus, fonts: { display: `"${pair.display}", sans-serif`, text: `"${pair.text}", sans-serif`, displayWeight: pair.displayWeight, textWeight: pair.textWeight }, colorBoost: enh.videoFx, showMargins: margins }
     : null), [picture, profile, pair, enh.videoFx, margins])
 
   useEffect(() => {

@@ -9,14 +9,23 @@ export interface FontPair {
   tone: Tone
   display: string
   text: string
+  /** The weights the pair draws at: display heavy, text medium so a supporting line never looks thin beside the hook. */
+  displayWeight: number
+  textWeight: number
   licence: 'OFL'
 }
 
+/**
+ * Owner 2026-11-22: the earlier pairs drew every hook in a plain UI sans at 700 and every line at 400 — legible, but it read as a
+ * form, not an advertisement. Each pair now leads with a display face built for headlines (Lalezar, Changa ExtraBold, El Messiri,
+ * Almarai ExtraBold, Cairo Black) and sets supporting text at a medium weight.
+ */
 export const FONT_PAIRS: ReadonlyArray<FontPair> = [
-  { key: 'plex-readex', tone: 'luxury', display: 'IBM Plex Sans Arabic', text: 'Readex Pro', licence: 'OFL' },
-  { key: 'cairo-tajawal', tone: 'bold', display: 'Cairo', text: 'Tajawal', licence: 'OFL' },
-  { key: 'almarai-kufi', tone: 'soft', display: 'Noto Kufi Arabic', text: 'Almarai', licence: 'OFL' },
-  { key: 'readex-plex', tone: 'modern', display: 'Readex Pro', text: 'IBM Plex Sans Arabic', licence: 'OFL' },
+  { key: 'messiri-readex', tone: 'luxury', display: 'El Messiri', text: 'Readex Pro', displayWeight: 700, textWeight: 500, licence: 'OFL' },
+  { key: 'lalezar-cairo', tone: 'bold', display: 'Lalezar', text: 'Cairo', displayWeight: 400, textWeight: 600, licence: 'OFL' },
+  { key: 'almarai-tajawal', tone: 'soft', display: 'Almarai', text: 'Tajawal', displayWeight: 800, textWeight: 500, licence: 'OFL' },
+  { key: 'changa-plex', tone: 'modern', display: 'Changa', text: 'IBM Plex Sans Arabic', displayWeight: 800, textWeight: 500, licence: 'OFL' },
+  { key: 'cairo-tajawal', tone: 'bold', display: 'Cairo', text: 'Tajawal', displayWeight: 900, textWeight: 500, licence: 'OFL' },
 ]
 
 export function pickFontPair(tone: Tone): FontPair {

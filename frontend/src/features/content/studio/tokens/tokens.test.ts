@@ -45,7 +45,7 @@ describe('font pairs', () => {
   })
 
   it('a tone picks its own pair, and the picture decides the tone when the brand states none', () => {
-    expect(pickFontPair('bold').key).toBe('cairo-tajawal')
+    expect(pickFontPair('bold').key).toBe('lalezar-cairo')
     expect(toneFromPicture({ tone: 'dark', temperature: 'warm', complexity: 'simple' })).toBe('luxury')
     expect(toneFromPicture({ tone: 'light', temperature: 'cool', complexity: 'busy' })).toBe('bold')
     expect(toneFromPicture({ tone: 'light', temperature: 'cool', complexity: 'simple' })).toBe('soft')
@@ -72,10 +72,10 @@ describe('deriving the tokens', () => {
   })
 
   it('the Brand Kit wins over the picture', () => {
-    const t = deriveTokens(dark, { tone: 'soft', fontPairKey: 'almarai-kufi', colors: { accent: '#1e78c8' } })
+    const t = deriveTokens(dark, { tone: 'soft', fontPairKey: 'almarai-tajawal', colors: { accent: '#1e78c8' } })
 
     expect(t.source).toBe('brand_kit')
-    expect(t.fontPair.key).toBe('almarai-kufi')
+    expect(t.fontPair.key).toBe('almarai-tajawal')
     expect(contrastRatio(fromHex(t.colors.accentText), fromHex(t.colors.accent))).toBeGreaterThanOrEqual(4.5)
   })
 

@@ -18,7 +18,8 @@ export interface PaintOptions {
   plan: FitPlan
   bitmap: CanvasImageSource & { width: number; height: number }
   focus: { x: number; y: number }
-  fonts: { display: string; text: string }
+  /** Families as CSS font-family values, with the weights this pair draws at (a single-weight display face must not be faux-bolded). */
+  fonts: { display: string; text: string; displayWeight?: number; textWeight?: number }
   /** «تأثيرات الفيديو»: a little more contrast and colour on the picture. */
   colorBoost?: boolean
   showMargins?: boolean
@@ -151,7 +152,7 @@ function drawElement(ctx: Ctx, e: El, g: Genome, o: PaintOptions, rtl: boolean):
   if (!e.lines) return
 
   const px = e.px ?? 48
-  const weight = e.font === 'display' ? DISPLAY_WEIGHT : TEXT_WEIGHT
+  const weight = e.font === 'display' ? (o.fonts.displayWeight ?? DISPLAY_WEIGHT) : (o.fonts.textWeight ?? TEXT_WEIGHT)
   const family = e.font === 'display' ? o.fonts.display : o.fonts.text
   ctx.font = `${weight} ${px}px ${family}`
   ctx.direction = rtl ? 'rtl' : 'ltr'
@@ -197,7 +198,8 @@ function drawElement(ctx: Ctx, e: El, g: Genome, o: PaintOptions, rtl: boolean):
     ctx.save()
     if (!onShape) { ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = px * 0.18; ctx.shadowOffsetY = 4 }
     ctx.fillStyle = e.color ?? '#FFFFFF'
-    if (g.treatment === 'weight-contrast' && e.role === 'hook' && i > 0) ctx.font = `${TEXT_WEIGHT} ${Math.round(px * 0.92)}px ${o.fonts.text}`
+    // The second line changes face, never to a thin weight: a hairline beside a display hook read as unfinished (Owner 2026-11-22).
+    if (g.treatment === 'weight-contrast' && e.role === 'hook' && i > 0) ctx.font = `700 ${Math.round(px * 0.92)}px ${o.fonts.text}`
     ctx.fillText(line, x, cy)
     ctx.restore()
     if (g.treatment === 'underline' && e.role === 'hook') {
