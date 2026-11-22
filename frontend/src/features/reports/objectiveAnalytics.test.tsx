@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/utils'
 import { ObjectiveAnalyticsSection } from './ObjectiveAnalyticsSection'
 import { drawableFamilies, formatKpi, type ObjectiveAnalytics, type ObjectiveFamilyBlock, type ObjectiveKpi } from './objectiveAnalytics'
@@ -97,6 +97,47 @@ describe('objective analytics section', () => {
 
     expect(screen.getByTestId('objective-kpi-leads-leads')).toHaveTextContent('48%')
     expect(screen.getByTestId('objective-kpi-leads-cpl').textContent).not.toMatch(/%/)
+  })
+
+  it('opens the family on its outcome, and a card is a switch: the spotlight reads that figure by platform and day (OBJECTIVE-CARDS-CREATIVE-001)', () => {
+    const block: ObjectiveFamilyBlock = {
+      ...awareness,
+      kpis: awareness.kpis.map((k) => (k.key === 'spend' ? { ...k, delta: 0.31 } : k)),
+      platforms: [
+        { provider: 'meta', spend_share: 0.6, kpis: [kpi('impressions', 200_000), kpi('cpm', 5), kpi('spend', 1000)] },
+        { provider: 'tiktok', spend_share: 0.4, kpis: [kpi('impressions', 100_000), kpi('cpm', 15), kpi('spend', 1500)] },
+      ],
+      trend: {
+        metric: 'cpm', outcome: 'impressions',
+        points: [
+          { date: '2026-07-01', reported: true, spend: 80, outcome: 9000, value: 8.9 },
+          { date: '2026-07-02', reported: false, spend: null, outcome: null, value: null },
+          { date: '2026-07-03', reported: true, spend: 90, outcome: 11000, value: 8.2 },
+        ],
+      },
+    }
+    renderWithProviders(<ObjectiveAnalyticsSection section={section([block])} currency="SAR" ar={false} />)
+
+    const spot = screen.getByTestId('objective-spotlight-awareness')
+    expect(spot).toHaveAttribute('data-kpi', 'impressions')
+    expect(screen.getByTestId('objective-kpi-awareness-impressions')).toHaveAttribute('aria-selected', 'true')
+    // Impressions add up and every platform reported them: each platform carries its share.
+    expect(within(screen.getByTestId('objective-spotlight-platforms-awareness')).getByText('66.7%')).toBeInTheDocument()
+    expect(screen.getByTestId('objective-trend-awareness')).toBeInTheDocument()
+    // Spend's movement is neutral — neither good nor bad.
+    expect(screen.getByTestId('objective-kpi-awareness-spend')).toHaveTextContent('+31%')
+
+    fireEvent.click(screen.getByTestId('objective-kpi-awareness-cpm'))
+    expect(spot).toHaveAttribute('data-kpi', 'cpm')
+    const platforms = screen.getByTestId('objective-spotlight-platforms-awareness')
+    // A cost reads lowest first, and a rate is never given a share of a whole.
+    expect(platforms.textContent?.indexOf('Meta') ?? -1).toBeLessThan(platforms.textContent?.search(/TikTok/) ?? -1)
+    expect(platforms.textContent).not.toMatch(/%/)
+
+    // Reach: no platform sent it — said, not drawn as zero.
+    fireEvent.click(screen.getByTestId('objective-kpi-awareness-reach'))
+    expect(screen.getByTestId('objective-spotlight-platforms-awareness')).toHaveTextContent('No platform reported this figure')
+    expect(screen.queryByTestId('objective-trend-awareness')).toBeNull()
   })
 
   it('draws best and weakest only where the server ranked, platform then content', () => {
