@@ -46,9 +46,9 @@ export function CompactTiles({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
         return (
           <div key={k.key} data-testid={`ga4-tile-${k.key}`} className="flex min-w-0 flex-col gap-1 overflow-hidden rounded-xl border border-border bg-surface px-3 pb-1 pt-2.5">
             <div className="flex items-center justify-between gap-1">
-              <span className="truncate text-[11px] font-semibold text-text-muted">{tx(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
+              <span className="truncate text-xs font-semibold text-text-muted">{tx(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
               {Icon && (
-                <span data-testid={`ga4-delta-${k.key}`} className={`tnum inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-[10px] font-bold ${good ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                <span data-testid={`ga4-delta-${k.key}`} className={`tnum inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-xs font-bold ${good ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
                   <Icon size={10} aria-hidden /><Num>{percent(Math.abs(c as number), 0)}</Num>
                 </span>
               )}
@@ -107,13 +107,13 @@ function Bar({ testId, icon, label, total, shared, segs, max, ar }: { testId: st
       <div className="flex min-w-0 items-center gap-2">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-secondary text-text-primary">{icon}</span>
         <span className="min-w-0">
-          <span className="block truncate text-[11px] font-semibold text-text-muted">{label}</span>
+          <span className="block truncate text-xs font-semibold text-text-muted">{label}</span>
           <span className="tnum block text-xl font-extrabold leading-none text-text-primary"><Num>{num(total)}</Num></span>
         </span>
       </div>
       <div className="flex h-9 w-full overflow-hidden rounded-xl bg-surface-secondary">
         {shared > 0 && (
-          <span data-testid={`${testId}-shared`} title={`${ar ? 'مشترك' : 'Shared'} ${num(shared)}`} className="tnum grid place-items-center text-[11px] font-bold text-white" style={{ width: w(shared), background: SHARED_COLOR }}>
+          <span data-testid={`${testId}-shared`} title={`${ar ? 'مشترك' : 'Shared'} ${num(shared)}`} className="tnum grid place-items-center text-xs font-bold text-white" style={{ width: w(shared), background: SHARED_COLOR }}>
             <span className="inline-flex items-center gap-1 truncate px-1"><Check size={12} aria-hidden /><Num>{num(shared)}</Num></span>
           </span>
         )}
@@ -123,7 +123,7 @@ function Bar({ testId, icon, label, total, shared, segs, max, ar }: { testId: st
 
           return (
             <span key={s.key} data-testid={`${testId}-seg-${s.key}`} title={`${tx(p.label, ar)} ${num(s.value)}`}
-              className="tnum grid place-items-center border-s-2 border-surface text-[11px] font-bold text-white" style={{ width: w(s.value), background: p.color }}>
+              className="tnum grid place-items-center border-s-2 border-surface text-xs font-bold text-white" style={{ width: w(s.value), background: p.color }}>
               <span className="inline-flex items-center gap-1 truncate px-1"><Icon size={12} aria-hidden /><Num>{num(s.value)}</Num></span>
             </span>
           )
@@ -164,7 +164,7 @@ export function GapStory({ data, ar, platforms = [] }: { data: GapReasonsPayload
           </span>
           <span className="relative grid h-11 w-11 place-items-center rounded-full bg-success/15 text-success">
             <ShoppingBag size={20} aria-hidden />
-            <span className="tnum absolute -top-1 -end-1 grid h-5 min-w-5 place-items-center rounded-full bg-success px-1 text-[10px] font-extrabold text-white"><Num>1</Num></span>
+            <span className="tnum absolute -top-1 -end-1 grid h-5 min-w-5 place-items-center rounded-full bg-success px-1 text-xs font-extrabold text-white"><Num>1</Num></span>
           </span>
           <span className="tnum rounded-full bg-brand-600/15 px-2 py-0.5 text-xs font-extrabold text-brand-600"><Num>{`×${logos.length}`}</Num></span>
         </div>
@@ -181,7 +181,7 @@ export function GapStory({ data, ar, platforms = [] }: { data: GapReasonsPayload
           const Icon = p.icon
 
           return (
-            <li key={`${l.key}-${'side' in l ? l.side : ''}`} data-testid={l.key === 'shared' ? 'gap-legend-shared' : `gap-reason-${l.key}`} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
+            <li key={`${l.key}-${'side' in l ? l.side : ''}`} data-testid={l.key === 'shared' ? 'gap-legend-shared' : `gap-reason-${l.key}`} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-text-secondary">
               <span className="grid h-4 w-4 place-items-center rounded-full text-white" style={{ background: p.color }}><Icon size={10} aria-hidden /></span>
               {tx(p.label, ar)}
               <span className="tnum font-extrabold text-text-primary"><Num>{num(l.value)}</Num></span>
@@ -229,7 +229,7 @@ export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPaylo
     <section data-testid="report-ga4-attribution-block" className="flex min-w-0 flex-col gap-4 rounded-2xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-extrabold text-text-primary">{ar ? 'المنصة مقابل الموقع' : 'Platform vs website'}</h3>
-        <span className="flex items-center gap-3 text-[11px] font-semibold text-text-muted">
+        <span className="flex items-center gap-3 text-xs font-semibold text-text-muted">
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--brand-600)' }} />{ar ? 'المنصة' : 'Platform'}</span>
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--teal)' }} />{ar ? 'الموقع' : 'Website'}</span>
         </span>
@@ -246,16 +246,16 @@ export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPaylo
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
                   <div className="h-3 rounded-full" style={{ width: w(r.claimed), background: 'var(--brand-600)' }} />
-                  <span className="tnum text-[11px] font-bold text-text-primary"><Num>{r.claimed === null ? '—' : num(r.claimed)}</Num></span>
+                  <span className="tnum text-xs font-bold text-text-primary"><Num>{r.claimed === null ? '—' : num(r.claimed)}</Num></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="h-3 rounded-full" style={{ width: w(r.ga4?.purchases), background: 'var(--teal)' }} />
-                  <span className="tnum text-[11px] font-bold text-text-primary"><Num>{r.ga4?.purchases == null ? '—' : num(r.ga4.purchases)}</Num></span>
+                  <span className="tnum text-xs font-bold text-text-primary"><Num>{r.ga4?.purchases == null ? '—' : num(r.ga4.purchases)}</Num></span>
                 </div>
               </div>
               <span className="flex flex-col items-end gap-1">
-                {D && <span data-testid={`match-dir-${r.key}`} data-direction={d} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${D.tone}`}><D.icon size={11} aria-hidden />{tx(D.label, ar)}</span>}
-                {r.ga4?.aov_usd != null && <span className="tnum text-[10px] text-text-muted"><ShoppingBag size={10} className="me-0.5 inline" aria-hidden /><Num>{money(r.ga4.aov_usd, 'USD')}</Num></span>}
+                {D && <span data-testid={`match-dir-${r.key}`} data-direction={d} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${D.tone}`}><D.icon size={11} aria-hidden />{tx(D.label, ar)}</span>}
+                {r.ga4?.aov_usd != null && <span className="tnum text-xs text-text-muted"><ShoppingBag size={10} className="me-0.5 inline" aria-hidden /><Num>{money(r.ga4.aov_usd, 'USD')}</Num></span>}
               </span>
             </li>
           )
@@ -264,7 +264,7 @@ export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPaylo
 
       {indirectTotal > 0 && (
         <div data-testid="indirect-path" className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between text-[11px] font-semibold text-text-muted">
+          <div className="flex items-center justify-between text-xs font-semibold text-text-muted">
             <span className="inline-flex items-center gap-1"><Route size={12} aria-hidden />{ar ? 'مسار غير مباشر' : 'Indirect path'}</span>
             <span className="tnum font-extrabold text-text-primary" data-testid="indirect-path-total"><Num>{num(indirectTotal)}</Num></span>
           </div>
@@ -273,7 +273,7 @@ export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPaylo
           </div>
           <div className="flex flex-wrap gap-x-3 gap-y-1">
             {indirect.map((i, n) => (
-              <span key={i.key} className="inline-flex items-center gap-1 text-[11px] text-text-secondary">
+              <span key={i.key} className="inline-flex items-center gap-1 text-xs text-text-secondary">
                 <span className="h-2 w-2 rounded-full" style={{ background: COLORS[n % COLORS.length] }} />{tx(UNPAID[i.key] ?? { ar: i.key, en: i.key }, ar)}
                 <span className="tnum font-bold text-text-primary"><Num>{num(i.sessions)}</Num></span>
               </span>
@@ -371,7 +371,7 @@ export function TablesVisual({ tables, currency, ar, pageSize = 8, top = 8 }: { 
                   <span className="tnum w-4 shrink-0 text-text-muted"><Num>{String(i + 1)}</Num></span>
                   <span dir="auto" className="truncate">{name}</span>
                   {sub && <span dir="ltr" className="shrink-0 font-normal text-text-muted">{sub}</span>}
-                  {i === 0 && <span className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success">{ar ? 'الأعلى' : 'Top'}</span>}
+                  {i === 0 && <span className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-xs font-bold text-success">{ar ? 'الأعلى' : 'Top'}</span>}
                 </span>
                 <span className="tnum whitespace-nowrap font-bold text-text-primary">
                   <Num>{fmt(b.v)}</Num>
