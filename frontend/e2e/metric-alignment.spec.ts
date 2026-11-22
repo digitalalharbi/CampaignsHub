@@ -94,7 +94,7 @@ test.describe('a metric card’s title and figure share one edge', () => {
 
   test('Arabic: the figure sits under its title at the right edge', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
 
     /*
       The compact summary, which replaced the thirteen-card strip — CONTENT-SUMMARY-COMPACT-001.
@@ -123,7 +123,7 @@ test.describe('a metric card’s title and figure share one edge', () => {
 
   test('English: the figure sits under its title at the left edge', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
     await switchToEnglish(page)
 
     const card = '[data-testid^="content-summary-"]:not([data-testid$="figures"]):not([data-testid$="count"]):not([data-testid$="mix"])'
@@ -148,7 +148,7 @@ test.describe('a metric card’s title and figure share one edge', () => {
    */
   test('Arabic: a content card’s value sits under its own label', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
 
     const card = page.getByRole('article').first()
     await expect(card.locator('dl div').first()).toBeVisible({ timeout: 30000 })

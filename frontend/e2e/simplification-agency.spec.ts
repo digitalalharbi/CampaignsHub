@@ -164,7 +164,7 @@ test.describe('agency filters are on the page, and name what they narrow', () =>
     },
     {
       id: 'content',
-      path: '/agency/content',
+      path: '/agency/content?view=grid',
       /*
        * The platform axis is visible chips now (UX-FILTERS-001), so it is pressed rather than
        * opened. `pickOption` still drives the pages whose axes ARE popovers.

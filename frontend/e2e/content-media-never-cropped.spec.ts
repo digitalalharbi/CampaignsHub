@@ -71,7 +71,7 @@ for (const viewport of [
   test(`every library cover fills a square frame — ${viewport.name}`, async ({ page, request }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
 
     await expect(page.locator('article').first()).toBeVisible({ timeout: 30_000 })
     await page.waitForLoadState('networkidle')
@@ -117,7 +117,7 @@ for (const viewport of [
   test(`the viewer shows the whole creative — ${viewport.name}`, async ({ page, request }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
 
     await expect(page.getByTestId('creative-card-open').first()).toBeVisible({ timeout: 30_000 })
     await page.getByTestId('creative-card-open').first().click()
@@ -177,7 +177,7 @@ for (const viewport of [
  */
 test('every card resolves to a picture, a film or a sentence — never an empty box', async ({ page, request }) => {
   await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-  await page.goto('/agency/content')
+  await page.goto('/agency/content?view=grid')
 
   await expect(page.locator('article').first()).toBeVisible({ timeout: 30_000 })
   await page.waitForLoadState('networkidle')

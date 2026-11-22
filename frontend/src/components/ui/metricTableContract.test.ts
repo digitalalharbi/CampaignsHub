@@ -57,6 +57,7 @@ const EXEMPT: Record<string, string> = {
   'src/features/reports/ReportsPage.tsx': 'a list of reports and a share access log — identifiers, times and controls, with nothing a reader compares across rows. Out of scope by KIND, not waiting to be migrated',
   'src/features/reports/PrintDocument.tsx': 'a printed page has no sort control, no hover and no scroller, and those three are most of what the primitive is. Out of scope by kind',
   'src/features/content/CreativesPage.tsx': 'the list view of a grid: selection checkboxes and media previews per row',
+  'src/features/content/library/CreativesTable.tsx': 'CONTENT-LIBRARY-SNAP-001 — a creative list, not an analytical table: a selection checkbox and a cover per row, and only identifiers (name, format, platform, status, campaign, date) with no figure a reader compares across rows. Out of scope by kind',
   'src/features/campaigns/CampaignCommandCenter.tsx': 'inline editing per row — the cells are controls, and the spec API needs an editable kind first',
   'src/features/campaigns/CampaignsPage.tsx': 'the campaigns table orders by PRIORITY BAND before any column sort, '
     + 'drives that sort from the page rather than from the table, and navigates on a row press. The objective-mix '

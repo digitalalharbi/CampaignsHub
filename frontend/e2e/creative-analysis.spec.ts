@@ -28,7 +28,7 @@ const cards = (page: Page) => page.getByRole('article')
 async function openLibrary(page: Page, request: APIRequestContext): Promise<string> {
   const projectId = await seededProject(request, STORE_PROJECT)
   await selectProject(page, projectId)
-  await page.goto('/agency/content')
+  await page.goto('/agency/content?view=grid')
   await expect(page.getByRole('heading', { name: /مكتبة المحتويات|Content library/ })).toBeVisible({ timeout: 30000 })
 
   return projectId
@@ -776,7 +776,7 @@ test.describe('the library toolbar holds still while it loads', () => {
     const projectId = await seededProject(request, STORE_PROJECT)
     await selectProject(page, projectId)
 
-    await page.goto('/agency/content')
+    await page.goto('/agency/content?view=grid')
 
     const toggle = page.getByRole('button', { name: /^(قائمة|List)$/ })
     await expect(toggle).toBeVisible({ timeout: 30000 })

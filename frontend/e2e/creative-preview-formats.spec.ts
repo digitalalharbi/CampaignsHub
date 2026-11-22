@@ -102,7 +102,7 @@ for (const locale of ['ar', 'en'] as const) {
 
     test.beforeEach(async ({ page, request }) => {
       await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-      await page.goto('/agency/content')
+      await page.goto('/agency/content?view=grid')
       // AFTER the shell is up: the toggle is a control in the app, and reading the stored locale
       // on `about:blank` is a SecurityError.
       if (locale === 'en') await switchToEnglish(page)

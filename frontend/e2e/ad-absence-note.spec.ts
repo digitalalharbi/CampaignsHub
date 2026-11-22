@@ -17,7 +17,7 @@ test.use({ storageState: AUTH.advertiser })
 
 test('the «why there is no preview» line is not hidden under the card’s own controls', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/app/content')
+  await page.goto('/app/content?view=grid')
   await expect(page.locator('main')).toBeVisible({ timeout: 20000 })
 
   /*

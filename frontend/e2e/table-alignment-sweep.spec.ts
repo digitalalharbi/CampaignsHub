@@ -308,7 +308,7 @@ async function stillFor(locator: Locator, timeout = 15000): Promise<void> {
  */
 const HAND_ROLLED = [
   { path: '/app/campaigns', what: 'the campaigns list — row selection and bulk actions' },
-  { path: '/app/content', what: 'the content list — selection checkboxes and media cells' },
+  { path: '/app/content?view=list', what: 'the content list — selection checkboxes and media cells' },
   { path: '/app/subscriptions', what: 'the subscription list' },
   { path: '/app/subscriptions/invoices', what: 'CampaignsHub’s own invoices to this customer' },
   { path: '/app/files', what: 'the files library' },
