@@ -1146,7 +1146,7 @@ final class DailyDigestMail extends Mailable
             'fine_named' => 'بخير',
             'funnel' => 'المسار',
             'content' => 'المحتوى',
-            'recommendations' => 'التوصيات المعتمدة',
+            'recommendations' => 'فرص التحسين المعتمدة',
             'best_content' => 'الأفضل',
             'declining' => 'يتراجع',
             'fatigued' => 'يحتاج تجديدًا',
