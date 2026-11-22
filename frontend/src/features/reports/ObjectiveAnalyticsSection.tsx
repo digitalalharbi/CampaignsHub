@@ -4,6 +4,8 @@ import { ProviderName } from '@/components/ProviderMark'
 import { platformColor } from '@/features/analytics/components'
 import { canonicalPlatform } from '@/lib/platforms'
 import { Num } from '@/components/ui/Num'
+import { KpiCard, TrendPill } from '@/features/analytics/components'
+import { compact, money } from '@/features/analytics/format'
 import {
   drawableFamilies,
   formatKpi,
@@ -12,6 +14,7 @@ import {
   unavailableNote,
   type ObjectiveAnalytics,
   type ObjectiveFamilyBlock,
+  type ObjectiveKpi,
   type ObjectiveRanking,
   type RankingEnd,
 } from './objectiveAnalytics'
@@ -52,46 +55,82 @@ export function ObjectiveAnalyticsSection({ section, currency, ar, showContent =
   )
 }
 
+/** Figures where less is better: their movement colours the other way, as on the summary's cards. */
+const LOWER_IS_BETTER = new Set(['spend', 'cpa', 'cpc', 'cpm', 'cpl', 'cpi', 'cpe', 'cost_per_view', 'cost_per_conversion', 'cost_per_lpv', 'cost_per_result', 'frequency'])
+
+/** The summary card's compact figure (1.49K USD, 1.63M); rates and multipliers keep their own reading. */
+function cardText(kpi: ObjectiveKpi, currency: Props['currency'], ar: boolean): string {
+  if (kpi.state !== 'reported' || kpi.value === null) return ar ? 'غير متاح' : 'Not available'
+  if (kpi.kind === 'money') return money(kpi.value, currency ?? null)
+  if (kpi.kind === 'count') return compact(kpi.value)
+
+  return formatKpi(kpi, currency)
+}
+
+/** A card's line is drawn only from a daily series the server sent for that very figure — never borrowed from another. */
+function sparkFor(key: string, trend: ObjectiveFamilyBlock['trend']): number[] | undefined {
+  if (!trend) return undefined
+  const pick = key === 'spend' ? 'spend' : key === trend.outcome ? 'outcome' : key === trend.metric ? 'value' : null
+  if (!pick) return undefined
+  const values = trend.points.map((p) => p[pick]).filter((v): v is number => typeof v === 'number')
+
+  return values.length > 1 ? values : undefined
+}
+
 function FamilyCard({ block, currency, ar, showContent }: { block: ObjectiveFamilyBlock; currency: Props['currency']; ar: boolean; showContent: boolean }) {
-  const spend = block.kpis.find((k) => k.key === 'spend')
-  const tiles = block.kpis.filter((k) => k.key !== 'spend')
+  /*
+   * OBJECTIVE-CARDS-PARITY-001 (Owner 2026-11-22: «البطاقات توازي البطاقات الصغيرة والكبيرة») — the family's KPIs drawn exactly as
+   * the summary draws its own: the first four as the large cards (figure, movement, daily line), the rest as the small cards
+   * (figure and movement). Spend leads, as it does above. A movement appears only where the server stated one.
+   */
+  const ordered = [...block.kpis].sort((a, b) => (a.key === 'spend' ? -1 : b.key === 'spend' ? 1 : 0))
+  const hero = ordered.slice(0, 4)
+  const rest = ordered.slice(4)
   const contentRanking = showContent ? block.content_ranking : null
+  const missingNote = (kpi: ObjectiveKpi) => {
+    const missing = kpi.state === 'reported' ? (kpi.not_reported_by ?? []) : []
+    if (missing.length === 0) return kpi.state === 'reported' ? undefined : unavailableNote(kpi.reason, ar)
+
+    return (ar ? 'دون ' : 'Excl. ') + missing.map((p) => providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')).join('، ')
+  }
 
   return (
     <div data-testid={`objective-family-${block.family}`} className="rounded-2xl border border-border bg-surface p-4">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <span className="font-bold text-text-primary">{ar ? block.label_ar : block.label_en}</span>
-        {spend && (
-          <span className="text-xs text-text-muted">
-            {ar ? spend.label_ar : spend.label_en} <Num className="tnum font-semibold text-text-primary">{formatKpi(spend, currency)}</Num>
-          </span>
-        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        {tiles.map((kpi) => {
-          const missing = kpi.state === 'reported' ? (kpi.not_reported_by ?? []) : []
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        {hero.map((kpi) => (
+          <div key={kpi.key} data-testid={`objective-kpi-${block.family}-${kpi.key}`} data-state={kpi.state} className="min-w-0">
+            <KpiCard
+              label={ar ? kpi.label_ar : kpi.label_en}
+              value={cardText(kpi, currency, ar)}
+              exact={kpi.state === 'reported' ? formatKpi(kpi, currency) : undefined}
+              delta={kpi.delta ?? undefined}
+              invertGood={LOWER_IS_BETTER.has(kpi.key)}
+              spark={sparkFor(kpi.key, block.trend)}
+              hint={missingNote(kpi)}
+            />
+          </div>
+        ))}
+      </div>
 
-          return (
-            <div
-              key={kpi.key}
-              data-testid={`objective-kpi-${block.family}-${kpi.key}`}
-              data-state={kpi.state}
-              className="min-w-0 rounded-xl bg-surface-secondary p-3"
-              title={kpi.state === 'reported' ? undefined : unavailableNote(kpi.reason, ar)}
-            >
-              <div className="truncate text-[11px] font-medium text-text-muted">{ar ? kpi.label_ar : kpi.label_en}</div>
-              <div className="tnum mt-1 text-lg font-extrabold text-text-primary"><Num>{formatKpi(kpi, currency)}</Num></div>
-              {missing.length > 0 && (
-                <div className="mt-0.5 truncate text-[10px] text-text-muted">
-                  {ar ? 'دون ' : 'Excl. '}
-                  {missing.map((p) => providerLabel(canonicalPlatform(p), ar ? 'ar' : 'en')).join('، ')}
-                </div>
-              )}
+      {rest.length > 0 && (
+        <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {rest.map((kpi) => (
+            <div key={kpi.key} data-testid={`objective-kpi-${block.family}-${kpi.key}`} data-state={kpi.state} title={missingNote(kpi)} className="min-w-0 rounded-xl border border-border bg-surface px-3 py-2">
+              <dt className="truncate text-xs font-semibold text-text-muted">{ar ? kpi.label_ar : kpi.label_en}</dt>
+              <dd className="mt-0.5 flex flex-wrap items-center justify-between gap-1">
+                <span className="tnum text-base font-extrabold text-text-primary" title={kpi.state === 'reported' ? formatKpi(kpi, currency) : undefined}>
+                  <Num>{cardText(kpi, currency, ar)}</Num>
+                </span>
+                {kpi.delta !== undefined && kpi.delta !== null && <TrendPill delta={kpi.delta} invertGood={LOWER_IS_BETTER.has(kpi.key)} />}
+              </dd>
             </div>
-          )
-        })}
-      </div>
+          ))}
+        </dl>
+      )}
 
       {(hasEnds(block.platform_ranking) || hasEnds(contentRanking)) && (
         <div className={`mt-3 grid gap-3 ${hasEnds(block.platform_ranking) && hasEnds(contentRanking) ? 'md:grid-cols-2' : ''}`}>
