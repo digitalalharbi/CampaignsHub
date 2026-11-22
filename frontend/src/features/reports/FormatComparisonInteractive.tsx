@@ -38,7 +38,7 @@ interface Bar { format: string; value: number; creatives: number; smallSample: b
 
 interface Scope { key: string; label: { ar: string; en: string } }
 
-export function FormatComparisonInteractive({ data, ar, client }: { data: FormatComparisonPayload; ar: boolean; client: boolean }) {
+export function FormatComparisonInteractive({ data, ar, client, heading = true, framed = true }: { data: FormatComparisonPayload; ar: boolean; client: boolean; heading?: boolean; framed?: boolean }) {
   const hidesMoney = client || data.spend_hidden === true
   const all = useMemo(() => drawnTable(data, hidesMoney), [data, hidesMoney])
   const currency = hidesMoney ? null : data.currency
@@ -70,9 +70,9 @@ export function FormatComparisonInteractive({ data, ar, client }: { data: Format
   const withMetrics = scope === 'all' ? data.totals?.creatives_with_metrics ?? null : null
 
   return (
-    <section data-testid="format-interactive" className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-extrabold tracking-tight text-text-primary">{ar ? 'مقارنة أنواع المحتوى' : 'Content types'}</h3>
+    <section data-testid="format-interactive" className={`flex min-w-0 flex-col gap-3 ${framed ? 'rounded-2xl border border-border bg-surface p-4' : ''}`}>
+      <div className={`flex flex-wrap items-center justify-between gap-2 ${!heading && scopes.length === 0 ? 'hidden' : ''}`}>
+        {heading ? <h3 className="text-sm font-extrabold tracking-tight text-text-primary">{ar ? 'مقارنة أنواع المحتوى' : 'Content types'}</h3> : <span />}
         {scopes.length > 0 && (
           <div role="tablist" aria-label={ar ? 'الهدف' : 'Objective'} className="inline-flex rounded-lg border border-border p-0.5 text-xs">
             {[{ key: 'all', label: { ar: 'كل الأهداف', en: 'All objectives' } }, ...scopes].map((s) => (
