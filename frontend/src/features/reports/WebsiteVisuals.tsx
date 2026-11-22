@@ -8,6 +8,9 @@ import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { ChartCard, ConversionFunnelChart, hasFunnel, KpiSparkline } from '@/features/analytics/charts'
 import { money, moneyExact, num, percent } from '@/features/analytics/format'
+import { countedAr } from '@/lib/counted'
+
+const DAYS_AR = { one: 'يوم', two: 'يومان', few: 'أيام', many: 'يومًا' }
 import { CHANNEL, DEVICE, donutRows, FUNNEL, KPI_LABEL, kpiText, productColumns, sessionColumns, UNPAID } from '@/features/analytics/ga4/Ga4StoreView'
 import { matchColumns, platformRows, type MatchRow } from '@/features/analytics/ga4/Ga4MatchBlock'
 import type { ClassificationRow, GapReasonsPayload, MatchPayload } from '@/features/analytics/ga4/matchTypes'
@@ -45,7 +48,7 @@ function Delta({ k }: { k: StoreKpi }) {
   const Icon = c > 0 ? ArrowUpRight : ArrowDownRight
 
   return (
-    <span data-testid={`ga4-delta-${k.key}`} className={`tnum inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-[10px] font-bold ${good ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+    <span data-testid={`ga4-delta-${k.key}`} className={`tnum inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 text-xs font-bold ${good ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
       <Icon size={10} aria-hidden /><Num>{percent(Math.abs(c), 0)}</Num>
     </span>
   )
@@ -85,7 +88,7 @@ export function CompactTiles({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
               {g.items.map((k) => (
                 <div key={k.key} data-testid={`ga4-tile-${k.key}`} data-tier="secondary" className="flex min-w-0 flex-col gap-0.5 rounded-xl bg-surface-secondary/60 px-2.5 py-2">
                   <span className="flex items-center justify-between gap-1">
-                    <span className="truncate text-[10px] font-semibold text-text-muted">{tx(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
+                    <span className="truncate text-xs font-semibold text-text-muted">{tx(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
                     <Delta k={k} />
                   </span>
                   <span className="tnum truncate text-sm font-extrabold text-text-primary"><Num>{value(k)}</Num></span>
@@ -112,10 +115,10 @@ function Coverage({ testId, meta, ar }: { testId: string; meta?: StoreBreakdownM
 
   return (
     <div data-testid={`${testId}-coverage`} className="flex flex-wrap gap-1.5">
-      {meta.unclassified > 0 && <span className="tnum inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-bold text-warning"><HelpCircle size={10} aria-hidden />{ar ? 'غير مصنّف' : 'Unclassified'} <Num>{`${num(meta.unclassified)} · ${percent(meta.unclassified / (meta.total || 1), 0)}`}</Num></span>}
-      {meta.days_total > 0 && meta.days_covered < meta.days_total && <span className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-bold text-text-secondary"><CalendarDays size={10} aria-hidden /><Num>{`${meta.days_covered}/${meta.days_total}`}</Num></span>}
+      {meta.unclassified > 0 && <span className="tnum inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-bold text-warning"><HelpCircle size={10} aria-hidden />{ar ? 'غير مصنّف' : 'Unclassified'} <Num>{`${num(meta.unclassified)} · ${percent(meta.unclassified / (meta.total || 1), 0)}`}</Num></span>}
+      {meta.days_total > 0 && meta.days_covered < meta.days_total && <span className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-bold text-text-secondary"><CalendarDays size={10} aria-hidden /><Num>{`${meta.days_covered}/${meta.days_total}`}</Num></span>}
       {over > 0 && (
-        <span data-testid={`${testId}-over`} title={ar ? 'التقارير تُحدَّث في أوقات مختلفة' : 'Reports refresh at different times'} className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-bold text-text-secondary">
+        <span data-testid={`${testId}-over`} title={ar ? 'التقارير تُحدَّث في أوقات مختلفة' : 'Reports refresh at different times'} className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-bold text-text-secondary">
           <RefreshCw size={10} aria-hidden /><Num>{`+${num(over)}`}</Num>
         </span>
       )}
@@ -168,11 +171,11 @@ export function AcquisitionVisual({ channels, devices, funnel, channelsMeta, dev
                     <span className="grid shrink-0 place-items-center rounded-xl" style={{ width: i === 0 ? 48 : 34, height: i === 0 ? 48 : 34, background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}><Icon size={i === 0 ? 24 : 16} aria-hidden /></span>
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="flex items-baseline justify-between gap-2">
-                        <span className="truncate text-[11px] font-semibold text-text-secondary">{r.name}</span>
+                        <span className="truncate text-xs font-semibold text-text-secondary">{r.name}</span>
                         <span className={`tnum font-extrabold text-text-primary ${i === 0 ? 'text-2xl' : 'text-base'}`}><Num>{percent(share, 0)}</Num></span>
                       </span>
                       <span className="h-1.5 overflow-hidden rounded-full bg-surface-secondary"><span className="block h-full rounded-full" style={{ width: `${Math.max(3, share * 100)}%`, background: color }} /></span>
-                      <span className="tnum text-[10px] text-text-muted"><Num>{num(r.value)}</Num></span>
+                      <span className="tnum text-xs text-text-muted"><Num>{num(r.value)}</Num></span>
                     </span>
                   </li>
                 )
@@ -238,13 +241,13 @@ function Bar({ testId, icon, label, total, shared, segs, max, ar }: { testId: st
       <div className="flex min-w-0 items-center gap-2">
         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface-secondary text-text-primary">{icon}</span>
         <span className="min-w-0">
-          <span className="block truncate text-[11px] font-semibold text-text-muted">{label}</span>
+          <span className="block truncate text-xs font-semibold text-text-muted">{label}</span>
           <span className="tnum block text-xl font-extrabold leading-none text-text-primary"><Num>{num(total)}</Num></span>
         </span>
       </div>
       <div className="flex h-9 w-full overflow-hidden rounded-xl bg-surface-secondary">
         {shared > 0 && (
-          <span data-testid={`${testId}-shared`} title={`${ar ? 'مشترك' : 'Shared'} ${num(shared)}`} className="tnum grid place-items-center text-[11px] font-bold text-white" style={{ width: w(shared), background: SHARED_COLOR }}>
+          <span data-testid={`${testId}-shared`} title={`${ar ? 'مشترك' : 'Shared'} ${num(shared)}`} className="tnum grid place-items-center text-xs font-bold text-white" style={{ width: w(shared), background: SHARED_COLOR }}>
             <span className="inline-flex items-center gap-1 truncate px-1"><Check size={12} aria-hidden /><Num>{num(shared)}</Num></span>
           </span>
         )}
@@ -254,7 +257,7 @@ function Bar({ testId, icon, label, total, shared, segs, max, ar }: { testId: st
 
           return (
             <span key={s.key} data-testid={`${testId}-seg-${s.key}`} title={`${tx(p.label, ar)} ${num(s.value)}`}
-              className="tnum grid place-items-center border-s-2 border-surface text-[11px] font-bold text-white" style={{ width: w(s.value), background: p.color }}>
+              className="tnum grid place-items-center border-s-2 border-surface text-xs font-bold text-white" style={{ width: w(s.value), background: p.color }}>
               <span className="inline-flex items-center gap-1 truncate px-1"><Icon size={12} aria-hidden /><Num>{num(s.value)}</Num></span>
             </span>
           )
@@ -295,7 +298,7 @@ export function GapStory({ data, ar, platforms = [] }: { data: GapReasonsPayload
           </span>
           <span className="relative grid h-11 w-11 place-items-center rounded-full bg-success/15 text-success">
             <ShoppingBag size={20} aria-hidden />
-            <span className="tnum absolute -top-1 -end-1 grid h-5 min-w-5 place-items-center rounded-full bg-success px-1 text-[10px] font-extrabold text-white"><Num>1</Num></span>
+            <span className="tnum absolute -top-1 -end-1 grid h-5 min-w-5 place-items-center rounded-full bg-success px-1 text-xs font-extrabold text-white"><Num>1</Num></span>
           </span>
           <span className="tnum rounded-full bg-brand-600/15 px-2 py-0.5 text-xs font-extrabold text-brand-600"><Num>{`×${logos.length}`}</Num></span>
         </div>
@@ -312,7 +315,7 @@ export function GapStory({ data, ar, platforms = [] }: { data: GapReasonsPayload
           const Icon = p.icon
 
           return (
-            <li key={`${l.key}-${'side' in l ? l.side : ''}`} data-testid={l.key === 'shared' ? 'gap-legend-shared' : `gap-reason-${l.key}`} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
+            <li key={`${l.key}-${'side' in l ? l.side : ''}`} data-testid={l.key === 'shared' ? 'gap-legend-shared' : `gap-reason-${l.key}`} className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-semibold text-text-secondary">
               <span className="grid h-4 w-4 place-items-center rounded-full text-white" style={{ background: p.color }}><Icon size={10} aria-hidden /></span>
               {tx(p.label, ar)}
               <span className="tnum font-extrabold text-text-primary"><Num>{num(l.value)}</Num></span>
@@ -384,7 +387,7 @@ function Reason({ icon: Icon, label, tone }: { icon: typeof Copy; label: string;
   return (
     <li className="flex min-w-0 items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
       <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md" style={{ background: `color-mix(in srgb, ${tone} 16%, transparent)`, color: tone }}><Icon size={14} aria-hidden /></span>
-      <span className="text-[11px] font-semibold leading-tight text-text-secondary">{label}</span>
+      <span className="text-xs font-semibold leading-tight text-text-secondary">{label}</span>
     </li>
   )
 }
@@ -402,8 +405,8 @@ export function AttributionStory({ data, ar, basis }: { data: MatchPayload; ar: 
   const at = (v: number) => `${(v / max) * 100}%`
   const direct = data.unattributed?.classes?.find((c) => c.class === 'direct')
   const spend = basis?.spendUsd ?? null
-  const realCpa = spend != null && orders > 0 ? spend / orders : null
-  const claimedCpa = spend != null && claimed > 0 ? spend / claimed : null
+  const real_cpa_usd = spend != null && orders > 0 ? spend / orders : null
+  const claimed_cpa_usd = spend != null && claimed > 0 ? spend / claimed : null
   const realRoas = spend != null && spend > 0 && basis?.revenueUsd != null ? basis.revenueUsd / spend : null
   const claimedRoas = spend != null && spend > 0 && claimedRevenue > 0 ? claimedRevenue / spend : null
   const suspects = suspectPlatforms(data)
@@ -415,16 +418,16 @@ export function AttributionStory({ data, ar, basis }: { data: MatchPayload; ar: 
       <div data-testid="story-ratio" className="grid grid-cols-1 items-stretch gap-2 rounded-xl border border-border bg-surface-secondary/40 p-3 sm:grid-cols-[1fr_auto_1fr_auto]">
         <div className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2.5">
           <span className="flex -space-x-1.5 rtl:space-x-reverse">{logos.map((p) => <span key={p} className="grid h-7 w-7 place-items-center rounded-full border-2 border-surface bg-surface-secondary"><ProviderMark provider={p} size={14} /></span>)}</span>
-          <span className="flex flex-col"><span className="text-[11px] font-semibold text-text-muted">{ar ? 'إسنادات المنصات' : 'Platform attributions'}</span><span data-testid="story-claimed" className="tnum text-2xl font-extrabold leading-none text-text-primary"><Num>{num(claimed)}</Num></span></span>
+          <span className="flex flex-col"><span className="text-xs font-semibold text-text-muted">{ar ? 'إسنادات المنصات' : 'Platform attributions'}</span><span data-testid="story-claimed" className="tnum text-2xl font-extrabold leading-none text-text-primary"><Num>{num(claimed)}</Num></span></span>
         </div>
         <span className="grid place-items-center text-lg font-extrabold text-text-muted" aria-hidden>÷</span>
         <div className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2.5">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-success/15 text-success">{fromStore ? <Store size={17} aria-hidden /> : <ShoppingBag size={17} aria-hidden />}</span>
-          <span className="flex flex-col"><span className="text-[11px] font-semibold text-text-muted">{ordersLabel}</span><span data-testid="story-orders" className="tnum text-2xl font-extrabold leading-none text-text-primary"><Num>{num(orders)}</Num></span></span>
+          <span className="flex flex-col"><span className="text-xs font-semibold text-text-muted">{ordersLabel}</span><span data-testid="story-orders" className="tnum text-2xl font-extrabold leading-none text-text-primary"><Num>{num(orders)}</Num></span></span>
         </div>
         <span data-testid="story-per-order" className="grid place-items-center rounded-xl bg-brand-600/15 px-3 py-2 text-center">
           <span className="tnum text-xl font-extrabold leading-none text-brand-600"><Num>{`×${(claimed / orders).toFixed(1)}`}</Num></span>
-          <span className="text-[10px] font-bold text-brand-600">{ar ? 'إسناد لكل طلب' : 'per order'}</span>
+          <span className="text-xs font-bold text-brand-600">{ar ? 'إسناد لكل طلب' : 'per order'}</span>
         </span>
       </div>
 
@@ -434,12 +437,12 @@ export function AttributionStory({ data, ar, basis }: { data: MatchPayload; ar: 
         <div className="relative mt-5 h-4 rounded-full bg-surface">
           <span className="absolute inset-y-0 start-0 rounded-full" style={{ width: at(floor), background: 'var(--brand-600)' }} />
           <span className="absolute inset-y-0 rounded-full" style={{ insetInlineStart: at(floor), width: `calc(${at(orders)} - ${at(floor)})`, background: 'repeating-linear-gradient(135deg, color-mix(in srgb, var(--success) 70%, transparent) 0 6px, color-mix(in srgb, var(--success) 35%, transparent) 6px 12px)' }} />
-          <span className="absolute -top-5 -translate-x-1/2 rtl:translate-x-1/2 tnum text-[11px] font-extrabold text-brand-600" style={{ insetInlineStart: at(floor) }}><Num>{num(floor)}</Num></span>
-          <span className="absolute -top-5 -translate-x-1/2 rtl:translate-x-1/2 tnum text-[11px] font-extrabold text-success" style={{ insetInlineStart: at(orders) }}><Num>{num(orders)}</Num></span>
-          {claimed > orders && <span data-testid="story-range-claimed" className="absolute -top-5 -translate-x-full rtl:translate-x-full tnum text-[11px] font-extrabold text-text-muted line-through" style={{ insetInlineStart: '100%' }}><Num>{num(claimed)}</Num></span>}
+          <span className="absolute -top-5 -translate-x-1/2 rtl:translate-x-1/2 tnum text-xs font-extrabold text-brand-600" style={{ insetInlineStart: at(floor) }}><Num>{num(floor)}</Num></span>
+          <span className="absolute -top-5 -translate-x-1/2 rtl:translate-x-1/2 tnum text-xs font-extrabold text-success" style={{ insetInlineStart: at(orders) }}><Num>{num(orders)}</Num></span>
+          {claimed > orders && <span data-testid="story-range-claimed" className="absolute -top-5 -translate-x-full rtl:translate-x-full tnum text-xs font-extrabold text-text-muted line-through" style={{ insetInlineStart: '100%' }}><Num>{num(claimed)}</Num></span>}
           {claimed > orders && <span className="absolute inset-y-0 end-0 rounded-e-full border-2 border-dashed border-border-strong" style={{ width: `calc(100% - ${at(orders)})` }} />}
         </div>
-        <span className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-semibold text-text-muted">
+        <span className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-text-muted">
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: 'var(--brand-600)' }} />{ar ? 'مؤكد في الموقع · آخر نقرة' : 'Confirmed on the site · last click'}</span>
           <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-success/60" />{ar ? `حتى كل ${fromStore ? 'طلبات المتجر' : 'طلبات الموقع'}` : 'Up to every order'}</span>
           {claimed > orders && <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-dashed border-border-strong" />{ar ? 'إسنادات · ليست طلبات' : 'Attributions · not orders'}</span>}
@@ -452,15 +455,15 @@ export function AttributionStory({ data, ar, basis }: { data: MatchPayload; ar: 
           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><ArrowUpRight size={14} className="text-brand-600" aria-hidden />{ar ? 'لماذا المنصات أعلى' : 'Why the platforms count more'}</span>
           <ul className="grid grid-cols-2 gap-1.5">{UP_REASONS.map((r) => <Reason key={r.key} icon={r.icon} label={tx(r.label, ar)} tone="var(--brand-600)" />)}</ul>
           <ul data-testid="story-windows" className="flex flex-wrap items-center gap-1.5" title={ar ? 'نوافذ النقرة الافتراضية تقريباً' : 'Approximate default click windows'}>
-            {WINDOWS.map((w) => <li key={w.provider} className="tnum inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-bold text-text-secondary"><ProviderMark provider={w.provider} size={11} /><Num>{ar ? `${w.days} يوم` : `${w.days}d`}</Num></li>)}
-            <li className="text-[10px] text-text-muted">{ar ? 'الافتراضي تقريباً' : 'approx. defaults'}</li>
+            {WINDOWS.map((w) => <li key={w.provider} className="tnum inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-xs font-bold text-text-secondary"><ProviderMark provider={w.provider} size={11} /><Num>{ar ? countedAr(w.days, DAYS_AR) : `${w.days}d`}</Num></li>)}
+            <li className="text-xs text-text-muted">{ar ? 'الافتراضي تقريباً' : 'approx. defaults'}</li>
           </ul>
         </div>
         <div data-testid="story-down" className="flex flex-col gap-2 rounded-xl border border-border bg-surface-secondary/40 p-3">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><ArrowDownRight size={14} className="text-[var(--teal)]" aria-hidden />{ar ? 'لماذا الموقع أقل' : 'Why the website credits fewer'}</span>
           <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">{DOWN_REASONS.map((r) => <Reason key={r.key} icon={r.icon} label={tx(r.label, ar)} tone="var(--teal)" />)}</ul>
           {direct && (direct.sessions ?? 0) > 0 && (
-            <span data-testid="story-direct" className="tnum inline-flex flex-wrap items-center gap-1.5 self-start rounded-full px-2.5 py-1 text-[11px] font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}>
+            <span data-testid="story-direct" className="tnum inline-flex flex-wrap items-center gap-1.5 self-start rounded-full px-2.5 py-1 text-xs font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}>
               <Keyboard size={12} aria-hidden />{ar ? 'مباشر' : 'Direct'} <Num>{num(direct.sessions ?? 0)}</Num> {ar ? 'زيارة' : 'visits'} · <Num>{num(direct.purchases ?? 0)}</Num> {ar ? 'طلب' : 'orders'}
             </span>
           )}
@@ -468,21 +471,21 @@ export function AttributionStory({ data, ar, basis }: { data: MatchPayload; ar: 
       </div>
 
       {/* 4 — how to judge: on orders, never on the platforms' sum. */}
-      {(realCpa !== null || realRoas !== null) && (
+      {(real_cpa_usd !== null || realRoas !== null) && (
         <div data-testid="story-judge" className="grid grid-cols-1 gap-2 rounded-xl border border-success/30 bg-success/5 p-3 sm:grid-cols-2">
-          {realCpa !== null && (
+          {real_cpa_usd !== null && (
             <div data-testid="story-real-cpa" className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
-              <span className="flex flex-col"><span className="text-[11px] font-semibold text-text-muted">{ar ? 'تكلفة الطلب الفعلي' : 'Cost per real order'}</span><span className="tnum text-[10px] text-text-muted">{ar ? `الصرف ÷ ${ordersLabel}` : 'Spend ÷ orders'}</span></span>
-              <span className="flex flex-col items-end"><span className="tnum text-xl font-extrabold text-success"><Num>{moneyExact(realCpa, 'USD')}</Num></span>{claimedCpa !== null && <span className="tnum text-[10px] text-text-muted line-through"><Num>{moneyExact(claimedCpa, 'USD')}</Num></span>}</span>
+              <span className="flex flex-col"><span className="text-xs font-semibold text-text-muted">{ar ? 'تكلفة الطلب الفعلي' : 'Cost per real order'}</span><span className="tnum text-xs text-text-muted">{ar ? `الصرف ÷ ${ordersLabel}` : 'Spend ÷ orders'}</span></span>
+              <span className="flex flex-col items-end"><span className="tnum text-xl font-extrabold text-success"><Num>{moneyExact(real_cpa_usd, 'USD')}</Num></span>{claimed_cpa_usd !== null && <span className="tnum text-xs text-text-muted line-through"><Num>{moneyExact(claimed_cpa_usd, 'USD')}</Num></span>}</span>
             </div>
           )}
           {realRoas !== null && (
             <div data-testid="story-real-roas" className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
-              <span className="flex flex-col"><span className="text-[11px] font-semibold text-text-muted">{ar ? 'العائد الفعلي' : 'Real return'}</span><span className="tnum text-[10px] text-text-muted">{ar ? 'إيراد الموقع ÷ الصرف' : 'Website revenue ÷ spend'}</span></span>
-              <span className="flex flex-col items-end"><span className="tnum text-xl font-extrabold text-success"><Num>{`×${realRoas.toFixed(2)}`}</Num></span>{claimedRoas !== null && <span className="tnum text-[10px] text-text-muted line-through"><Num>{`×${claimedRoas.toFixed(2)}`}</Num></span>}</span>
+              <span className="flex flex-col"><span className="text-xs font-semibold text-text-muted">{ar ? 'العائد الفعلي' : 'Real return'}</span><span className="tnum text-xs text-text-muted">{ar ? 'إيراد الموقع ÷ الصرف' : 'Website revenue ÷ spend'}</span></span>
+              <span className="flex flex-col items-end"><span className="tnum text-xl font-extrabold text-success"><Num>{`×${realRoas.toFixed(2)}`}</Num></span>{claimedRoas !== null && <span className="tnum text-xs text-text-muted line-through"><Num>{`×${claimedRoas.toFixed(2)}`}</Num></span>}</span>
             </div>
           )}
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-text-secondary sm:col-span-2"><Scale size={12} aria-hidden />{ar ? 'رقم كل منصة للمقارنة بين حملاتها فقط · لا يُجمع ولا يُقارن بالمتجر' : 'Each platform’s figure compares its own campaigns only · never summed or set against the store'}</span>
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-text-secondary sm:col-span-2"><Scale size={12} aria-hidden />{ar ? 'رقم كل منصة للمقارنة بين حملاتها فقط · لا يُجمع ولا يُقارن بالمتجر' : 'Each platform’s figure compares its own campaigns only · never summed or set against the store'}</span>
         </div>
       )}
 
@@ -490,7 +493,7 @@ export function AttributionStory({ data, ar, basis }: { data: MatchPayload; ar: 
       {suspects.length > 0 && (
         <ul data-testid="story-check" className="flex flex-col gap-1.5">
           {suspects.map((p) => (
-            <li key={p.platform} data-testid={`story-check-${p.platform}`} className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] font-semibold text-warning">
+            <li key={p.platform} data-testid={`story-check-${p.platform}`} className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-semibold text-warning">
               <SearchCheck size={14} aria-hidden /><ProviderMark provider={p.platform} size={14} />
               <span className="tnum"><Num>{`${num(p.claimed)} ↔ ${num(p.measured)}`}</Num></span>
               <span>{ar ? 'يستحق فحص تكرار حدث الشراء (event_id موحّد)' : 'Worth checking for a duplicated Purchase event (one event_id)'}</span>
@@ -546,7 +549,7 @@ export function SiteEvidence({ data, ar }: { data: MatchPayload; ar: boolean }) 
           <div className="flex items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><Fingerprint size={14} aria-hidden />{ar ? 'بصمة الإعلان · من سجلّ الموقع' : 'The ad’s fingerprint · from the website’s log'}</span>
           </div>
-          <span className="flex flex-wrap gap-3 text-[10px] font-semibold text-text-muted">
+          <span className="flex flex-wrap gap-3 text-xs font-semibold text-text-muted">
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: 'var(--teal)' }} />{ar ? 'صنّفها الموقع إعلاناً' : 'Labelled ad by the site'}</span>
             <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: 'var(--brand-600)' }} />{ar ? 'وصلت بمعرّف نقرة الإعلان' : 'Arrived with the ad’s click id'}</span>
           </span>
@@ -559,10 +562,10 @@ export function SiteEvidence({ data, ar }: { data: MatchPayload; ar: boolean }) 
                 <li key={r.platform} data-testid={`evidence-fingerprint-${r.platform}`} className="grid grid-cols-[2rem_1fr_auto] items-center gap-2">
                   <span className="grid h-8 w-8 place-items-center rounded-full bg-surface"><ProviderMark provider={r.platform} size={16} /></span>
                   <span className="flex min-w-0 flex-col gap-1">
-                    <span className="flex items-center gap-2"><span className="h-2.5 rounded-full" style={{ width: w(r.labelled), background: 'var(--teal)' }} /><span className="tnum text-[11px] font-bold text-text-primary"><Num>{num(r.labelled)}</Num></span></span>
-                    <span className="flex items-center gap-2"><span className="h-2.5 rounded-full" style={{ width: w(r.fingerprint), background: 'var(--brand-600)' }} /><span className="tnum text-[11px] font-bold text-text-primary"><Num>{num(r.fingerprint)}</Num></span></span>
+                    <span className="flex items-center gap-2"><span className="h-2.5 rounded-full" style={{ width: w(r.labelled), background: 'var(--teal)' }} /><span className="tnum text-xs font-bold text-text-primary"><Num>{num(r.labelled)}</Num></span></span>
+                    <span className="flex items-center gap-2"><span className="h-2.5 rounded-full" style={{ width: w(r.fingerprint), background: 'var(--brand-600)' }} /><span className="tnum text-xs font-bold text-text-primary"><Num>{num(r.fingerprint)}</Num></span></span>
                   </span>
-                  {times !== null && times >= 1.2 ? <span data-testid={`evidence-times-${r.platform}`} className="tnum rounded-full bg-brand-600/15 px-2 py-0.5 text-[11px] font-extrabold text-brand-600"><Num>{`×${times >= 10 ? Math.round(times) : times.toFixed(1)}`}</Num></span> : <span className="inline-flex items-center rounded-full bg-success/15 px-1.5 py-0.5 text-success"><Check size={11} aria-hidden /></span>}
+                  {times !== null && times >= 1.2 ? <span data-testid={`evidence-times-${r.platform}`} className="tnum rounded-full bg-brand-600/15 px-2 py-0.5 text-xs font-extrabold text-brand-600"><Num>{`×${times >= 10 ? Math.round(times) : times.toFixed(1)}`}</Num></span> : <span className="inline-flex items-center rounded-full bg-success/15 px-1.5 py-0.5 text-success"><Check size={11} aria-hidden /></span>}
                 </li>
               )
             })}
@@ -578,7 +581,7 @@ export function SiteEvidence({ data, ar }: { data: MatchPayload; ar: boolean }) 
           <div data-testid="evidence-waffle" data-dots={dots.length} className="flex flex-wrap gap-[3px]" aria-hidden>
             {dots.map((k, i) => <span key={i} className="h-3 w-3 rounded-[3px]" style={{ background: PATH_COLOR[k] ?? 'var(--text-muted)' }} />)}
           </div>
-          {per > 1 && <span className="tnum text-[10px] text-text-muted"><Num>{`■ = ${per}`}</Num></span>}
+          {per > 1 && <span className="tnum text-xs text-text-muted"><Num>{`■ = ${per}`}</Num></span>}
           <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
             {paths.map((p) => {
               const Icon = PATH_ICON[p.key] ?? HelpCircle
@@ -588,8 +591,8 @@ export function SiteEvidence({ data, ar }: { data: MatchPayload; ar: boolean }) 
                 <li key={p.key} data-testid={`evidence-path-${p.key}`} className="flex min-w-0 items-center gap-2 rounded-lg bg-surface px-2 py-1.5">
                   <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md" style={{ background: `color-mix(in srgb, ${color} 18%, transparent)`, color }}><Icon size={12} aria-hidden /></span>
                   <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-[10px] font-semibold text-text-secondary">{tx(PATH_LABEL[p.key] ?? { ar: p.key, en: p.key }, ar)}</span>
-                    <span className="tnum text-sm font-extrabold leading-none text-text-primary"><Num>{num(p.orders)}</Num><span className="ms-1 text-[10px] font-bold text-text-muted"><Num>{percent(p.orders / orders, 0)}</Num></span></span>
+                    <span className="truncate text-xs font-semibold text-text-secondary">{tx(PATH_LABEL[p.key] ?? { ar: p.key, en: p.key }, ar)}</span>
+                    <span className="tnum text-sm font-extrabold leading-none text-text-primary"><Num>{num(p.orders)}</Num><span className="ms-1 text-xs font-bold text-text-muted"><Num>{percent(p.orders / orders, 0)}</Num></span></span>
                   </span>
                 </li>
               )
@@ -614,7 +617,7 @@ export function SimpleAnswer({ data, ar, basis }: { data: MatchPayload; ar: bool
   const fromStore = basis?.ordersSource === 'store' && basis.orders != null
   const per = claimed / orders
   const spend = basis?.spendUsd ?? null
-  const cpa = spend != null ? spend / orders : null
+  const cpa_usd = spend != null ? spend / orders : null
   const roas = spend != null && spend > 0 && basis?.revenueUsd != null ? basis.revenueUsd / spend : null
   const shown = Math.min(Math.max(2, Math.round(per)), 4)
 
@@ -658,13 +661,13 @@ export function SimpleAnswer({ data, ar, basis }: { data: MatchPayload; ar: bool
           </WhyCard>
           <WhyCard testId="simple-why-window" label={ar ? 'اشترى بعد أيام · المنصة تحسبه' : 'Bought days later · the platform counts it'}>
             <Bubble tone="var(--brand-600)"><Megaphone size={16} aria-hidden /></Bubble>
-            <span className="tnum flex flex-1 items-center gap-1 text-[10px] font-bold text-text-muted"><span className="h-0.5 flex-1 rounded-full bg-border-strong" /><Clock size={11} aria-hidden />{ar ? 'حتى ٣٠ يوم' : 'up to 30 days'}<span className="h-0.5 flex-1 rounded-full bg-border-strong" /></span>
+            <span className="tnum flex flex-1 items-center gap-1 text-xs font-bold text-text-muted"><span className="h-0.5 flex-1 rounded-full bg-border-strong" /><Clock size={11} aria-hidden />{ar ? `حتى ${countedAr(30, DAYS_AR)}` : 'up to 30 days'}<span className="h-0.5 flex-1 rounded-full bg-border-strong" /></span>
             <Bubble tone="var(--success)"><ShoppingBag size={16} aria-hidden /></Bubble>
           </WhyCard>
           <WhyCard testId="simple-why-last" label={ar ? 'الموقع يحسب آخر زيارة فقط' : 'The website counts the last visit only'}>
             <Bubble tone="var(--teal)"><Keyboard size={16} aria-hidden /></Bubble>
             <Road ar={ar} />
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Globe size={12} aria-hidden />{ar ? 'مباشر' : 'Direct'}</span>
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Globe size={12} aria-hidden />{ar ? 'مباشر' : 'Direct'}</span>
           </WhyCard>
         </ul>
       </div>
@@ -672,18 +675,18 @@ export function SimpleAnswer({ data, ar, basis }: { data: MatchPayload; ar: bool
       {/* How to judge: three figures. */}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <div className="flex flex-col items-center gap-0.5 rounded-xl bg-surface px-3 py-2.5">
-          <span className="text-[11px] font-bold text-text-muted">{ar ? 'طلباتك الحقيقية' : 'Your real orders'}</span>
+          <span className="text-xs font-bold text-text-muted">{ar ? 'طلباتك الحقيقية' : 'Your real orders'}</span>
           <span className="tnum text-2xl font-extrabold text-success"><Num>{num(orders)}</Num></span>
         </div>
-        {cpa !== null && (
+        {cpa_usd !== null && (
           <div data-testid="simple-cpa" className="flex flex-col items-center gap-0.5 rounded-xl bg-surface px-3 py-2.5">
-            <span className="text-[11px] font-bold text-text-muted">{ar ? 'تكلفة الطلب' : 'Cost per order'}</span>
-            <span className="tnum text-2xl font-extrabold text-success"><Num>{moneyExact(cpa, 'USD')}</Num></span>
+            <span className="text-xs font-bold text-text-muted">{ar ? 'تكلفة الطلب' : 'Cost per order'}</span>
+            <span className="tnum text-2xl font-extrabold text-success"><Num>{moneyExact(cpa_usd, 'USD')}</Num></span>
           </div>
         )}
         {roas !== null && (
           <div data-testid="simple-roas" className="flex flex-col items-center gap-0.5 rounded-xl bg-surface px-3 py-2.5">
-            <span className="text-[11px] font-bold text-text-muted">{ar ? 'معدل العائد' : 'Return'}</span>
+            <span className="text-xs font-bold text-text-muted">{ar ? 'معدل العائد' : 'Return'}</span>
             <span className="tnum text-2xl font-extrabold text-success"><Num>{`×${roas.toFixed(2)}`}</Num></span>
           </div>
         )}
@@ -696,7 +699,7 @@ function WhyCard({ testId, label, chip, children }: { testId: string; label: str
   return (
     <li data-testid={testId} className="flex flex-col items-center gap-2 rounded-xl bg-surface px-3 py-3 text-center">
       <span className="flex w-full items-center justify-center gap-2">{children}</span>
-      <span className="text-[11px] font-bold leading-snug text-text-secondary">{label}{chip && <span className="tnum ms-1.5 rounded-full bg-brand-600/15 px-1.5 py-0.5 text-brand-600"><Num>{chip}</Num></span>}</span>
+      <span className="text-xs font-bold leading-snug text-text-secondary">{label}{chip && <span className="tnum ms-1.5 rounded-full bg-brand-600/15 px-1.5 py-0.5 text-brand-600"><Num>{chip}</Num></span>}</span>
     </li>
   )
 }
@@ -731,7 +734,7 @@ export function AttributionVisual({ data, ar, pageSize = 8, basis }: { data: Mat
     <section data-testid="report-ga4-attribution-block" className="flex min-w-0 flex-col gap-4 rounded-2xl border border-border bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-extrabold text-text-primary">{ar ? 'المنصة مقابل الموقع' : 'Platform vs website'}</h3>
-        <span className="flex items-center gap-3 text-[11px] font-semibold text-text-muted">
+        <span className="flex items-center gap-3 text-xs font-semibold text-text-muted">
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--brand-600)' }} />{ar ? 'المنصة' : 'Platform'}</span>
           <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--teal)' }} />{ar ? 'الموقع' : 'Website'}</span>
         </span>
@@ -750,16 +753,16 @@ export function AttributionVisual({ data, ar, pageSize = 8, basis }: { data: Mat
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
                   <div className="h-3 rounded-full" style={{ width: w(r.claimed), background: 'var(--brand-600)' }} />
-                  <span className="tnum text-[11px] font-bold text-text-primary"><Num>{r.claimed === null ? '—' : num(r.claimed)}</Num></span>
+                  <span className="tnum text-xs font-bold text-text-primary"><Num>{r.claimed === null ? '—' : num(r.claimed)}</Num></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="h-3 rounded-full" style={{ width: w(r.ga4?.purchases), background: 'var(--teal)' }} />
-                  <span className="tnum text-[11px] font-bold text-text-primary"><Num>{r.ga4?.purchases == null ? '—' : num(r.ga4.purchases)}</Num></span>
+                  <span className="tnum text-xs font-bold text-text-primary"><Num>{r.ga4?.purchases == null ? '—' : num(r.ga4.purchases)}</Num></span>
                 </div>
               </div>
               <span className="flex flex-col items-end gap-1">
-                {D && <span data-testid={`match-dir-${r.key}`} data-direction={d} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${D.tone}`}><D.icon size={11} aria-hidden />{tx(D.label, ar)}</span>}
-                {r.ga4?.aov_usd != null && <span className="tnum text-[10px] text-text-muted"><ShoppingBag size={10} className="me-0.5 inline" aria-hidden /><Num>{money(r.ga4.aov_usd, 'USD')}</Num></span>}
+                {D && <span data-testid={`match-dir-${r.key}`} data-direction={d} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${D.tone}`}><D.icon size={11} aria-hidden />{tx(D.label, ar)}</span>}
+                {r.ga4?.aov_usd != null && <span className="tnum text-xs text-text-muted"><ShoppingBag size={10} className="me-0.5 inline" aria-hidden /><Num>{money(r.ga4.aov_usd, 'USD')}</Num></span>}
               </span>
             </li>
           )
@@ -865,7 +868,7 @@ function RankBars<R>({ rows, metrics, name, sub, fmt, ar, top = 8, testId = 'ga4
                   <span className="tnum w-4 shrink-0 text-text-muted"><Num>{String(i + 1)}</Num></span>
                   <span dir="auto" className="truncate" title={n}>{n}</span>
                   {s2 && <span dir="ltr" className="shrink-0 font-normal text-text-muted">{s2}</span>}
-                  {i === 0 && <span className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success">{ar ? 'الأعلى' : 'Top'}</span>}
+                  {i === 0 && <span className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-xs font-bold text-success">{ar ? 'الأعلى' : 'Top'}</span>}
                 </span>
                 <span className="tnum whitespace-nowrap font-bold text-text-primary">
                   <Num>{fmt(b.v, metric!.kind)}</Num>
@@ -946,7 +949,8 @@ export function ClassificationVisual({ groups, ar, table }: { groups: Record<str
   const [chosen, setChosen] = useState<string | null>(null)
   const active = chosen !== null && keys.includes(chosen) ? chosen : keys[0]
   if (active === undefined) return null
-  const fmt = (v: number, kind: Kind) => (kind === 'money' ? money(v, 'USD') : kind === 'rate' ? percent(v, 2) : num(v))
+  // Classification money is `revenue_usd` only (see its metrics): the figure is in dollars by its own name.
+  const fmt = (v_usd: number, kind: Kind) => (kind === 'money' ? money(v_usd, 'USD') : kind === 'rate' ? percent(v_usd, 2) : num(v_usd))
 
   return (
     <section data-testid="ga4-classification-visual" className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
