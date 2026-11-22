@@ -17,7 +17,7 @@ import { ensureFonts } from '../studio/ui/fonts'
 import { canExportVideo } from '../studio/export/renderOutput'
 import { EnginePreview } from '../studio/engine/EnginePreview'
 import { FAMILY_FOR, renderEngineImage, renderEngineVideo } from '../studio/engine/renderEngine'
-import { generateBatch, newSeed, profileOf, solveOne, type Candidate } from '../studio/engine/generate'
+import { generateBatch, newSeed, profileOf, shortCopy, solveOne, type Candidate } from '../studio/engine/generate'
 import { genomeKey } from '../studio/engine/genome'
 import type { Copy } from '../studio/engine/solve'
 import type { PaintOptions } from '../studio/engine/paint'
@@ -246,9 +246,10 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
     if (!enh.textImprove || variantCount < 2) return res
     // «تحسينات النص»: each design re-solved with its own text option; one that would break a rule keeps the first option.
     const candidates = res.candidates.map((c, i) => {
-      const r = solveOne(res.profile, c.genome, { copy: copyAt(i), measure, locale, ctaSticker: enh.stickerCta })
+      const copy = c.short ? shortCopy(copyAt(i)) : copyAt(i)
+      const r = solveOne(c.profile, c.genome, { copy, measure, locale, ctaSticker: enh.stickerCta })
 
-      return r.ok ? { ...c, elements: r.elements, score: r.score, minContrast: r.minContrast } : c
+      return r.ok ? { ...c, elements: r.elements, score: r.score, minContrast: r.minContrast, textIndex: i } : c
     })
 
     return { ...res, candidates }
@@ -287,10 +288,13 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
       const opts = { ...paintOptions, showMargins: false }
       for (const c of picked) {
         const asVideo = c.as === 'video' && canExportVideo()
-        const blob = asVideo ? await renderEngineVideo(c.elements, c.genome, opts, locale) : await renderEngineImage(c.elements, c.genome, opts, locale)
+        const own = { ...opts, plan: c.profile.plan, focus: c.profile.focus }
+        const blob = asVideo ? await renderEngineVideo(c.elements, c.genome, own, locale) : await renderEngineImage(c.elements, c.genome, own, locale)
         n += 1
         const name = `${baseName} ــ ${asVideo ? 'VID' : 'IMG'}-${c.genome.archetype} ــ 9x16 ${n}`
-        const used = copyAt(enh.textImprove ? engine.candidates.indexOf(c) : 0)
+        // The copy this design actually draws: its text option, and no supporting line on a short design.
+        const full = copyAt((c as Candidate & { textIndex?: number }).textIndex ?? 0)
+        const used = c.short ? shortCopy(full) : full
         await saveStudioOutput(session.id, {
           file: blob, kind: asVideo ? 'video' : 'image', name,
           familyKey: FAMILY_FOR[c.genome.archetype] ?? 'minimal', familyVersion: 1,
@@ -340,11 +344,11 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
     let elements = sample.elements
     const copy = key === 'textImprove' ? copyAt(example) : key === 'details' ? { ...copyAt(0), price: priced } : key === 'enhanceCta' ? { ...copyAt(0), support: description.trim() } : copyAt(0)
     if (key !== 'videoFx') {
-      const r = solveOne(engine.profile, sample.genome, { copy, measure, locale, ctaSticker: key === 'stickerCta' || enh.stickerCta })
+      const r = solveOne(sample.profile, sample.genome, { copy: sample.short ? { ...copy, message: '' } : copy, measure, locale, ctaSticker: key === 'stickerCta' || enh.stickerCta })
       if (r.ok) elements = r.elements
     }
 
-    return <EnginePreview key={fontsTick} elements={elements} genome={sample.genome} options={{ ...paintOptions, colorBoost: key === 'videoFx' || enh.videoFx, showMargins: false }} video={false} locale={locale} />
+    return <EnginePreview key={fontsTick} elements={elements} genome={sample.genome} options={{ ...paintOptions, plan: sample.profile.plan, focus: sample.profile.focus, colorBoost: key === 'videoFx' || enh.videoFx, showMargins: false }} video={false} locale={locale} />
   }
 
   const ENH: Array<{ key: EnhKey; state: 'on' | 'soon' | 'platform' | 'needs'; need?: string; art: 'design' | 'sizes' | 'comments' | 'catalog' }> = [
@@ -600,7 +604,7 @@ export function ContentComposer({ onClose }: { onClose: () => void }) {
                   <li key={c.id}>
                     <button type="button" onClick={() => setChosen((x) => (on ? x.filter((y) => y !== i) : [...x, i]))} data-testid={`composer-design-${i}`}
                       className={`relative block w-full overflow-hidden rounded-xl border-2 ${on ? 'border-brand-600' : 'border-transparent'}`}>
-                      <EnginePreview key={`${c.id}-${fontsTick}`} elements={c.elements} genome={c.genome} options={paintOptions} video={c.as === 'video'} locale={locale} />
+                      <EnginePreview key={`${c.id}-${fontsTick}`} elements={c.elements} genome={c.genome} options={{ ...paintOptions, plan: c.profile.plan, focus: c.profile.focus }} video={c.as === 'video'} locale={locale} />
                       {on && <span className="absolute end-2 top-2 rounded-full bg-brand-600 p-1 text-white"><Check size={12} aria-hidden /></span>}
                     </button>
                     <p className="mt-1 flex items-center justify-between gap-2 text-xs">
