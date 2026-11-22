@@ -113,7 +113,7 @@ export function Ga4ReportBlocks({ payload, ar, parts = WEBSITE_PARTS, pageSize =
         </div>
       )}
       {acquisition && <div data-testid="report-ga4-acquisition" className="min-w-0"><AcquisitionVisual channels={acquisition.channels} devices={acquisition.devices} channelsMeta={acquisition.channels_meta} devicesMeta={acquisition.devices_meta} funnel={acquisition.funnel} ar={ar} /></div>}
-      {attribution && <div data-testid="report-ga4-attribution" className="min-w-0"><AttributionVisual data={attribution} ar={ar} pageSize={pageSize} /></div>}
+      {attribution && <div data-testid="report-ga4-attribution" className="min-w-0"><AttributionVisual data={attribution} ar={ar} pageSize={pageSize} basis={basisOf(payload)} /></div>}
       {gap && <div data-testid="report-ga4-gap" className="min-w-0"><Ga4Gap gap={gap} ar={ar} /></div>}
       {reasons && <div data-testid="report-ga4-reasons" className="min-w-0"><GapStory data={reasons} ar={ar} platforms={platformsOf(payload)} /></div>}
       {classification && <div data-testid="report-ga4-classification" className="min-w-0"><ClassificationVisual groups={classification.groups} ar={ar} table={(g) => <ClassificationTable data={classification} group={g} ar={ar} pageSize={pageSize} />} /></div>}
@@ -121,6 +121,24 @@ export function Ga4ReportBlocks({ payload, ar, parts = WEBSITE_PARTS, pageSize =
       {products && <div data-testid="report-ga4-products" className="min-w-0"><TablesVisual testId="ga4-products-visual" title={ar ? 'المنتجات' : 'Products'} tables={{ products: products.table }} currency={products.currency} ar={ar} pageSize={pageSize} /></div>}
     </section>
   )
+}
+
+/**
+ * WEBSITE-VISUAL-004 — what the attribution reading judges against: the store's orders when the store is connected, else the website's;
+ * the report's spend when the report is in dollars (the website's revenue arrives in dollars); the website's revenue in dollars.
+ */
+export function basisOf(payload: WithGa4Sections): Visuals.AttributionBasis {
+  const p = payload as WithGa4Sections & { store_analytics?: { store?: { orders?: { live?: number } } | null } | null; totals?: { spend?: number | null } | null; currency?: string | null }
+  const kpi = (k: string) => payload.ga4_overview?.kpis?.find((x) => x.key === k)
+  const store = p.store_analytics?.store?.orders?.live
+  const site = kpi('transactions')?.current
+
+  return {
+    orders: store != null ? store : site ?? null,
+    ordersSource: store != null ? 'store' : 'site',
+    spendUsd: p.currency === 'USD' && p.totals?.spend != null ? p.totals.spend : null,
+    revenueUsd: kpi('revenue')?.current_usd ?? null,
+  }
 }
 
 /** The ad platforms this report's website reading compares against, for the «one order, several platforms» picture. */
@@ -256,7 +274,7 @@ export function Ga4Slide({ slide, data, ar = true, paged = false }: { slide: { i
       // Only a snapshot frozen before the website tab has this page: it renders as it was frozen, its tiles and funnel included.
       return data.ga4_pulse ? <div data-testid="slide-ga4-pulse">{head('__ga4_pulse')}<div className="flex flex-col gap-3"><Ga4Tiles kpis={data.ga4_pulse.kpis} ar={ar} />{data.ga4_pulse.funnel.length > 0 && <Ga4Acquisition frozen channels={null} devices={null} funnel={data.ga4_pulse.funnel} ar={ar} />}</div></div> : null
     case '__ga4_attribution':
-      return data.ga4_attribution ? <div data-testid="slide-ga4-attribution">{head('__ga4_attribution')}{paged ? <AttributionMatchBlock data={data.ga4_attribution} ar={ar} pageSize={6} paged range={slide.range} /> : <AttributionVisual data={data.ga4_attribution} ar={ar} pageSize={8} />}</div> : null
+      return data.ga4_attribution ? <div data-testid="slide-ga4-attribution">{head('__ga4_attribution')}{paged ? <AttributionMatchBlock data={data.ga4_attribution} ar={ar} pageSize={6} paged range={slide.range} /> : <AttributionVisual data={data.ga4_attribution} ar={ar} pageSize={8} basis={basisOf(data)} />}</div> : null
     case '__ga4_reasons':
       return data.ga4_gap_reasons ? <div data-testid="slide-ga4-reasons">{head('__ga4_reasons')}<GapStory data={data.ga4_gap_reasons} ar={ar} platforms={platformsOf(data)} /></div> : null
     case '__ga4_classification':
