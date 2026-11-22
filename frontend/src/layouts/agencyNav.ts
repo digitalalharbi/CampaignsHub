@@ -154,7 +154,7 @@ export const agencyFoldedLeaves: readonly NavLeaf[] = [
   // ONE-BUDGET-UI-001 — opened from a budget's panel («حدود أدق»).
   { to: '/agency/spend-limits', ar: 'حدود الإنفاق', en: 'Spend limits', icon: Wallet },
   // OPS-TABS-001 — opened from the operations tabs.
-  { to: '/agency/recommendations', ar: 'التوصيات', en: 'Recommendations', icon: Lightbulb },
+  { to: '/agency/recommendations', ar: 'فرص التحسين', en: 'Recommendations', icon: Lightbulb },
   { to: '/agency/agents/approvals', ar: 'الموافقات', en: 'Approvals', icon: ShieldCheck },
   { to: '/agency/agents', ar: 'الوكلاء', en: 'Agents', icon: Bot, end: true },
 ]
