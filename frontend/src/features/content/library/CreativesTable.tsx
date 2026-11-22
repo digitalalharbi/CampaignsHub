@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, Download, Eye, Filter, Layers, Search, SplitSquareHorizontal } from 'lucide-react'
+import { ChevronDown, Download, Eye, Filter, Layers, MoreVertical, Search, SplitSquareHorizontal } from 'lucide-react'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Num } from '@/components/ui/Num'
 import { useProject } from '@/stores/project'
@@ -13,7 +13,7 @@ import { CreativeCompare } from '../CreativeCompare'
 import { COMPARE_MAX } from '../standing'
 import { Cover } from './Cover'
 import { LIB } from './copy'
-import { deliveryOf, formatLabel, isoDaysAgo } from './util'
+import { createdOf, deliveryOf, formatLabel, isoDaysAgo, usageOf } from './util'
 
 const PER_PAGE = 25
 
@@ -59,7 +59,7 @@ export function CreativesTable() {
     const chosen = rows.filter((r) => selected.includes(r.id))
     const lines = [[t.cols.name, t.cols.format, t.cols.platform, t.cols.status, t.cols.usage, t.cols.created].join(',')]
     for (const r of chosen) {
-      lines.push([r.name, formatLabel(r.kind, t), r.provider, t[deliveryOf(r)], r.campaign_name ?? '', r.freshness.first_seen_at?.slice(0, 10) ?? ''].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      lines.push([r.name, formatLabel(r.kind, t), r.provider, t[deliveryOf(r)], String(usageOf(r).campaigns), createdOf(r)?.slice(0, 10) ?? ''].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))
     }
     const url = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' }))
     const a = document.createElement('a')
@@ -129,24 +129,31 @@ export function CreativesTable() {
               <th className="p-3 text-start">{t.cols.status}</th>
               <th className="p-3 text-start">{t.cols.usage}</th>
               <th className="p-3 text-start">{t.cols.created}</th>
+              <th className="w-14 p-3" aria-hidden />
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => {
               const state = deliveryOf(r)
+              const usage = usageOf(r)
 
               return (
                 <tr key={r.id} data-testid={`creatives-row-${r.id}`} className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-secondary" onClick={() => navigate(r.id)}>
                   <td className="p-3" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={r.name} checked={selected.includes(r.id)} onChange={() => toggle(r.id)} /></td>
-                  <td className="p-3"><Cover preview={r.preview} ar={ar} className="h-16 w-10 rounded-md" /></td>
+                  <td className="p-3"><Cover preview={r.preview} ar={ar} className="h-20 w-12 rounded-md" /></td>
                   <td className="max-w-sm p-3 font-semibold text-text-primary"><span className="line-clamp-2">{r.name}</span></td>
                   <td className="p-3 text-text-primary">{formatLabel(r.kind, t)}</td>
                   <td className="p-3"><span className="flex items-center gap-2 text-text-primary"><ProviderMark provider={r.provider} size={18} /></span></td>
                   <td className="p-3"><span className="flex items-center gap-2 font-semibold text-text-primary"><span className={`size-2.5 rounded-full ${STATE_DOT[state]}`} aria-hidden />{t[state]}</span></td>
-                  <td className="p-3 text-text-primary">
-                    {r.campaign_name ? <><span className="block">{t.inCampaign}</span><span className="block max-w-56 truncate text-xs text-text-secondary">{r.campaign_name}</span></> : <span className="text-text-secondary">{t.noCampaign}</span>}
+                  <td className="p-3 text-text-primary" data-testid={`creatives-usage-${r.id}`}>
+                    {usage.campaigns > 0
+                      ? <><span className="block">{t.inCampaigns.replace('{n}', formatNumber(usage.campaigns))}</span><span className="block text-xs text-text-secondary">{t.runningN.replace('{n}', formatNumber(usage.running))}</span></>
+                      : <span className="text-text-secondary">{t.noCampaign}</span>}
                   </td>
-                  <td className="p-3 text-text-primary"><Num>{fmtDate(r.freshness.first_seen_at)}</Num></td>
+                  <td className="p-3 text-text-primary"><Num>{fmtDate(createdOf(r))}</Num></td>
+                  <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" onClick={() => navigate(r.id)} aria-label={`${t.open} ${r.name}`} className="flex size-9 items-center justify-center rounded-lg bg-surface-secondary text-text-primary hover:bg-surface-hover"><MoreVertical size={16} aria-hidden /></button>
+                  </td>
                 </tr>
               )
             })}
