@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowDownRight, ArrowUpRight, CalendarDays, Check, CheckCheck, Clock, Equal, Eye, EyeOff, Fingerprint, Globe, Keyboard, Megaphone, MonitorSmartphone, RefreshCw, Route, Search, Share2, ShieldOff, ShoppingBag, Smartphone, Store, Tag, HelpCircle, Users } from 'lucide-react'
+import { AppWindow, ArrowDownRight, ArrowUpRight, CalendarDays, Check, Clock, Cookie, Copy, Equal, Eye, EyeOff, Fingerprint, Keyboard, Megaphone, MonitorSmartphone, MousePointerClick, RefreshCw, Route, Scale, Search, SearchCheck, Share2, ShoppingBag, Smartphone, Sparkles, Store, Tag, Target, HelpCircle, Users } from 'lucide-react'
 import { partIcon, ShareTiles } from './ShareTiles'
 import { Num } from '@/components/ui/Num'
 import { FixedPageTable } from '@/components/ui/FixedPageTable'
@@ -342,86 +342,161 @@ const DIR: Record<Direction, { label: L; icon: typeof Equal; tone: string }> = {
 }
 
 /**
- * WEBSITE-VISUAL-002 (Owner 2026-11-22) — «ليش جوجل أناليتكس ما يقرأ كل الطلبات؟ وهل مؤشرات المنصات خاطئة؟ … أحتاج إيصال الفكرة بشكل
- * إبداعي ومقنع … ويعزز الموثوقية». One customer's journey, drawn: the ad is seen, the customer comes back later by another road, and buys.
- * The platform counts the order inside its attribution window; the website files the same visit under the road it came by. Two correct
- * readings of one order, from two places — then the four mechanisms that make them differ, each as an icon. A schematic, not a figure:
- * it states how each side counts, never how many orders either side «should» have.
+ * WEBSITE-VISUAL-004 (Owner 2026-11-22) — the attribution reading the owner wrote, drawn from the report's own figures:
+ *
+ *   «211 عدد إسنادات، مو عدد طلبات» — the platforms' sum against the orders (the store's when the store is connected, else the
+ *   website's), as a ratio; one order, counted by every platform that touched it; the real effect as a range between the orders the
+ *   website credits to the ads' last click (the confirmed floor) and every order (the ceiling), the platforms' sum outside it; why the
+ *   platforms count more (duplication, view-through, click window, modelled iOS conversions) and why the website credits fewer (last
+ *   click, no views, in-app browser, devices, typed-in returns, cookies); how to judge (spend ÷ orders, revenue ÷ spend, against the
+ *   platforms' own per-attribution figures); and the one case that IS a tracking fault — a platform claiming ten times what the
+ *   website measured for it, worth checking for a duplicated Purchase event.
+ *
+ * Every number is the server's. The default windows are the platforms' published defaults, marked as such («الافتراضي تقريباً»).
  */
-const RETURN_ROADS = [
-  { key: 'direct', icon: Keyboard, label: { ar: 'مباشر', en: 'Direct' } },
-  { key: 'search', icon: Search, label: { ar: 'بحث', en: 'Search' } },
-  { key: 'referral', icon: Share2, label: { ar: 'رابط', en: 'Link' } },
-  { key: 'device', icon: MonitorSmartphone, label: { ar: 'جهاز آخر', en: 'Other device' } },
+export interface AttributionBasis { orders: number | null; ordersSource: 'store' | 'site'; spendUsd: number | null; revenueUsd: number | null; currency?: string }
+
+const WINDOWS: Array<{ provider: string; days: number }> = [{ provider: 'snapchat', days: 28 }, { provider: 'tiktok', days: 7 }, { provider: 'meta', days: 7 }, { provider: 'google', days: 30 }]
+const UP_REASONS = [
+  { key: 'dup', icon: Copy, label: { ar: 'نفس الطلب في أكثر من منصة', en: 'One order, several platforms' } },
+  { key: 'view', icon: Eye, label: { ar: 'مشاهدة بلا نقرة', en: 'Viewed, not clicked' } },
+  { key: 'window', icon: Clock, label: { ar: 'نافذة النقرة · أيام', en: 'Click window · days' } },
+  { key: 'model', icon: Sparkles, label: { ar: 'تقدير iOS', en: 'Modelled on iOS' } },
 ]
-const WHY = [
-  { key: 'window', icon: Clock, label: { ar: 'نافذة أيام', en: 'Days-long window' } },
-  { key: 'view', icon: Eye, label: { ar: 'مشاهدة بلا نقرة', en: 'View, no click' } },
-  { key: 'device', icon: MonitorSmartphone, label: { ar: 'جهاز آخر', en: 'Another device' } },
-  { key: 'privacy', icon: ShieldOff, label: { ar: 'منع التتبع', en: 'Tracking blocked' } },
+const DOWN_REASONS = [
+  { key: 'last', icon: MousePointerClick, label: { ar: 'آخر نقرة فقط', en: 'Last click only' } },
+  { key: 'noview', icon: EyeOff, label: { ar: 'لا يرى المشاهدات', en: 'Sees no views' } },
+  { key: 'inapp', icon: AppWindow, label: { ar: 'متصفح التطبيق ← Safari', en: 'In-app browser → Safari' } },
+  { key: 'device', icon: MonitorSmartphone, label: { ar: 'جوال ↔ كمبيوتر', en: 'Phone ↔ computer' } },
+  { key: 'typed', icon: Keyboard, label: { ar: 'رجع وكتب الاسم', en: 'Came back, typed the name' } },
+  { key: 'cookie', icon: Cookie, label: { ar: 'Safari يحذف الكوكيز', en: 'Safari clears cookies' } },
 ]
 
-export function Journey({ ar, platforms = [] }: { ar: boolean; platforms?: string[] }) {
-  const logos = [...new Set(platforms)].slice(0, 4)
+/** The platforms whose claim is ten times or more what the website measured for them (and at least 20): worth a duplicate-event check. */
+export function suspectPlatforms(data: MatchPayload): Array<{ platform: string; claimed: number; measured: number }> {
+  return (data.platforms ?? [])
+    .map((p) => ({ platform: p.platform, claimed: p.claimed?.conversions ?? 0, measured: p.ga4?.purchases ?? 0 }))
+    .filter((p) => p.claimed >= 20 && p.measured > 0 && p.claimed / p.measured >= 10)
+}
+
+function Reason({ icon: Icon, label, tone }: { icon: typeof Copy; label: string; tone: string }) {
+  return (
+    <li className="flex min-w-0 items-center gap-2 rounded-lg bg-surface px-2.5 py-2">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md" style={{ background: `color-mix(in srgb, ${tone} 16%, transparent)`, color: tone }}><Icon size={14} aria-hidden /></span>
+      <span className="text-[11px] font-semibold leading-tight text-text-secondary">{label}</span>
+    </li>
+  )
+}
+
+export function AttributionStory({ data, ar, basis }: { data: MatchPayload; ar: boolean; basis?: AttributionBasis }) {
+  const claimed = (data.platforms ?? []).reduce((a, p) => a + (p.claimed?.conversions ?? 0), 0)
+  const claimedRevenue = (data.platforms ?? []).reduce((a, p) => a + (p.claimed?.revenue_usd ?? 0), 0)
+  const paths = orderPaths(data)
+  const floor = paths.find((p) => p.key === 'ads')?.orders ?? 0
+  const orders = basis?.orders ?? paths.reduce((a, p) => a + p.orders, 0)
+  if (claimed <= 0 || orders <= 0) return null
+  const fromStore = basis?.ordersSource === 'store' && basis.orders != null
+  const logos = [...new Set((data.platforms ?? []).filter((p) => (p.claimed?.conversions ?? 0) > 0).map((p) => p.platform))].slice(0, 5)
+  const max = Math.max(claimed, orders)
+  const at = (v: number) => `${(v / max) * 100}%`
+  const direct = data.unattributed?.classes?.find((c) => c.class === 'direct')
+  const spend = basis?.spendUsd ?? null
+  const realCpa = spend != null && orders > 0 ? spend / orders : null
+  const claimedCpa = spend != null && claimed > 0 ? spend / claimed : null
+  const realRoas = spend != null && spend > 0 && basis?.revenueUsd != null ? basis.revenueUsd / spend : null
+  const claimedRoas = spend != null && spend > 0 && claimedRevenue > 0 ? claimedRevenue / spend : null
+  const suspects = suspectPlatforms(data)
+  const ordersLabel = fromStore ? (ar ? 'طلبات المتجر' : 'Store orders') : (ar ? 'طلبات الموقع' : 'Website orders')
 
   return (
-    <div data-testid="attribution-journey" className="flex flex-col gap-3 rounded-xl border border-border bg-surface-secondary/40 p-3">
-      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><Route size={13} aria-hidden />{ar ? 'رحلة العميل' : 'The customer journey'}</span>
-
-      {/* The road: seen → came back later → bought. */}
-      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2" aria-label={ar ? 'شاهد الإعلان ثم عاد لاحقاً واشترى' : 'Saw the ad, came back later, bought'}>
-        <span data-testid="journey-seen" className="flex flex-col items-center gap-1">
-          <span className="flex -space-x-1.5 rtl:space-x-reverse">
-            {(logos.length ? logos : ['']).map((p) => <span key={p} className="grid h-8 w-8 place-items-center rounded-full border-2 border-surface bg-surface">{p ? <ProviderMark provider={p} size={16} /> : <Megaphone size={14} aria-hidden />}</span>)}
-          </span>
-          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-text-secondary"><Eye size={11} aria-hidden />{ar ? 'شاهد الإعلان' : 'Saw the ad'}</span>
-          <span className="tnum rounded-full bg-brand-600/15 px-1.5 text-[10px] font-bold text-brand-600">{ar ? 'يوم 1' : 'Day 1'}</span>
-        </span>
-        <span className="relative flex items-center justify-center">
-          <span className="absolute inset-x-0 top-1/2 border-t-2 border-dashed border-border-strong" aria-hidden />
-          <span className="relative flex flex-wrap items-center justify-center gap-1 bg-transparent">
-            {RETURN_ROADS.map((r) => (
-              <span key={r.key} title={tx(r.label, ar)} className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-semibold text-text-secondary"><r.icon size={11} aria-hidden />{tx(r.label, ar)}</span>
-            ))}
-          </span>
-        </span>
-        <span data-testid="journey-bought" className="flex flex-col items-center gap-1">
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-success/15 text-success"><ShoppingBag size={18} aria-hidden /></span>
-          <span className="text-[10px] font-bold text-text-secondary">{ar ? 'اشترى' : 'Bought'}</span>
-          <span className="tnum rounded-full bg-success/15 px-1.5 text-[10px] font-bold text-success">{ar ? 'يوم 12' : 'Day 12'}</span>
+    <div data-testid="attribution-story" className="flex flex-col gap-3">
+      {/* 1 — attributions, not orders. */}
+      <div data-testid="story-ratio" className="grid grid-cols-1 items-stretch gap-2 rounded-xl border border-border bg-surface-secondary/40 p-3 sm:grid-cols-[1fr_auto_1fr_auto]">
+        <div className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2.5">
+          <span className="flex -space-x-1.5 rtl:space-x-reverse">{logos.map((p) => <span key={p} className="grid h-7 w-7 place-items-center rounded-full border-2 border-surface bg-surface-secondary"><ProviderMark provider={p} size={14} /></span>)}</span>
+          <span className="flex flex-col"><span className="text-[11px] font-semibold text-text-muted">{ar ? 'إسنادات المنصات' : 'Platform attributions'}</span><span data-testid="story-claimed" className="tnum text-2xl font-extrabold leading-none text-text-primary"><Num>{num(claimed)}</Num></span></span>
+        </div>
+        <span className="grid place-items-center text-lg font-extrabold text-text-muted" aria-hidden>÷</span>
+        <div className="flex items-center gap-3 rounded-xl bg-surface px-3 py-2.5">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-success/15 text-success">{fromStore ? <Store size={17} aria-hidden /> : <ShoppingBag size={17} aria-hidden />}</span>
+          <span className="flex flex-col"><span className="text-[11px] font-semibold text-text-muted">{ordersLabel}</span><span data-testid="story-orders" className="tnum text-2xl font-extrabold leading-none text-text-primary"><Num>{num(orders)}</Num></span></span>
+        </div>
+        <span data-testid="story-per-order" className="grid place-items-center rounded-xl bg-brand-600/15 px-3 py-2 text-center">
+          <span className="tnum text-xl font-extrabold leading-none text-brand-600"><Num>{`×${(claimed / orders).toFixed(1)}`}</Num></span>
+          <span className="text-[10px] font-bold text-brand-600">{ar ? 'إسناد لكل طلب' : 'per order'}</span>
         </span>
       </div>
 
-      {/* The same order, read from two places. */}
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <div data-testid="journey-platform" className="flex items-center gap-2.5 rounded-xl border px-3 py-2" style={{ borderColor: 'color-mix(in srgb, var(--brand-600) 40%, transparent)' }}>
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600/15 text-brand-600"><Megaphone size={15} aria-hidden /></span>
-          <span className="flex min-w-0 flex-col">
-            <span className="text-[11px] font-bold text-text-primary">{ar ? 'المنصة' : 'Platform'}</span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-text-secondary"><Clock size={10} aria-hidden />{ar ? 'شاهد أو نقر خلال نافذتها' : 'Seen or clicked within its window'}</span>
-          </span>
-          <span className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-600/15 px-2 py-0.5 text-[10px] font-extrabold text-brand-600"><Check size={11} aria-hidden />{ar ? 'طلب من الإعلان' : 'Ad order'}</span>
+      {/* 2 — the real effect is a range: the confirmed floor to every order; the platforms' sum sits outside it. */}
+      <div data-testid="story-range" className="flex flex-col gap-2 rounded-xl border border-border bg-surface-secondary/40 p-3">
+        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><Target size={14} aria-hidden />{ar ? 'الأثر الحقيقي للإعلانات' : 'The ads’ real effect'}</span>
+        <div className="relative mt-5 h-4 rounded-full bg-surface">
+          <span className="absolute inset-y-0 start-0 rounded-full" style={{ width: at(floor), background: 'var(--brand-600)' }} />
+          <span className="absolute inset-y-0 rounded-full" style={{ insetInlineStart: at(floor), width: `calc(${at(orders)} - ${at(floor)})`, background: 'repeating-linear-gradient(135deg, color-mix(in srgb, var(--success) 70%, transparent) 0 6px, color-mix(in srgb, var(--success) 35%, transparent) 6px 12px)' }} />
+          <span className="absolute -top-5 -translate-x-1/2 rtl:translate-x-1/2 tnum text-[11px] font-extrabold text-brand-600" style={{ insetInlineStart: at(floor) }}><Num>{num(floor)}</Num></span>
+          <span className="absolute -top-5 -translate-x-1/2 rtl:translate-x-1/2 tnum text-[11px] font-extrabold text-success" style={{ insetInlineStart: at(orders) }}><Num>{num(orders)}</Num></span>
+          {claimed > orders && <span data-testid="story-range-claimed" className="absolute -top-5 -translate-x-full rtl:translate-x-full tnum text-[11px] font-extrabold text-text-muted line-through" style={{ insetInlineStart: '100%' }}><Num>{num(claimed)}</Num></span>}
+          {claimed > orders && <span className="absolute inset-y-0 end-0 rounded-e-full border-2 border-dashed border-border-strong" style={{ width: `calc(100% - ${at(orders)})` }} />}
         </div>
-        <div data-testid="journey-site" className="flex items-center gap-2.5 rounded-xl border px-3 py-2" style={{ borderColor: 'color-mix(in srgb, var(--teal) 40%, transparent)' }}>
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Globe size={15} aria-hidden /></span>
-          <span className="flex min-w-0 flex-col">
-            <span className="text-[11px] font-bold text-text-primary">{ar ? 'الموقع' : 'Website'}</span>
-            <span className="inline-flex items-center gap-1 text-[10px] text-text-secondary"><Route size={10} aria-hidden />{ar ? 'يسجّل مصدر آخر زيارة' : 'Files the last visit’s source'}</span>
-          </span>
-          <span className="ms-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}><Keyboard size={11} aria-hidden />{ar ? 'مباشر' : 'Direct'}</span>
+        <span className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-semibold text-text-muted">
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: 'var(--brand-600)' }} />{ar ? 'مؤكد في الموقع · آخر نقرة' : 'Confirmed on the site · last click'}</span>
+          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-success/60" />{ar ? `حتى كل ${fromStore ? 'طلبات المتجر' : 'طلبات الموقع'}` : 'Up to every order'}</span>
+          {claimed > orders && <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm border border-dashed border-border-strong" />{ar ? 'إسنادات · ليست طلبات' : 'Attributions · not orders'}</span>}
+        </span>
+      </div>
+
+      {/* 3 — why the platforms count more; why the website credits fewer. */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div data-testid="story-up" className="flex flex-col gap-2 rounded-xl border border-border bg-surface-secondary/40 p-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><ArrowUpRight size={14} className="text-brand-600" aria-hidden />{ar ? 'لماذا المنصات أعلى' : 'Why the platforms count more'}</span>
+          <ul className="grid grid-cols-2 gap-1.5">{UP_REASONS.map((r) => <Reason key={r.key} icon={r.icon} label={tx(r.label, ar)} tone="var(--brand-600)" />)}</ul>
+          <ul data-testid="story-windows" className="flex flex-wrap items-center gap-1.5" title={ar ? 'نوافذ النقرة الافتراضية تقريباً' : 'Approximate default click windows'}>
+            {WINDOWS.map((w) => <li key={w.provider} className="tnum inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-bold text-text-secondary"><ProviderMark provider={w.provider} size={11} /><Num>{ar ? `${w.days} يوم` : `${w.days}d`}</Num></li>)}
+            <li className="text-[10px] text-text-muted">{ar ? 'الافتراضي تقريباً' : 'approx. defaults'}</li>
+          </ul>
+        </div>
+        <div data-testid="story-down" className="flex flex-col gap-2 rounded-xl border border-border bg-surface-secondary/40 p-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-text-primary"><ArrowDownRight size={14} className="text-[var(--teal)]" aria-hidden />{ar ? 'لماذا الموقع أقل' : 'Why the website credits fewer'}</span>
+          <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">{DOWN_REASONS.map((r) => <Reason key={r.key} icon={r.icon} label={tx(r.label, ar)} tone="var(--teal)" />)}</ul>
+          {direct && (direct.sessions ?? 0) > 0 && (
+            <span data-testid="story-direct" className="tnum inline-flex flex-wrap items-center gap-1.5 self-start rounded-full px-2.5 py-1 text-[11px] font-extrabold text-[var(--teal)]" style={{ background: 'color-mix(in srgb, var(--teal) 15%, transparent)' }}>
+              <Keyboard size={12} aria-hidden />{ar ? 'مباشر' : 'Direct'} <Num>{num(direct.sessions ?? 0)}</Num> {ar ? 'زيارة' : 'visits'} · <Num>{num(direct.purchases ?? 0)}</Num> {ar ? 'طلب' : 'orders'}
+            </span>
+          )}
         </div>
       </div>
-      <span data-testid="journey-both" className="mx-auto inline-flex items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-[11px] font-extrabold text-success"><CheckCheck size={13} aria-hidden />{ar ? 'طلب واحد · قراءتان صحيحتان' : 'One order · two correct readings'}</span>
 
-      {/* Why the two readings differ: four mechanisms, an icon each. */}
-      <ul data-testid="journey-why" className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-        {WHY.map((w) => (
-          <li key={w.key} data-testid={`journey-why-${w.key}`} className="flex flex-col items-center gap-1 rounded-lg bg-surface px-2 py-2 text-center">
-            <span className="grid h-7 w-7 place-items-center rounded-full bg-surface-secondary text-text-secondary"><w.icon size={14} aria-hidden /></span>
-            <span className="text-[10px] font-semibold text-text-secondary">{tx(w.label, ar)}</span>
-          </li>
-        ))}
-      </ul>
+      {/* 4 — how to judge: on orders, never on the platforms' sum. */}
+      {(realCpa !== null || realRoas !== null) && (
+        <div data-testid="story-judge" className="grid grid-cols-1 gap-2 rounded-xl border border-success/30 bg-success/5 p-3 sm:grid-cols-2">
+          {realCpa !== null && (
+            <div data-testid="story-real-cpa" className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
+              <span className="flex flex-col"><span className="text-[11px] font-semibold text-text-muted">{ar ? 'تكلفة الطلب الفعلي' : 'Cost per real order'}</span><span className="tnum text-[10px] text-text-muted">{ar ? `الصرف ÷ ${ordersLabel}` : 'Spend ÷ orders'}</span></span>
+              <span className="flex flex-col items-end"><span className="tnum text-xl font-extrabold text-success"><Num>{money(realCpa, 'USD')}</Num></span>{claimedCpa !== null && <span className="tnum text-[10px] text-text-muted line-through"><Num>{money(claimedCpa, 'USD')}</Num></span>}</span>
+            </div>
+          )}
+          {realRoas !== null && (
+            <div data-testid="story-real-roas" className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-2">
+              <span className="flex flex-col"><span className="text-[11px] font-semibold text-text-muted">{ar ? 'العائد الفعلي' : 'Real return'}</span><span className="tnum text-[10px] text-text-muted">{ar ? 'إيراد الموقع ÷ الصرف' : 'Website revenue ÷ spend'}</span></span>
+              <span className="flex flex-col items-end"><span className="tnum text-xl font-extrabold text-success"><Num>{`×${realRoas.toFixed(2)}`}</Num></span>{claimedRoas !== null && <span className="tnum text-[10px] text-text-muted line-through"><Num>{`×${claimedRoas.toFixed(2)}`}</Num></span>}</span>
+            </div>
+          )}
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-text-secondary sm:col-span-2"><Scale size={12} aria-hidden />{ar ? 'رقم كل منصة للمقارنة بين حملاتها فقط · لا يُجمع ولا يُقارن بالمتجر' : 'Each platform’s figure compares its own campaigns only · never summed or set against the store'}</span>
+        </div>
+      )}
+
+      {/* 5 — the one case that is a fault: a claim ten times the measure. */}
+      {suspects.length > 0 && (
+        <ul data-testid="story-check" className="flex flex-col gap-1.5">
+          {suspects.map((p) => (
+            <li key={p.platform} data-testid={`story-check-${p.platform}`} className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] font-semibold text-warning">
+              <SearchCheck size={14} aria-hidden /><ProviderMark provider={p.platform} size={14} />
+              <span className="tnum"><Num>{`${num(p.claimed)} ↔ ${num(p.measured)}`}</Num></span>
+              <span>{ar ? 'يستحق فحص تكرار حدث الشراء (event_id موحّد)' : 'Worth checking for a duplicated Purchase event (one event_id)'}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
@@ -530,7 +605,7 @@ export function SiteEvidence({ data, ar }: { data: MatchPayload; ar: boolean }) 
  * «مطابقة الإسناد» as Thunder reads it: one row per platform, the platform's count and the website's on one scale, the measured
  * basket beside it, and a neutral direction chip. The indirect path is one stacked bar. The table stays one click away.
  */
-export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPayload; ar: boolean; pageSize?: number }) {
+export function AttributionVisual({ data, ar, pageSize = 8, basis }: { data: MatchPayload; ar: boolean; pageSize?: number; basis?: AttributionBasis }) {
   const rows = platformRows(data.platforms ?? [])
   const internal = (data.platforms ?? []).some((p) => p.campaigns !== undefined)
   const max = rows.reduce((m, r) => Math.max(m, r.claimed ?? 0, r.ga4?.purchases ?? 0), 0)
@@ -576,9 +651,9 @@ export function AttributionVisual({ data, ar, pageSize = 8 }: { data: MatchPaylo
         })}
       </ul>
 
-      <SiteEvidence data={data} ar={ar} />
+      <AttributionStory data={data} ar={ar} basis={basis} />
 
-      <Journey ar={ar} platforms={rows.map((r) => r.platform)} />
+      <SiteEvidence data={data} ar={ar} />
 
       {indirectTotal > 0 && (
         <div data-testid="indirect-path" className="flex flex-col gap-2 rounded-xl bg-surface-secondary/50 p-3">
