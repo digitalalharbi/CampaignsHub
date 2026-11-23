@@ -76,6 +76,11 @@ for (const role of ROLES) {
     expect(response.status(), `login refused for ${role.email}: ${body.slice(0, 400)}`).toBe(200)
 
     await expect(page).not.toHaveURL(/\/login$/, { timeout: 30_000 })
+    /*
+     * ADS-MANAGER-001 — «الحملات» opens on the simple Ads Manager by default; the specs written for the full workspace
+     * keep reading it through the remembered «عرض متقدم» choice. `ads-manager.spec.ts` clears it to test the simple view.
+     */
+    await page.evaluate(() => localStorage.setItem('ch-campaigns-layout', 'advanced'))
     await page.context().storageState({ path: role.file })
   })
 }

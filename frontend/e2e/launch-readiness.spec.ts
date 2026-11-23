@@ -41,6 +41,9 @@ async function toTrackingStep(page: Page, projectId: string) {
   await page.route('**/api/v1/projects/*/launch/options', (route) => route.fulfill(ok(OPTIONS)))
   await page.route('**/api/v1/projects/*/launch/plans', (route) => (route.request().method() === 'GET' ? route.fulfill(ok([])) : route.abort()))
   await page.goto('/agency/launch')
+  // LAUNCH-SNAP-001 — the page opens on the objective dialog; answer it before the steps.
+  await page.getByTestId('launch-objective-traffic').click({ timeout: 30_000 })
+  await page.getByTestId('launch-objective-next').click()
   await expect(page.getByTestId('launch-step-accounts')).toBeVisible({ timeout: 30_000 })
 
   // The account list: just the accounts — no event text, no readiness widget.

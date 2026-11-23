@@ -138,7 +138,7 @@ const VIEWS: Array<{ id: ViewMode; ar: string; en: string; icon: typeof LayoutGr
   { id: 'history', ar: 'سجل التغييرات', en: 'Change history', icon: History },
 ]
 
-export function CampaignsPage() {
+export function CampaignsPage({ onSimpleView }: { onSimpleView?: () => void } = {}) {
   const t = useT()
   const locale = useUi((s) => s.locale)
   const ar = locale === 'ar'
@@ -932,6 +932,7 @@ export function CampaignsPage() {
           <>
           {!fit && finders}
           <DateRangePicker projectId={projectId} budgetHint testId="campaigns-period-picker" />
+          {onSimpleView && <Button variant="secondary" onClick={onSimpleView} data-testid="campaigns-simple-view">{ar ? 'العرض المبسّط' : 'Simple view'}</Button>}
           {canCreate && <Button data-testid="new-campaign" onClick={() => navigate(`${portalBaseOf(location.pathname)}/launch`)}><Plus size={16} /> {t('new_campaign')}</Button>}
           </>
         }

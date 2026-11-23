@@ -26,6 +26,12 @@ const plan = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
+/** LAUNCH-SNAP-001 — the objective is asked first; the walk below starts after it. */
+async function chooseObjective(goal = 'traffic') {
+  fireEvent.click(await screen.findByTestId(`launch-objective-${goal}`))
+  fireEvent.click(screen.getByTestId('launch-objective-next'))
+}
+
 /** LAUNCH-001 — the builder publishes only after an explicit confirmation, and shows what the platform answered. */
 describe('the launch page', () => {
   beforeEach(() => {
@@ -42,6 +48,7 @@ describe('the launch page', () => {
   it('walks account → objective → review, saves the plan, and publishes only through the confirmation', async () => {
     vi.mocked(publishPlan).mockResolvedValue(plan({ status: 'published', unified_campaign_id: 'uc1', steps: [{ account_id: 'acc1', provider: 'meta', campaign: { status: 'done', external_id: '5001' }, ad_set: null, ad: null, launched: null }] }) as never)
     renderWithProviders(<LaunchPage />, { locale: 'ar', route: '/agency/launch' })
+    await chooseObjective()
 
     fireEvent.click(await screen.findByTestId('launch-account-acc1'))
     fireEvent.click(screen.getByTestId('launch-next'))
@@ -78,6 +85,7 @@ describe('the launch page', () => {
     vi.mocked(useLaunchOptions).mockReturnValue(ok(options('awaiting_credentials')) as never)
     vi.mocked(useLaunchPlans).mockReturnValue(ok([plan({ review: [{ account_id: 'acc1', provider: 'meta', account_name: 'Razzah Meta', currency: 'SAR', problems: ['awaiting_credentials'], step: plan().steps[0] }] })]) as never)
     renderWithProviders(<LaunchPage />, { locale: 'ar', route: '/app/launch' })
+    await chooseObjective()
 
     const box = await screen.findByTestId('launch-account-acc1')
     expect(box).toBeDisabled()
@@ -95,6 +103,7 @@ describe('the launch page', () => {
     const partial = plan({ status: 'partial', unified_campaign_id: 'uc1', steps: [{ account_id: 'acc1', provider: 'meta', campaign: { status: 'done', external_id: '5001' }, ad_set: { status: 'failed', error: '(#100) Bad targeting' }, ad: { status: 'pending' }, launched: null }] })
     vi.mocked(useLaunchPlans).mockReturnValue(ok([partial]) as never)
     renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+    await chooseObjective()
 
     fireEvent.click(await screen.findByText('Open'))
     const results = await screen.findByTestId('launch-results')
@@ -122,6 +131,7 @@ describe('the launch page', () => {
     } as never
     vi.mocked(useLaunchOptions).mockReturnValue(ok(withReadiness) as never)
     renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+    await chooseObjective()
 
     // The account list stays CLEAN: one list item per account and no readiness text in it (the e2e gate walks `li`, and the Owner
     // found the chips «filler» there). Readiness lives in the Tracking step.
@@ -158,6 +168,7 @@ describe('the launch page', () => {
     }) as never)
     vi.mocked(savePlan).mockResolvedValue(plan() as never)
     renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+    await chooseObjective()
 
     // The goal and its proposals sit with the objective they would set — not on the account list.
     fireEvent.click(await screen.findByTestId('launch-account-acc1'))
@@ -178,6 +189,7 @@ describe('the launch page', () => {
     vi.mocked(savePlan).mockResolvedValue(plan({ launch: true, spend, spec: { ...plan().spec, launch: true } }) as never)
     vi.mocked(publishPlan).mockResolvedValue(plan({ status: 'published', launch: true, spend }) as never)
     renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+    await chooseObjective()
 
     fireEvent.click(await screen.findByTestId('launch-account-acc1'))
     fireEvent.click(screen.getByTestId('launch-next'))
@@ -210,6 +222,7 @@ describe('the launch page', () => {
       slots: [{ id: 'acc1', share_pct: 100, amount: 100, currency: 'SAR', amount_in_account_currency: 100, account_currency: 'SAR' }],
     } as never)
     renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+    await chooseObjective()
 
     fireEvent.click(await screen.findByTestId('launch-account-acc1'))
     fireEvent.click(screen.getByTestId('launch-next'))
@@ -235,6 +248,7 @@ describe('the launch page', () => {
       }],
     }) as never)
     renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+    await chooseObjective()
 
     fireEvent.click(await screen.findByTestId('launch-account-acc1'))
     fireEvent.click(screen.getByTestId('launch-next'))
@@ -242,5 +256,21 @@ describe('the launch page', () => {
     const proposal = await screen.findByTestId('launch-proposal-measurement_first')
     expect(proposal).toHaveTextContent('No synced results yet')
     expect(proposal.textContent).not.toMatch(/does not exist|is missing/i)
+  })
+
+  it('asks the objective first, then shows the build as a tree with what is still missing (LAUNCH-SNAP-001)', async () => {
+    renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+
+    expect(await screen.findByTestId('launch-objective')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('launch-objective-leads'))
+    expect(screen.getByTestId('launch-objective-info')).toHaveTextContent('Collect interested people')
+    fireEvent.click(screen.getByTestId('launch-objective-next'))
+    expect(screen.queryByTestId('launch-objective')).not.toBeInTheDocument()
+
+    expect(screen.getByTestId('launch-tree')).toHaveTextContent('Leads campaign')
+    expect(screen.getByTestId('launch-summary-missing')).toHaveTextContent('Choose at least one ad account')
+    fireEvent.click(screen.getByTestId('launch-account-acc1'))
+    expect(screen.getByTestId('launch-summary')).toHaveTextContent('Razzah Meta')
+    expect(screen.getByTestId('launch-summary-missing')).not.toHaveTextContent('Choose at least one ad account')
   })
 })
