@@ -54,6 +54,8 @@ return [
         'auth_token' => env('TWILIO_AUTH_TOKEN'),
         'verify_service_sid' => env('TWILIO_VERIFY_SERVICE_SID'),
         'verify_channel' => env('TWILIO_VERIFY_CHANNEL', 'sms'),
+        // TWO-STEP-WHATSAPP-001 — true only once a WhatsApp sender is registered on the Verify service.
+        'verify_whatsapp' => (bool) env('TWILIO_VERIFY_WHATSAPP', false),
         'connect_timeout' => (int) env('TWILIO_CONNECT_TIMEOUT', 3),
         'timeout' => (int) env('TWILIO_TIMEOUT', 8),
         // NOTIFICATION-CHANNELS-001 — WhatsApp notifications over the same account. All optional: with no sender

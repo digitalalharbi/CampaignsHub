@@ -95,7 +95,8 @@ final class ContactVerificationService
         }
 
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-        $twilio = $channel === 'sms' && $this->twilio->configured();
+        // WhatsApp codes go through the same Verify service once its WhatsApp sender is registered (TWO-STEP-WHATSAPP-001).
+        $twilio = ($channel === 'sms' && $this->twilio->configured()) || ($channel === 'whatsapp' && $this->twilio->whatsappReady());
         $providerOn = $twilio
             || (bool) config("requests.verification.providers.{$this->providerKey($channel)}", false);
 
@@ -128,7 +129,7 @@ final class ContactVerificationService
          */
         if ($twilio) {
             try {
-                $state = $this->twilio->send($destination);
+                $state = $this->twilio->send($destination, $channel);
                 $v->forceFill(['delivery_status' => $state === 'pending' ? 'sent' : $state])->save();
                 // PRICING-USAGE-CREDITS-001 — a code the platform paid Twilio to send for a workspace is that workspace's usage.
                 if ($state === 'pending' && $tenantId !== null) {
@@ -239,7 +240,7 @@ final class ContactVerificationService
             }
         }
 
-        if ($v->channel === 'sms' && $v->provider === 'twilio_verify') {
+        if (in_array($v->channel, ['sms', 'whatsapp'], true) && $v->provider === 'twilio_verify') {
             try {
                 $status = $this->twilio->check((string) $v->destination, $code);
             } catch (TwilioVerifyException) {

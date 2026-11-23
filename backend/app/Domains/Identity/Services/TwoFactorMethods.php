@@ -85,6 +85,11 @@ final class TwoFactorMethods
         if ($user->two_factor_sms_enabled_at !== null && $this->smsReachable($user)) {
             $active[] = 'sms';
         }
+        // TWO-STEP-WHATSAPP-001 — WhatsApp is a second way to reach the same confirmed number: offered with the phone method,
+        // and only when Twilio can actually send it there.
+        if ($user->two_factor_sms_enabled_at !== null && $this->whatsappReachable($user)) {
+            $active[] = 'whatsapp';
+        }
 
         return $active;
     }
@@ -115,9 +120,12 @@ final class TwoFactorMethods
             'methods' => $this->active($user),
             'default' => $this->defaultMethod($user),
             'email_hint' => in_array('email', $this->active($user), true) ? PendingOAuthLink::mask((string) $user->email) : null,
-            'phone_hint' => in_array('sms', $this->active($user), true) ? self::maskPhone((string) $user->phone) : null,
+            'phone_hint' => array_intersect(['sms', 'whatsapp'], $this->active($user)) !== [] ? self::maskPhone((string) $user->phone) : null,
             'recovery_available' => $this->recoveryCodesLeft($user) > 0,
+            'recovery_left' => $this->recoveryCodesLeft($user),
             'resend_after' => self::RESEND_COOLDOWN,
+            // What the screen tells the person about the code they are waiting for.
+            'code_ttl_minutes' => (int) config('requests.verification.code_ttl_minutes', 10),
         ];
     }
 
@@ -195,7 +203,7 @@ final class TwoFactorMethods
         $destination = $this->destination($user, $method);
 
         $result = $this->codes->start(
-            $method === 'email' ? 'email' : 'sms',
+            $method === 'email' ? 'email' : ($method === 'whatsapp' ? 'whatsapp' : 'sms'),
             $destination,
             $purpose,
             cooldownSeconds: self::RESEND_COOLDOWN,
@@ -452,7 +460,7 @@ final class TwoFactorMethods
 
         /** @var ContactVerification|null $row */
         $row = ContactVerification::query()->find($verificationId);
-        $channel = $method === 'email' ? 'email' : 'sms';
+        $channel = $method === 'email' ? 'email' : ($method === 'whatsapp' ? 'whatsapp' : 'sms');
 
         // A code minted for another purpose, channel or person is not this one, whatever it verifies.
         if ($row === null || $row->purpose !== $purpose || $row->channel !== $channel || $row->consumed_at !== null
@@ -478,8 +486,8 @@ final class TwoFactorMethods
             return Str::lower(trim((string) $user->email));
         }
 
-        abort_unless($method === 'sms', 422);
-        abort_unless($this->smsProviderReady(), 422, (string) __('auth.two_factor_sms_awaiting'));
+        abort_unless(in_array($method, ['sms', 'whatsapp'], true), 422);
+        abort_unless($method === 'whatsapp' ? $this->twilio->whatsappReady() : $this->smsProviderReady(), 422, (string) __('auth.two_factor_sms_awaiting'));
         $e164 = $user->phone_verified_at !== null ? PhoneNumber::normalise((string) $user->phone) : null;
         abort_if($e164 === null, 422, (string) __('auth.two_factor_phone_unconfirmed'));
 
@@ -519,6 +527,11 @@ final class TwoFactorMethods
     private function smsReachable(User $user): bool
     {
         return $this->smsProviderReady() && $user->phone !== null && $user->phone_verified_at !== null;
+    }
+
+    private function whatsappReachable(User $user): bool
+    {
+        return $this->twilio->whatsappReady() && $user->phone !== null && $user->phone_verified_at !== null;
     }
 
     private function ownerKey(User $user): string

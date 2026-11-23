@@ -27,12 +27,21 @@ final class TwilioVerifyService
             && $this->serviceSid() !== '';
     }
 
+    /**
+     * WhatsApp through the same Verify service. Twilio sends it only once a WhatsApp sender is registered on the Verify service,
+     * which nothing here can prove, so the operator states it (`TWILIO_VERIFY_WHATSAPP=true`) and until then it is not offered.
+     */
+    public function whatsappReady(): bool
+    {
+        return $this->configured() && (bool) config('services.twilio.verify_whatsapp', false);
+    }
+
     /** Start a Verify challenge and return Twilio's non-secret status (normally `pending`). */
-    public function send(string $e164): string
+    public function send(string $e164, ?string $channel = null): string
     {
         $response = $this->request('Verifications', [
             'To' => $e164,
-            'Channel' => (string) config('services.twilio.verify_channel', 'sms'),
+            'Channel' => $channel === 'whatsapp' ? 'whatsapp' : (string) config('services.twilio.verify_channel', 'sms'),
         ]);
 
         return (string) ($response->json('status') ?? 'pending');

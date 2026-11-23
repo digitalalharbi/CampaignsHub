@@ -206,6 +206,40 @@ final class TwoFactorSignInTest extends TestCase
         $this->assertAuthenticatedAs($user, 'web');
     }
 
+    /** TWO-STEP-WHATSAPP-001 — a phone-method account is offered WhatsApp only when Twilio Verify can send it there. */
+    public function test_whatsapp_is_offered_with_the_phone_method_only_when_twilio_can_send_it(): void
+    {
+        config(['services.twilio.account_sid' => 'AC1', 'services.twilio.auth_token' => 't', 'services.twilio.verify_service_sid' => 'VA1']);
+        $this->person(['two_factor_enabled' => true, 'two_factor_sms_enabled_at' => now(), 'phone' => '+966501234567', 'phone_verified_at' => now()]);
+
+        config(['services.twilio.verify_whatsapp' => false]);
+        $this->login()->assertJsonPath('data.two_factor.methods', ['sms'])->assertJsonPath('data.two_factor.code_ttl_minutes', 10);
+        $this->withHeaders($this->spa)->postJson('/api/v1/auth/two-factor/send', ['method' => 'whatsapp'])->assertStatus(422);
+
+        config(['services.twilio.verify_whatsapp' => true]);
+        $this->withHeaders($this->spa)->getJson('/api/v1/auth/two-factor')->assertJsonPath('data.two_factor.methods', ['sms', 'whatsapp']);
+    }
+
+    /** TWO-STEP-WHATSAPP-001 — the code goes out on the WhatsApp channel and is checked with Twilio, once. */
+    public function test_a_whatsapp_code_answers_the_challenge_through_twilio(): void
+    {
+        config(['services.twilio.account_sid' => 'AC1', 'services.twilio.auth_token' => 't', 'services.twilio.verify_service_sid' => 'VA1', 'services.twilio.verify_whatsapp' => true]);
+        Http::fake([
+            'verify.twilio.com/v2/Services/VA1/Verifications' => Http::response(['status' => 'pending']),
+            'verify.twilio.com/v2/Services/VA1/VerificationCheck' => Http::response(['status' => 'approved']),
+        ]);
+        $user = $this->person(['two_factor_enabled' => true, 'two_factor_sms_enabled_at' => now(), 'phone' => '+966501234567', 'phone_verified_at' => now()]);
+        $this->login()->assertJsonPath('data.two_factor.methods', ['sms', 'whatsapp']);
+
+        $this->withHeaders($this->spa)->postJson('/api/v1/auth/two-factor/send', ['method' => 'whatsapp'])
+            ->assertOk()->assertJsonPath('data.delivery_status', 'sent')->assertJsonPath('data.dev_code', null);
+        Http::assertSent(fn ($r) => str_ends_with($r->url(), '/Verifications') && $r['Channel'] === 'whatsapp' && $r['To'] === '+966501234567');
+        $this->assertTrue(ContactVerification::query()->where('channel', 'whatsapp')->where('provider', 'twilio_verify')->exists());
+
+        $this->withHeaders($this->spa)->postJson('/api/v1/auth/two-factor/verify', ['method' => 'whatsapp', 'code' => '123456'])->assertOk();
+        $this->assertAuthenticatedAs($user, 'web');
+    }
+
     public function test_an_expired_email_code_is_refused(): void
     {
         $this->person(['two_factor_enabled' => true, 'two_factor_email_enabled_at' => now()]);

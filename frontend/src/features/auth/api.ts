@@ -85,7 +85,7 @@ export async function login(input: LoginInput): Promise<AuthUser> {
  * challenge accepts. Every sign-in call below turns that answer into {@link TwoStepRequired}, so a caller that only knows how to
  * handle a signed-in user can never mistake a held sign-in for a finished one.
  */
-export type TwoStepMethod = 'totp' | 'email' | 'sms'
+export type TwoStepMethod = 'totp' | 'email' | 'sms' | 'whatsapp'
 
 export interface TwoStepInfo {
   required: true
@@ -94,7 +94,11 @@ export interface TwoStepInfo {
   email_hint: string | null
   phone_hint: string | null
   recovery_available: boolean
+  /** How many recovery codes are left (absent from older servers). */
+  recovery_left?: number
   resend_after: number
+  /** How long a code sent by email, SMS or WhatsApp stays valid (absent from older servers). */
+  code_ttl_minutes?: number
 }
 
 export class TwoStepRequired extends Error {
@@ -122,7 +126,7 @@ export async function fetchTwoStep(): Promise<TwoStepInfo> {
   return two_factor
 }
 
-export async function sendTwoStepCode(method: 'email' | 'sms'): Promise<{ delivery_status: string; resend_after: number; dev_code: string | null }> {
+export async function sendTwoStepCode(method: 'email' | 'sms' | 'whatsapp'): Promise<{ delivery_status: string; resend_after: number; dev_code: string | null }> {
   await ensureCsrfCookie()
   return postData('/auth/two-factor/send', { method })
 }

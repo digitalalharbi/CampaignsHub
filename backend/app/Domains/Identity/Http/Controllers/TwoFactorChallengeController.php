@@ -58,10 +58,10 @@ final class TwoFactorChallengeController extends Controller
         return ApiResponse::success(['two_factor' => $this->methods->challengeFor($user)], (string) __('auth.two_factor_required'));
     }
 
-    /** POST /auth/two-factor/send — a code by email or SMS. */
+    /** POST /auth/two-factor/send — a code by email, SMS or WhatsApp. */
     public function send(Request $request): JsonResponse
     {
-        $data = $request->validate(['method' => ['required', Rule::in(['email', 'sms'])]]);
+        $data = $request->validate(['method' => ['required', Rule::in(['email', 'sms', 'whatsapp'])]]);
 
         $user = $this->pendingUser($request);
         if ($user === null) {
@@ -91,7 +91,7 @@ final class TwoFactorChallengeController extends Controller
     public function verify(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'method' => ['required', Rule::in(['totp', 'email', 'sms', 'recovery'])],
+            'method' => ['required', Rule::in(['totp', 'email', 'sms', 'whatsapp', 'recovery'])],
             'code' => ['required', 'string', 'max:32'],
         ]);
 
