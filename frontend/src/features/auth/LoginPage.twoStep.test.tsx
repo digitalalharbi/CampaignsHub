@@ -16,7 +16,7 @@ vi.mock('./api', async (orig) => {
   }
 })
 
-import { fetchTwoStep, login, TwoStepRequired, verifyTwoStep, type TwoStepInfo } from './api'
+import { fetchTwoStep, login, sendTwoStepCode, TwoStepRequired, verifyTwoStep, type TwoStepInfo } from './api'
 
 const TOTP_ONLY: TwoStepInfo = {
   required: true, methods: ['totp'], default: 'totp', email_hint: null, phone_hint: null, recovery_available: true, resend_after: 60,
@@ -53,8 +53,30 @@ describe('LoginPage — the second step', () => {
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login?two_step=1', locale: 'en' })
 
-    expect(await screen.findByTestId('two-step-method-email')).toBeInTheDocument()
+    // The method in use is named and explained; the others sit behind «Try another way», each saying where its code goes.
+    expect(await screen.findByTestId('two-step-panel-totp')).toHaveTextContent('Authenticator app')
+    expect(screen.getByTestId('two-step-explain')).toHaveTextContent(/Google Authenticator/)
+    fireEvent.click(screen.getByTestId('two-step-other'))
+    expect(screen.getByTestId('two-step-method-email')).toHaveTextContent('a•••@t.test')
     expect(screen.getByTestId('two-step-method-recovery')).toBeInTheDocument()
     expect(fetchTwoStep).toHaveBeenCalled()
+  })
+
+  it('says where an SMS code went and how long it lasts (TWO-STEP-UX-002)', async () => {
+    vi.mocked(fetchTwoStep).mockResolvedValueOnce({ ...TOTP_ONLY, methods: ['sms', 'email'], default: 'sms', phone_hint: '+966 5•• ••• 567', email_hint: 'a•••@t.test' })
+    vi.mocked(sendTwoStepCode).mockResolvedValue({ delivery_status: 'sent', resend_after: 60, dev_code: null })
+    signOut()
+    renderWithProviders(<LoginPage />, { route: '/login?two_step=1', locale: 'en' })
+
+    // The default (SMS) is sent on arrival and the screen says so, with the masked number and the code's lifetime.
+    expect(await screen.findByTestId('two-step-sent')).toHaveTextContent('Sent to +966 5•• ••• 567')
+    expect(screen.getByTestId('two-step-sent')).toHaveTextContent('valid for 10 minutes')
+    expect(sendTwoStepCode).toHaveBeenCalledWith('sms')
+
+    fireEvent.click(screen.getByTestId('two-step-other'))
+    fireEvent.click(screen.getByTestId('two-step-method-email'))
+    expect(screen.getByTestId('two-step-panel-email')).toHaveTextContent('Enter the code sent to your email')
+    fireEvent.click(screen.getByTestId('two-step-send'))
+    await waitFor(() => expect(sendTwoStepCode).toHaveBeenCalledWith('email'))
   })
 })
