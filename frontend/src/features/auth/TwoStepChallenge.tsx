@@ -32,7 +32,7 @@ const COPY = {
     name: { totp: 'تطبيق المصادقة', email: 'البريد الإلكتروني', sms: 'رسالة نصية', recovery: 'رمز احتياطي' },
     heading: { totp: 'أدخل رمز تطبيق المصادقة', email: 'أدخل الرمز المرسل لبريدك', sms: 'أدخل الرمز المرسل لجوالك', recovery: 'أدخل رمزًا احتياطيًا' },
     sub: {
-      totp: 'من Google أو Microsoft Authenticator',
+      totp: 'من Google Authenticator أو Microsoft Authenticator',
       email: (to: string | null) => to ?? 'بريدك الإلكتروني',
       sms: (to: string | null) => to ?? 'جوالك',
       recovery: 'بالشكل xxxxx-xxxxx · يُستخدم مرة واحدة',
@@ -56,7 +56,7 @@ const COPY = {
     name: { totp: 'Authenticator app', email: 'Email', sms: 'Text message', recovery: 'Recovery code' },
     heading: { totp: 'Enter your authenticator code', email: 'Enter the code sent to your email', sms: 'Enter the code sent to your phone', recovery: 'Enter a recovery code' },
     sub: {
-      totp: 'From Google or Microsoft Authenticator',
+      totp: 'From Google Authenticator or Microsoft Authenticator',
       email: (to: string | null) => to ?? 'your email',
       sms: (to: string | null) => to ?? 'your phone',
       recovery: 'Format xxxxx-xxxxx · works once',
