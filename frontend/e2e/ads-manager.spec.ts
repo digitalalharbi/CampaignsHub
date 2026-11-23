@@ -11,13 +11,20 @@ test.describe('the ads manager (agency)', () => {
 
   test('opens simple, moves between levels, and remembers the advanced view', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-    await page.addInitScript(() => { if (!sessionStorage.getItem('ads-manager-reset')) { localStorage.removeItem('ch-campaigns-layout'); sessionStorage.setItem('ads-manager-reset', '1') } })
+    await page.addInitScript(() => {
+      if (!sessionStorage.getItem('ads-manager-reset')) {
+        for (const k of ['ch-campaigns-layout', 'ch-ads-manager-kpis', 'ch-ads-manager-preset']) localStorage.removeItem(k)
+        sessionStorage.setItem('ads-manager-reset', '1')
+      }
+    })
     await page.goto('/agency/campaigns')
 
     await expect(page.getByTestId('ads-manager')).toBeVisible({ timeout: 30_000 })
-    for (const k of ['spend', 'impressions', 'clicks', 'ctr', 'video_views']) await expect(page.getByTestId(`ads-manager-kpi-${k}`)).toBeVisible()
+    for (const [i, k] of ['spend', 'impressions', 'clicks', 'ctr', 'video_views'].entries()) {
+      await expect(page.getByTestId(`ads-manager-kpi-${i}`)).toHaveAttribute('data-metric', k)
+    }
 
-    for (const level of ['ad_sets', 'ads', 'accounts', 'campaigns']) {
+    for (const level of ['accounts', 'ad_sets', 'ads', 'campaigns']) {
       await page.getByTestId(`ads-manager-level-${level}`).click()
       await expect(page.getByTestId(`ads-manager-level-${level}`)).toHaveAttribute('aria-selected', 'true')
     }
