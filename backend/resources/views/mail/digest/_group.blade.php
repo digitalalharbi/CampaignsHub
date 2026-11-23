@@ -22,8 +22,8 @@
                         </td>
                         @foreach ($pf['figures'] as $f)
                             <td width="26%" align="center" valign="middle" style="padding:5px 0; text-align:center;">
-                                <div style="font-size:12px; font-weight:800; color:{{ $f['missing'] ? '#8b9a97' : '#0b1a16' }};" dir="ltr">{{ $f['missing'] ? '—' : $f['value'] }}</div>
-                                <div style="font-size:10px; font-weight:700; color:{{ $f['colour'] }};" dir="ltr">{{ $f['missing'] ? ($dir === 'rtl' ? 'لا بيانات' : 'No data') : ($f['change'] ?: ' ') }}</div>
+                                <div style="font-size:12px; font-weight:800; color:{{ $f['missing'] ? '#8b9a97' : '#0b1a16' }};" dir="ltr">{{ $f['missing'] ? '' : $f['value'] }}</div>
+                                <div style="font-size:10px; font-weight:700; color:{{ $f['colour'] }};" dir="ltr">{{ $f['missing'] ? ' ' : ($f['change'] ?: ' ') }}</div>
                             </td>
                         @endforeach
                     </tr>

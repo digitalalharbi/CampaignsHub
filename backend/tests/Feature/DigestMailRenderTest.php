@@ -118,7 +118,7 @@ final class DigestMailRenderTest extends TestCase
      * coalesce to 0 and the unit falls back to the reporting default. A withheld figure never prints as zero,
      * and the row says «no data» in the product's own words — in both languages, with and without money.
      */
-    public function test_a_project_with_no_figures_says_no_data_and_never_prints_zero_in_a_currency(): void
+    public function test_a_project_with_no_figures_is_left_out_and_never_prints_zero_in_a_currency(): void
     {
         $empty = [
             'project_id' => 'p2', 'project_name' => 'Quiet Project', 'currency' => 'USD',
@@ -130,24 +130,19 @@ final class DigestMailRenderTest extends TestCase
         $withData = array_merge($this->digest()['projects'][0], ['currency' => 'SAR']);
         $digest = $this->digest(['currency' => 'SAR', 'projects' => [$withData, $empty]]);
 
-        foreach (['ar' => ['لا بيانات', 'لا أرقام مسجّلة'], 'en' => ['No data', 'No figures recorded']] as $locale => [$chip, $line]) {
-            // EMAIL-CLIENT-COMPAT-001 — margins are spacer tables now; they are not the row's end.
-            $html = (string) preg_replace('#<table[^>]*data-spacer="\d+"[^>]*>.*?</table>#s', '', $this->renderOf($digest, $locale));
-            $quiet = (string) substr($html, (int) strrpos($html, 'data-block="portfolio-row"'));
-            $quiet = (string) substr($quiet, 0, (int) strpos($quiet, '</table>') + 8);
-            $this->assertStringContainsString('Quiet Project', $quiet);
-            $this->assertStringContainsString($chip, $quiet, "[$locale] the row says it has no data");
-            $this->assertStringContainsString($line, $quiet);
-            $this->assertDoesNotMatchRegularExpression('/\b0\s*(USD|SAR|\$|ر\.س)(?!\w)/u', $quiet, "[$locale] a withheld figure is never «0 USD»");
-            $this->assertStringNotContainsString('USD', $quiet, "[$locale] no currency is stated beside a figure nobody has");
-            $this->assertStringNotContainsString(' $', $quiet, "[$locale] no currency mark is stated beside a figure nobody has");
-            $this->assertStringNotContainsString('within the range', $quiet, "[$locale] no verdict is offered on nothing");
+        // DIGEST-NO-EMPTY-001 — Owner 2026-11-23: a project with no figures is not drawn at all, and nothing says «no data».
+        foreach (['ar' => 'لا بيانات', 'en' => 'No data'] as $locale => $chip) {
+            $html = $this->renderOf($digest, $locale);
+            $this->assertStringNotContainsString('Quiet Project', $html, "[$locale] the project with no figures is left out");
+            $this->assertStringNotContainsString($chip, $html, "[$locale] «no data» is never written");
+            $this->assertDoesNotMatchRegularExpression('/\b0\s*(USD|SAR|\$|ر\.س)(?!\w)/u', $html, "[$locale] a withheld figure is never «0 USD»");
             $this->assertStringContainsString('9,400', $html, "[$locale] the project with data keeps its spend");
         }
 
-        // The member without money.view gets the same honest row, and no spend either way.
+        // The member without money.view: the same rule — the quiet project is left out, and no spend either way.
         $restricted = (string) (new DailyDigestMail($digest, 'en', 'Mohammed', 'daily', null, 'restricted'))->render();
-        $this->assertStringContainsString('No data', $restricted);
+        $this->assertStringNotContainsString('No data', $restricted);
+        $this->assertStringNotContainsString('Quiet Project', $restricted);
         $this->assertStringNotContainsString('0 USD', $restricted);
         $this->assertStringNotContainsString('0 $', $restricted);
 

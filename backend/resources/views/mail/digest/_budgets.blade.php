@@ -27,7 +27,7 @@
                                 @if ($r['bar'] < 100)<td height="8" style="font-size:1px; line-height:8px;">&nbsp;</td>@endif
                             </tr></table>
                         @else
-                            <span style="font-size:11px; color:#8b9a97;">{{ $dir === 'rtl' ? 'لا بيانات' : 'No data' }}</span>
+                            {{-- DIGEST-NO-EMPTY-001 — no «لا بيانات»: the reason line below says what blocks the figure. --}}&nbsp;
                         @endif
                     </td>
                     <td width="26%" style="padding:3px 0; font-weight:800; color:{{ $r['over'] ? '#b91c1c' : '#0a6b57' }}; text-align:{{ $endSide }}; white-space:nowrap;" dir="ltr">{{ $r['state'] === 'ok' ? $r['remaining'] : '' }}</td>

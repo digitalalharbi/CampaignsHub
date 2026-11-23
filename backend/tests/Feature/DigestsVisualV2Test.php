@@ -93,7 +93,10 @@ final class DigestsVisualV2Test extends TestCase
             $this->assertContains($r['name'], $names);
         }
         $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio'))->render();
-        $this->assertSame(30, substr_count($html, 'data-block="portfolio-row"'));
+        // DIGEST-NO-EMPTY-001 — Owner 2026-11-23: every project WITH figures is in the mail once; one with none is left out.
+        $withFigures = count(array_filter($m['heatmap']['rows'], static fn (array $r): bool => $r['state'] !== 'none'));
+        $this->assertSame($withFigures, substr_count($html, 'data-block="portfolio-row"'));
+        $this->assertStringNotContainsString('لا بيانات', $html);
         // DIGEST-FIGURES-ONLY-001 — Owner 2026-11-21: the coverage count read a generic freshness state and flagged projects
         // whose figures had arrived; it is gone. Every project is still in the mail once, as its card.
         $this->assertStringNotContainsString('أرقامها محدّثة', $html);
@@ -141,7 +144,7 @@ final class DigestsVisualV2Test extends TestCase
         // DIGEST-FIGURES-ONLY-001 — the normal reader gets the same figures; no decision cards for anyone any more.
         $normal = (new OperationalDigestMail(OperationalDigestModel::portfolio($d, 'ar', 'daily'), 'ar', 'م', 'daily', 'portfolio'))->render();
         $this->assertStringNotContainsString('data-block="issue"', $normal);
-        $this->assertSame(30, substr_count($normal, 'data-block="portfolio-row"'));
+        $this->assertSame(count(OperationalDigestModel::portfolio($d, 'ar', 'daily')['cards']), substr_count($normal, 'data-block="portfolio-row"'));
     }
 
     public function test_the_weekly_differs_from_the_daily_and_both_are_visual_not_prose(): void

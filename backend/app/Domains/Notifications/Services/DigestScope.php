@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Projects\Models\Project;
+use App\Domains\Projects\Models\ProjectMembership;
 use App\Domains\Tenancy\Enums\Portal;
 use App\Domains\Tenancy\Models\Membership;
 use App\Models\User;
@@ -197,7 +198,24 @@ final class DigestScope
                 ->all();
         }
 
-        return [];
+        /*
+         * DIGEST-RECIPIENT-SCOPE-001 — Owner 2026-11-23: «كل مدير مشروع يوصله أداء مشروعه، وفق صلاحياته فقط 100%». A member
+         * with no named scope and no tenant-wide grant still reaches the projects they hold a CURRENT project membership of —
+         * the same rule `ProjectReach` applies to every page — so a project manager added to his project gets its digest.
+         * Only live projects of THIS tenant, and never more than those memberships.
+         */
+        return Project::query()
+            ->live()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('id', ProjectMembership::query()
+                ->withoutGlobalScopes()
+                ->current()
+                ->where('tenant_id', $tenantId)
+                ->where('user_id', $user->getKey())
+                ->select('project_id'))
+            ->pluck('id')
+            ->map(static fn ($id): string => (string) $id)
+            ->all();
     }
 
     /**
