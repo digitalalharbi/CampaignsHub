@@ -355,14 +355,15 @@ final class DailyDigestMail extends Mailable
              * (A payload that carries no `reported` map predates it and is taken to have data.)
              */
             $noData = $reported !== [] && ! in_array(true, $reported, true);
-            // DIGEST-NO-EMPTY-001 — Owner 2026-11-23: a project with nothing reported is left out of the mail, not written as «لا بيانات».
-            if ($noData) {
+            // DIGEST-NO-EMPTY-001 — Owner 2026-11-23: a project with NOTHING to report (no ad figure, no lead follow-up, no site
+            // figures) is left out of the mail, never written as «لا بيانات». Leads that arrived are data, so that project stays.
+            if ($noData && empty($block['follow_up']) && empty($block['ga4'])) {
                 continue;
             }
 
             // The objective figure: the first the metric set names; with no stated set, the first the totals hold.
             $objectiveKey = null;
-            foreach (self::OBJECTIVE_KEYS as $key) {
+            foreach ($noData ? [] : self::OBJECTIVE_KEYS as $key) {
                 // Named by the set first, otherwise the first the totals hold — and only ever a REAL figure (Owner 2026-10-22: nothing is written about a figure nobody sent).
                 if (($set === [] || in_array($key, $set, true)) && array_key_exists($key, $totals) && is_numeric($totals[$key])) {
                     $objectiveKey = $key;
