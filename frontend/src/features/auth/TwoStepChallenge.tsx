@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { CheckCircle2, ChevronLeft, ChevronRight, KeyRound, Mail, MessageSquare, ShieldCheck, Smartphone, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, KeyRound, Mail, MessageSquare, ShieldCheck, Smartphone, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { toApiError } from '@/lib/api/client'
@@ -17,9 +17,9 @@ import { cancelTwoStep, fetchTwoStep, sendTwoStepCode, verifyTwoStep, type TwoSt
  * for every way of being wrong, because that is what the server says.
  *
  * TWO-STEP-UX-002 (Owner 2026-11-23): the screen used to say «التحقق بخطوتين · الرمز» and nothing else, so nobody could tell
- * which code it wanted. It now reads like the large providers' second step: the method in use is named with its icon, a sentence
- * says exactly where the code comes from (which app, which address or number, how long it lasts), and «جرّب طريقة أخرى» opens a
- * list of every way this account can answer, each with where it goes.
+ * which code it wanted. It now reads like the large providers' second step, in as few words as they use: the method's icon and a
+ * one-line heading, one short line of where the code comes from (the app, or the masked address or number and its lifetime), the
+ * code, «تحقق», and two small links — resend and «طريقة أخرى», which lists every way this account can answer.
  */
 type Choice = TwoStepMethod | 'recovery'
 type Sent = 'email' | 'sms'
@@ -29,85 +29,49 @@ const MINUTES_AR = { one: 'دقيقة', two: 'دقيقتين', few: 'دقائق'
 const COPY = {
   ar: {
     title: 'التحقق بخطوتين',
-    lead: 'خطوة أمان إضافية لحماية حسابك. أكّد أنه أنت للمتابعة.',
-    name: { totp: 'تطبيق المصادقة', email: 'البريد الإلكتروني', sms: 'رسالة نصية (SMS)', recovery: 'رمز احتياطي' },
-    heading: {
-      totp: 'أدخل الرمز من تطبيق المصادقة',
-      email: 'أدخل الرمز المرسل إلى بريدك',
-      sms: 'أدخل الرمز المرسل برسالة نصية',
-      recovery: 'أدخل أحد رموزك الاحتياطية',
+    name: { totp: 'تطبيق المصادقة', email: 'البريد الإلكتروني', sms: 'رسالة نصية', recovery: 'رمز احتياطي' },
+    heading: { totp: 'أدخل رمز تطبيق المصادقة', email: 'أدخل الرمز المرسل لبريدك', sms: 'أدخل الرمز المرسل لجوالك', recovery: 'أدخل رمزًا احتياطيًا' },
+    sub: {
+      totp: 'من Google أو Microsoft Authenticator',
+      email: (to: string | null) => to ?? 'بريدك الإلكتروني',
+      sms: (to: string | null) => to ?? 'جوالك',
+      recovery: 'بالشكل xxxxx-xxxxx · يُستخدم مرة واحدة',
     },
-    body: {
-      totp: 'افتح تطبيق المصادقة في جوالك (مثل Google Authenticator أو Microsoft Authenticator أو Authy)، واكتب الرمز المكوّن من 6 أرقام الظاهر تحت حساب كامبينز هب.',
-      email: (to: string) => `نرسل رمزًا من 6 أرقام إلى ${to}. إذا ما وصلك خلال دقيقة، تحقق من مجلد الرسائل غير المرغوب فيها.`,
-      sms: (to: string) => `نرسل رسالة نصية فيها رمز من 6 أرقام إلى الرقم ${to}.`,
-      recovery: 'هي الرموز اللي حفظتها لما فعّلت التحقق بخطوتين، مثل xxxxx-xxxxx. كل رمز يُستخدم مرة وحدة فقط.',
-    },
-    option: {
-      totp: 'رمز من تطبيق المصادقة في جوالك',
-      email: (to: string | null) => (to ? `رمز إلى ${to}` : 'رمز إلى بريدك الإلكتروني'),
-      sms: (to: string | null) => (to ? `رسالة نصية إلى ${to}` : 'رسالة نصية إلى جوالك'),
-      recovery: 'أحد الرموز الاحتياطية اللي حفظتها',
-    },
-    totpHint: 'الرمز يتجدد كل 30 ثانية. إذا انتهى وأنت تكتبه، اكتب الرمز الجديد.',
-    valid: (m: number) => `الرمز صالح لمدة ${countedAr(m, MINUTES_AR)}.`,
+    valid: (m: number) => `صالح ${countedAr(m, MINUTES_AR)}`,
     code: 'رمز التحقق',
-    send: (to: string) => `أرسل الرمز إلى ${to}`,
-    sendPlain: 'أرسل الرمز',
+    send: 'أرسل الرمز',
     resend: 'إعادة الإرسال',
-    wait: (s: number) => `إعادة الإرسال بعد ${s} ث`,
-    sentTo: (to: string) => `تم الإرسال إلى ${to}`,
-    notSent: 'ما قدرنا نرسل الرمز الآن. أعد المحاولة أو جرّب طريقة أخرى.',
-    verify: 'تحقق وادخل',
-    other: 'جرّب طريقة أخرى',
+    wait: (s: number) => `إعادة الإرسال ${s} ث`,
+    notSent: 'تعذّر الإرسال. أعد المحاولة.',
+    verify: 'تحقق',
+    other: 'طريقة أخرى',
     chooseTitle: 'اختر طريقة التحقق',
-    chooseLead: 'هذي الطرق المفعّلة على حسابك.',
     current: 'الحالية',
-    back: 'رجوع لتسجيل الدخول',
-    backToCode: 'رجوع',
-    help: 'ما تقدر توصل لأي طريقة؟ تواصل مع مدير مساحة العمل لإعادة ضبط التحقق بخطوتين.',
+    back: 'رجوع',
     expired: 'انتهت مهلة التحقق. سجّل الدخول مرة أخرى.',
     none: 'لا توجد طريقة متاحة الآن. استخدم رمزًا احتياطيًا.',
   },
   en: {
     title: 'Two-step verification',
-    lead: 'An extra security step protects your account. Confirm it is you to continue.',
-    name: { totp: 'Authenticator app', email: 'Email', sms: 'Text message (SMS)', recovery: 'Recovery code' },
-    heading: {
-      totp: 'Enter the code from your authenticator app',
-      email: 'Enter the code sent to your email',
-      sms: 'Enter the code sent by text message',
-      recovery: 'Enter one of your recovery codes',
+    name: { totp: 'Authenticator app', email: 'Email', sms: 'Text message', recovery: 'Recovery code' },
+    heading: { totp: 'Enter your authenticator code', email: 'Enter the code sent to your email', sms: 'Enter the code sent to your phone', recovery: 'Enter a recovery code' },
+    sub: {
+      totp: 'From Google or Microsoft Authenticator',
+      email: (to: string | null) => to ?? 'your email',
+      sms: (to: string | null) => to ?? 'your phone',
+      recovery: 'Format xxxxx-xxxxx · works once',
     },
-    body: {
-      totp: 'Open the authenticator app on your phone (such as Google Authenticator, Microsoft Authenticator or Authy) and type the 6-digit code shown under CampaignsHub.',
-      email: (to: string) => `We send a 6-digit code to ${to}. If it has not arrived within a minute, check your spam folder.`,
-      sms: (to: string) => `We send a text message with a 6-digit code to ${to}.`,
-      recovery: 'These are the codes you saved when you turned on two-step verification, like xxxxx-xxxxx. Each one works once.',
-    },
-    option: {
-      totp: 'A code from the authenticator app on your phone',
-      email: (to: string | null) => (to ? `A code to ${to}` : 'A code to your email'),
-      sms: (to: string | null) => (to ? `A text message to ${to}` : 'A text message to your phone'),
-      recovery: 'One of the recovery codes you saved',
-    },
-    totpHint: 'The code changes every 30 seconds. If it runs out while you type, enter the new one.',
-    valid: (m: number) => `The code is valid for ${countedEn(m, 'minute', 'minutes')}.`,
+    valid: (m: number) => `valid ${countedEn(m, 'minute', 'minutes')}`,
     code: 'Verification code',
-    send: (to: string) => `Send the code to ${to}`,
-    sendPlain: 'Send the code',
+    send: 'Send code',
     resend: 'Resend',
     wait: (s: number) => `Resend in ${s}s`,
-    sentTo: (to: string) => `Sent to ${to}`,
-    notSent: 'We could not send the code right now. Try again or use another way.',
-    verify: 'Verify and continue',
-    other: 'Try another way',
-    chooseTitle: 'Choose how to verify',
-    chooseLead: 'These are the methods turned on for your account.',
+    notSent: 'Could not send. Try again.',
+    verify: 'Verify',
+    other: 'Another way',
+    chooseTitle: 'Choose a method',
     current: 'Current',
-    back: 'Back to sign in',
-    backToCode: 'Back',
-    help: 'Cannot reach any of these? Ask your workspace admin to reset two-step verification.',
+    back: 'Back',
     expired: 'The verification step expired. Sign in again.',
     none: 'No method is available right now. Use a recovery code.',
   },
@@ -142,7 +106,6 @@ export function TwoStepChallenge({
 
   const method: Choice | null = choice ?? info?.default ?? (info?.methods.length ? info.methods[0] : info ? 'recovery' : null)
   const hintOf = (m: Choice | null) => (m === 'email' ? info?.email_hint ?? null : m === 'sms' ? info?.phone_hint ?? null : null)
-  const hint = hintOf(method)
   // Email and SMS codes live ten minutes (ContactVerificationService, `requests.verification.code_ttl_minutes`).
   const ttl = 10
 
@@ -205,23 +168,20 @@ export function TwoStepChallenge({
   const choices: Choice[] = [...(info?.methods ?? []), ...(info?.recovery_available ? (['recovery'] as const) : [])]
   const Icon = method ? ICONS[method] : ShieldCheck
   const Chevron = locale === 'ar' ? ChevronLeft : ChevronRight
-  const optionText = (m: Choice) => m === 'totp' ? c.option.totp : m === 'recovery' ? c.option.recovery : c.option[m](hintOf(m))
-  const bodyText = (m: Choice) => m === 'totp' ? c.body.totp : m === 'recovery' ? c.body.recovery : c.body[m](hintOf(m) ?? c.name[m])
+  const subOf = (m: Choice) => (m === 'totp' || m === 'recovery' ? c.sub[m] : c.sub[m](hintOf(m)))
+  const delivered = delivery !== null && DELIVERED.has(delivery)
 
   return (
     <div data-testid="two-step" className="rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow-small)]">
-      <div className="mb-5 flex flex-col items-center gap-2 text-center">
-        <span className="flex size-12 items-center justify-center rounded-full bg-brand-500/10 text-brand-600"><ShieldCheck size={24} aria-hidden /></span>
-        <h1 className="text-xl font-bold text-text-primary">{c.title}</h1>
-        <p className="text-sm text-text-secondary">{c.lead}</p>
-      </div>
+      <p className="mb-4 flex items-center justify-center gap-1.5 text-xs font-semibold text-text-muted">
+        <ShieldCheck size={14} aria-hidden /> {c.title}
+      </p>
 
       {info === null && probe.isPending && <div className="h-24 animate-pulse rounded-xl bg-surface-secondary" />}
 
       {info !== null && choosing && (
         <div data-testid="two-step-choose">
-          <h2 className="text-base font-bold text-text-primary">{c.chooseTitle}</h2>
-          <p className="mb-3 text-sm text-text-secondary">{c.chooseLead}</p>
+          <h1 className="mb-3 text-center text-lg font-bold text-text-primary">{c.chooseTitle}</h1>
           <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
             {choices.map((m) => {
               const MIcon = ICONS[m]
@@ -234,61 +194,33 @@ export function TwoStepChallenge({
                     onClick={() => pick(m)}
                     className="flex w-full items-center gap-3 px-4 py-3 text-start transition-colors hover:bg-surface-secondary"
                   >
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface-secondary text-text-secondary"><MIcon size={18} aria-hidden /></span>
+                    <MIcon size={18} className="shrink-0 text-text-secondary" aria-hidden />
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-                        {c.name[m]}
-                        {method === m && <span className="rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-semibold text-brand-600">{c.current}</span>}
-                      </span>
-                      <span className="block truncate text-xs text-text-secondary" dir="auto">{optionText(m)}</span>
+                      <span className="block text-sm font-semibold text-text-primary">{c.name[m]}</span>
+                      <span className="block truncate text-xs text-text-muted" dir="auto">{subOf(m)}</span>
                     </span>
-                    <Chevron size={16} className="shrink-0 text-text-muted" aria-hidden />
+                    {method === m ? <span className="text-xs font-semibold text-brand-600">{c.current}</span> : <Chevron size={16} className="shrink-0 text-text-muted" aria-hidden />}
                   </button>
                 </li>
               )
             })}
           </ul>
-          <p className="mt-3 text-xs text-text-muted">{c.help}</p>
-          <Button type="button" variant="ghost" className="mt-3 w-full" data-testid="two-step-choose-back" onClick={() => setChoosing(false)}>{c.backToCode}</Button>
+          <Button type="button" variant="ghost" className="mt-3 w-full" data-testid="two-step-choose-back" onClick={() => setChoosing(false)}>{c.back}</Button>
         </div>
       )}
 
       {info !== null && !choosing && method !== null && (
         <>
-          <div className="mb-4 flex items-start gap-3 rounded-xl border border-border bg-surface-secondary/50 p-3" data-testid={`two-step-panel-${method}`}>
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-500/10 text-brand-600"><Icon size={20} aria-hidden /></span>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-brand-600">{c.name[method]}</p>
-              <h2 className="text-sm font-bold text-text-primary">{c.heading[method]}</h2>
-              <p className="mt-1 text-sm leading-relaxed text-text-secondary" data-testid="two-step-explain">{bodyText(method)}</p>
-              {method === 'totp' && <p className="mt-1 text-xs text-text-muted">{c.totpHint}</p>}
-            </div>
+          <div className="mb-5 flex flex-col items-center gap-2 text-center" data-testid={`two-step-panel-${method}`}>
+            <span className="flex size-12 items-center justify-center rounded-full bg-brand-500/10 text-brand-600"><Icon size={22} aria-hidden /></span>
+            <h1 className="text-lg font-bold text-text-primary">{c.heading[method]}</h1>
+            <p className="text-sm text-text-secondary" data-testid="two-step-explain" dir="auto">
+              {subOf(method)}
+              {isSent(method) && delivered && <span data-testid="two-step-sent"> · {c.valid(ttl)}</span>}
+            </p>
           </div>
 
-          {info.methods.length === 0 && method === 'recovery' && <p className="mb-3 text-sm text-text-secondary">{c.none}</p>}
-
-          {isSent(method) && (
-            <div className="mb-3 space-y-2">
-              {delivery !== null && DELIVERED.has(delivery) && (
-                <p data-testid="two-step-sent" className="flex items-center gap-1.5 text-sm text-success" dir="auto">
-                  <CheckCircle2 size={16} aria-hidden /> {c.sentTo(hint ?? c.name[method])} · {c.valid(ttl)}
-                </p>
-              )}
-              {delivery !== null && !DELIVERED.has(delivery) && <p className="text-sm text-warning">{c.notSent}</p>}
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                data-testid="two-step-send"
-                className="w-full"
-                disabled={cooldown > 0}
-                loading={send.isPending}
-                onClick={() => send.mutate(method)}
-              >
-                {cooldown > 0 ? c.wait(cooldown) : delivery === null ? (hint ? c.send(hint) : c.sendPlain) : c.resend}
-              </Button>
-            </div>
-          )}
+          {info.methods.length === 0 && method === 'recovery' && <p className="mb-3 text-center text-sm text-text-secondary">{c.none}</p>}
 
           <form onSubmit={(e) => { e.preventDefault(); submit() }} className="space-y-4">
             {method === 'recovery' ? (
@@ -306,25 +238,38 @@ export function TwoStepChallenge({
               <OtpField value={code} onChange={setCode} onComplete={submit} label={c.code} autoFocus testId="two-step-otp" disabled={verify.isPending} />
             )}
 
-            {error && <p role="alert" data-testid="two-step-error" className="text-sm text-danger">{error}</p>}
+            {error && <p role="alert" data-testid="two-step-error" className="text-center text-sm text-danger">{error}</p>}
+            {isSent(method) && delivery !== null && !delivered && <p className="text-center text-sm text-warning">{c.notSent}</p>}
 
             <Button type="submit" size="lg" className="w-full" data-testid="two-step-verify" loading={verify.isPending}>{c.verify}</Button>
           </form>
 
-          <div className="mt-4 flex flex-col gap-1 border-t border-border pt-3">
+          <div className="mt-4 flex items-center justify-between gap-2 text-sm">
+            {isSent(method) ? (
+              <button
+                type="button"
+                data-testid="two-step-send"
+                disabled={cooldown > 0 || send.isPending}
+                onClick={() => send.mutate(method)}
+                className="font-semibold text-brand-600 hover:underline disabled:cursor-default disabled:font-normal disabled:text-text-muted disabled:no-underline"
+              >
+                <span className="tnum">{cooldown > 0 ? c.wait(cooldown) : delivery === null ? c.send : c.resend}</span>
+              </button>
+            ) : <span />}
             {choices.length > 1 && (
-              <Button type="button" variant="ghost" className="w-full" data-testid="two-step-other" onClick={() => setChoosing(true)}>{c.other}</Button>
+              <button type="button" data-testid="two-step-other" onClick={() => setChoosing(true)} className="font-semibold text-brand-600 hover:underline">{c.other}</button>
             )}
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full"
-              data-testid="two-step-back"
-              onClick={() => { void cancelTwoStep().catch(() => undefined); onLeave(false) }}
-            >
-              {c.back}
-            </Button>
           </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            className="mt-3 w-full"
+            data-testid="two-step-back"
+            onClick={() => { void cancelTwoStep().catch(() => undefined); onLeave(false) }}
+          >
+            {c.back}
+          </Button>
         </>
       )}
     </div>

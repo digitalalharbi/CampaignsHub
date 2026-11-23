@@ -54,8 +54,8 @@ describe('LoginPage — the second step', () => {
     renderWithProviders(<LoginPage />, { route: '/login?two_step=1', locale: 'en' })
 
     // The method in use is named and explained; the others sit behind «Try another way», each saying where its code goes.
-    expect(await screen.findByTestId('two-step-panel-totp')).toHaveTextContent('Authenticator app')
-    expect(screen.getByTestId('two-step-explain')).toHaveTextContent(/Google Authenticator/)
+    expect(await screen.findByTestId('two-step-panel-totp')).toHaveTextContent('Enter your authenticator code')
+    expect(screen.getByTestId('two-step-explain')).toHaveTextContent(/Microsoft Authenticator/)
     fireEvent.click(screen.getByTestId('two-step-other'))
     expect(screen.getByTestId('two-step-method-email')).toHaveTextContent('a•••@t.test')
     expect(screen.getByTestId('two-step-method-recovery')).toBeInTheDocument()
@@ -69,8 +69,8 @@ describe('LoginPage — the second step', () => {
     renderWithProviders(<LoginPage />, { route: '/login?two_step=1', locale: 'en' })
 
     // The default (SMS) is sent on arrival and the screen says so, with the masked number and the code's lifetime.
-    expect(await screen.findByTestId('two-step-sent')).toHaveTextContent('Sent to +966 5•• ••• 567')
-    expect(screen.getByTestId('two-step-sent')).toHaveTextContent('valid for 10 minutes')
+    expect(await screen.findByTestId('two-step-sent')).toHaveTextContent('valid 10 minutes')
+    expect(screen.getByTestId('two-step-explain')).toHaveTextContent('+966 5•• ••• 567')
     expect(sendTwoStepCode).toHaveBeenCalledWith('sms')
 
     fireEvent.click(screen.getByTestId('two-step-other'))
