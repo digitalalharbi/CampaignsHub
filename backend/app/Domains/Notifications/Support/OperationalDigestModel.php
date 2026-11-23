@@ -441,20 +441,43 @@ final class OperationalDigestModel
                 $lines[] = ['label' => (string) ($pr['objective_label'] ?? ''), 'figures' => array_values(array_slice($kpis, 1))];
             }
             $platforms = array_values(array_filter((array) ($pr['platforms'] ?? []), static fn (array $pf): bool => (int) ($pf['share'] ?? 0) > 0));
+            // DIGEST-PROJECT-CARDS-001 — Owner 2026-11-23: short figures (125.9K) so the tiles fit; the report keeps the full ones.
+            $short = static fn (array $f): array => array_merge($f, ['value' => self::compactFigure((string) ($f['value'] ?? ''))]);
+            $lines = array_map(static fn (array $l): array => ['label' => $l['label'], 'figures' => array_map($short, $l['figures'])], $lines);
 
             return [
                 'id' => (string) $pr['id'],
+                'url' => (string) ($pr['links']['report'] ?? ''),
                 'name' => (string) $pr['name'],
                 'state' => (string) $pr['state'],
                 'no_data' => $pr['state'] === 'none',
                 'reason' => $pr['state'] === 'none' ? (string) ($pr['status']['reason'] ?? '') : '',
-                'spend' => $kpis[0] ?? null,
+                'spend' => isset($kpis[0]) ? $short($kpis[0]) : null,
                 'share' => $total > 0 ? (int) round($spendOf($pr) / $total * 100) : 0,
                 'lines' => array_values(array_filter($lines, static fn (array $l): bool => $l['figures'] !== [])),
                 // Every platform that spent, never a fixed number of them (CanonicalPlatformOrderTest).
                 'platforms' => array_map(static fn (array $pf): array => ['name' => (string) $pf['name'], 'share' => (int) $pf['share']], $platforms),
             ];
         }, $projects);
+    }
+
+    /**
+     * DIGEST-PROJECT-CARDS-001 — the figure's number shortened from 10,000 up (125,943 → 125.9K, 1,250,000 → 1.25M),
+     * keeping its currency mark, sign, «×» or «%» exactly where they were. A small number, a missing one or text is untouched.
+     */
+    public static function compactFigure(string $value): string
+    {
+        return (string) preg_replace_callback('/\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{5,}(?:\.\d+)?/', static function (array $m): string {
+            $n = (float) str_replace(',', '', $m[0]);
+            if ($n < 10000) {
+                return $m[0];
+            }
+            [$div, $suffix] = $n >= 1_000_000 ? [1_000_000, 'M'] : [1000, 'K'];
+            $v = $n / $div;
+            $out = number_format($v, $v >= 10 ? 1 : 2, '.', '');
+
+            return rtrim(rtrim($out, '0'), '.').$suffix;
+        }, $value, 1);
     }
 
     /**
