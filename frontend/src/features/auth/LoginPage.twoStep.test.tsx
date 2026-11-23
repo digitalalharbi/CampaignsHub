@@ -62,10 +62,8 @@ describe('LoginPage — the second step', () => {
     expect(fetchTwoStep).toHaveBeenCalled()
   })
 
-  it('offers WhatsApp beside SMS and says where the code goes and how long it lasts (TWO-STEP-UX-002)', async () => {
-    vi.mocked(fetchTwoStep).mockResolvedValueOnce({
-      ...TOTP_ONLY, methods: ['sms', 'whatsapp'], default: 'sms', phone_hint: '+966 5•• ••• 567', code_ttl_minutes: 10, recovery_left: 8,
-    })
+  it('says where an SMS code went and how long it lasts (TWO-STEP-UX-002)', async () => {
+    vi.mocked(fetchTwoStep).mockResolvedValueOnce({ ...TOTP_ONLY, methods: ['sms', 'email'], default: 'sms', phone_hint: '+966 5•• ••• 567', email_hint: 'a•••@t.test' })
     vi.mocked(sendTwoStepCode).mockResolvedValue({ delivery_status: 'sent', resend_after: 60, dev_code: null })
     signOut()
     renderWithProviders(<LoginPage />, { route: '/login?two_step=1', locale: 'en' })
@@ -76,10 +74,9 @@ describe('LoginPage — the second step', () => {
     expect(sendTwoStepCode).toHaveBeenCalledWith('sms')
 
     fireEvent.click(screen.getByTestId('two-step-other'))
-    expect(screen.getByTestId('two-step-method-recovery')).toHaveTextContent('8 codes left')
-    fireEvent.click(screen.getByTestId('two-step-method-whatsapp'))
-    expect(screen.getByTestId('two-step-panel-whatsapp')).toHaveTextContent('Enter the code sent on WhatsApp')
+    fireEvent.click(screen.getByTestId('two-step-method-email'))
+    expect(screen.getByTestId('two-step-panel-email')).toHaveTextContent('Enter the code sent to your email')
     fireEvent.click(screen.getByTestId('two-step-send'))
-    await waitFor(() => expect(sendTwoStepCode).toHaveBeenCalledWith('whatsapp'))
+    await waitFor(() => expect(sendTwoStepCode).toHaveBeenCalledWith('email'))
   })
 })

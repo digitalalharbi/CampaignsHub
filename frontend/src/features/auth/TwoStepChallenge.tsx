@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { CheckCircle2, ChevronLeft, ChevronRight, KeyRound, Mail, MessageCircle, MessageSquare, ShieldCheck, Smartphone, type LucideIcon } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, KeyRound, Mail, MessageSquare, ShieldCheck, Smartphone, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { toApiError } from '@/lib/api/client'
@@ -19,10 +19,10 @@ import { cancelTwoStep, fetchTwoStep, sendTwoStepCode, verifyTwoStep, type TwoSt
  * TWO-STEP-UX-002 (Owner 2026-11-23): the screen used to say «التحقق بخطوتين · الرمز» and nothing else, so nobody could tell
  * which code it wanted. It now reads like the large providers' second step: the method in use is named with its icon, a sentence
  * says exactly where the code comes from (which app, which address or number, how long it lasts), and «جرّب طريقة أخرى» opens a
- * list of every way this account can answer, each with where it goes. WhatsApp is offered beside SMS when the server can send it.
+ * list of every way this account can answer, each with where it goes.
  */
 type Choice = TwoStepMethod | 'recovery'
-type Sent = 'email' | 'sms' | 'whatsapp'
+type Sent = 'email' | 'sms'
 
 const MINUTES_AR = { one: 'دقيقة', two: 'دقيقتين', few: 'دقائق', many: 'دقيقة' }
 
@@ -30,27 +30,24 @@ const COPY = {
   ar: {
     title: 'التحقق بخطوتين',
     lead: 'خطوة أمان إضافية لحماية حسابك. أكّد أنه أنت للمتابعة.',
-    name: { totp: 'تطبيق المصادقة', email: 'البريد الإلكتروني', sms: 'رسالة نصية (SMS)', whatsapp: 'واتساب', recovery: 'رمز احتياطي' },
+    name: { totp: 'تطبيق المصادقة', email: 'البريد الإلكتروني', sms: 'رسالة نصية (SMS)', recovery: 'رمز احتياطي' },
     heading: {
       totp: 'أدخل الرمز من تطبيق المصادقة',
       email: 'أدخل الرمز المرسل إلى بريدك',
       sms: 'أدخل الرمز المرسل برسالة نصية',
-      whatsapp: 'أدخل الرمز المرسل على واتساب',
       recovery: 'أدخل أحد رموزك الاحتياطية',
     },
     body: {
       totp: 'افتح تطبيق المصادقة في جوالك (مثل Google Authenticator أو Microsoft Authenticator أو Authy)، واكتب الرمز المكوّن من 6 أرقام الظاهر تحت حساب كامبينز هب.',
       email: (to: string) => `نرسل رمزًا من 6 أرقام إلى ${to}. إذا ما وصلك خلال دقيقة، تحقق من مجلد الرسائل غير المرغوب فيها.`,
       sms: (to: string) => `نرسل رسالة نصية فيها رمز من 6 أرقام إلى الرقم ${to}.`,
-      whatsapp: (to: string) => `نرسل رمزًا من 6 أرقام في رسالة واتساب إلى الرقم ${to}.`,
       recovery: 'هي الرموز اللي حفظتها لما فعّلت التحقق بخطوتين، مثل xxxxx-xxxxx. كل رمز يُستخدم مرة وحدة فقط.',
     },
     option: {
       totp: 'رمز من تطبيق المصادقة في جوالك',
       email: (to: string | null) => (to ? `رمز إلى ${to}` : 'رمز إلى بريدك الإلكتروني'),
       sms: (to: string | null) => (to ? `رسالة نصية إلى ${to}` : 'رسالة نصية إلى جوالك'),
-      whatsapp: (to: string | null) => (to ? `رسالة واتساب إلى ${to}` : 'رسالة واتساب إلى جوالك'),
-      recovery: (left: number | undefined) => (left === undefined ? 'أحد الرموز اللي حفظتها' : `باقي لك ${countedAr(left, { one: 'رمز', two: 'رمزان', few: 'رموز', many: 'رمزًا' })}`),
+      recovery: 'أحد الرموز الاحتياطية اللي حفظتها',
     },
     totpHint: 'الرمز يتجدد كل 30 ثانية. إذا انتهى وأنت تكتبه، اكتب الرمز الجديد.',
     valid: (m: number) => `الرمز صالح لمدة ${countedAr(m, MINUTES_AR)}.`,
@@ -75,27 +72,24 @@ const COPY = {
   en: {
     title: 'Two-step verification',
     lead: 'An extra security step protects your account. Confirm it is you to continue.',
-    name: { totp: 'Authenticator app', email: 'Email', sms: 'Text message (SMS)', whatsapp: 'WhatsApp', recovery: 'Recovery code' },
+    name: { totp: 'Authenticator app', email: 'Email', sms: 'Text message (SMS)', recovery: 'Recovery code' },
     heading: {
       totp: 'Enter the code from your authenticator app',
       email: 'Enter the code sent to your email',
       sms: 'Enter the code sent by text message',
-      whatsapp: 'Enter the code sent on WhatsApp',
       recovery: 'Enter one of your recovery codes',
     },
     body: {
       totp: 'Open the authenticator app on your phone (such as Google Authenticator, Microsoft Authenticator or Authy) and type the 6-digit code shown under CampaignsHub.',
       email: (to: string) => `We send a 6-digit code to ${to}. If it has not arrived within a minute, check your spam folder.`,
       sms: (to: string) => `We send a text message with a 6-digit code to ${to}.`,
-      whatsapp: (to: string) => `We send a 6-digit code in a WhatsApp message to ${to}.`,
       recovery: 'These are the codes you saved when you turned on two-step verification, like xxxxx-xxxxx. Each one works once.',
     },
     option: {
       totp: 'A code from the authenticator app on your phone',
       email: (to: string | null) => (to ? `A code to ${to}` : 'A code to your email'),
       sms: (to: string | null) => (to ? `A text message to ${to}` : 'A text message to your phone'),
-      whatsapp: (to: string | null) => (to ? `A WhatsApp message to ${to}` : 'A WhatsApp message to your phone'),
-      recovery: (left: number | undefined) => (left === undefined ? 'One of the codes you saved' : `${countedEn(left, 'code', 'codes')} left`),
+      recovery: 'One of the recovery codes you saved',
     },
     totpHint: 'The code changes every 30 seconds. If it runs out while you type, enter the new one.',
     valid: (m: number) => `The code is valid for ${countedEn(m, 'minute', 'minutes')}.`,
@@ -119,9 +113,9 @@ const COPY = {
   },
 } as const
 
-const ICONS: Record<Choice, LucideIcon> = { totp: Smartphone, email: Mail, sms: MessageSquare, whatsapp: MessageCircle, recovery: KeyRound }
+const ICONS: Record<Choice, LucideIcon> = { totp: Smartphone, email: Mail, sms: MessageSquare, recovery: KeyRound }
 const DELIVERED = new Set(['sent', 'queued', 'delivered'])
-const isSent = (m: Choice | null): m is Sent => m === 'email' || m === 'sms' || m === 'whatsapp'
+const isSent = (m: Choice | null): m is Sent => m === 'email' || m === 'sms'
 
 export function TwoStepChallenge({
   locale,
@@ -147,9 +141,10 @@ export function TwoStepChallenge({
   const autoSent = useRef(false)
 
   const method: Choice | null = choice ?? info?.default ?? (info?.methods.length ? info.methods[0] : info ? 'recovery' : null)
-  const hintOf = (m: Choice | null) => (m === 'email' ? info?.email_hint ?? null : m === 'sms' || m === 'whatsapp' ? info?.phone_hint ?? null : null)
+  const hintOf = (m: Choice | null) => (m === 'email' ? info?.email_hint ?? null : m === 'sms' ? info?.phone_hint ?? null : null)
   const hint = hintOf(method)
-  const ttl = info?.code_ttl_minutes ?? 10
+  // Email and SMS codes live ten minutes (ContactVerificationService, `requests.verification.code_ttl_minutes`).
+  const ttl = 10
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -173,7 +168,7 @@ export function TwoStepChallenge({
     onError: (e) => { if (toApiError(e).status === 410) onLeave(true) },
   })
 
-  // A code by email, SMS or WhatsApp is sent once on arrival when it is the default, so the person is not asked to press twice.
+  // A code by email or SMS is sent once on arrival when it is the default, so the person is not asked to press twice.
   useEffect(() => {
     if (autoSent.current || choice !== null || !info) return
     if (isSent(info.default)) {
@@ -210,7 +205,7 @@ export function TwoStepChallenge({
   const choices: Choice[] = [...(info?.methods ?? []), ...(info?.recovery_available ? (['recovery'] as const) : [])]
   const Icon = method ? ICONS[method] : ShieldCheck
   const Chevron = locale === 'ar' ? ChevronLeft : ChevronRight
-  const optionText = (m: Choice) => m === 'totp' ? c.option.totp : m === 'recovery' ? c.option.recovery(info?.recovery_left) : c.option[m](hintOf(m))
+  const optionText = (m: Choice) => m === 'totp' ? c.option.totp : m === 'recovery' ? c.option.recovery : c.option[m](hintOf(m))
   const bodyText = (m: Choice) => m === 'totp' ? c.body.totp : m === 'recovery' ? c.body.recovery : c.body[m](hintOf(m) ?? c.name[m])
 
   return (
