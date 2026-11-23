@@ -319,6 +319,16 @@ final class DigestDispatcher
             if ($onlyProject === null && $this->readsBudgetsOnly($user, $projectIds)) {
                 return $this->sendBudgetsOnly($user, $tenantId, $kind, $from, $to, $locale, $ledgerKind, $ledgerKey, $scope, $projectIds);
             }
+            /*
+             * DIGEST-RECIPIENT-SCOPE-001 — Owner 2026-11-23: «وفق صلاحياته فقط 100%». The performance digest carries a project
+             * only where the reader may open its performance in the product (analytics or campaigns), asked of the SAME
+             * `ProjectAbilities` the project pages ask — so a membership that withholds a project's performance withholds it here.
+             */
+            $projectIds = array_values(array_filter($projectIds, fn ($id): bool => $this->abilities->allows($user, (string) $id, ProjectCapability::ANALYTICS_VIEW)
+                || $this->abilities->allows($user, (string) $id, ProjectCapability::CAMPAIGNS_VIEW)));
+            if ($projectIds === []) {
+                return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', 'no_scope');
+            }
             // DELIVERY-QUIET-001 — a project with no spend and no impression in this period is not reported; none moved, nothing is sent.
             $projectIds = app(DeliveryState::class)->watched($projectIds, Carbon::parse($from)->toDateString(), Carbon::parse($to)->toDateString());
             if ($projectIds === []) {
@@ -350,13 +360,10 @@ final class DigestDispatcher
             $digest['narrowing'] = $this->scope->narrowing($user, $tenantId);
 
             /*
-             * DIGESTS-YESTERDAY-BY-OBJECTIVE-001 — the per-project daily is an INVENTORY: every active project gets its own
-             * mail every morning, and a project with nothing to report says «لا بيانات» with the reason the data proves
-             * (no platform linked, the sync stopped, figures late, or no spend), instead of silently not arriving.
+             * DIGEST-NO-EMPTY-001 — Owner 2026-11-23: «إذا لا يوجد بيانات لا ترسل أبدًا». This supersedes the per-project «لا بيانات»
+             * inventory of DIGESTS-YESTERDAY-BY-OBJECTIVE-001: a digest with nothing to report is not sent, to anyone, in any rhythm.
              */
-            $inventory = $onlyProject !== null && $kind === 'daily' && ($digest['reason'] ?? null) === 'no_activity'
-                && $audience === 'agency' && (bool) config('mail.operational_digests');
-            if (($digest['sendable'] ?? false) !== true && ! $inventory) {
+            if (($digest['sendable'] ?? false) !== true) {
                 return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', (string) ($digest['reason'] ?? 'not_sendable'));
             }
 

@@ -355,8 +355,10 @@ final class DailyDigestMail extends Mailable
              * (A payload that carries no `reported` map predates it and is taken to have data.)
              */
             $noData = $reported !== [] && ! in_array(true, $reported, true);
-            if ($noData && $tone === 'neutral') {
-                $verdict['text'] = $ar ? 'لا أرقام مسجّلة لهذه الفترة.' : 'No figures recorded for this period.';
+            // DIGEST-NO-EMPTY-001 — Owner 2026-11-23: a project with NOTHING to report (no ad figure, no lead follow-up, no site
+            // figures) is left out of the mail, never written as «لا بيانات». Leads that arrived are data, so that project stays.
+            if ($noData && empty($block['follow_up']) && empty($block['ga4'])) {
+                continue;
             }
 
             // The objective figure: the first the metric set names; with no stated set, the first the totals hold.
@@ -382,8 +384,8 @@ final class DailyDigestMail extends Mailable
                 $rows[] = [
                     'name' => (string) ($block['project_name'] ?? ''),
                     'tone' => $tone,
-                    'status' => $noData && $tone === 'neutral' ? $this->noDataLabel($ar) : $this->statusLabel($tone, $ar),
-                    'verdict' => $noData && $tone === 'neutral' ? (string) $verdict['text'] : $this->clientVerdict($block, $ar, $tone),
+                    'status' => $this->statusLabel($tone, $ar),
+                    'verdict' => $this->clientVerdict($block, $ar, $tone),
                     'spend' => null,
                     'second' => $bp->card($second === 'revenue' ? 'conversions' : 'conversions', $totals, $reported, $change),
                     'revenue' => $second === 'revenue' ? $bp->card('revenue', $totals, $reported, $change) : null,
@@ -403,7 +405,7 @@ final class DailyDigestMail extends Mailable
             $rows[] = [
                 'name' => (string) ($block['project_name'] ?? ''),
                 'tone' => $tone,
-                'status' => $noData && $tone === 'neutral' ? $this->noDataLabel($ar) : $this->statusLabel($tone, $ar),
+                'status' => $this->statusLabel($tone, $ar),
                 'verdict' => (string) ($verdict['text'] ?? ''),
                 'spend' => $bp->card('spend', $totals, $reported, $change),
                 'second' => $bp->card($second, $totals, $reported, $change),
@@ -555,11 +557,6 @@ final class DailyDigestMail extends Mailable
         return (float) $delta >= 0
             ? ($ar ? "النتائج ارتفعت {$pct} مقارنة بالفترة السابقة." : "Results rose {$pct} against the previous period.")
             : ($ar ? "النتائج تراجعت {$pct} مقارنة بالفترة السابقة." : "Results fell {$pct} against the previous period.");
-    }
-
-    private function noDataLabel(bool $ar): string
-    {
-        return $ar ? 'لا بيانات' : 'No data';
     }
 
     private function statusLabel(string $tone, bool $ar): string

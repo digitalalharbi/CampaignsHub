@@ -455,9 +455,10 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         });
     }
 
-    // ── §3 — one mail per ACTIVE project, data or not ────────────────────────
+    // ── §3 — one mail per ACTIVE project WITH figures (DIGEST-NO-EMPTY-001 supersedes «data or not») ──────
 
-    public function test_every_active_project_gets_its_own_daily_mail_and_one_without_data_says_why(): void
+    /** DIGEST-NO-EMPTY-001 — Owner 2026-11-23: «إذا لا يوجد بيانات لا ترسل أبدًا». A project with no figures gets no mail. */
+    public function test_only_a_project_with_figures_gets_its_daily_mail_and_an_empty_one_gets_none(): void
     {
         Mail::fake();
         config()->set('providers.channels.email', ConfiguredDigestEmailProvider::class);
@@ -471,22 +472,16 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
 
         $this->artisan('notifications:send-digests')->assertSuccessful();
 
-        Mail::assertSent(OperationalDigestMail::class, 3);
-        $names = [];
-        Mail::assertSent(OperationalDigestMail::class, function (OperationalDigestMail $m) use (&$names): bool {
-            $names[] = $m->model['name'];
+        Mail::assertSent(OperationalDigestMail::class, 1);
+        Mail::assertSent(OperationalDigestMail::class, function (OperationalDigestMail $m): bool {
+            $this->assertSame('Spending', $m->model['name']);
             $this->assertSame('project', $m->scope, 'a separate mail per project, never a combined one');
             $this->assertSame('أمس: 11 نوفمبر 2026', $m->periodLabel);
             $this->assertStringContainsString('ملخص المشروع : أمس', (string) $m->envelope()->subject);
-            if ($m->model['name'] !== 'Spending') {
-                $this->assertSame('none', $m->model['state']);
-                $this->assertStringContainsString('ما فيه منصة إعلانية مربوطة بالمشروع', $m->render(), '«لا بيانات» with the reason the data proves');
-            }
+            $this->assertStringNotContainsString('لا بيانات', $m->render());
 
             return true;
         });
-        sort($names);
-        $this->assertSame(['Quiet A', 'Quiet B', 'Spending'], $names, 'the paused project is not reported on');
     }
 
     // ── §1 — naming ─────────────────────────────────────────────────────────
@@ -560,8 +555,10 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
     {
         $d = DigestDemo::payload(12, 6);
         $m = OperationalDigestModel::portfolio($d, 'ar', 'daily');
-        $this->assertCount(12, $m['cards']);
-        $this->assertCount(12, array_unique(array_column($m['cards'], 'id')));
+        // DIGEST-NO-EMPTY-001 — every project WITH figures, once; a project with none is left out.
+        $withFigures = count(array_filter($m['projects'], static fn (array $p): bool => $p['state'] !== 'none'));
+        $this->assertCount($withFigures, $m['cards']);
+        $this->assertCount($withFigures, array_unique(array_column($m['cards'], 'id')));
         $spends = array_map(static fn (array $c): float => (float) collect($m['projects'])->firstWhere('id', $c['id'])['raw']['totals']['spend'], $m['cards']);
         $sorted = $spends;
         rsort($sorted);
@@ -569,7 +566,7 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
 
         $html = (new OperationalDigestMail($m, 'ar', 'م', 'daily', 'portfolio', 'أمس: 11 نوفمبر 2026'))->render();
         $this->assertStringContainsString('ملخص كل مشروع', $html);
-        $this->assertSame(12, substr_count($html, 'data-block="portfolio-row"'));
+        $this->assertSame($withFigures, substr_count($html, 'data-block="portfolio-row"'));
         foreach (['data-block="movers"', 'data-block="counts"', 'data-block="heatmap"', 'data-block="coverage"', 'أرقامها محدّثة', 'الأفضل والأقل', 'data-block="issue"'] as $gone) {
             $this->assertStringNotContainsString($gone, $html, $gone);
         }

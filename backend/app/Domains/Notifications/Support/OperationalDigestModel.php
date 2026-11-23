@@ -430,6 +430,9 @@ final class OperationalDigestModel
         usort($projects, static fn (array $a, array $b): int => ($spendOf($b) <=> $spendOf($a)) ?: strcmp((string) $a['name'], (string) $b['name']));
         $total = array_sum(array_map($spendOf, $projects));
 
+        // DIGEST-NO-EMPTY-001 — Owner 2026-11-23: a project with no figures is not drawn at all.
+        $projects = array_values(array_filter($projects, static fn (array $pr): bool => ($pr['state'] ?? '') !== 'none'));
+
         return array_map(static function (array $pr) use ($spendOf, $total): array {
             $kpis = (array) ($pr['kpis'] ?? []);
             $lines = [];
@@ -443,7 +446,8 @@ final class OperationalDigestModel
             $platforms = array_values(array_filter((array) ($pr['platforms'] ?? []), static fn (array $pf): bool => (int) ($pf['share'] ?? 0) > 0));
             // DIGEST-PROJECT-CARDS-001 — Owner 2026-11-23: short figures (125.9K) so the tiles fit; the report keeps the full ones.
             $short = static fn (array $f): array => array_merge($f, ['value' => self::compactFigure((string) ($f['value'] ?? ''))]);
-            $lines = array_map(static fn (array $l): array => ['label' => $l['label'], 'figures' => array_map($short, $l['figures'])], $lines);
+            // DIGEST-NO-EMPTY-001 — a figure nobody reported is left out, never written as «لا بيانات».
+            $lines = array_map(static fn (array $l): array => ['label' => $l['label'], 'figures' => array_values(array_map($short, array_filter($l['figures'], static fn (array $f): bool => ! ($f['missing'] ?? false))))], $lines);
 
             return [
                 'id' => (string) $pr['id'],
@@ -452,7 +456,7 @@ final class OperationalDigestModel
                 'state' => (string) $pr['state'],
                 'no_data' => $pr['state'] === 'none',
                 'reason' => $pr['state'] === 'none' ? (string) ($pr['status']['reason'] ?? '') : '',
-                'spend' => isset($kpis[0]) ? $short($kpis[0]) : null,
+                'spend' => isset($kpis[0]) && ! ($kpis[0]['missing'] ?? false) ? $short($kpis[0]) : null,
                 'share' => $total > 0 ? (int) round($spendOf($pr) / $total * 100) : 0,
                 'lines' => array_values(array_filter($lines, static fn (array $l): bool => $l['figures'] !== [])),
                 // Every platform that spent, never a fixed number of them (CanonicalPlatformOrderTest).

@@ -3,7 +3,9 @@
   Cells carry their width as a percentage on the cell itself — no media query, no `display:block`, no stacking class — so a phone
   keeps them side by side in Gmail, Outlook and Apple Mail alike. Needs $figures; optional $per, $big (bool).
 --}}
-@php($per = $per ?? 3)
+{{-- DIGEST-NO-EMPTY-001 — Owner 2026-11-23: a tile with no figure is not drawn; «لا بيانات» is never written. --}}
+@php($figures = array_values(array_filter($figures, static fn (array $f): bool => ! ($f['missing'] ?? false))))
+@php($per = min($per ?? 3, max(1, count($figures))))
 @php($w = (int) floor(100 / $per))
 @foreach (array_chunk($figures, $per) as $row)
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="tiles" style="margin-top:6px; table-layout:fixed;">

@@ -28,11 +28,14 @@
                 <div style="font-size:12px; color:#5b6b68; padding-top:2px;">{{ $m['mixed'] ? ($ar ? 'كل الأهداف' : 'All objectives') : $m['objective_label'] }} · {{ $t['kind_note'] }}</div>
                 @if ($m['state'] === 'none')<div data-block="no-data-reason" style="font-size:12px; color:#3d4742; padding-top:4px;">{{ $m['status']['reason'] }}</div>@endif
             </td>
+            {{-- DIGEST-NO-EMPTY-001 — no box when the headline figure is missing; «لا بيانات» is never written. --}}
+            @unless ($h['missing'])
             <td width="116" style="padding:12px 10px; vertical-align:middle; text-align:center; background-color:#e6e2d6; border-radius:{{ $startSide === 'right' ? '12px 0 0 12px' : '0 12px 12px 0' }};">
                 <div class="ch-kpi-lead" style="font-size:24px; line-height:1.15; font-weight:800; color:{{ $h['missing'] ? '#8b9a97' : '#0b1a16' }};" dir="ltr">{{ $h['value'] }}</div>
                 <div style="font-size:11px; color:#5b6b68;">{{ $h['label'] }}</div>
                 @if ($h['change'])<div style="font-size:12px; font-weight:800; color:{{ $h['colour'] }};" dir="ltr">{{ $h['change'] }}</div>@endif
             </td>
+            @endunless
         </tr>
     </table>
 

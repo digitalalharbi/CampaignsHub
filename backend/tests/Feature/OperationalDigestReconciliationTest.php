@@ -205,8 +205,9 @@ final class OperationalDigestReconciliationTest extends TestCase
         }
         $this->assertFalse($byKey['spend']['missing']);
 
+        // DIGEST-NO-EMPTY-001 — Owner 2026-11-23: the mail leaves those cells empty; it never writes «لا بيانات» or «0».
         $html = (new OperationalDigestMail($model, 'ar', 'م', 'weekly', 'project'))->render();
-        $this->assertStringContainsString('لا بيانات', $html);
+        $this->assertStringNotContainsString('لا بيانات', $html);
     }
 
     public function test_a_digest_never_carries_another_tenants_project(): void

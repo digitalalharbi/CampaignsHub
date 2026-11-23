@@ -92,10 +92,11 @@ final class OperationalMailTextTest extends TestCase
         $this->assertSame([], array_values(array_unique($m[0])), 'English wording inside the Arabic digest');
     }
 
-    public function test_the_digest_says_no_data_for_a_platform_that_sent_no_reach_and_never_zero(): void
+    /** DIGEST-NO-EMPTY-001 — Owner 2026-11-23: a figure that did not arrive is left out; «لا بيانات» is never written. */
+    public function test_the_digest_never_writes_no_data_for_a_figure_that_did_not_arrive(): void
     {
         $text = self::visible((string) MailGallery::render('digest-portfolio', 'ar'));
-        $this->assertStringContainsString('لا بيانات', $text);
+        $this->assertStringNotContainsString('لا بيانات', $text);
     }
 
     /**

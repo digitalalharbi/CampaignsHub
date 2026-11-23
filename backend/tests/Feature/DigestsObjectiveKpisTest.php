@@ -175,7 +175,8 @@ final class DigestsObjectiveKpisTest extends TestCase
         }
         // The results/freshness line the digest already carried is kept INSIDE the same box.
         $html = (new OperationalDigestMail(OperationalDigestModel::project($d['projects'][0], 'ar', 7), 'ar', 'x', 'daily', 'project'))->render();
-        $this->assertStringContainsString('«لا بيانات»', html_entity_decode($html));
+        $this->assertStringContainsString('الرقم اللي ما وصل ما يظهر في الرسالة', html_entity_decode($html));
+        $this->assertStringNotContainsString('لا بيانات', html_entity_decode($html), 'DIGEST-NO-EMPTY-001');
         $this->assertStringContainsString('مؤشرات استرشادية وغير مرجعية', html_entity_decode($html));
     }
 
