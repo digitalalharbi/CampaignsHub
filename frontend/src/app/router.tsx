@@ -19,7 +19,7 @@ const ResetPasswordPage = lazyPage(() => import('@/features/auth/ResetPasswordPa
 const RequireAuth = lazyPage(() => import('@/features/auth/RequireAuth'), 'RequireAuth')
 const CampaignDetailPage = lazyPage(() => import('@/features/campaigns/CampaignDetailPage'), 'CampaignDetailPage')
 const RoleDashboardPage = lazyPage(() => import('@/features/roleDashboard/RoleDashboardPage'), 'RoleDashboardPage')
-const CampaignsPage = lazyPage(() => import('@/features/campaigns/CampaignsPage'), 'CampaignsPage')
+const CampaignsHome = lazyPage(() => import('@/features/campaigns/CampaignsHome'), 'CampaignsHome')
 const AnalyticsPage = lazyPage(() => import('@/features/analytics/AnalyticsPage'), 'AnalyticsPage')
 const RecommendationsPage = lazyPage(() => import('@/features/recommendations/RecommendationsPage'), 'RecommendationsPage')
 const AgentCenterPage = lazyPage(() => import('@/features/agents/AgentCenterPage'), 'AgentCenterPage')
@@ -404,7 +404,7 @@ export const router = createBrowserRouter(withErrorBoundary([
           { path: 'projects/:projectId/integrations', element: <ProjectIntegrationsPage /> },
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
                     { path: 'design', element: <DesignSystemPage /> },
-          { path: 'campaigns', element: <CampaignsPage /> },
+          { path: 'campaigns', element: <CampaignsHome /> },
           /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
           /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
           { path: 'launch', element: <LaunchPage /> },
@@ -675,7 +675,7 @@ export const router = createBrowserRouter(withErrorBoundary([
              * how two portals start disagreeing about what a figure means.
              */
             { path: 'analytics', element: <AnalyticsPage /> },
-            { path: 'campaigns', element: <CampaignsPage /> },
+            { path: 'campaigns', element: <CampaignsHome /> },
             /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
             /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
             { path: 'launch', element: <LaunchPage /> },

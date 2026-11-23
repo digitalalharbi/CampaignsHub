@@ -1,5 +1,16 @@
 import { expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { AUTH, seededProject, selectProject } from './helpers'
+
+/** LAUNCH-SNAP-001 — with a project chosen the page opens on the objective dialog; answer it and carry on. */
+async function passObjective(page: Page) {
+  const dialog = page.getByTestId('launch-objective')
+  if (await dialog.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await page.getByTestId('launch-objective-traffic').click()
+    await page.getByTestId('launch-objective-next').click()
+    await expect(dialog).toBeHidden()
+  }
+}
 
 /**
  * LAUNCH-001 — «حملة جديدة» is its own page in both portals: the rail opens it, it walks the steps, and it
@@ -17,6 +28,7 @@ test.describe('the launcher (advertiser)', () => {
     await expect(page).toHaveURL(/\/app\/launch$/)
     await expect(page.getByTestId('launch-page')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByTestId('launch-history')).toBeVisible()
+    await passObjective(page)
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.locator('main a[href^="/agency"]')).toHaveCount(0)
 
@@ -31,6 +43,7 @@ test.describe('the launcher (agency, seeded store project)', () => {
   test('the accounts step states each account’s real write state and never offers a publish without one', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
     await page.goto('/agency/launch')
+    await passObjective(page)
     await expect(page.getByTestId('launch-step-accounts')).toBeVisible({ timeout: 30_000 })
 
     const accounts = page.getByTestId('launch-accounts')

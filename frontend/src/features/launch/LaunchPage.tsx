@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { BarChart3, CheckCircle2, CircleCheck, CircleDashed, CircleDot, CircleHelp, ClipboardList, FileText, Megaphone, Rocket, Users, XCircle } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { BarChart3, CheckCircle2, CircleCheck, CircleDashed, CircleDot, CircleHelp, ClipboardList, FileText, Filter, Megaphone, MousePointerClick, Rocket, ShoppingCart, Users, XCircle } from 'lucide-react'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -78,6 +78,10 @@ export function LaunchPage() {
   const [confirming, setConfirming] = useState(false)
   const [spendOk, setSpendOk] = useState(false)
   const [errors, setErrors] = useState<FieldError[]>([])
+  // LAUNCH-SNAP-001 — the objective is asked first, in its own dialog, the way Snapchat opens «Create campaign».
+  const [asking, setAsking] = useState(true)
+  const [picked, setPicked] = useState<BusinessGoal>('sales')
+  const navigate = useNavigate()
 
   const title = ar ? 'حملة جديدة' : 'Launch'
   const purpose = ar
@@ -119,14 +123,23 @@ export function LaunchPage() {
     spec.ad === null || spec.ad.name.trim() !== '',
     true, true, true,
   ]
+  const go = (i: number) => { if (i < step || canNext.slice(0, i).every(Boolean)) setStep(i) }
   const problemsTotal = (plan?.review ?? []).reduce((n, r) => n + r.problems.length, 0)
   const publishable = plan !== null && plan.status === 'draft' && problemsTotal === 0
 
   return (
     <div className="space-y-4" data-testid="launch-page">
       <PageIntro title={title} purpose={purpose} />
-      <FormStepper steps={STEPS(ar)} current={step} onStepClick={(i) => { if (i < step || canNext.slice(0, i).every(Boolean)) setStep(i) }} />
+      {asking && plan === null && (
+        <ObjectivePicker ar={ar} picked={picked} onPick={setPicked}
+          onCancel={() => navigate(portal('/campaigns'))}
+          onNext={() => { setGoal(picked); setSpec((st) => ({ ...st, business_goal: picked })); setAsking(false) }} />
+      )}
+      <div className="lg:hidden"><FormStepper steps={STEPS(ar)} current={step} onStepClick={go} /></div>
       <ErrorSummary errors={errors} title={ar ? 'لم تُحفظ الخطة' : 'The plan was not saved'} />
+      <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_260px] lg:items-start">
+      <BuildTree ar={ar} step={step} canNext={canNext} goal={goal} onGo={go} />
+      <div className="min-w-0 space-y-4">
 
       {options.isPending ? <Skeleton className="h-40" /> : options.isError ? (
         <p role="alert" className="text-sm text-danger">{ar ? 'تعذّرت قراءة حسابات المشروع.' : 'The project’s accounts could not be read.'}</p>
@@ -359,6 +372,10 @@ export function LaunchPage() {
       {step === 5 && plan && plan.status === 'draft' && problemsTotal > 0 && (
         <p className="text-xs text-warning" data-testid="launch-blocked">{ar ? `لا يمكن النشر: ${problemsTotal} مشكلة في المراجعة أعلاه.` : `Cannot publish: ${problemsTotal} problem(s) in the review above.`}</p>
       )}
+
+      </div>
+      <BuildSummary ar={ar} goal={goal} name={spec.name} accounts={accounts.filter((a) => chosen(a.id))} budgets={spec.accounts} canNext={canNext} plan={plan} />
+      </div>
 
       {confirming && plan && (
         <Modal open onClose={() => { setConfirming(false); setSpendOk(false) }} title={ar ? 'تأكيد النشر' : 'Confirm publishing'} size="md"
@@ -734,4 +751,130 @@ const LIMIT_SCOPE: Record<'project' | 'platform' | 'account', { en: string; ar: 
   project: { en: 'project', ar: 'المشروع' },
   platform: { en: 'platform', ar: 'المنصة' },
   account: { en: 'account', ar: 'الحساب' },
+}
+
+/** LAUNCH-SNAP-001 — what each business goal is good for, said once in the objective dialog. */
+const GOAL_INFO: Record<BusinessGoal, { Icon: typeof Megaphone; ar: string; en: string; outcomesAr: string[]; outcomesEn: string[] }> = {
+  awareness: { Icon: Megaphone, ar: 'أوصل علامتك لأكبر عدد وأثِر الاهتمام بها.', en: 'Reach people and create interest in your brand.', outcomesAr: ['الوعي بالعلامة', 'مشاهدات الفيديو', 'التفاعل'], outcomesEn: ['Brand awareness', 'Video views', 'Engagement'] },
+  traffic: { Icon: MousePointerClick, ar: 'وجّه الناس لموقعك أو صفحتك.', en: 'Send people to your website or page.', outcomesAr: ['زيارات الموقع', 'النقرات', 'زيارات الصفحة'], outcomesEn: ['Website visits', 'Clicks', 'Landing page views'] },
+  leads: { Icon: Filter, ar: 'اجمع بيانات المهتمين بنموذج أو صفحة هبوط.', en: 'Collect interested people through a form or a landing page.', outcomesAr: ['نماذج العملاء', 'التسجيلات', 'التواصل'], outcomesEn: ['Lead forms', 'Sign-ups', 'Contacts'] },
+  sales: { Icon: ShoppingCart, ar: 'حقّق طلبات ومبيعات من متجرك.', en: 'Drive orders and sales from your store.', outcomesAr: ['الشراء', 'الإضافة للسلة', 'إتمام الطلب'], outcomesEn: ['Purchases', 'Add to cart', 'Checkout'] },
+}
+
+function ObjectivePicker({ ar, picked, onPick, onCancel, onNext }: { ar: boolean; picked: BusinessGoal; onPick: (g: BusinessGoal) => void; onCancel: () => void; onNext: () => void }) {
+  const info = GOAL_INFO[picked]
+  return (
+    <Modal open onClose={onCancel} title={ar ? 'اختر هدف الحملة' : 'Choose an objective'} size="lg"
+      footer={<><Button variant="secondary" onClick={onCancel} data-testid="launch-objective-cancel">{ar ? 'إلغاء' : 'Cancel'}</Button><Button onClick={onNext} data-testid="launch-objective-next">{ar ? 'التالي' : 'Next'}</Button></>}>
+      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]" data-testid="launch-objective">
+        <div role="radiogroup" aria-label={ar ? 'الهدف' : 'Objective'} className="space-y-1.5">
+          {GOALS.map((g) => {
+            const Icon = GOAL_INFO[g.id].Icon
+            const on = picked === g.id
+            return (
+              <button key={g.id} type="button" role="radio" aria-checked={on} onClick={() => onPick(g.id)} data-testid={`launch-objective-${g.id}`}
+                className={`flex w-full items-center gap-3 rounded-xl border p-3 text-start transition-colors ${on ? 'border-brand-500 bg-brand-500/10' : 'border-border hover:border-brand-400'}`}>
+                <span className={`flex size-4 shrink-0 items-center justify-center rounded-full border-2 ${on ? 'border-brand-600' : 'border-border-strong'}`}>{on && <span className="size-2 rounded-full bg-brand-600" />}</span>
+                <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${on ? 'bg-brand-600 text-white' : 'bg-surface-secondary text-text-secondary'}`}><Icon size={18} aria-hidden /></span>
+                <span className="text-sm font-semibold text-text-primary">{ar ? g.ar : g.en}</span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="space-y-4 rounded-xl bg-surface-secondary/60 p-4" data-testid="launch-objective-info">
+          <span className="flex size-14 items-center justify-center rounded-2xl bg-brand-500/10 text-brand-600"><info.Icon size={28} aria-hidden /></span>
+          <p className="text-sm font-semibold text-text-primary">{ar ? info.ar : info.en}</p>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-text-secondary">{ar ? 'نتائج مناسبة لهذا الهدف' : 'Outcomes this objective is good for'}</p>
+            <div className="flex flex-wrap gap-1.5">{(ar ? info.outcomesAr : info.outcomesEn).map((o) => <span key={o} className="rounded-md bg-surface px-2 py-1 text-xs font-semibold text-text-primary">{o}</span>)}</div>
+          </div>
+          <p className="text-xs text-text-muted">{ar ? 'يقترح النظام هدف كل حساب حسب ما قاسته المنصة فعلًا، وتقدر تغيّره في الخطوات التالية.' : 'Each account’s objective is proposed from what its platform actually measured; you can change it in the next steps.'}</p>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/** LAUNCH-SNAP-001 — the build as a tree: campaign, ad group, ad, then review, the way Snapchat lists the parts of a draft. */
+function BuildTree({ ar, step, canNext, goal, onGo }: { ar: boolean; step: number; canNext: boolean[]; goal: BusinessGoal | null; onGo: (i: number) => void }) {
+  const goalName = goal ? GOALS.find((g) => g.id === goal)?.[ar ? 'ar' : 'en'] : null
+  const groups: Array<{ label: string; Icon: typeof Megaphone; steps: Array<{ i: number; label: string }> }> = [
+    { label: goalName ? (ar ? `حملة ${goalName}` : `${goalName} campaign`) : (ar ? 'الحملة' : 'Campaign'), Icon: Megaphone, steps: [{ i: 0, label: ar ? 'الحسابات' : 'Accounts' }, { i: 1, label: ar ? 'الهدف والميزانية' : 'Objective & budget' }] },
+    { label: ar ? 'المجموعة' : 'Ad group', Icon: Users, steps: [{ i: 2, label: ar ? 'الجمهور والميزانية' : 'Audience & budget' }] },
+    { label: ar ? 'الإعلان' : 'Ad', Icon: FileText, steps: [{ i: 3, label: ar ? 'المحتوى' : 'Creative' }, { i: 4, label: ar ? 'الرابط والتتبع' : 'Link & tracking' }] },
+    { label: ar ? 'المراجعة والنشر' : 'Review & publish', Icon: ClipboardList, steps: [{ i: 5, label: ar ? 'المراجعة' : 'Review' }] },
+  ]
+  return (
+    <nav aria-label={ar ? 'أجزاء الحملة' : 'Campaign parts'} className="hidden rounded-2xl border border-border bg-surface p-2 lg:block" data-testid="launch-tree">
+      {groups.map((g) => (
+        <div key={g.label} className="border-b border-border py-2 last:border-0">
+          <p className="flex items-center gap-2 px-2 pb-1 text-sm font-bold text-text-primary"><g.Icon size={15} aria-hidden /> {g.label}</p>
+          {g.steps.map((st) => {
+            const allowed = st.i < step || canNext.slice(0, st.i).every(Boolean)
+            const done = st.i < step
+            return (
+              <button key={st.i} type="button" disabled={!allowed} aria-current={step === st.i ? 'step' : undefined} onClick={() => onGo(st.i)} data-testid={`launch-tree-${st.i}`}
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 ps-6 text-start text-sm disabled:opacity-50 ${step === st.i ? 'bg-brand-500/10 font-semibold text-brand-600' : 'text-text-secondary hover:bg-surface-secondary'}`}>
+                {done ? <CircleCheck size={14} className="text-success" aria-hidden /> : step === st.i ? <CircleDot size={14} aria-hidden /> : <CircleDashed size={14} aria-hidden />}
+                {st.label}
+              </button>
+            )
+          })}
+        </div>
+      ))}
+    </nav>
+  )
+}
+
+/** LAUNCH-SNAP-001 — what the draft holds so far and what is still missing, beside the form like Snapchat's «Your campaign looks great». */
+function BuildSummary({ ar, goal, name, accounts, budgets, canNext, plan }: {
+  ar: boolean
+  goal: BusinessGoal | null
+  name: string
+  accounts: Array<{ id: string; name: string | null; provider: string; currency?: string | null }>
+  budgets: LaunchSpec['accounts']
+  canNext: boolean[]
+  plan: LaunchPlan | null
+}) {
+  const missing = [
+    !canNext[0] && (ar ? 'اختر حسابًا إعلانيًا واحدًا على الأقل' : 'Choose at least one ad account'),
+    !canNext[1] && (ar ? 'اكتب اسم الحملة واختر الهدف لكل منصة' : 'Name the campaign and pick each platform’s objective'),
+    !canNext[2] && (ar ? 'سمِّ المجموعة' : 'Name the ad group'),
+    !canNext[3] && (ar ? 'سمِّ الإعلان' : 'Name the ad'),
+  ].filter((x): x is string => Boolean(x))
+  const goalName = goal ? GOALS.find((g) => g.id === goal)?.[ar ? 'ar' : 'en'] : null
+  return (
+    <aside className="hidden space-y-3 lg:block" data-testid="launch-summary">
+      <div className="rounded-2xl border border-border bg-surface p-4">
+        {missing.length === 0 ? (
+          <p className="flex items-center justify-between gap-2 text-sm font-bold text-text-primary" data-testid="launch-summary-ready">{ar ? 'حملتك جاهزة للمراجعة' : 'Your campaign looks ready'} <CheckCircle2 size={18} className="text-success" aria-hidden /></p>
+        ) : (
+          <div className="space-y-1.5" data-testid="launch-summary-missing">
+            <p className="text-sm font-bold text-text-primary">{ar ? 'باقي لإكمال الحملة' : 'Still to complete'}</p>
+            <ul className="space-y-1 text-xs text-text-secondary">{missing.map((m) => <li key={m} className="flex items-start gap-1.5"><CircleDashed size={12} className="mt-0.5 shrink-0" aria-hidden />{m}</li>)}</ul>
+          </div>
+        )}
+      </div>
+      <dl className="space-y-3 rounded-2xl border border-border bg-surface p-4 text-sm">
+        <div><dt className="text-xs text-text-muted">{ar ? 'الهدف' : 'Objective'}</dt><dd className="font-semibold text-text-primary">{goalName ?? '—'}</dd></div>
+        <div><dt className="text-xs text-text-muted">{ar ? 'اسم الحملة' : 'Campaign name'}</dt><dd className="truncate font-semibold text-text-primary">{name.trim() || '—'}</dd></div>
+        <div>
+          <dt className="text-xs text-text-muted">{ar ? 'الحسابات' : 'Accounts'}</dt>
+          <dd className="mt-1 space-y-1">
+            {accounts.length === 0 ? <span className="text-text-muted">—</span> : accounts.map((a) => {
+              const b = budgets.find((x) => x.external_account_id === a.id)?.daily_budget ?? null
+              return (
+                <span key={a.id} className="flex items-center gap-2">
+                  <ProviderMark provider={a.provider} size={16} className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{a.name ?? providerLabel(a.provider, ar ? 'ar' : 'en')}</span>
+                  {b !== null && <bdi dir="ltr" className="text-xs text-text-secondary">{withMark(String(b), a.currency ?? null)}</bdi>}
+                </span>
+              )
+            })}
+          </dd>
+        </div>
+        <div><dt className="text-xs text-text-muted">{ar ? 'الحالة عند الإنشاء' : 'Status when created'}</dt><dd className="font-semibold text-text-primary">{plan?.launch ? (ar ? 'تعمل فورًا' : 'Runs at once') : (ar ? 'موقوفة' : 'Paused')}</dd></div>
+      </dl>
+    </aside>
+  )
 }
