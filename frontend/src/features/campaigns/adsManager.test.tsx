@@ -47,8 +47,8 @@ describe('the ads manager', () => {
     vi.mocked(useSummary).mockReturnValue(ok({ current: totals, previous: totals, currency: 'USD', delta: {}, reported: {}, rows_in_scope: true }) as never)
     vi.mocked(useTimeseries).mockReturnValue(ok([{ date: '2026-11-17', ...totals }]) as never)
     vi.mocked(useCampaigns).mockReturnValue(ok([
-      { campaign_id: 'c1', campaign_name: '22Nov 2026 ــ Tamayoz Land Taif ــ LeadForm', provider: 'snapchat', objective: 'LEAD_GENERATION', status: 'active', last_active_on: '2099-01-01', ...totals, leads: 2 },
-      { campaign_id: 'c2', campaign_name: 'Old', provider: 'meta', objective: 'OUTCOME_TRAFFIC', status: 'paused', last_active_on: null, ...totals },
+      { campaign_id: 'c1', campaign_name: '22Nov 2026 ــ Tamayoz Land Taif ــ LeadForm', provider: 'snapchat', objective: 'LEAD_GENERATION', objective_family: 'leads', status: 'active', last_active_on: '2099-01-01', ...totals, leads: 2 },
+      { campaign_id: 'c2', campaign_name: 'Old', provider: 'meta', objective: 'OUTCOME_SALES', objective_family: 'sales', status: 'paused', last_active_on: null, ...totals },
     ]) as never)
     vi.mocked(useEntities).mockReturnValue(ok({ entities: [] }) as never)
     vi.mocked(useAccounts).mockReturnValue(ok([{ account_id: 'a1', provider: 'snapchat', account_name: 'Tamayoz', ...totals }]) as never)
@@ -108,8 +108,14 @@ describe('the ads manager', () => {
     expect(screen.getByTestId('ads-manager-kpi-4')).toHaveAttribute('data-metric', 'leads')
     expect(JSON.parse(localStorage.getItem('ch-ads-manager-kpis') ?? '[]')[4]).toBe('leads')
 
+    fireEvent.change(screen.getByTestId('ads-manager-preset'), { target: { value: 'sales' } })
+    expect(screen.getByTestId('ads-manager-kpi-1')).toHaveAttribute('data-metric', 'purchases')
+    expect(screen.getByTestId('ads-manager-kpi-1')).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('ads-manager-kpi-2')).toHaveAttribute('data-metric', 'revenue')
+
     fireEvent.change(screen.getByTestId('ads-manager-preset'), { target: { value: 'leads' } })
     expect(localStorage.getItem('ch-ads-manager-preset')).toBe('leads')
+    expect(screen.getByTestId('ads-manager-kpi-1')).toHaveAttribute('data-metric', 'leads')
     expect(screen.getByTestId('ads-manager-table-campaigns-total').closest('table')).toHaveTextContent('Cost per lead')
   })
 
@@ -122,5 +128,22 @@ describe('the ads manager', () => {
     fireEvent.click(within(details).getByTestId('ads-manager-drill-ad_sets'))
     expect(screen.getByTestId('ads-manager-level-ad_sets')).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('ads-manager-parent')).toHaveTextContent('Tamayoz Land Taif')
+  })
+
+  it('offers no lead figure where no campaign in scope was bought for leads', async () => {
+    vi.mocked(useCampaigns).mockReturnValue(ok([
+      { campaign_id: 'c9', campaign_name: 'Sales only', provider: 'meta', objective: 'OUTCOME_SALES', objective_family: 'sales', status: 'active', last_active_on: '2099-01-01', ...totals, leads: 22 },
+    ]) as never)
+    localStorage.setItem('ch-ads-manager-kpis', JSON.stringify(['spend', 'leads', 'clicks', 'ctr', 'video_views']))
+    renderWithProviders(<CampaignsHome />, { locale: 'en', route: '/agency/campaigns' })
+
+    const slot = await screen.findByTestId('ads-manager-kpi-1')
+    expect(slot).toHaveAttribute('data-metric', 'impressions')
+    const options = [...within(screen.getByTestId('ads-manager-kpi-pick-1')).getAllByRole('option')].map((o) => o.getAttribute('value'))
+    expect(options).not.toContain('leads')
+    expect(options).not.toContain('cpl')
+    expect(options).toContain('purchases')
+    const presets = [...within(screen.getByTestId('ads-manager-preset')).getAllByRole('option')].map((o) => o.getAttribute('value'))
+    expect(presets).toEqual(['performance', 'sales'])
   })
 })

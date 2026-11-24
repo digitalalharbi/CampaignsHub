@@ -86,8 +86,44 @@ const METRICS: Array<{ key: MetricKey; ar: string; en: string; kind: ColumnKind 
   { key: 'cpa', ar: 'تكلفة الطلب', en: 'Cost per purchase', kind: 'money' },
   { key: 'installs', ar: 'التحميلات', en: 'Installs', kind: 'count' },
 ]
+/**
+ * ADS-MANAGER-005 (Owner 2026-11-24, «الحملة بيعية ولايوجد حملات ليد جرايشن لذلك غير منطقي يكون هناك نتائج عملاء محتملين») —
+ * a figure that is the RESULT of one objective is offered only where a campaign in scope was bought for that objective.
+ * A sales campaign's pixel can still fire a «Lead» event (Meta reports it), but that is not a lead result, and a page with
+ * no lead-generation campaign does not offer «العملاء المحتملون» at all. Delivery figures belong to every objective.
+ */
+const METRIC_FAMILY: Record<string, string> = {
+  leads: 'leads', cpl: 'leads', installs: 'app', purchases: 'sales', revenue: 'sales', roas: 'sales', cpa: 'sales',
+}
 const DEFAULT_SLOTS: MetricKey[] = ['spend', 'impressions', 'clicks', 'ctr', 'video_views']
+/**
+ * ADS-MANAGER-004 (Owner 2026-11-24) — choosing a metric set by objective re-points the five figures over the chart and the
+ * chart itself to that objective («مثلا الى مبيعات»), not only the table's columns. Each slot can still be changed by hand.
+ */
+const PRESET_SLOTS: Record<PresetKey, MetricKey[]> = {
+  performance: DEFAULT_SLOTS,
+  sales: ['spend', 'purchases', 'revenue', 'roas', 'cpa'],
+  awareness: ['spend', 'impressions', 'reach', 'cpm', 'video_views'],
+  traffic: ['spend', 'clicks', 'ctr', 'cpc', 'landing_page_views'],
+  leads: ['spend', 'leads', 'cpl', 'clicks', 'ctr'],
+  app: ['spend', 'installs', 'clicks', 'ctr', 'cpc'],
+  video: ['spend', 'video_views', 'impressions', 'reach', 'cpm'],
+  engagement: ['spend', 'engagements', 'impressions', 'clicks', 'ctr'],
+}
 const SLOTS_KEY = 'ch-ads-manager-kpis'
+/** A day's figure for the chart: the reported one, else the ratio derived from that day's own counts — never a guess. */
+const RATIOS: Record<string, [string, string, number?]> = {
+  ctr: ['clicks', 'impressions'], cpc: ['spend', 'clicks'], cpm: ['spend', 'impressions', 1000], cpl: ['spend', 'leads'],
+  cpa: ['spend', 'purchases'], roas: ['revenue', 'spend'],
+}
+function pointValue(row: Record<string, unknown>, key: string): number | null {
+  const v = row[key]
+  if (typeof v === 'number') return v
+  const r = RATIOS[key]
+  if (!r) return null
+  const a = row[r[0]], b = row[r[1]]
+  return typeof a === 'number' && typeof b === 'number' && b > 0 ? (a / b) * (r[2] ?? 1) : null
+}
 const PRESET_KEY = 'ch-ads-manager-preset'
 function readSlots(): MetricKey[] {
   try {
@@ -149,12 +185,28 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
   const [details, setDetails] = useState<{ row: Row; level: Level } | null>(null)
   /** «show its ad sets / its ads» — the parent the lower level is narrowed to. */
   const [parent, setParent] = useState<{ kind: 'campaign' | 'ad_set'; id: string; name: string } | null>(null)
-  const choosePreset = (k: PresetKey) => { setPreset(k); try { localStorage.setItem(PRESET_KEY, k) } catch { /* private window */ } }
+  const choosePreset = (k: PresetKey) => {
+    const next = PRESET_SLOTS[k]
+    setPreset(k)
+    setSlots(next)
+    setMetric(next[1] ?? next[0]!)
+    setCompareTo(next[0] ?? null)
+    try { localStorage.setItem(PRESET_KEY, k); localStorage.setItem(SLOTS_KEY, JSON.stringify(next)) } catch { /* private window */ }
+  }
 
   const filters: MetricFilters = platform === 'all' ? {} : { provider: [platform] }
   const summary = useSummary(projectId, range, filters)
   const series = useTimeseries(projectId, range, filters)
   const campaigns = useCampaigns(projectId, range, filters)
+  /** The objectives actually bought in scope; null while unknown, so nothing is hidden on a guess. */
+  const families = useMemo(() => (campaigns.data ? new Set(campaigns.data.map((c) => c.objective_family ?? 'unknown')) : null), [campaigns.data])
+  const offers = (m: MetricKey) => { const f = METRIC_FAMILY[m]; return !f || families === null || families.has(f) }
+  const presetOffered = (k: PresetKey) => k === 'performance' || families === null || families.has(k)
+  const activePreset: PresetKey = presetOffered(preset) ? preset : 'performance'
+  const offeredMetrics = METRICS.filter((m) => offers(m.key))
+  const shownSlots = slots.map((k, i) => (offers(k) ? k : (DEFAULT_SLOTS[i] && offers(DEFAULT_SLOTS[i]!) ? DEFAULT_SLOTS[i]! : 'spend')))
+  const shownMetric = offers(metric) ? metric : shownSlots[0]!
+  const shownCompare = compareTo && offers(compareTo) ? compareTo : null
   const adSets = useEntities(projectId, range, 'ad_set', null, filters)
   const ads = useEntities(projectId, range, 'ad', null, filters)
   const accounts = useAccounts(projectId, range, filters)
@@ -207,13 +259,13 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
   }, [rowsByLevel, level, delivery, search, parent])
 
   const totals = useMemo(() => rows.reduce((t, r) => {
-    for (const c of PRESETS[preset].columns) {
+    for (const c of PRESETS[activePreset].columns) {
       const v = c.additive ? c.get(r.totals) : null
       if (v !== null) t[c.key] = (t[c.key] ?? 0) + v
     }
     for (const k of ['impressions', 'clicks']) t[`__${k}`] = (t[`__${k}`] ?? 0) + (Number(r.totals[k]) || 0)
     return t
-  }, {} as Record<string, number>), [rows, preset])
+  }, {} as Record<string, number>), [rows, activePreset])
 
   const isAccounts = level === 'accounts'
   const covers = useAccountCovers(projectId, range, isAccounts)
@@ -232,16 +284,16 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
   const chartKind = (m: MetricKey) => { const k = meta(m).kind; return k === 'money' ? ('money' as const) : k === 'percent' ? ('percent' as const) : k === 'ratio' ? ('ratio' as const) : ('num' as const) }
   const chartData = (series.data ?? []).map((p) => {
     const row = p as unknown as Record<string, unknown>
-    return { date: p.date, [metric]: row[metric] ?? null, ...(compareTo && compareTo !== metric ? { [compareTo]: row[compareTo] ?? null } : {}) }
+    return { date: p.date, [shownMetric]: pointValue(row, shownMetric), ...(shownCompare && shownCompare !== shownMetric ? { [shownCompare]: pointValue(row, shownCompare) } : {}) }
   })
   const chartSeries = [
-    { key: metric, name: label(metric), color: 'var(--warning)', kind: chartKind(metric) },
-    ...(compareTo && compareTo !== metric ? [{ key: compareTo, name: label(compareTo), color: 'var(--success)', kind: chartKind(compareTo) }] : []),
+    { key: shownMetric, name: label(shownMetric), color: 'var(--warning)', kind: chartKind(shownMetric) },
+    ...(shownCompare && shownCompare !== shownMetric ? [{ key: shownCompare, name: label(shownCompare), color: 'var(--success)', kind: chartKind(shownCompare) }] : []),
   ]
-  const showResult = level !== 'accounts' && preset === 'performance'
+  const showResult = level !== 'accounts' && activePreset === 'performance'
   const pulseById = new Map((pulse.data ?? []).map((p) => [`${p.provider}:${p.account_id}`, p]))
   const openPlatform = (provider: string | null) => { setPlatform(provider ?? 'all'); setParent(null); setLevel('campaigns') }
-  const columns = PRESETS[preset].columns
+  const columns = PRESETS[activePreset].columns
   const cell = (c: ColumnDef, t: Record<string, unknown>): string =>
     c.key === 'spend' ? moneyFromTotals(t as unknown as MetricTotals, 'spend', ar, currency).text : fmtKind(c.kind, c.get(t))
 
@@ -274,13 +326,13 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
       {/* The period's figures as tabs over one chart. */}
       <section className="overflow-hidden rounded-2xl border border-border bg-surface" data-testid="ads-manager-kpis">
         <div role="tablist" className="grid grid-cols-2 border-b border-border sm:grid-cols-3 lg:grid-cols-5">
-          {slots.map((k, i) => (
+          {shownSlots.map((k, i) => (
             <div key={i} role="tab" aria-selected={metric === k} tabIndex={0} data-testid={`ads-manager-kpi-${i}`} data-metric={k}
               onClick={() => setMetric(k)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setMetric(k) } }}
-              className={`min-w-0 cursor-pointer border-b-2 px-4 py-3 text-start transition-colors ${metric === k ? 'border-text-primary bg-surface' : 'border-transparent bg-surface-secondary/60 hover:bg-surface-secondary'}`}>
+              className={`min-w-0 cursor-pointer border-b-2 px-4 py-3 text-start transition-colors ${shownMetric === k ? 'border-text-primary bg-surface' : 'border-transparent bg-surface-secondary/60 hover:bg-surface-secondary'}`}>
               <select value={k} onClick={(e) => e.stopPropagation()} onChange={(e) => setSlot(i, e.target.value)} aria-label={ar ? 'اختر المؤشر' : 'Choose the figure'} data-testid={`ads-manager-kpi-pick-${i}`}
                 className="-ms-1 max-w-full cursor-pointer truncate rounded bg-transparent text-xs text-text-secondary underline decoration-dotted underline-offset-4 hover:text-text-primary">
-                {METRICS.map((m) => <option key={m.key} value={m.key}>{ar ? m.ar : m.en}</option>)}
+                {offeredMetrics.map((m) => <option key={m.key} value={m.key}>{ar ? m.ar : m.en}</option>)}
               </select>
               <span className="block text-lg font-bold text-text-primary">{summary.isPending ? <Skeleton className="h-6 w-20" /> : <Num>{valueOf(summary.data?.current, k)}</Num>}</span>
             </div>
@@ -289,18 +341,18 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
         {chartOpen && (
           <div className="p-4">
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5"><span className="size-2.5 rounded-sm bg-warning" />{label(metric)}</span>
-              {compareTo !== null && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5"><span className="size-2.5 rounded-sm bg-warning" />{label(shownMetric)}</span>
+              {shownCompare !== null && (
                 <>
                   <span className="text-text-muted">{ar ? 'مقابل' : 'vs.'}</span>
-                  <select aria-label={ar ? 'المؤشر المقارن' : 'Compared metric'} value={compareTo} onChange={(e) => setCompareTo(e.target.value as MetricKey)} data-testid="ads-manager-compare"
+                  <select aria-label={ar ? 'المؤشر المقارن' : 'Compared metric'} value={shownCompare} onChange={(e) => setCompareTo(e.target.value as MetricKey)} data-testid="ads-manager-compare"
                     className="h-9 rounded-lg border border-border bg-surface px-2 text-sm">
-                    {METRICS.filter((m) => m.key !== metric).map((m) => <option key={m.key} value={m.key}>{ar ? m.ar : m.en}</option>)}
+                    {offeredMetrics.filter((m) => m.key !== shownMetric).map((m) => <option key={m.key} value={m.key}>{ar ? m.ar : m.en}</option>)}
                   </select>
                 </>
               )}
-              <button type="button" className="ms-auto text-xs font-semibold text-text-secondary underline" onClick={() => setCompareTo(compareTo === null ? (metric === 'impressions' ? 'spend' : 'impressions') : null)} data-testid="ads-manager-compare-toggle">
-                {compareTo === null ? (ar ? 'إظهار المقارنة' : 'Show comparison') : (ar ? 'إخفاء المقارنة' : 'Hide comparison')}
+              <button type="button" className="ms-auto text-xs font-semibold text-text-secondary underline" onClick={() => setCompareTo(shownCompare === null ? (shownMetric === 'impressions' ? 'spend' : 'impressions') : null)} data-testid="ads-manager-compare-toggle">
+                {shownCompare === null ? (ar ? 'إظهار المقارنة' : 'Show comparison') : (ar ? 'إخفاء المقارنة' : 'Hide comparison')}
               </button>
             </div>
             {series.isPending ? <Skeleton className="h-56" /> : <MetricLineChart data={chartData} series={chartSeries} height={240} currency={currency ?? ''} rightAxisFor={chartSeries[1]?.key} />}
@@ -322,9 +374,9 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
         </div>
         <label className="flex h-10 items-center gap-2 rounded-xl border border-border bg-surface ps-3 text-sm font-semibold text-text-secondary">
           <Columns3 size={16} className="shrink-0" aria-hidden /> {ar ? 'المؤشرات' : 'Metrics'}
-          <select value={preset} onChange={(e) => choosePreset(e.target.value as PresetKey)} data-testid="ads-manager-preset"
+          <select value={activePreset} onChange={(e) => choosePreset(e.target.value as PresetKey)} data-testid="ads-manager-preset"
             className="h-full cursor-pointer rounded-e-xl bg-transparent pe-2 text-sm font-bold text-text-primary outline-none">
-            {PRESET_ORDER.map((k) => <option key={k} value={k}>{ar ? PRESETS[k].ar : PRESETS[k].en}</option>)}
+            {PRESET_ORDER.filter(presetOffered).map((k) => <option key={k} value={k}>{ar ? PRESETS[k].ar : PRESETS[k].en}</option>)}
           </select>
         </label>
         {platforms.length > 1 && (
@@ -449,7 +501,7 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
 
       {details && (
         <EntityDetails
-          details={details} ar={ar} projectId={projectId} columns={PRESETS[preset].columns.length ? PRESETS[preset].columns : PRESETS.performance.columns}
+          details={details} ar={ar} projectId={projectId} columns={PRESETS[activePreset].columns}
           fmt={(c, t) => cell(c, t)}
           onClose={() => setDetails(null)}
           onDrill={(kind, target) => {
