@@ -28,7 +28,7 @@ import { relevanceOf, type CampaignRelevance } from './campaignRelevance'
 import { PRESET_ORDER, PRESETS, type ColumnDef, type ColumnKind, type PresetKey } from './adsManagerColumns'
 import { CampaignControlPanel } from './CampaignControlPanel'
 import { getCampaign } from './api'
-import { AdsManagerAccounts } from './AdsManagerAccounts'
+import { AccountCampaigns, AccountCovers, AccountSpark, useAccountCovers } from './AdsManagerAccounts'
 import { objectiveLabel, providerLabel } from './labels'
 
 /**
@@ -215,6 +215,8 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
     return t
   }, {} as Record<string, number>), [rows, preset])
 
+  const isAccounts = level === 'accounts'
+  const covers = useAccountCovers(projectId, range, isAccounts)
   if (!projectId) return <ProjectChooser purpose="analytics" />
 
   const meta = (m: MetricKey) => METRICS.find((x) => x.key === m) ?? METRICS[0]!
@@ -237,6 +239,8 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
     ...(compareTo && compareTo !== metric ? [{ key: compareTo, name: label(compareTo), color: 'var(--success)', kind: chartKind(compareTo) }] : []),
   ]
   const showResult = level !== 'accounts' && preset === 'performance'
+  const pulseById = new Map((pulse.data ?? []).map((p) => [`${p.provider}:${p.account_id}`, p]))
+  const openPlatform = (provider: string | null) => { setPlatform(provider ?? 'all'); setParent(null); setLevel('campaigns') }
   const columns = PRESETS[preset].columns
   const cell = (c: ColumnDef, t: Record<string, unknown>): string =>
     c.key === 'spend' ? moneyFromTotals(t as unknown as MetricTotals, 'spend', ar, currency).text : fmtKind(c.kind, c.get(t))
@@ -308,7 +312,7 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
         </button>
       </section>
 
-      {/* Delivery, platform and one search. */}
+      {/* Delivery, the metric set, platform and one search — one row. */}
       <div className="flex flex-wrap items-center gap-2">
         <div role="group" aria-label={ar ? 'التسليم' : 'Delivery'} className="flex rounded-xl bg-surface-secondary p-1">
           {([['all', ar ? 'الكل' : 'All'], ['serving', ar ? 'قيد التسليم' : 'Delivering'], ['off', ar ? 'متوقفة' : 'Not delivering']] as const).map(([k, t]) => (
@@ -316,6 +320,13 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
               className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${delivery === k ? 'bg-surface text-text-primary shadow-[var(--shadow-small)]' : 'text-text-secondary hover:text-text-primary'}`}>{t}</button>
           ))}
         </div>
+        <label className="flex h-10 items-center gap-2 rounded-xl border border-border bg-surface ps-3 text-sm font-semibold text-text-secondary">
+          <Columns3 size={16} className="shrink-0" aria-hidden /> {ar ? 'المؤشرات' : 'Metrics'}
+          <select value={preset} onChange={(e) => choosePreset(e.target.value as PresetKey)} data-testid="ads-manager-preset"
+            className="h-full cursor-pointer rounded-e-xl bg-transparent pe-2 text-sm font-bold text-text-primary outline-none">
+            {PRESET_ORDER.map((k) => <option key={k} value={k}>{ar ? PRESETS[k].ar : PRESETS[k].en}</option>)}
+          </select>
+        </label>
         {platforms.length > 1 && (
           <div role="group" aria-label={ar ? 'المنصة' : 'Platform'} className="flex items-center gap-1" data-testid="ads-manager-platforms">
             <button type="button" aria-pressed={platform === 'all'} onClick={() => setPlatform('all')} className={`h-9 rounded-lg px-2.5 text-xs font-semibold ${platform === 'all' ? 'bg-text-primary text-surface' : 'border border-border text-text-secondary'}`}>{ar ? 'كل المنصات' : 'All platforms'}</button>
@@ -354,31 +365,19 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
           </p>
         )}
 
+        {parent && level !== 'accounts' && level !== 'campaigns' && (
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-          {parent && level !== 'accounts' && level !== 'campaigns' && (
+          {(
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-600" data-testid="ads-manager-parent">
               {parent.kind === 'campaign' ? (ar ? 'الحملة: ' : 'Campaign: ') : (ar ? 'المجموعة: ' : 'Ad set: ')}{parent.name}
               <button type="button" onClick={() => setParent(null)} aria-label={ar ? 'إلغاء التصفية' : 'Clear'} className="ms-1 font-bold hover:underline">×</button>
             </span>
           )}
-          <label className="ms-auto flex items-center gap-2 text-xs font-semibold text-text-secondary">
-            <Columns3 size={15} aria-hidden /> {ar ? 'المؤشرات' : 'Metrics'}
-            <select value={preset} onChange={(e) => choosePreset(e.target.value as PresetKey)} data-testid="ads-manager-preset"
-              className="h-9 rounded-lg border border-border bg-surface px-2 text-sm font-semibold text-text-primary">
-              {PRESET_ORDER.map((k) => <option key={k} value={k}>{ar ? PRESETS[k].ar : PRESETS[k].en}</option>)}
-            </select>
-          </label>
         </div>
+        )}
 
         <div className="p-2">
-          {level === 'accounts' ? (
-            <AdsManagerAccounts
-              rows={rows.map((r) => ({ id: r.id, name: r.name, provider: r.provider, accountId: r.externalId, delivery: r.delivery, totals: r.totals }))}
-              pulse={pulse.data ?? []} projectId={projectId} range={range} currency={currency} ar={ar} loading={pending}
-              onCampaigns={(provider) => { setPlatform(provider ?? 'all'); setParent(null); setLevel('campaigns') }}
-              onDetails={(id) => { const row = rows.find((x) => x.id === id); if (row) setDetails({ row, level: 'accounts' }) }}
-            />
-          ) : pending ? <Skeleton className="h-24" /> : rows.length === 0 ? (
+          {pending ? <Skeleton className="h-24" /> : rows.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-text-muted" data-testid="ads-manager-empty">{ar ? 'لا شيء في هذه الفترة يطابق الاختيار.' : 'Nothing in this period matches.'}</p>
           ) : (
             <MetricTable
@@ -388,6 +387,7 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
                 ar ? 'الاسم' : 'Name',
                 ...(level === 'campaigns' ? [ar ? 'الحالة' : 'Status'] : []),
                 ar ? 'التسليم' : 'Delivery',
+                ...(isAccounts ? [ar ? 'الإنفاق اليومي' : 'Daily spend', ar ? 'الحملات' : 'Campaigns', ar ? 'أعلى المحتوى' : 'Top content'] : []),
                 ...(showResult ? [ar ? 'النتائج' : 'Result', ar ? 'تكلفة النتيجة' : 'Cost per result'] : []),
                 ...columns.map((c) => (ar ? c.ar : c.en)),
               ]}
@@ -396,6 +396,7 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
                 const spend = Number(r.totals.spend) || 0
                 return [
                   r.name, ...(level === 'campaigns' ? [r.running ? 1 : 0] : []), r.delivery,
+                  ...(isAccounts ? [null, pulseById.get(r.id)?.active_campaigns ?? null, null] : []),
                   ...(result ? [result.value, result.value ? spend / result.value : null] : []),
                   ...columns.map((c) => c.get(r.totals)),
                 ]
@@ -421,6 +422,11 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
                     </button>,
                   ] : []),
                   <span key="d" className="inline-flex items-center gap-1.5 whitespace-nowrap text-text-primary"><span className={`size-2 rounded-full ${d.dot}`} aria-hidden />{ar ? d.ar : d.en}</span>,
+                  ...(isAccounts ? [
+                    <AccountSpark key="sp" points={(pulseById.get(r.id)?.daily ?? []).map((x) => x.spend)} />,
+                    <AccountCampaigns key="ca" pulse={pulseById.get(r.id)} ar={ar} onOpen={() => openPlatform(r.provider)} />,
+                    <AccountCovers key="co" covers={r.externalId ? covers.byAccount.get(r.externalId) ?? [] : []} pending={covers.pending} ar={ar} />,
+                  ] : []),
                   ...(result ? [
                     <span key="r" className="flex flex-col"><span>{result.value === null ? '—' : num(result.value)}</span><span className="text-xs text-text-muted">{resultLabel(result, ar)}</span></span>,
                     resultCostText(result, r.totals, currency),
@@ -432,6 +438,7 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
                 <span key="t" className="font-semibold" data-testid="ads-manager-totals">{ar ? `الإجمالي · ${rows.length}` : `Total · ${rows.length}`}</span>,
                 ...(level === 'campaigns' ? ['—'] : []),
                 '—',
+                ...(isAccounts ? ['—', '—', '—'] : []),
                 ...(showResult ? ['—', '—'] : []),
                 ...columns.map((c) => (c.key === 'ctr' ? (totals.__impressions ? percent((totals.__clicks ?? 0) / totals.__impressions, 2) : '—') : c.additive && totals[c.key] !== undefined ? fmtKind(c.kind, totals[c.key]) : '—')),
               ]}
