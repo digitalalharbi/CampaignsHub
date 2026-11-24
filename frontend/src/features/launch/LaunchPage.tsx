@@ -61,7 +61,11 @@ const problemText = (p: string, ar: boolean): string => {
 
 const TIKTOK_CALLS = ['LEARN_MORE', 'SHOP_NOW', 'ORDER_NOW', 'SIGN_UP', 'CONTACT_US', 'BOOK_NOW', 'APPLY_NOW', 'VISIT_STORE']
 
-const empty = (): LaunchSpec => ({ name: '', objective: '', objectives: {}, accounts: [], ad_set: null, ad: null, tracking: { url: '' }, launch: false })
+/*
+ * LAUNCH-SNAP-002 (Owner 2026-11-24) — a new campaign comes with its ad group and its ad, the way Snapchat opens a draft with
+ * «New Ad Set #1» and «New Ad #1». Both can still be switched off; their names follow the campaign's until the person types one.
+ */
+const empty = (): LaunchSpec => ({ name: '', objective: '', objectives: {}, accounts: [], ad_set: { name: '', countries: ['SA'], optimization_goal: {}, bid_amount: {} }, ad: { name: '', creative_id: {} }, tracking: { url: '' }, launch: false })
 
 export function LaunchPage() {
   const ar = useUi((s) => s.locale) === 'ar'
@@ -123,7 +127,17 @@ export function LaunchPage() {
     spec.ad === null || spec.ad.name.trim() !== '',
     true, true, true,
   ]
-  const go = (i: number) => { if (i < step || canNext.slice(0, i).every(Boolean)) setStep(i) }
+  /** The ad group's and the ad's names follow the campaign's — «… ــ Ad Set 1», «… ــ Ad 1» — until the person types their own. */
+  const named = (st: LaunchSpec): LaunchSpec => {
+    const base = st.name.trim()
+    if (base === '') return st
+    return {
+      ...st,
+      ad_set: st.ad_set && st.ad_set.name.trim() === '' ? { ...st.ad_set, name: `${base} ــ Ad Set 1` } : st.ad_set,
+      ad: st.ad && st.ad.name.trim() === '' ? { ...st.ad, name: `${base} ــ Ad 1` } : st.ad,
+    }
+  }
+  const go = (i: number) => { if (i < step || canNext.slice(0, i).every(Boolean)) { if (i >= 2) setSpec(named); setStep(i) } }
   const problemsTotal = (plan?.review ?? []).reduce((n, r) => n + r.problems.length, 0)
   const publishable = plan !== null && plan.status === 'draft' && problemsTotal === 0
 
@@ -357,7 +371,7 @@ export function LaunchPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button variant="secondary" disabled={step === 0 || step === 6} onClick={() => setStep((s) => Math.max(0, s - 1))}>{ar ? 'السابق' : 'Back'}</Button>
         <div className="flex gap-2">
-          {step < 4 && <Button disabled={!canNext[step]} onClick={() => setStep((s) => s + 1)} data-testid="launch-next">{ar ? 'التالي' : 'Next'}</Button>}
+          {step < 4 && <Button disabled={!canNext[step]} onClick={() => { if (step === 1) setSpec(named); setStep((s) => s + 1) }} data-testid="launch-next">{ar ? 'التالي' : 'Next'}</Button>}
           {step === 4 && <Button loading={save.isPending} onClick={() => save.mutate()} data-testid="launch-save">{ar ? 'حفظ ومراجعة' : 'Save & review'}</Button>}
           {step === 5 && (
             <>
