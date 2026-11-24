@@ -88,12 +88,12 @@ describe('the ads manager', () => {
     renderWithProviders(<CampaignsHome />, { locale: 'en', route: '/agency/campaigns' })
 
     fireEvent.click(await screen.findByTestId('ads-manager-level-accounts'))
-    const card = screen.getByTestId('ads-manager-account-card')
-    expect(card).toHaveTextContent('Tamayoz')
-    expect(card).toHaveTextContent('Active 3')
-    expect(await within(card).findByTestId('ads-manager-account-creative')).toHaveAttribute('title', 'Taif reel')
+    const table = screen.getByTestId('ads-manager-table-accounts-total').closest('table') as HTMLElement
+    expect(within(table).getByTestId('ads-manager-row')).toHaveTextContent('Tamayoz')
+    expect(within(table).getByTestId('ads-manager-account-campaigns')).toHaveTextContent('Active 3')
+    expect(await within(table).findByTestId('ads-manager-account-creative')).toHaveAttribute('title', 'Taif reel')
 
-    fireEvent.click(within(card).getByTestId('ads-manager-account-campaigns'))
+    fireEvent.click(within(table).getByTestId('ads-manager-account-campaigns'))
     expect(screen.getByTestId('ads-manager-level-campaigns')).toHaveAttribute('aria-selected', 'true')
     expect(vi.mocked(useCampaigns)).toHaveBeenLastCalledWith('p1', expect.anything(), { provider: ['snapchat'] })
 
