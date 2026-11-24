@@ -14,6 +14,15 @@ vi.mock('./BulkCampaignActions', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
   return { ...actual, runBulk: vi.fn() }
 })
+vi.mock('@/features/content/api', async (orig) => {
+  const actual = await (orig() as Promise<Record<string, unknown>>)
+  return {
+    ...actual,
+    listCreatives: vi.fn().mockResolvedValue({ creatives: [
+      { id: 'cr1', name: 'Taif reel', provider: 'snapchat', ad_account: { id: 'a1', name: 'Tamayoz' }, preview: { state: 'available', kind: 'video', thumbnail_url: 'https://x/t.jpg', image_url: null } },
+    ] }),
+  }
+})
 vi.mock('@/features/analytics/charts', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
   return { ...actual, MetricLineChart: () => <div data-testid="chart" /> }
@@ -31,6 +40,8 @@ describe('the ads manager', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.removeItem('ch-campaigns-layout')
+    localStorage.removeItem('ch-ads-manager-kpis')
+    localStorage.removeItem('ch-ads-manager-preset')
     signInWith(['campaigns.view', 'campaigns.create', 'campaigns.pause'])
     useProject.setState({ currentProjectId: 'p1' } as never)
     vi.mocked(useSummary).mockReturnValue(ok({ current: totals, previous: totals, currency: 'USD', delta: {}, reported: {}, rows_in_scope: true }) as never)
@@ -49,7 +60,7 @@ describe('the ads manager', () => {
     renderWithProviders(<CampaignsHome />, { locale: 'en', route: '/agency/campaigns' })
 
     expect(await screen.findByTestId('ads-manager')).toBeInTheDocument()
-    expect(screen.getByTestId('ads-manager-kpi-impressions')).toHaveTextContent('Impressions')
+    expect(screen.getByTestId('ads-manager-kpi-1')).toHaveAttribute('data-metric', 'impressions')
     expect(screen.getAllByTestId('ads-manager-row')).toHaveLength(2)
     expect(screen.getByTestId('ads-manager-totals')).toHaveTextContent('Total · 2')
 
@@ -77,10 +88,39 @@ describe('the ads manager', () => {
     renderWithProviders(<CampaignsHome />, { locale: 'en', route: '/agency/campaigns' })
 
     fireEvent.click(await screen.findByTestId('ads-manager-level-accounts'))
-    expect(screen.getByTestId('ads-manager-row')).toHaveTextContent('Tamayoz')
-    expect(screen.getByTestId('ads-manager-row')).toHaveTextContent('Active campaigns: 3')
+    const card = screen.getByTestId('ads-manager-account-card')
+    expect(card).toHaveTextContent('Tamayoz')
+    expect(card).toHaveTextContent('Active 3')
+    expect(await within(card).findByTestId('ads-manager-account-creative')).toHaveAttribute('title', 'Taif reel')
+
+    fireEvent.click(within(card).getByTestId('ads-manager-account-campaigns'))
+    expect(screen.getByTestId('ads-manager-level-campaigns')).toHaveAttribute('aria-selected', 'true')
+    expect(vi.mocked(useCampaigns)).toHaveBeenLastCalledWith('p1', expect.anything(), { provider: ['snapchat'] })
 
     fireEvent.click(screen.getByTestId('ads-manager-advanced'))
     expect(localStorage.getItem('ch-campaigns-layout')).toBe('advanced')
+  })
+
+  it('lets each figure over the chart be chosen, and the columns follow the chosen objective', async () => {
+    renderWithProviders(<CampaignsHome />, { locale: 'en', route: '/agency/campaigns' })
+
+    fireEvent.change(await screen.findByTestId('ads-manager-kpi-pick-4'), { target: { value: 'leads' } })
+    expect(screen.getByTestId('ads-manager-kpi-4')).toHaveAttribute('data-metric', 'leads')
+    expect(JSON.parse(localStorage.getItem('ch-ads-manager-kpis') ?? '[]')[4]).toBe('leads')
+
+    fireEvent.change(screen.getByTestId('ads-manager-preset'), { target: { value: 'leads' } })
+    expect(localStorage.getItem('ch-ads-manager-preset')).toBe('leads')
+    expect(screen.getByTestId('ads-manager-table-campaigns-total').closest('table')).toHaveTextContent('Cost per lead')
+  })
+
+  it('opens a row into its details with the way down to its ad sets', async () => {
+    renderWithProviders(<CampaignsHome />, { locale: 'en', route: '/agency/campaigns' })
+
+    fireEvent.click((await screen.findAllByTestId('ads-manager-row'))[0]!)
+    const details = screen.getByTestId('ads-manager-details')
+    expect(details).toHaveTextContent('Campaign')
+    fireEvent.click(within(details).getByTestId('ads-manager-drill-ad_sets'))
+    expect(screen.getByTestId('ads-manager-level-ad_sets')).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('ads-manager-parent')).toHaveTextContent('Tamayoz Land Taif')
   })
 })

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
-import { Building2, ChevronDown, ChevronUp, Image as ImageIcon, Layers, Megaphone, Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Building2, ChevronDown, ChevronUp, Columns3, Image as ImageIcon, Layers, Megaphone, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { usePortalPath } from '@/app/portalPath'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Button } from '@/components/ui/Button'
@@ -12,7 +12,7 @@ import { Num } from '@/components/ui/Num'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { Skeleton } from '@/components/ui/States'
 import { MetricLineChart } from '@/features/analytics/charts'
-import { compact, money, moneyFromTotals, num, percent } from '@/features/analytics/format'
+import { compact, money, moneyFromTotals, num, percent, ratio } from '@/features/analytics/format'
 import {
   useAccountPulse, useAccounts, useCampaigns, useEntities, useSummary, useTimeseries,
   type AccountState, type MetricFilters, type MetricTotals,
@@ -25,6 +25,10 @@ import { useUi } from '@/stores/ui'
 import { runBulk } from './BulkCampaignActions'
 import { campaignResult, resultCostText, resultLabel } from './campaignResult'
 import { relevanceOf, type CampaignRelevance } from './campaignRelevance'
+import { PRESET_ORDER, PRESETS, type ColumnDef, type ColumnKind, type PresetKey } from './adsManagerColumns'
+import { CampaignControlPanel } from './CampaignControlPanel'
+import { getCampaign } from './api'
+import { AdsManagerAccounts } from './AdsManagerAccounts'
 import { objectiveLabel, providerLabel } from './labels'
 
 /**
@@ -38,7 +42,7 @@ import { objectiveLabel, providerLabel } from './labels'
  */
 type Level = 'accounts' | 'campaigns' | 'ad_sets' | 'ads'
 type Delivery = 'all' | 'serving' | 'off'
-type MetricKey = 'spend' | 'impressions' | 'clicks' | 'ctr' | 'video_views'
+type MetricKey = string
 
 interface Row {
   id: string
@@ -51,21 +55,57 @@ interface Row {
   /** The unified campaign a switch acts on — campaigns only. */
   campaignId: string | null
   running: boolean
+  /** The unified campaign this row belongs to (its own id for a campaign) — what the control panel manages. */
+  unifiedId: string | null
+  /** The platform's id of this row, so the control panel opens focused on it. */
+  externalId: string | null
+  /** The parents, for «show its ad sets / ads». */
+  adSetId: string | null
 }
 
-const METRICS: Array<{ key: MetricKey; ar: string; en: string }> = [
-  { key: 'spend', ar: 'الإنفاق', en: 'Amount spent' },
-  { key: 'impressions', ar: 'الظهور', en: 'Impressions' },
-  { key: 'clicks', ar: 'النقرات', en: 'Clicks' },
-  { key: 'ctr', ar: 'معدل النقر', en: 'Click rate' },
-  { key: 'video_views', ar: 'مشاهدات الفيديو', en: 'Video views' },
+/**
+ * Owner 2026-11-24 — the figures over the chart are chosen by the reader, slot by slot, the way Snapchat's are: each tab
+ * names its figure with a menu, and the choice is remembered.
+ */
+const METRICS: Array<{ key: MetricKey; ar: string; en: string; kind: ColumnKind }> = [
+  { key: 'spend', ar: 'الإنفاق', en: 'Amount spent', kind: 'money' },
+  { key: 'impressions', ar: 'الظهور', en: 'Impressions', kind: 'count' },
+  { key: 'reach', ar: 'الوصول', en: 'Reach', kind: 'count' },
+  { key: 'clicks', ar: 'النقرات', en: 'Clicks', kind: 'count' },
+  { key: 'ctr', ar: 'معدل النقر', en: 'Click rate', kind: 'percent' },
+  { key: 'cpc', ar: 'تكلفة النقرة', en: 'CPC', kind: 'money' },
+  { key: 'cpm', ar: 'تكلفة الألف ظهور', en: 'CPM', kind: 'money' },
+  { key: 'video_views', ar: 'مشاهدات الفيديو', en: 'Video views', kind: 'count' },
+  { key: 'landing_page_views', ar: 'زيارات الصفحة', en: 'Landing page views', kind: 'count' },
+  { key: 'engagements', ar: 'التفاعلات', en: 'Engagements', kind: 'count' },
+  { key: 'leads', ar: 'العملاء المحتملون', en: 'Leads', kind: 'count' },
+  { key: 'cpl', ar: 'تكلفة العميل', en: 'Cost per lead', kind: 'money' },
+  { key: 'purchases', ar: 'المشتريات', en: 'Purchases', kind: 'count' },
+  { key: 'revenue', ar: 'المبيعات', en: 'Revenue', kind: 'money' },
+  { key: 'roas', ar: 'العائد', en: 'ROAS', kind: 'ratio' },
+  { key: 'cpa', ar: 'تكلفة الطلب', en: 'Cost per purchase', kind: 'money' },
+  { key: 'installs', ar: 'التحميلات', en: 'Installs', kind: 'count' },
 ]
+const DEFAULT_SLOTS: MetricKey[] = ['spend', 'impressions', 'clicks', 'ctr', 'video_views']
+const SLOTS_KEY = 'ch-ads-manager-kpis'
+const PRESET_KEY = 'ch-ads-manager-preset'
+function readSlots(): MetricKey[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(SLOTS_KEY) ?? 'null')
+    if (Array.isArray(v) && v.length === 5 && v.every((k) => typeof k === 'string' && METRICS.some((m) => m.key === k))) return v as MetricKey[]
+  } catch { /* fall through */ }
+  return DEFAULT_SLOTS
+}
+function readPreset(): PresetKey {
+  try { const v = localStorage.getItem(PRESET_KEY); return v && v in PRESETS ? (v as PresetKey) : 'performance' } catch { return 'performance' }
+}
 
+/** Owner 2026-11-24 — the hierarchy in its own order: accounts, campaigns, ad sets, ads. */
 const LEVELS: Array<{ key: Level; ar: string; en: string; Icon: typeof Megaphone }> = [
+  { key: 'accounts', ar: 'الحسابات', en: 'Accounts', Icon: Building2 },
   { key: 'campaigns', ar: 'الحملات', en: 'Campaigns', Icon: Megaphone },
   { key: 'ad_sets', ar: 'المجموعات', en: 'Ad sets', Icon: Layers },
   { key: 'ads', ar: 'الإعلانات', en: 'Ads', Icon: ImageIcon },
-  { key: 'accounts', ar: 'الحسابات', en: 'Accounts', Icon: Building2 },
 ]
 
 const DELIVERY_TEXT: Record<Row['delivery'], { ar: string; en: string; dot: string }> = {
@@ -92,12 +132,24 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
   const [delivery, setDelivery] = useState<Delivery>('all')
   const [search, setSearch] = useState('')
   const [platform, setPlatform] = useState<string>('all')
-  const [metric, setMetric] = useState<MetricKey>('spend')
+  const [slots, setSlots] = useState<MetricKey[]>(readSlots)
+  const [metric, setMetric] = useState<MetricKey>(() => readSlots()[0]!)
+  const setSlot = (i: number, k: MetricKey) => {
+    const next = slots.map((x, j) => (j === i ? k : x))
+    setSlots(next)
+    if (slots[i] === metric) setMetric(k)
+    try { localStorage.setItem(SLOTS_KEY, JSON.stringify(next)) } catch { /* private window */ }
+  }
   const [compareTo, setCompareTo] = useState<MetricKey | null>('impressions')
   const [chartOpen, setChartOpen] = useState(true)
   const [toggling, setToggling] = useState<Row | null>(null)
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<string | null>(null)
+  const [preset, setPreset] = useState<PresetKey>(readPreset)
+  const [details, setDetails] = useState<{ row: Row; level: Level } | null>(null)
+  /** «show its ad sets / its ads» — the parent the lower level is narrowed to. */
+  const [parent, setParent] = useState<{ kind: 'campaign' | 'ad_set'; id: string; name: string } | null>(null)
+  const choosePreset = (k: PresetKey) => { setPreset(k); try { localStorage.setItem(PRESET_KEY, k) } catch { /* private window */ } }
 
   const filters: MetricFilters = platform === 'all' ? {} : { provider: [platform] }
   const summary = useSummary(projectId, range, filters)
@@ -115,15 +167,15 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
     return {
       campaigns: (campaigns.data ?? []).map((c) => {
         const d = relevanceOf({ status: c.status, last_active_on: c.last_active_on }, end)
-        return { id: c.campaign_id, name: c.campaign_name ?? '—', provider: c.provider, sub: c.objective ? objectiveLabel(c.objective, lang) : null, delivery: d, objective: c.objective, totals: c as unknown as Record<string, unknown>, campaignId: c.campaign_id, running: d !== 'stopped' }
+        return { id: c.campaign_id, name: c.campaign_name ?? '—', provider: c.provider, sub: c.objective ? objectiveLabel(c.objective, lang) : null, delivery: d, objective: c.objective, totals: c as unknown as Record<string, unknown>, campaignId: c.campaign_id, running: d !== 'stopped', unifiedId: c.campaign_id, externalId: null, adSetId: null }
       }),
       ad_sets: (adSets.data?.entities ?? []).map((e) => {
         const d = relevanceOf({ status: e.status, last_active_on: e.last_active_on }, end)
-        return { id: e.entity_id, name: e.name ?? '—', provider: e.provider ?? null, sub: e.objective ? objectiveLabel(e.objective, lang) : null, delivery: d, objective: e.objective, totals: e, campaignId: null, running: d !== 'stopped' }
+        return { id: e.entity_id, name: e.name ?? '—', provider: e.provider ?? null, sub: e.objective ? objectiveLabel(e.objective, lang) : null, delivery: d, objective: e.objective, totals: e, campaignId: null, running: d !== 'stopped', unifiedId: e.unified_campaign_id ?? null, externalId: e.external_id, adSetId: e.entity_id }
       }),
       ads: (ads.data?.entities ?? []).map((e) => {
         const d = relevanceOf({ status: e.status, last_active_on: e.last_active_on }, end)
-        return { id: e.entity_id, name: e.name ?? '—', provider: e.provider ?? null, sub: e.objective ? objectiveLabel(e.objective, lang) : null, delivery: d, objective: e.objective, totals: e, campaignId: null, running: d !== 'stopped' }
+        return { id: e.entity_id, name: e.name ?? '—', provider: e.provider ?? null, sub: e.objective ? objectiveLabel(e.objective, lang) : null, delivery: d, objective: e.objective, totals: e, campaignId: null, running: d !== 'stopped', unifiedId: e.unified_campaign_id ?? null, externalId: e.external_id, adSetId: e.ad_set_id }
       }),
       accounts: (accounts.data ?? []).map((a) => {
         const p = pulseOf.get(`${a.provider}:${a.account_id}`)
@@ -132,7 +184,7 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
         return {
           id: `${a.provider}:${a.account_id ?? '—'}`, name: a.account_name ?? providerLabel(a.provider, lang), provider: a.provider,
           sub: n === null ? null : (ar ? `حملات نشطة: ${n}` : `Active campaigns: ${n}`), delivery: d, objective: null,
-          totals: a as unknown as Record<string, unknown>, campaignId: null, running: d === 'serving',
+          totals: a as unknown as Record<string, unknown>, campaignId: null, running: d === 'serving', unifiedId: null, externalId: a.account_id, adSetId: null,
         }
       }),
     }
@@ -144,31 +196,50 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
     return rowsByLevel[level].filter((r) => {
+      if (parent && level !== 'accounts' && level !== 'campaigns') {
+        if (parent.kind === 'campaign' && r.unifiedId !== parent.id) return false
+        if (parent.kind === 'ad_set' && (level !== 'ads' || r.adSetId !== parent.id)) return false
+      }
       if (delivery === 'serving' && r.delivery !== 'serving') return false
       if (delivery === 'off' && r.delivery === 'serving') return false
       return q === '' || r.name.toLowerCase().includes(q)
     })
-  }, [rowsByLevel, level, delivery, search])
+  }, [rowsByLevel, level, delivery, search, parent])
 
   const totals = useMemo(() => rows.reduce((t, r) => {
-    for (const k of ['spend', 'impressions', 'clicks']) t[k] = (t[k] ?? 0) + (Number(r.totals[k]) || 0)
+    for (const c of PRESETS[preset].columns) {
+      const v = c.additive ? c.get(r.totals) : null
+      if (v !== null) t[c.key] = (t[c.key] ?? 0) + v
+    }
+    for (const k of ['impressions', 'clicks']) t[`__${k}`] = (t[`__${k}`] ?? 0) + (Number(r.totals[k]) || 0)
     return t
-  }, {} as Record<string, number>), [rows])
+  }, {} as Record<string, number>), [rows, preset])
 
   if (!projectId) return <ProjectChooser purpose="analytics" />
 
-  const label = (m: MetricKey) => METRICS.find((x) => x.key === m)![ar ? 'ar' : 'en']
+  const meta = (m: MetricKey) => METRICS.find((x) => x.key === m) ?? METRICS[0]!
+  const label = (m: MetricKey) => meta(m)[ar ? 'ar' : 'en']
+  const fmtKind = (kind: ColumnKind, v: number | null | undefined): string =>
+    v === null || v === undefined ? '—' : kind === 'money' ? money(v, currency) : kind === 'percent' ? percent(v, 2) : kind === 'ratio' ? ratio(v) : compact(v)
   const valueOf = (t: MetricTotals | undefined, m: MetricKey): string => {
     if (!t) return '—'
     if (m === 'spend') return moneyFromTotals(t, 'spend', ar, currency).text
-    if (m === 'ctr') return percent(t.ctr, 2)
-    return compact(t[m] as number)
+    const v = (t as unknown as Record<string, unknown>)[m]
+    return fmtKind(meta(m).kind, typeof v === 'number' ? v : null)
   }
-  const chartData = (series.data ?? []).map((p) => ({ date: p.date, [metric]: p[metric], ...(compareTo && compareTo !== metric ? { [compareTo]: p[compareTo] } : {}) }))
+  const chartKind = (m: MetricKey) => { const k = meta(m).kind; return k === 'money' ? ('money' as const) : k === 'percent' ? ('percent' as const) : k === 'ratio' ? ('ratio' as const) : ('num' as const) }
+  const chartData = (series.data ?? []).map((p) => {
+    const row = p as unknown as Record<string, unknown>
+    return { date: p.date, [metric]: row[metric] ?? null, ...(compareTo && compareTo !== metric ? { [compareTo]: row[compareTo] ?? null } : {}) }
+  })
   const chartSeries = [
-    { key: metric, name: label(metric), color: 'var(--warning)', kind: metric === 'spend' ? ('money' as const) : metric === 'ctr' ? ('percent' as const) : ('num' as const) },
-    ...(compareTo && compareTo !== metric ? [{ key: compareTo, name: label(compareTo), color: 'var(--success)', kind: compareTo === 'spend' ? ('money' as const) : compareTo === 'ctr' ? ('percent' as const) : ('num' as const) }] : []),
+    { key: metric, name: label(metric), color: 'var(--warning)', kind: chartKind(metric) },
+    ...(compareTo && compareTo !== metric ? [{ key: compareTo, name: label(compareTo), color: 'var(--success)', kind: chartKind(compareTo) }] : []),
   ]
+  const showResult = level !== 'accounts' && preset === 'performance'
+  const columns = PRESETS[preset].columns
+  const cell = (c: ColumnDef, t: Record<string, unknown>): string =>
+    c.key === 'spend' ? moneyFromTotals(t as unknown as MetricTotals, 'spend', ar, currency).text : fmtKind(c.kind, c.get(t))
 
   const confirmToggle = async () => {
     if (!toggling?.campaignId) return
@@ -199,13 +270,16 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
       {/* The period's figures as tabs over one chart. */}
       <section className="overflow-hidden rounded-2xl border border-border bg-surface" data-testid="ads-manager-kpis">
         <div role="tablist" className="grid grid-cols-2 border-b border-border sm:grid-cols-3 lg:grid-cols-5">
-          {METRICS.map((m) => (
-            <button key={m.key} type="button" role="tab" aria-selected={metric === m.key} data-testid={`ads-manager-kpi-${m.key}`}
-              onClick={() => setMetric(m.key)}
-              className={`min-w-0 border-b-2 px-4 py-3 text-start transition-colors ${metric === m.key ? 'border-text-primary bg-surface' : 'border-transparent bg-surface-secondary/60 hover:bg-surface-secondary'}`}>
-              <span className="block truncate text-xs text-text-secondary">{ar ? m.ar : m.en}</span>
-              <span className="block text-lg font-bold text-text-primary">{summary.isPending ? <Skeleton className="h-6 w-20" /> : <Num>{valueOf(summary.data?.current, m.key)}</Num>}</span>
-            </button>
+          {slots.map((k, i) => (
+            <div key={i} role="tab" aria-selected={metric === k} tabIndex={0} data-testid={`ads-manager-kpi-${i}`} data-metric={k}
+              onClick={() => setMetric(k)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setMetric(k) } }}
+              className={`min-w-0 cursor-pointer border-b-2 px-4 py-3 text-start transition-colors ${metric === k ? 'border-text-primary bg-surface' : 'border-transparent bg-surface-secondary/60 hover:bg-surface-secondary'}`}>
+              <select value={k} onClick={(e) => e.stopPropagation()} onChange={(e) => setSlot(i, e.target.value)} aria-label={ar ? 'اختر المؤشر' : 'Choose the figure'} data-testid={`ads-manager-kpi-pick-${i}`}
+                className="-ms-1 max-w-full cursor-pointer truncate rounded bg-transparent text-xs text-text-secondary underline decoration-dotted underline-offset-4 hover:text-text-primary">
+                {METRICS.map((m) => <option key={m.key} value={m.key}>{ar ? m.ar : m.en}</option>)}
+              </select>
+              <span className="block text-lg font-bold text-text-primary">{summary.isPending ? <Skeleton className="h-6 w-20" /> : <Num>{valueOf(summary.data?.current, k)}</Num>}</span>
+            </div>
           ))}
         </div>
         {chartOpen && (
@@ -280,8 +354,31 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
           </p>
         )}
 
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+          {parent && level !== 'accounts' && level !== 'campaigns' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-500/10 px-3 py-1 text-xs font-semibold text-brand-600" data-testid="ads-manager-parent">
+              {parent.kind === 'campaign' ? (ar ? 'الحملة: ' : 'Campaign: ') : (ar ? 'المجموعة: ' : 'Ad set: ')}{parent.name}
+              <button type="button" onClick={() => setParent(null)} aria-label={ar ? 'إلغاء التصفية' : 'Clear'} className="ms-1 font-bold hover:underline">×</button>
+            </span>
+          )}
+          <label className="ms-auto flex items-center gap-2 text-xs font-semibold text-text-secondary">
+            <Columns3 size={15} aria-hidden /> {ar ? 'المؤشرات' : 'Metrics'}
+            <select value={preset} onChange={(e) => choosePreset(e.target.value as PresetKey)} data-testid="ads-manager-preset"
+              className="h-9 rounded-lg border border-border bg-surface px-2 text-sm font-semibold text-text-primary">
+              {PRESET_ORDER.map((k) => <option key={k} value={k}>{ar ? PRESETS[k].ar : PRESETS[k].en}</option>)}
+            </select>
+          </label>
+        </div>
+
         <div className="p-2">
-          {pending ? <Skeleton className="h-24" /> : rows.length === 0 ? (
+          {level === 'accounts' ? (
+            <AdsManagerAccounts
+              rows={rows.map((r) => ({ id: r.id, name: r.name, provider: r.provider, accountId: r.externalId, delivery: r.delivery, totals: r.totals }))}
+              pulse={pulse.data ?? []} projectId={projectId} range={range} currency={currency} ar={ar} loading={pending}
+              onCampaigns={(provider) => { setPlatform(provider ?? 'all'); setParent(null); setLevel('campaigns') }}
+              onDetails={(id) => { const row = rows.find((x) => x.id === id); if (row) setDetails({ row, level: 'accounts' }) }}
+            />
+          ) : pending ? <Skeleton className="h-24" /> : rows.length === 0 ? (
             <p className="px-4 py-10 text-center text-sm text-text-muted" data-testid="ads-manager-empty">{ar ? 'لا شيء في هذه الفترة يطابق الاختيار.' : 'Nothing in this period matches.'}</p>
           ) : (
             <MetricTable
@@ -291,35 +388,29 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
                 ar ? 'الاسم' : 'Name',
                 ...(level === 'campaigns' ? [ar ? 'الحالة' : 'Status'] : []),
                 ar ? 'التسليم' : 'Delivery',
-                ar ? 'الإنفاق' : 'Amount spent',
-                ...(level !== 'accounts' ? [ar ? 'النتائج' : 'Result', ar ? 'تكلفة النتيجة' : 'Cost per result'] : []),
-                ar ? 'الظهور' : 'Impressions',
-                ar ? 'النقرات' : 'Clicks',
-                ar ? 'معدل النقر' : 'Click rate',
+                ...(showResult ? [ar ? 'النتائج' : 'Result', ar ? 'تكلفة النتيجة' : 'Cost per result'] : []),
+                ...columns.map((c) => (ar ? c.ar : c.en)),
               ]}
               values={rows.map((r) => {
-                const t = r.totals as unknown as MetricTotals
-                const result = level === 'accounts' ? null : campaignResult(r.objective, r.totals)
+                const result = showResult ? campaignResult(r.objective, r.totals) : null
+                const spend = Number(r.totals.spend) || 0
                 return [
-                  r.name, ...(level === 'campaigns' ? [r.running ? 1 : 0] : []), r.delivery, t.spend ?? null,
-                  ...(result ? [result.value, result.value ? (t.spend ?? 0) / result.value : null] : []),
-                  t.impressions ?? null, t.clicks ?? null, t.ctr ?? null,
+                  r.name, ...(level === 'campaigns' ? [r.running ? 1 : 0] : []), r.delivery,
+                  ...(result ? [result.value, result.value ? spend / result.value : null] : []),
+                  ...columns.map((c) => c.get(r.totals)),
                 ]
               })}
               rows={rows.map((r) => {
-                const result = level === 'accounts' ? null : campaignResult(r.objective, r.totals)
+                const result = showResult ? campaignResult(r.objective, r.totals) : null
                 const d = DELIVERY_TEXT[r.delivery]
-                const t = r.totals as unknown as MetricTotals
                 return [
-                  <div key="n" className="flex items-center gap-2.5" data-testid="ads-manager-row">
+                  <button key="n" type="button" onClick={() => setDetails({ row: r, level })} className="flex w-full items-center gap-2.5 text-start" data-testid="ads-manager-row">
                     {r.provider && <ProviderMark provider={r.provider} size={20} className="shrink-0" />}
                     <span className="min-w-0">
-                      {level === 'campaigns' && r.campaignId
-                        ? <Link to={portal(`/campaigns/${projectId}/${r.campaignId}`)} className="block truncate font-semibold text-text-primary hover:underline">{r.name}</Link>
-                        : <span className="block truncate font-semibold text-text-primary">{r.name}</span>}
+                      <span className="block truncate font-semibold text-text-primary hover:underline">{r.name}</span>
                       {r.sub && <span className="block truncate text-xs text-text-muted">{r.sub}</span>}
                     </span>
-                  </div>,
+                  </button>,
                   ...(level === 'campaigns' ? [
                     <button key="s" type="button" role="switch" aria-checked={r.running} disabled={!canPause || r.campaignId === null}
                       title={canPause ? undefined : (ar ? 'يحتاج صلاحية إيقاف الحملات' : 'Needs the pause permission')}
@@ -330,30 +421,39 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
                     </button>,
                   ] : []),
                   <span key="d" className="inline-flex items-center gap-1.5 whitespace-nowrap text-text-primary"><span className={`size-2 rounded-full ${d.dot}`} aria-hidden />{ar ? d.ar : d.en}</span>,
-                  <span key="sp" className="font-semibold">{moneyFromTotals(t, 'spend', ar, currency).text}</span>,
                   ...(result ? [
                     <span key="r" className="flex flex-col"><span>{result.value === null ? '—' : num(result.value)}</span><span className="text-xs text-text-muted">{resultLabel(result, ar)}</span></span>,
                     resultCostText(result, r.totals, currency),
                   ] : []),
-                  num(t.impressions),
-                  num(t.clicks),
-                  percent(t.ctr, 2),
+                  ...columns.map((c) => cell(c, r.totals)),
                 ]
               })}
               footer={[
                 <span key="t" className="font-semibold" data-testid="ads-manager-totals">{ar ? `الإجمالي · ${rows.length}` : `Total · ${rows.length}`}</span>,
                 ...(level === 'campaigns' ? ['—'] : []),
                 '—',
-                money(totals.spend ?? 0, currency),
-                ...(level !== 'accounts' ? ['—', '—'] : []),
-                num(totals.impressions),
-                num(totals.clicks),
-                totals.impressions ? percent((totals.clicks ?? 0) / totals.impressions, 2) : '—',
+                ...(showResult ? ['—', '—'] : []),
+                ...columns.map((c) => (c.key === 'ctr' ? (totals.__impressions ? percent((totals.__clicks ?? 0) / totals.__impressions, 2) : '—') : c.additive && totals[c.key] !== undefined ? fmtKind(c.kind, totals[c.key]) : '—')),
               ]}
             />
           )}
         </div>
       </section>
+
+      {details && (
+        <EntityDetails
+          details={details} ar={ar} projectId={projectId} columns={PRESETS[preset].columns.length ? PRESETS[preset].columns : PRESETS.performance.columns}
+          fmt={(c, t) => cell(c, t)}
+          onClose={() => setDetails(null)}
+          onDrill={(kind, target) => {
+            const r = details.row
+            setDetails(null)
+            if (kind === 'campaigns') { setPlatform(r.provider ?? 'all'); setParent(null); setLevel('campaigns'); return }
+            setParent(details.level === 'campaigns' ? { kind: 'campaign', id: r.unifiedId ?? r.id, name: r.name } : { kind: 'ad_set', id: r.adSetId ?? r.id, name: r.name })
+            setLevel(target)
+          }}
+        />
+      )}
 
       {toggling && (
         <Modal open onClose={() => { if (!busy) setToggling(null) }} size="md"
@@ -367,5 +467,87 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
         </Modal>
       )}
     </div>
+  )
+}
+
+/**
+ * ADS-MANAGER-002 — a row opens its own part: the figures of the chosen metric set, the way down to what is beneath it, and,
+ * for a campaign, an ad set or an ad, the provider control panel that edits and manages it (the same panel the campaign
+ * page uses — nothing is written from here directly).
+ */
+function EntityDetails({
+  details, ar, projectId, columns, fmt, onClose, onDrill,
+}: {
+  details: { row: Row; level: Level }
+  ar: boolean
+  projectId: string | null
+  columns: ColumnDef[]
+  fmt: (c: ColumnDef, t: Record<string, unknown>) => string
+  onClose: () => void
+  onDrill: (kind: 'campaigns' | 'down', target: Level) => void
+}) {
+  const portal = usePortalPath()
+  const { row, level } = details
+  const manageable = level !== 'accounts' && row.unifiedId !== null && projectId !== null
+  const campaign = useQuery({
+    queryKey: ['ads-manager', 'campaign', projectId, row.unifiedId],
+    queryFn: () => getCampaign(projectId!, row.unifiedId!),
+    enabled: manageable,
+  })
+  const d = DELIVERY_TEXT[row.delivery]
+  const result = level !== 'accounts' ? campaignResult(row.objective, row.totals) : null
+  const LEVEL_NAME: Record<Level, { ar: string; en: string }> = {
+    accounts: { ar: 'حساب إعلاني', en: 'Ad account' }, campaigns: { ar: 'حملة', en: 'Campaign' },
+    ad_sets: { ar: 'مجموعة', en: 'Ad set' }, ads: { ar: 'إعلان', en: 'Ad' },
+  }
+  return (
+    <Modal open onClose={onClose} size="lg" title={row.name}>
+      <div className="space-y-4" data-testid="ads-manager-details">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {row.provider && <ProviderMark provider={row.provider} size={20} />}
+          <span className="rounded-full bg-surface-secondary px-2.5 py-0.5 text-xs font-semibold text-text-secondary">{ar ? LEVEL_NAME[level].ar : LEVEL_NAME[level].en}</span>
+          <span className="inline-flex items-center gap-1.5 text-text-primary"><span className={`size-2 rounded-full ${d.dot}`} aria-hidden />{ar ? d.ar : d.en}</span>
+          {row.sub && <span className="text-text-muted">· {row.sub}</span>}
+        </div>
+
+        <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {result && (
+            <div className="rounded-xl bg-surface-secondary px-3 py-2">
+              <dt className="text-xs text-text-secondary">{resultLabel(result, ar)}</dt>
+              <dd className="text-base font-bold text-text-primary"><Num>{result.value === null ? '—' : num(result.value)}</Num></dd>
+            </div>
+          )}
+          {columns.map((c) => (
+            <div key={c.key} className="rounded-xl bg-surface-secondary px-3 py-2">
+              <dt className="text-xs text-text-secondary">{ar ? c.ar : c.en}</dt>
+              <dd className="text-base font-bold text-text-primary"><Num>{fmt(c, row.totals)}</Num></dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="flex flex-wrap gap-2">
+          {level === 'accounts' && (
+            <>
+              <Button size="sm" variant="secondary" onClick={() => onDrill('campaigns', 'campaigns')} data-testid="ads-manager-drill-campaigns"><Megaphone size={14} aria-hidden /> {ar ? 'حملات هذه المنصة' : 'This platform\'s campaigns'}</Button>
+              <Link to={portal('/integrations')} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-bold text-text-primary hover:bg-surface-secondary">{ar ? 'إدارة الربط' : 'Manage the connection'}</Link>
+            </>
+          )}
+          {level === 'campaigns' && <Button size="sm" variant="secondary" onClick={() => onDrill('down', 'ad_sets')} data-testid="ads-manager-drill-ad_sets"><Layers size={14} aria-hidden /> {ar ? 'مجموعاتها' : 'Its ad sets'}</Button>}
+          {(level === 'campaigns' || level === 'ad_sets') && <Button size="sm" variant="secondary" onClick={() => onDrill('down', 'ads')} data-testid="ads-manager-drill-ads"><ImageIcon size={14} aria-hidden /> {ar ? 'إعلاناتها' : 'Its ads'}</Button>}
+          {row.unifiedId && <Link to={portal(`/campaigns/${row.unifiedId}`)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-bold text-text-primary hover:bg-surface-secondary" data-testid="ads-manager-open-campaign">{ar ? 'صفحة الحملة' : 'Campaign page'}</Link>}
+        </div>
+
+        {manageable && (
+          <section className="rounded-xl border border-border p-3" data-testid="ads-manager-manage">
+            <h3 className="mb-2 flex items-center gap-1.5 text-sm font-bold text-text-primary"><SlidersHorizontal size={15} aria-hidden /> {ar ? 'التعديل والإدارة' : 'Edit and manage'}</h3>
+            {campaign.isPending ? <Skeleton className="h-24" /> : campaign.data ? (
+              <CampaignControlPanel campaign={campaign.data} projectId={projectId!} focusExternalId={level === 'campaigns' ? undefined : row.externalId ?? undefined} />
+            ) : (
+              <p className="text-xs text-text-muted">{ar ? 'تعذّر تحميل خيارات الإدارة لهذه الحملة.' : 'Could not load the management options for this campaign.'}</p>
+            )}
+          </section>
+        )}
+      </div>
+    </Modal>
   )
 }
