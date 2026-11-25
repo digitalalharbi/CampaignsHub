@@ -147,18 +147,18 @@ describe('store funnel tab — instant data', () => {
     const client = newClient()
     vi.mocked(getData).mockResolvedValue(funnel(R1, 25))
     const { rerender } = render(wrap(client, <StoreFunnelTab projectId="p1" range={R1} />))
-    expect(await screen.findByTestId('funnel-stage-orders')).toHaveTextContent('25')
+    expect(await screen.findByTestId('funnel-coverage')).toHaveTextContent('25')
 
     let release: (v: unknown) => void = () => {}
     vi.mocked(getData).mockImplementation(() => new Promise((r) => { release = r }))
     rerender(wrap(client, <StoreFunnelTab projectId="p1" range={R2} />))
 
-    expect(screen.getByTestId('funnel-stage-orders')).toHaveTextContent('25')
+    expect(screen.getByTestId('funnel-coverage')).toHaveTextContent('25')
     expect(screen.getByTestId('refresh-note')).toHaveAttribute('data-state', 'previous')
     expect(screen.getByTestId('refresh-note')).toHaveTextContent('Oct 1 – Oct 10, 2026')
 
     await act(async () => { release(funnel(R2, 7)) })
-    await waitFor(() => expect(screen.getByTestId('funnel-stage-orders')).toHaveTextContent('7'))
+    await waitFor(() => expect(screen.getByTestId('funnel-coverage')).toHaveTextContent('7'))
     expect(screen.queryByTestId('refresh-note')).toBeNull()
   })
 
@@ -166,12 +166,12 @@ describe('store funnel tab — instant data', () => {
     const client = newClient()
     vi.mocked(getData).mockResolvedValue(funnel(R1, 25))
     const { rerender } = render(wrap(client, <StoreFunnelTab projectId="p1" range={R1} />))
-    expect(await screen.findByTestId('funnel-stage-orders')).toBeInTheDocument()
+    expect(await screen.findByTestId('funnel-coverage')).toBeInTheDocument()
 
     vi.mocked(getData).mockImplementation(() => new Promise(() => {}))
     rerender(wrap(client, <StoreFunnelTab projectId="p2" range={R1} />))
 
-    expect(screen.queryByTestId('funnel-stage-orders')).toBeNull()
+    expect(screen.queryByTestId('funnel-coverage')).toBeNull()
     expect(screen.getByTestId('store-funnel-skeleton')).toBeInTheDocument()
   })
 })
