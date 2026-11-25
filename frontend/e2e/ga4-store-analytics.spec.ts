@@ -74,6 +74,10 @@ test.describe('GA4 store analytics', () => {
     // The match section replaces the comparison card once it has loaded; measure the page after that.
     await expect(page.getByTestId('ga4-match')).toBeVisible({ timeout: 30000 })
     await page.waitForLoadState('networkidle')
+    // The full table sits behind «التفاصيل» under the bars, as in the report.
+    const toggle = page.getByTestId('ga4-table-toggle')
+    await toggle.scrollIntoViewIfNeeded()
+    if (!(await toggle.evaluate((d) => (d as HTMLDetailsElement).open))) await toggle.locator('summary').click()
     const table = page.getByTestId('ga4-table-box')
     await table.scrollIntoViewIfNeeded()
     const first = await box(table)
@@ -148,8 +152,10 @@ test.describe('GA4 store analytics', () => {
 
     await openTechnical(page)
     await expect(page.getByTestId('ga4-match')).toBeVisible({ timeout: 30000 })
-    await expect(page.getByTestId('match-basis')).toHaveText(/Website|الموقع/)
-    const table = page.getByTestId('match-table-box')
+    // The report's own match picture above carries a table of the same name; the drill is the analyst's one.
+    const match = page.getByTestId('ga4-match')
+    await expect(match.getByTestId('match-basis')).toHaveText(/Website|الموقع/)
+    const table = match.getByTestId('match-table-box')
     await table.scrollIntoViewIfNeeded()
     // Measure the page only once everything below the match has loaded, so the comparison after the
     // drill speaks for the match box alone.
@@ -157,25 +163,25 @@ test.describe('GA4 store analytics', () => {
     const level1 = await box(table)
 
     // Platform -> campaigns.
-    await page.locator('[data-testid^="match-drill-platform-"]').first().click()
-    await expect(page.getByTestId('match-crumb-platform')).toBeVisible()
-    expect(await box(page.getByTestId('match-table-box')), 'drilling to campaigns resized the table').toEqual(level1)
-    await expect(page.getByTestId('confidence-utm').or(page.getByTestId('confidence-id')).first()).toBeVisible()
+    await match.locator('[data-testid^="match-drill-platform-"]').first().click()
+    await expect(match.getByTestId('match-crumb-platform')).toBeVisible()
+    expect(await box(match.getByTestId('match-table-box')), 'drilling to campaigns resized the table').toEqual(level1)
+    await expect(match.getByTestId('confidence-utm').or(match.getByTestId('confidence-id')).first()).toBeVisible()
 
     // Campaign -> landing pages, then back with the breadcrumb.
-    await page.locator('[data-testid^="match-drill-campaign-"]').first().click()
-    await expect(page.getByTestId('match-crumb-campaign')).toBeVisible()
-    expect(await box(page.getByTestId('match-landing-table-box')), 'the landing level resized the table').toEqual(level1)
-    await page.getByTestId('match-crumb-platform').click()
-    await expect(page.getByTestId('match-table-box')).toBeVisible()
-    await page.getByTestId('match-crumb-root').click()
-    expect(await box(page.getByTestId('match-table-box'))).toEqual(level1)
+    await match.locator('[data-testid^="match-drill-campaign-"]').first().click()
+    await expect(match.getByTestId('match-crumb-campaign')).toBeVisible()
+    expect(await box(match.getByTestId('match-landing-table-box')), 'the landing level resized the table').toEqual(level1)
+    await match.getByTestId('match-crumb-platform').click()
+    await expect(match.getByTestId('match-table-box')).toBeVisible()
+    await match.getByTestId('match-crumb-root').click()
+    expect(await box(match.getByTestId('match-table-box'))).toEqual(level1)
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(pageHeight)
 
     // A platform chip narrows the match, the classification and the gap together.
-    const rowsBefore = await page.locator('[data-testid^="match-drill-platform-"]').count()
+    const rowsBefore = await match.locator('[data-testid^="match-drill-platform-"]').count()
     await page.locator('[data-testid^="ga4-filter-platform-"]:not([data-testid$="-all"])').first().click()
-    await expect(page.locator('[data-testid^="match-drill-platform-"]')).toHaveCount(1)
+    await expect(match.locator('[data-testid^="match-drill-platform-"]')).toHaveCount(1)
     expect(rowsBefore).toBeGreaterThan(1)
     await page.getByTestId('ga4-filter-platform-all').click()
   })
