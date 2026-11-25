@@ -4,7 +4,8 @@ import { QueryFailure } from '@/components/ui/QueryFailure'
 import { ChartBodySkeleton, KpiRowSkeleton } from '@/components/ui/Skeletons'
 import { useSwrQuery } from '@/lib/query/swr'
 import { ChartCard } from '../charts'
-import { Ga4Acquisition, Ga4Gap, Ga4Series, Ga4Tables, Ga4Tiles } from './Ga4StoreView'
+import { Ga4Gap, Ga4Series } from './Ga4StoreView'
+import { AcquisitionVisual, CompactTiles, TablesVisual } from '@/features/reports/WebsiteVisuals'
 import type { StorePayload } from './storeTypes'
 import { hideParam } from './visibility'
 
@@ -40,14 +41,15 @@ export function Ga4StoreSection({ projectId, range, ar, hide = [], showGap = tru
 
   return (
     <div data-testid="ga4-store" aria-busy={q.isShowingPrevious} className={`space-y-4 ${q.isShowingPrevious ? 'opacity-60' : ''}`}>
-      <Ga4Tiles kpis={d.kpis ?? []} ar={ar} />
+      {/* ANALYTICS-REPORT-PARITY-001 (Owner 2026-11-25) — the report's own visuals, not an older copy of them. */}
+      <CompactTiles kpis={d.kpis ?? []} ar={ar} />
       {d.usd && !d.usd.available && d.usd.reason === 'no_rate' && (
         <Badge tone="warning" data-testid="ga4-usd-withheld">{ar ? `بلا سعر صرف ${d.usd.from ?? ''}` : `No ${d.usd.from ?? ''} rate`}</Badge>
       )}
       <Ga4Series series={d.series ?? []} currency={d.currency} ar={ar} />
-      <Ga4Acquisition channels={d.channels} devices={d.devices} channelsMeta={d.channels_meta} devicesMeta={d.devices_meta} funnel={d.funnel ?? []} ar={ar} />
+      <AcquisitionVisual channels={d.channels} devices={d.devices} channelsMeta={d.channels_meta} devicesMeta={d.devices_meta} funnel={d.funnel ?? []} ar={ar} />
       {d.gap && showGap && <Ga4Gap gap={d.gap} ar={ar} />}
-      {d.tables && <Ga4Tables tables={d.tables} currency={d.currency} ar={ar} />}
+      {d.tables && <TablesVisual tables={d.tables} currency={d.currency} ar={ar} />}
     </div>
   )
 }

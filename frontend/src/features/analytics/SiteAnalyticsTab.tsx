@@ -108,8 +108,17 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
       {/* GA4-STORE-ANALYTICS-001 — the store reading: tiles, charts, GA4 vs platforms, fixed-size tables. */}
       {projectId && <Ga4Workbench projectId={projectId} range={range} ar={ar} />}
 
+      {/*
+        ANALYTICS-REPORT-PARITY-001 (Owner 2026-11-25) — the report's tiles above already carry these figures, so the older
+        tile row moved here as the reference behind them. The deeper analysis below — UTM explorer, the three sources side by side,
+        new versus returning, events — stays, folded under «تحليل إضافي» like the report's details, so the tab reads as the
+        report does and nothing the analyst used is lost.
+      */}
+      <details data-testid="site-more-analysis" className="rounded-2xl border border-border bg-surface">
+        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-extrabold text-text-primary">{ar ? 'تحليل إضافي' : 'More analysis'}</summary>
+        <div className="space-y-4 border-t border-border p-3">
+      {/* Each figure's definition, source and previous period — the reference behind the tiles above. */}
       {d.kpis && d.previous_period && <SiteKpis kpis={d.kpis} previous={d.previous_period} ar={ar} />}
-
       {projectId && <TrafficExplorer projectId={projectId} range={range} ar={ar} />}
       {projectId && <ThreeSourcesPanel projectId={projectId} range={range} ar={ar} />}
 
@@ -148,6 +157,8 @@ export function SiteAnalyticsTab({ projectId, range }: { projectId: string | nul
           </div>
         )}
       </ChartCard>
+        </div>
+      </details>
     </div>
   )
 }
