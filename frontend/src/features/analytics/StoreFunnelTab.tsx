@@ -1,13 +1,5 @@
-import { campaigns as countedCampaigns } from '@/lib/counted'
-import { StatCard } from '@/components/ui/StatCard'
-import { AlertTriangle, Banknote, MousePointerClick, ShoppingCart, Receipt, Store, Target, TrendingDown, UserPlus } from 'lucide-react'
-import { PlatformDonutChart, RankingBarChart } from './charts'
-import { MiniCard } from './StoreInsightsBoard'
-import { providerLabel } from '@/features/campaigns/labels'
-import { canonicalPlatform } from '@/lib/platforms'
-import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
+import { Store } from 'lucide-react'
 import { Panel } from './components'
-import { compact, money, moneyExact, num, ratio } from './format'
 import { getData } from '@/lib/api/client'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState, Skeleton } from '@/components/ui/States'
@@ -15,7 +7,6 @@ import { RefreshNote } from '@/components/ui/RefreshNote'
 import { useSwrQuery } from '@/lib/query/swr'
 import { useUi } from '@/stores/ui'
 import { QueryFailure } from '@/components/ui/QueryFailure'
-import { Explainer } from '@/components/ui/Explainer'
 import { OrderSourcesPanel } from './OrderSourcesPanel'
 import { StoreMirror } from './StoreMirror'
 import { ThreeSourcesPanel } from './ThreeSourcesPanel'
@@ -134,33 +125,8 @@ interface FunnelPayload {
   }
 }
 
-const SOURCE_LABEL: Record<Stage['source']['kind'], { ar: string; en: string; tone: 'success' | 'info' | 'neutral' }> = {
-  stores: { ar: 'المتجر', en: 'Store', tone: 'success' },
-  ad_platforms: { ar: 'بكسل المنصات', en: 'Platform pixel', tone: 'info' },
-  ga4: { ar: 'ما قاسه الموقع (الموقع)', en: 'Site-measured (Website)', tone: 'info' },
-  none: { ar: 'لا يوجد مصدر', en: 'No source', tone: 'neutral' },
-}
 
-/**
- * The funnel API states rates as PERCENTAGES (3.5 means 3.5%), not as ratios.
- *
- * `format.percent()` multiplies by a hundred, which is right for the ratio-shaped figures everywhere
- * else on this page and wrong here — it printed a 3.5% click-through as «350.0%» and a drop-off as
- * «9650.0%». Caught by looking at the rendered page. Keeping the API self-describing and converting at
- * the one place that consumes it is better than making one endpoint speak a different dialect.
- */
-function rate(n: number | null): string {
-  return n === null ? '—' : `${n.toFixed(1)}%`
-}
 
-const METHOD_AR: Record<string, string> = {
-  utm_campaign_id: 'معرّف الحملة في UTM',
-  utm_campaign_name: 'اسم الحملة في UTM',
-  click_id_platform_only: 'معرّف النقرة — المنصة فقط',
-  utm_source_platform_only: 'مصدر UTM — المنصة فقط',
-  conflict: 'تعارض بين معرّف النقرة والحملة',
-  none: 'بلا إسناد',
-}
 
 export function StoreFunnelTab({ projectId, range }: { projectId: string | null; range: { from: string; to: string } }) {
   const ar = useUi((s) => s.locale) === 'ar'
@@ -181,7 +147,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       fallbackTitle={ar ? 'تعذّر تحميل الفانل.' : 'The funnel could not be loaded.'} />
   }
 
-  const { stages, steps, totals, derived, comparisons, coverage } = q.data
+  const { totals, coverage } = q.data
   const note = (
     <RefreshNote ar={ar} isRefreshing={q.isRefreshing} isShowingPrevious={q.isShowingPrevious} refreshFailed={q.refreshFailed}
       updatedAt={q.updatedAt} shownPeriod={formatPeriodRange(q.data.window.from, q.data.window.to, ar ? 'ar' : 'en')} onRetry={() => void q.refetch()} />
@@ -190,8 +156,6 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
   // rendering, but nothing on this page decides a currency for itself any more.
   // FX-APPLY-001 — the store figures' own reporting currency, never a guessed «SAR».
   const cur = totals.reporting_currency || null
-  const stepFrom = new Map(steps.map((s) => [s.to, s]))
-  const widest = Math.max(...stages.map((s) => s.value ?? 0), 1)
 
   return (
     <div data-testid="store-funnel" aria-busy={q.isShowingPrevious} className={`space-y-4 transition-opacity duration-[var(--motion-panel)] ease-[var(--motion-ease)] ${q.isShowingPrevious ? 'opacity-60' : ''}`}>
@@ -199,8 +163,7 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       {/*
         STORE-MIRROR-001 (Owner 2026-11-25) — «اجعلها بنفس فكرة تحليلات الموقع … جزء المتجر يوازي جزء الموقع». The tab opens the way the
         website tab does: one header line, then the store's own reading in the website's own shapes. Without a store it is the
-        website tab's not-connected state: one chip and where to connect it. What this tab used to open on — the platform-pixel
-        funnel and its tables — is kept, folded, under «التفاصيل الفنية».
+        website tab's not-connected state: one chip and where to connect it.
       */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
         <Badge tone="success">{ar ? 'المتجر' : 'Store'}</Badge>
@@ -215,279 +178,25 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       ) : (
         <StoreMirror projectId={projectId} range={range} ar={ar} spend={totals.spend ?? null} />
       )}
-
-      <details data-testid="store-technical-details" className="rounded-2xl border border-border bg-surface">
-        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-extrabold text-text-primary">{coverage.stores === 0 ? (ar ? 'قمع المنصات الإعلانية' : 'Ad-platform funnel') : (ar ? 'التفاصيل الفنية' : 'Technical details')}</summary>
-        <div className="space-y-4 border-t border-border p-3">
-      {q.data.reading && <FunnelReadingBlock reading={q.data.reading} ar={ar} />}
-
-      {/*
-        ANALYTICS-REPORT-LAYOUT-001 — Owner 2026-11-18: the store tab rebuilt as a store report (Salla / Zid style):
-        the headline figures first and large, the funnel as a row of stage cards, comparisons as charts, and the
-        long provenance sentences moved into each card's tooltip. Every figure is the same payload as before.
-      */}
-      <div data-testid="store-hero" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {(() => {
-          const revenue = stages.find((x) => x.key === 'revenue')?.value ?? null
-          const orders = [...stages].reverse().find((x) => x.key === 'orders' && x.value !== null)?.value ?? null
-          return [
-            { k: 'revenue', label: ar ? 'الإيراد' : 'Revenue', value: revenue === null ? null : money(revenue, cur), icon: <Banknote size={14} aria-hidden />, tone: 'success' as const },
-            { k: 'orders', label: ar ? 'الطلبات' : 'Orders', value: orders === null ? null : compact(orders), icon: <Receipt size={14} aria-hidden />, tone: 'brand' as const },
-            { k: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order', value: derived.aov === null ? null : money(derived.aov, cur), icon: <ShoppingCart size={14} aria-hidden />, tone: 'info' as const },
-            { k: 'roas', label: ar ? 'معدل العائد' : 'ROAS', value: derived.roas === null || derived.roas === 0 ? null : ratio(derived.roas), icon: <Target size={14} aria-hidden />, tone: 'neutral' as const },
-          ].filter((t) => t.value !== null).map((t) => (
-            <StatCard key={t.k} testid={`store-hero-${t.k}`} tone={t.tone} label={<span className="inline-flex items-center gap-1.5">{t.icon}{t.label}</span>} value={t.value} />
-          ))
-        })()}
-      </div>
+      {/* COMMERCE-FX-001 — a total short by an unconvertible order says so where the totals are, not only inside the details. */}
+      {coverage.orders_with_money_withheld > 0 && (
+        <p data-testid="store-money-withheld" className="text-xs text-warning">
+          {ar
+            ? `${coverage.orders_with_money_withheld} طلبًا بعملة (${coverage.money_withheld_currencies.join('، ')}) بلا سعر صرف مؤرّخ — غير محتسبة في المبالغ أعلاه.`
+            : `${coverage.orders_with_money_withheld} order(s) in ${coverage.money_withheld_currencies.join(', ')} have no dated rate — not in the amounts above.`}
+        </p>
+      )}
 
       {/*
-        STORE-INSIGHTS-002 (Owner 2026-11-25) — «لم ألاحظ تحسّن بالشكل والرسوم». The funnel is drawn as a funnel: one tapered bar per
-        stage, centred, its width the stage's share of the widest one, the step between two stages as a conversion chip and a drop
-        chip. The source of each stage stays beside it; a stage nobody measures is an outlined gap, never a zero.
+        STORE-TAB-STORE-ONLY-001 (Owner 2026-11-26) — «قمع المنصات الإعلانية مازال موجود وكبير الحجم وغير مناسب». The store tab's source
+        is the store, as the website tab's is GA4: the ad-platform pixel funnel and its tables belong to the platforms tabs, not here.
+        With no store the tab is the one chip above; with a store, the details fold only what the store itself states.
       */}
-      <Panel title={ar ? 'الفانل: من الظهور إلى الإيراد' : 'Funnel: impression to revenue'}>
-        <ol data-testid="funnel-stages" className="flex flex-col gap-1">
-          {stages.map((stage) => {
-            const source = SOURCE_LABEL[stage.source.kind]
-            const step = stepFrom.get(stage.key)
-            const width = stage.value === null ? 100 : Math.max(8, (stage.value / widest) * 100)
-            const fill = stage.source.kind === 'stores' ? 'var(--success)' : stage.source.kind === 'ga4' ? 'var(--info)' : 'var(--brand-600)'
-
-            return (
-              <li key={stage.key} data-testid={`funnel-stage-${stage.key}`} title={ar ? stage.source.ar : stage.source.en} className="flex flex-col gap-1">
-                {step && step.conversion_rate !== null && (
-                  <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs">
-                    <span className="tnum rounded-full bg-success/10 px-2 py-0.5 font-semibold text-success">{ar ? 'تحويل' : 'Conv.'} {rate(step.conversion_rate)}</span>
-                    <span className="tnum inline-flex items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 font-semibold text-danger"><TrendingDown size={11} />{rate(step.drop_off)}</span>
-                    {step.spans_unmeasured_stages && (
-                      <span data-testid={`funnel-span-${stage.key}`} className="text-text-muted">{ar ? 'يتخطّى مراحل غير مقيسة' : 'spans unmeasured stages'}</span>
-                    )}
-                  </span>
-                )}
-                <div className="grid grid-cols-[8.5rem_1fr] items-center gap-3 sm:grid-cols-[10rem_1fr]">
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="truncate text-sm font-bold text-text-primary">{ar ? stage.label_ar : stage.label_en}</span>
-                    <span><Badge tone={source.tone}>{ar ? source.ar : source.en}</Badge></span>
-                  </span>
-                  <div className="flex justify-center">
-                    {stage.value === null ? (
-                      <div className="flex h-11 w-full flex-col items-center justify-center rounded-xl border border-dashed border-border px-3 text-center">
-                        <span data-testid={`funnel-unmeasured-${stage.key}`} className="text-xs font-semibold text-text-muted">{ar ? 'لا يُقاس' : 'Not measured'}</span>
-                        <span className="truncate text-xs text-text-muted">{ar ? stage.source.ar : stage.source.en}</span>
-                      </div>
-                    ) : (
-                      <div className="flex h-11 items-center justify-center rounded-xl px-3 text-white shadow-sm transition-[width]" style={{ width: `${width}%`, minWidth: '5.5rem', background: `linear-gradient(90deg, color-mix(in srgb, ${fill} 75%, transparent), ${fill})` }}>
-                        <span className="tnum truncate text-base font-extrabold" title={stage.key !== 'revenue' ? num(stage.value) : undefined}>{stage.key === 'revenue' ? money(stage.value, cur) : compact(stage.value)}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {stage.state === 'partial' && <span className="self-center"><Badge tone="warning">{ar ? 'ناقص' : 'Undercount'}</Badge></span>}
-                {(stage.note_ar || stage.note_en) && (
-                  <p data-testid={`funnel-note-${stage.key}`} className="flex items-start justify-center gap-1 text-xs leading-snug text-warning">
-                    <AlertTriangle size={11} className="mt-0.5 shrink-0" />
-                    {ar ? stage.note_ar : stage.note_en}
-                  </p>
-                )}
-              </li>
-            )
-          })}
-        </ol>
-      </Panel>
-
-      {(() => {
-        // Only the figures this period actually has: a card that reads «—» four times says nothing (show only what's available).
-        const cards = [
-          { k: 'attributed-roas', label: ar ? 'ROAS المُسند' : 'Attributed ROAS', value: derived.attributed_roas === null ? null : ratio(derived.attributed_roas), icon: <Target size={14} aria-hidden />, sub: ar ? 'الطلبات المربوطة بحملة' : 'Orders traced to a campaign' },
-          { k: 'cpa', label: ar ? 'تكلفة الطلب' : 'CPA', value: derived.cpa === null ? null : moneyExact(derived.cpa, cur ?? null), icon: <Receipt size={14} aria-hidden />, sub: ar ? 'الإنفاق ÷ الطلبات' : 'Spend ÷ orders' },
-          { k: 'cac', label: ar ? 'تكلفة اكتساب العميل' : 'CAC', value: derived.cac === null ? null : money(derived.cac, cur), icon: <UserPlus size={14} aria-hidden />, sub: ar ? 'الإنفاق ÷ العملاء الجدد' : 'Spend ÷ new customers' },
-          { k: 'click-order', label: ar ? 'من النقرة إلى الطلب' : 'Click → order', value: derived.conversion_rate === null || derived.conversion_rate === 0 ? null : rate(derived.conversion_rate), icon: <MousePointerClick size={14} aria-hidden />, sub: undefined as string | undefined },
-        ].filter((c) => c.value !== null)
-        if (cards.length === 0) return null
-
-        return (
-          <div data-testid="funnel-derived" className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            {cards.map((c) => <MiniCard key={c.k} testId={`funnel-derived-${c.k}`} icon={c.icon} label={c.label} value={c.value as string} sub={c.sub} />)}
-          </div>
-        )
-      })()}
-
       {coverage.stores > 0 && (
-      <div className="grid gap-4 lg:grid-cols-2">
-      {/*
-        Gross → refunded → net, because the page already subtracts and never says how much.
-        
-        Every money figure here is NET: the ROAS card's own hint says «on net revenue, after
-        refunds». So a merchant reading «revenue 100,000, ROAS 4x» is told a subtraction happened and
-        cannot see its size — 500 refunded and 50,000 refunded produce the same screen, and they are
-        not the same month. The funnel has computed `refunded` and `gross_revenue` since it shipped
-        and nothing rendered either.
-        
-        Cancelled orders sit here for the same reason: an order that never completed is not a refund
-        and not a sale, and it is the other way the order count and the money can disagree.
-      */}
-      <Panel title={ar ? 'ما لم يبقَ' : 'What did not stick'}>
-        <dl data-testid="funnel-refunds" className="grid gap-3 text-sm sm:grid-cols-3">
-          <Fact label={ar ? 'الإيراد قبل الاسترداد' : 'Revenue before refunds'} value={money(totals.gross_revenue, cur)} />
-          <Fact
-            label={ar ? 'المسترد' : 'Refunded'}
-            value={money(totals.refunded, cur)}
-            /* Zero is the ordinary answer and must not be dressed as a warning. */
-            tone={totals.refunded > 0 ? 'warning' : undefined}
-          />
-          <Fact label={ar ? 'طلبات ملغاة' : 'Cancelled orders'} value={num(totals.cancelled_orders)} tone={totals.cancelled_orders > 0 ? 'warning' : undefined} />
-        </dl>
-        {/*
-          VISUAL-FIRST-001 — the subtraction is a proportion, so it is drawn as one.
-
-          «If a fact can be represented truthfully as a visual, the VISUAL is primary.» The three
-          figures above already say gross, refunded and net; what a merchant actually asks is «how
-          much of the month came back», and a share of a bar answers that at a glance where a ratio
-          of two eight-digit numbers does not. Drawn only when there is a gross figure to take a
-          share OF — a bar over zero would be a drawing of nothing.
-        */}
-        {totals.gross_revenue > 0 && (
-          /*
-            AGGREGATION-TRUTH-001 — «kept» is the server's net revenue, not a second one computed here.
-        
-            This drew `gross_revenue - refunded`, which is a THIRD figure agreeing with neither the
-            page nor the server. `revenue` is the sum of each order's own `netRevenue()`, and that
-            method does three things this subtraction cannot see: a cancelled order contributes 0, an
-            order whose money is withheld contributes NOTHING rather than a converted guess, and a
-            refund larger than its own order clamps at zero instead of eating another order's sale.
-            `refunded`, meanwhile, is summed over ALL orders while `gross_revenue` counts only the
-            live ones — so a refund on a cancelled order was subtracted from a total that never
-            included it, and the bar could show «kept» below the net revenue printed inches above it,
-            or below zero outright.
-        
-            Both figures now come from the same order set the server summed, so the bar is the
-            subtraction this panel describes rather than an approximation of it. The lost half is
-            «did not stick» rather than «refunded» because it is exactly that: refunds on live orders
-            AND money the contract refused to state.
-          */
-          <ShareBar
-            testid="funnel-refund-share"
-            kept={totals.revenue}
-            lost={Math.max(0, totals.gross_revenue - totals.revenue)}
-            keptLabel={ar ? 'بقي' : 'Kept'}
-            lostLabel={ar ? 'لم يبقَ' : 'Did not stick'}
-          />
-        )}
-        <Explainer
-          className="mt-2"
-          testid="funnel-refund-note"
-          label={ar ? 'كيف تُحتسب هذه المبالغ' : 'How these amounts are counted'}
-        >
-          {ar
-            ? 'كل مبلغ في هذه الصفحة صافٍ بعد الاسترداد — وهذا هو مقدار ما طُرح. الطلب الملغى لم يُحتسب إيرادًا أصلًا، فهو ليس استردادًا.'
-            : 'Every amount on this page is net of refunds — this is how much was taken off. A cancelled order was never counted as revenue, so it is not a refund.'}
-        </Explainer>
-      </Panel>
-
-      <Panel title={ar ? 'صدق الإسناد' : 'Attribution honesty'}>
-        <dl data-testid="funnel-attribution" className="grid gap-3 text-sm sm:grid-cols-3">
-          <Fact label={ar ? 'طلبات مُسندة لحملة' : 'Orders traced to a campaign'} value={num(totals.attributed_orders)} />
-          <Fact label={ar ? 'طلبات بلا إسناد' : 'Orders with no attribution'} value={num(coverage.orders_without_attribution)} tone="warning" />
-          <Fact label={ar ? 'إيراد مُسند' : 'Attributed revenue'} value={money(totals.attributed_revenue, cur)} />
-        </dl>
-        {/*
-          The same reasoning, and here the proportion IS the finding: «a high share of them is a
-          link-tagging problem before it is anything about performance». A reader cannot judge «high»
-          from two counts side by side, and can from a bar.
-        */}
-        {totals.attributed_orders + coverage.orders_without_attribution > 0 && (
-          <ShareBar
-            testid="funnel-attribution-share"
-            kept={totals.attributed_orders}
-            lost={coverage.orders_without_attribution}
-            keptLabel={ar ? 'مُسندة' : 'Traced'}
-            lostLabel={ar ? 'بلا إسناد' : 'Untraced'}
-          />
-        )}
-        <Explainer
-          className="mt-2"
-          testid="funnel-attribution-note"
-          label={ar ? 'ماذا يعني «بلا إسناد»' : 'What «untraced» means'}
-        >
-          {ar
-            ? 'الطلبات التي تعذّر ربطها بحملة تُعرض هنا ولا تُوزَّع على الحملات. نسبة مرتفعة منها تعني مشكلة في وسوم الروابط قبل أن تعني أي شيء عن الأداء.'
-            : 'Orders that could not be traced are shown here and never spread across campaigns. A high share of them is a link-tagging problem before it is anything about performance.'}
-        </Explainer>
-      </Panel>
-
-      </div>
-      )}
-
-      {comparisons.platforms.length > 0 && (
-        <Panel title={ar ? 'المقارنة بين المنصات' : 'Across platforms'}>
-          <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-          <div className="min-w-0">
-          <RankingBarChart
-            colorByPlatform={false}
-            currency={cur ?? ''}
-            data={comparisons.platforms.map((p) => ({ label: providerLabel(canonicalPlatform(p.platform), ar ? 'ar' : 'en'), spend: p.spend, revenue: p.revenue }))}
-            bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }, { key: 'revenue', name: ar ? 'الإيراد' : 'Revenue', kind: 'money' }]}
-            height={240}
-          />
-          </div>
-          {comparisons.platforms.some((p) => p.spend > 0) && (
-            <div data-testid="funnel-platform-donut" className="min-w-0">
-              <PlatformDonutChart height={240} currency={cur ?? ''} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={money(comparisons.platforms.reduce((a, p) => a + p.spend, 0), cur)}
-                data={comparisons.platforms.filter((p) => p.spend > 0).map((p) => ({ key: canonicalPlatform(p.platform), name: providerLabel(canonicalPlatform(p.platform), ar ? 'ar' : 'en'), value: p.spend }))} />
-            </div>
-          )}
-          </div>
-          <details className="mt-2 text-xs"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
-          <Table
-            head={[ar ? 'المنصة' : 'Platform', ar ? 'الإنفاق' : 'Spend', ar ? 'الطلبات' : 'Orders', ar ? 'الإيراد' : 'Revenue', 'ROAS']}
-            rows={comparisons.platforms.map((p) => [p.platform, money(p.spend, cur), num(p.orders), money(p.revenue, cur), ratio(p.roas)])}
-            values={comparisons.platforms.map((p) => [p.platform, p.spend, p.orders, p.revenue, p.roas])}
-          />
-          </details>
-        </Panel>
-      )}
-
-      {comparisons.campaigns.length > 0 && (
-        <Panel title={ar ? 'المقارنة بين الحملات' : 'Across campaigns'}>
-          <details className="text-xs" open={comparisons.campaigns.length <= 5}><summary className="cursor-pointer select-none font-semibold text-text-muted">{countedCampaigns(comparisons.campaigns.length, ar ? 'ar' : 'en')}</summary>
-          <Table
-            head={[ar ? 'الحملة' : 'Campaign', ar ? 'الطلبات' : 'Orders', ar ? 'الإيراد' : 'Revenue', ar ? 'طريقة الإسناد' : 'How it was traced']}
-            rows={comparisons.campaigns.map((c) => [
-              c.external_campaign_id.slice(0, 8),
-              num(c.orders),
-              money(c.revenue, cur),
-              ar ? (METHOD_AR[c.attribution_method ?? 'none'] ?? c.attribution_method) : c.attribution_method,
-            ])}
-            values={comparisons.campaigns.map((c) => [
-              c.external_campaign_id, c.orders, c.revenue, c.attribution_method ?? null,
-            ])}
-          />
-          </details>
-        </Panel>
-      )}
-
-      {comparisons.products.length > 0 && (
-        <Panel title={ar ? 'المنتجات الأكثر مبيعًا' : 'Best sellers'}>
-          <RankingBarChart
-            horizontal
-            currency={cur ?? ''}
-            data={comparisons.products.slice(0, 8).map((p) => ({ label: p.name.slice(0, 26), revenue: p.revenue }))}
-            bars={[{ key: 'revenue', name: ar ? 'الإيراد' : 'Revenue', kind: 'money' }]}
-            height={Math.max(160, Math.min(8, comparisons.products.length) * 34)}
-          />
-          <details className="mt-2 text-xs"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
-          <Table
-            head={[ar ? 'المنتج' : 'Product', ar ? 'الكمية' : 'Quantity', ar ? 'الإيراد' : 'Revenue']}
-            rows={comparisons.products.map((p) => [p.name, num(p.quantity), money(p.revenue, cur)])}
-            values={comparisons.products.map((p) => [p.name, p.quantity, p.revenue])}
-          />
-          </details>
-        </Panel>
-      )}
-
-      {/* STORE-ANALYTICS-DEPTH-001 — the store's own reading, each order's source by evidence, and the three sources side by side. */}
-      {coverage.stores > 0 && <OrderSourcesPanel projectId={projectId} range={range} ar={ar} />}
+      <details data-testid="store-technical-details" className="rounded-2xl border border-border bg-surface">
+        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-extrabold text-text-primary">{ar ? 'التفاصيل الفنية' : 'Technical details'}</summary>
+        <div className="space-y-4 border-t border-border p-3">
+      <OrderSourcesPanel projectId={projectId} range={range} ar={ar} />
       <ThreeSourcesPanel projectId={projectId} range={range} ar={ar} />
 
       {/* The footer that says what this page could NOT see. */}
@@ -541,161 +250,6 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       </p>
         </div>
       </details>
-    </div>
-  )
-}
-
-/**
- * One bar, two shares — what stayed and what did not.
- *
- * Deliberately not a chart library: two counts on one axis is a `<div>` with two widths, and reaching
- * for Recharts here would buy an SVG, a ResponsiveContainer and a resize observer to draw a rectangle.
- *
- * The percentage is rendered next to the label rather than inside the bar, because the losing share
- * is routinely small enough that no text fits inside it, and a number that disappears at 3% is worse
- * than one that never moved.
- */
-function ShareBar({
-  kept,
-  lost,
-  keptLabel,
-  lostLabel,
-  testid,
-}: {
-  kept: number
-  lost: number
-  keptLabel: string
-  lostLabel: string
-  testid: string
-}) {
-  const total = kept + lost
-  /* Callers guard against an empty total; this is the second lock, so a division can never be by zero. */
-  if (total <= 0) return null
-
-  const lostShare = (lost / total) * 100
-
-  return (
-    <div className="mt-3" data-testid={testid}>
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-secondary" aria-hidden>
-        <div className="bg-brand-500" style={{ width: `${100 - lostShare}%` }} />
-        <div className="bg-warning" style={{ width: `${lostShare}%` }} />
-      </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-brand-500" aria-hidden />
-          {keptLabel} <span className="tnum font-semibold">{(100 - lostShare).toFixed(1)}%</span>
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-warning" aria-hidden />
-          {lostLabel} <span className="tnum font-semibold">{lostShare.toFixed(1)}%</span>
-        </span>
-      </div>
-    </div>
-  )
-}
-
-function Fact({ label, value, tone }: { label: string; value: string; tone?: 'warning' }) {
-  return (
-    <div>
-      <dt className="text-xs text-text-secondary">{label}</dt>
-      <dd className={`tnum text-lg font-extrabold ${tone === 'warning' ? 'text-warning' : 'text-text-primary'}`}>{value}</dd>
-    </div>
-  )
-}
-
-/**
- * STORE-TABLE-PRESENTATION-001 — the store tables, on the product's own table.
- *
- * This was a fourth hand-rolled table: no sort on any column, every figure left-aligned under a
- * left-aligned header, and its own idea of what a missing value looks like. The store tab is where
- * an operator compares platforms and campaigns against orders that actually happened, and comparing
- * is exactly what a table with no sort cannot help with.
- *
- * `values` carries the raw figures behind the formatted cells, so ordering is done on the number
- * rather than on «1.2K» as a string — and a figure the money contract refused to state sorts LAST
- * rather than as a zero, because «this platform's spend is in another currency» is not the cheapest
- * spend.
- */
-function Table({
-  head,
-  rows,
-  values,
-}: {
-  head: string[]
-  rows: Array<Array<string | null>>
-  values?: SortValues[]
-}) {
-  return (
-    <MetricTable
-      head={head}
-      rows={rows.map((row) => row.map((cell) => cell ?? '—'))}
-      values={values}
-      initialSort={values ? { column: 1, dir: 'desc' } : undefined}
-    />
-  )
-}
-
-/**
- * The five steps, over the funnel's own stages.
- *
- * Absent steps stay absent: there is no signal without two measured stages, and no action without a
- * signal. The silence says WHICH silence — a store that has not synced its orders and a project with
- * no store at all are different situations, and an operator acts on them differently.
- */
-function FunnelReadingBlock({ reading, ar }: { reading: FunnelReading; ar: boolean }) {
-  const SILENT: Record<string, { ar: string; en: string }> = {
-    only_one_stage_is_measured: {
-      ar: 'مرحلة واحدة فقط مقيسة في هذه الفترة — لا يمكن قراءة انخفاض بين طرف واحد.',
-      en: 'Only one stage is measured in this window — a fall needs two ends.',
-    },
-    no_stage_could_be_measured: {
-      ar: 'لا مرحلة مقيسة في هذه الفترة: لا متجر مربوط أو لم تصل بيانات بعد.',
-      en: 'No stage is measured in this window: no store is connected, or nothing has arrived yet.',
-    },
-    no_stage_fell: {
-      ar: 'لم تنخفض أي مرحلة عن سابقتها في هذه الفترة.',
-      en: 'No stage fell below the one before it in this window.',
-    },
-  }
-
-  return (
-    <div data-testid="funnel-reading" className="rounded-xl border border-border bg-surface-secondary/40 p-3.5">
-      {reading.signal === null ? (
-        <p data-testid="funnel-reading-silent" className="text-sm text-text-secondary">
-          {ar
-            ? SILENT[reading.silent_reason ?? 'no_stage_could_be_measured']?.ar
-            : SILENT[reading.silent_reason ?? 'no_stage_could_be_measured']?.en}
-        </p>
-      ) : (
-        <div className="flex flex-wrap items-center gap-4">
-          <span data-testid="funnel-reading-share" className="grid h-16 w-16 shrink-0 place-items-center rounded-full border-4 border-danger/30 text-lg font-extrabold text-danger" dir="ltr">
-            {Math.round(reading.signal.share * 100)}%
-          </span>
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <p className="flex flex-wrap items-center gap-1.5 text-sm text-text-primary">
-              <span className="text-xs text-text-muted">{ar ? 'أكبر انخفاض' : 'Largest fall'}</span>
-              <span className="rounded-full bg-surface px-2 py-0.5 font-bold">{ar ? reading.signal.from.label_ar : reading.signal.from.label_en}</span>
-              <TrendingDown size={14} className="text-danger" aria-hidden />
-              <span className="rounded-full bg-surface px-2 py-0.5 font-bold">{ar ? reading.signal.to.label_ar : reading.signal.to.label_en}</span>
-            </p>
-            {reading.action && (
-              <p data-testid="funnel-reading-action" className="text-sm font-medium text-text-primary">
-                {ar ? reading.action.ar : reading.action.en}
-              </p>
-            )}
-            {reading.explanation && (
-              <p className="text-xs leading-relaxed text-text-muted">{ar ? reading.explanation.ar : reading.explanation.en}</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {reading.unmeasured_stages > 0 && (
-        <p data-testid="funnel-reading-unmeasured" className="mt-2 text-xs text-text-muted">
-          {ar
-            ? `${reading.unmeasured_stages} مرحلة بلا قياس في هذه الفترة، وليست طرفًا في أي انخفاض أعلاه.`
-            : `${reading.unmeasured_stages} stage(s) are unmeasured in this window and are not an end of any fall above.`}
-        </p>
       )}
     </div>
   )
