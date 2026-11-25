@@ -28,13 +28,51 @@ describe('the store panels', () => {
   beforeEach(() => { vi.clearAllMocks(); signInWith(['campaigns.view']) })
   afterEach(() => signOut())
 
+  it('STORE-INSIGHTS-001 — draws large and small cards, the week heat map, circles, best sellers with pictures, basket and coupons', async () => {
+    const cells = Array.from({ length: 7 }, () => Array(24).fill(0))
+    cells[4][21] = 9
+    cells[1][13] = 3
+    vi.mocked(getData).mockResolvedValue({
+      ...depth,
+      trend: [{ date: '2026-10-01', orders: 2, net: 150 }, { date: '2026-10-02', orders: 1, net: 150 }],
+      products: { ...depth.products, best_by_revenue: [{ name: 'Gold ring', image_url: 'https://cdn.salla.test/ring.jpg', quantity: 3, revenue: 900, orders: 3 }, { name: 'Tasbih', image_url: null, quantity: 1, revenue: 100, orders: 1 }] },
+      insights: {
+        status_mix: [{ key: 'completed', orders: 3, share: 0.75 }, { key: 'cancelled', orders: 1, share: 0.25 }],
+        payment_mix: { rows: [{ key: 'mada', orders: 2, net: 200, share: 0.67 }, { key: 'cod', orders: 1, net: 100, share: 0.33 }], other: null, unstated: 0, stated: 3 },
+        city_mix: { rows: [{ key: 'Riyadh', orders: 2, net: 200, share: 1 }], other: null, unstated: 1, stated: 2 },
+        heatmap: { cells, max: 9, peak: { day: 4, hour: 21, orders: 9 }, by_day: [0, 3, 0, 0, 9, 0, 0], by_hour: Array.from({ length: 24 }, (_, h) => (h === 21 ? 9 : h === 13 ? 3 : 0)), timezone: 'Asia/Riyadh' },
+        basket: { bands: [{ from: 0, to: 50, orders: 1, net: 40 }, { from: 50, to: 100, orders: 2, net: 160 }, { from: 100, to: null, orders: 2, net: 400 }], median: 80 },
+        coupons: { rows: [{ code: 'RAMADAN', orders: 2, discount: 30, net: 200 }], orders_with_coupon: 2, share: 0.4 },
+        composition: { products: 280, shipping: 40, tax: 30, discounts: 30, refunded: 50 },
+      },
+    })
+    renderWithProviders(<StoreDepthPanel projectId="p1" range={range} ar={false} />, { route: '/agency/analytics', locale: 'en' })
+
+    expect(await screen.findByTestId('store-insights')).toBeInTheDocument()
+    expect(screen.getByTestId('store-hero-net')).toHaveTextContent('$')
+    expect(screen.getByTestId('store-delta-orders')).toHaveTextContent('200%')
+    expect(screen.getByTestId('store-mini-cards').children.length).toBeGreaterThanOrEqual(10)
+    // The week: Thursday 9 pm is named as the peak, in the merchant's own zone.
+    expect(screen.getByTestId('store-heatmap-peak')).toHaveTextContent('Thu 9pm')
+    expect(screen.getByTestId('store-heat-4-21')).toHaveAttribute('title', expect.stringContaining('9'))
+    // Best sellers with their own pictures; a product with none keeps its place with a placeholder.
+    expect(screen.getByTestId('store-gallery-0').querySelector('img')).toHaveAttribute('src', 'https://cdn.salla.test/ring.jpg')
+    expect(screen.getByTestId('store-gallery-1').querySelector('img')).toBeNull()
+    // The circles, and what each field leaves unstated said, not spread.
+    for (const id of ['store-donut-status', 'store-donut-payment', 'store-donut-city', 'store-donut-customers', 'store-donut-money']) expect(screen.getByTestId(id)).toBeInTheDocument()
+    expect(screen.getByTestId('store-donut-city')).toHaveTextContent('1 order(s) did not state this')
+    expect(screen.getByTestId('store-basket')).toHaveTextContent('2')
+    expect(screen.getByTestId('store-coupons')).toHaveTextContent('RAMADAN')
+  })
+
   it('labels the store as the authority, states growth, absent figures and the withheld currency', async () => {
     vi.mocked(getData).mockResolvedValue(depth)
     renderWithProviders(<StoreDepthPanel projectId="p1" range={range} ar={false} />, { route: '/agency/analytics', locale: 'en' })
-    expect(await screen.findByTestId('store-net')).toHaveTextContent('+200.0%')
+    // STORE-INSIGHTS-001 — the large card carries the growth as its own chip.
+    expect(await screen.findByTestId('store-delta-net')).toHaveTextContent('200%')
     expect(screen.getByTestId('store-depth')).toHaveTextContent('Store-confirmed')
-    expect(screen.getByTestId('store-discounts')).toHaveTextContent('—')
-    expect(screen.getByTestId('store-conversion')).toHaveTextContent('Nothing measures visits')
+    expect(screen.getByTestId('store-mini-discounts')).toHaveTextContent('—')
+    expect(screen.getByTestId('store-mini-conversion')).toHaveTextContent('Nothing measures visits')
     expect(screen.getByTestId('store-ltv-note')).toHaveTextContent('Too few customers')
     expect(screen.getByTestId('store-withheld')).toHaveTextContent('EUR')
     expect(screen.getByTestId('store-abandoned')).toHaveTextContent('No lines stored')

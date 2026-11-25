@@ -256,6 +256,57 @@ final class StoreAttributionDepthTest extends TestCase
         }
     }
 
+    // ── STORE-INSIGHTS-001 — the deeper reading (Owner 2026-11-25) ─────────────────────────────
+
+    public function test_insights_split_orders_by_state_payment_city_hour_basket_and_coupon_without_contact_details(): void
+    {
+        $riyadh = $this->customer('c-ruh', '2026-01-01 10:00:00');
+        $riyadh->forceFill(['city' => 'الرياض', 'email' => 'secret@buyer.test', 'phone' => '+966500000000'])->save();
+        $this->order('a', 100, ['payment_status' => 'mada', 'commerce_customer_id' => $riyadh->id, 'coupon_code' => 'ramadan', 'discount_total' => 20, 'subtotal' => 110]);
+        $this->order('b', 200, ['payment_status' => 'mada', 'commerce_customer_id' => $riyadh->id]);
+        $this->order('c', 300, ['payment_status' => 'cod']);
+        $this->order('d', 400, ['status' => 'under_review']);
+        $this->order('e', 500, ['payment_status' => 'mada', 'placed_at' => '2026-10-06 18:00:00']);
+        $this->order('x', 900, ['status' => 'cancelled', 'cancelled_at' => '2026-10-06 10:00:00', 'payment_status' => 'tabby']);
+
+        $i = $this->data('commerce/depth?from=2026-10-01&to=2026-10-31')['insights'];
+
+        // Every order's state, the cancelled one included; shares of all six.
+        $status = collect($i['status_mix'])->keyBy('key');
+        $this->assertSame(4, $status['completed']['orders']);
+        $this->assertSame(1, $status['under_review']['orders']);
+        $this->assertSame(1, $status['cancelled']['orders']);
+
+        // Payment and city count live orders only, and an order that did not state the field is counted apart, never spread.
+        $payment = collect($i['payment_mix']['rows'])->keyBy('key');
+        $this->assertSame(3, $payment['mada']['orders']);
+        $this->assertSame(1, $payment['cod']['orders']);
+        $this->assertArrayNotHasKey('tabby', $payment->all(), 'a cancelled order is not a payment');
+        $this->assertSame(1, $i['payment_mix']['unstated']);
+        $this->assertSame('الرياض', $i['city_mix']['rows'][0]['key']);
+        $this->assertSame(2, $i['city_mix']['rows'][0]['orders']);
+        $this->assertSame(3, $i['city_mix']['unstated']);
+
+        // The week: seven days of 24 hours, the busiest cell named.
+        $this->assertCount(7, $i['heatmap']['cells']);
+        $this->assertCount(24, $i['heatmap']['cells'][0]);
+        $this->assertSame(5, array_sum($i['heatmap']['by_day']));
+        $this->assertSame(4, $i['heatmap']['peak']['orders']);
+
+        // Basket bands hold every live order once; the coupon carries its discount and its net.
+        $this->assertSame(5, array_sum(array_column($i['basket']['bands'], 'orders')));
+        $this->assertEquals(300.0, $i['basket']['median']);
+        $this->assertSame('RAMADAN', $i['coupons']['rows'][0]['code']);
+        $this->assertEquals(20.0, $i['coupons']['rows'][0]['discount']);
+        $this->assertEquals(0.2, $i['coupons']['share']);
+        $this->assertEquals(110.0, $i['composition']['products']);
+
+        // No contact field leaves the server.
+        $body = (string) json_encode($i);
+        $this->assertStringNotContainsString('secret@buyer.test', $body);
+        $this->assertStringNotContainsString('+966500000000', $body);
+    }
+
     // ── The store's own reading ────────────────────────────────────────────────────────────────
 
     public function test_depth_states_gross_net_discount_shipping_tax_states_and_growth(): void
