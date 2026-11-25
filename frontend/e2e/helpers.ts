@@ -263,83 +263,22 @@ export async function seedExternals(request: APIRequestContext, projectId: strin
  * campaigns through is still there, opened by the campaigns page's own address (`?launch=1`), so that is the path
  * walked here: same page, same modal, same permission check. `launch.spec.ts` covers the button's own destination.
  */
-export async function openCampaignBuilder(page: Page) {
-  // The campaigns page opens on the chart-heavy overview; wait for it to be interactive first.
-  await expect(page.getByTestId('view-overview')).toBeVisible({ timeout: 20000 })
-  const here = new URL(page.url())
-  await page.goto(`${here.pathname}?launch=1`)
-  await expect(page.getByLabel(/Campaign name|اسم الحملة/), 'the draft builder did not open').toBeVisible({ timeout: 20000 })
-}
-
-export async function createCampaign(page: Page, name: string) {
-  await openCampaignBuilder(page)
-
-  /*
-   * Assert the field actually HOLDS the name before saving.
-   *
-   * `fill` writes the DOM value and dispatches an input event, but React has to render before its
-   * own state carries it — and on WebKit under the full three-browser load that had not always
-   * happened by the time the click landed. The form then posted an empty name, the server refused
-   * it, and the modal stayed open showing a validation error on a field the test had just filled.
-   * Waiting on the value is waiting for the precondition the next line depends on.
-   *
-   * And waiting for as long as its neighbours do. This guard was written for a render that had not
-   * happened yet and then given expect's DEFAULT five seconds, while the wait two lines below gets
-   * fifteen and the one above twenty. On a loaded runner the render it exists to absorb outlasted
-   * its own budget and the guard failed as «Expected: "E2E Link B …" / Received: ""» — the guard
-   * reporting the very condition it was added to wait through. Reproduced locally on chromium first,
-   * where the whole spec passes in 36s, so the number was the only thing wrong.
-   *
-   * That read of it was wrong, and the budget was not the only thing. It failed again on chromium
-   * with the full fifteen seconds, re-reading the same input 34 times and seeing "" each time — and a
-   * render that has not happened yet resolves in a retry or two, so 34 of them means the value was
-   * taken away rather than late. `CampaignFormModal` restored its fields from a passive effect, which
-   * runs in a task AFTER the commit that attaches them: the field was reachable and fillable in that
-   * gap and the restore then wiped it. It is a layout effect now, so the gap does not exist. The wait
-   * stays as it is — it still absorbs a genuinely slow render, and it is the assertion that caught
-   * both the symptom and, eventually, the cause.
-   */
-  const nameField = page.getByLabel(/Campaign name|اسم الحملة/)
-  await nameField.fill(name)
-  await expect(nameField, 'the form never took the name it was given').toHaveValue(name, { timeout: 15_000 })
-
-  const save = page.getByRole('button', { name: /^Save$|^حفظ$/ })
-  await save.click()
-  /*
-   * Wait for the modal to actually close before touching the page behind it — clicking the view
-   * switcher while the overlay is still up lands on the overlay and silently does nothing (this was
-   * an intermittent failure under parallel load on WebKit and Firefox).
-   *
-   * And when it does NOT close, say what the dialog is showing.
-   *
-   * This failed on chromium as «Expected: hidden / Received: visible» and nothing else — which names
-   * the symptom and hides the cause, so four separate reproductions were spent asking the dialog a
-   * question the assertion could have answered. It is a dialog with words in it: a validation error,
-   * a refused request and a save that never fired look completely different, and the next occurrence
-   * should not need a bisect to tell them apart.
-   */
-  try {
-    await expect(save).toBeHidden({ timeout: 20_000 })
-  } catch (failure) {
-    const said = await page.locator('[role="dialog"]').first().innerText().catch(() => '')
-
-    throw new Error(
-      `the new-campaign dialog never closed after Save. It was showing:\n  ${
-        said.replace(/\s+/g, ' ').slice(0, 500)
-      }\n\n${failure instanceof Error ? failure.message : String(failure)}`,
-    )
-  }
-
-  // CAMPAIGN-010: the page opens on the overview, so the new campaign is only visible once the card
-  // list is shown. Switching here keeps every caller of this helper working.
-  await page.getByTestId('view-cards').click()
-  await expect(page.getByText(name)).toBeVisible({ timeout: 15000 })
-}
-
 /**
- * Fill and submit the public intake wizard through the mandatory OTP verification step. Assumes the app is in
- * English (call switchToEnglish first). Returns the created request reference (REQ-YYYY-XXXXXX).
+ * ADS-MANAGER-007 — the in-page draft builder went with the advanced campaigns view (a new campaign is launched from
+ * /launch). A spec that only needs a unified campaign to exist creates it through the same API the builder called, in the
+ * project the page has selected, and lands back on the campaigns page.
  */
+export async function createCampaign(page: Page, name: string): Promise<string> {
+  const projectId = await page.evaluate(() => {
+    try { return JSON.parse(localStorage.getItem('campaign-hub-project-storage') ?? '{}')?.state?.currentProjectId ?? null } catch { return null }
+  })
+  if (!projectId) throw new Error('createCampaign needs a selected project')
+  const headers = await csrfHeaders(page.request)
+  const res = await page.request.post(`/api/v1/projects/${projectId}/campaigns`, { headers, data: { name } })
+  expect(res.status(), `creating «${name}» answered ${res.status()}: ${(await res.text()).slice(0, 300)}`).toBe(201)
+  return ((await res.json()).data as { id: string }).id
+}
+
 export async function submitVerifiedRequest(
   page: Page,
   opts: { name: string; email: string; phone: string; company: string; objective: string; service?: RegExp },
@@ -932,4 +871,18 @@ export async function walkRail(page: Page, hrefs: string[]): Promise<void> {
       )
     }
   }
+}
+
+/**
+ * ADS-MANAGER-007 — the campaigns list is the Ads Manager, whose rows are the campaigns that reported in the period. A spec
+ * that needs one SEEDED campaign's own page (its tabs, its settings, its links) opens it by address, found by name through
+ * the same campaigns API the product reads, rather than by clicking a card in a list that no longer exists.
+ */
+export async function openCampaign(page: Page, projectId: string, name: string, portal: '/app' | '/agency' = '/app'): Promise<string> {
+  const res = await page.request.get(`/api/v1/projects/${projectId}/campaigns?search=${encodeURIComponent(name)}&per_page=50`, { headers: API_HEADERS })
+  const rows = ((await res.json()).data ?? []) as Array<{ id: string; name: string }>
+  const found = rows.find((c) => c.name === name) ?? rows.find((c) => c.name.includes(name))
+  if (!found) throw new Error(`seeded campaign "${name}" is missing — run the demo seeder`)
+  await page.goto(`${portal}/campaigns/${projectId}/${found.id}`)
+  return found.id
 }

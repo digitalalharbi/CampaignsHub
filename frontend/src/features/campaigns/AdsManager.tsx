@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, ChevronDown, ChevronUp, Columns3, Image as ImageIcon, Layers, Megaphone, Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { Building2, ChevronDown, ChevronUp, Columns3, Download, GitCompare, History, Image as ImageIcon, Layers, Megaphone, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { usePortalPath } from '@/app/portalPath'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Button } from '@/components/ui/Button'
 import { DateRangePicker } from '@/components/ui/DateRangePicker'
 import { Modal } from '@/components/ui/Modal'
 import { MetricTable } from '@/components/ui/MetricTable'
+import { downloadTableCsv } from '@/lib/tableCsv'
 import { Num } from '@/components/ui/Num'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { Skeleton } from '@/components/ui/States'
@@ -28,6 +29,12 @@ import { relevanceOf, type CampaignRelevance } from './campaignRelevance'
 import { PRESET_ORDER, PRESETS, type ColumnDef, type ColumnKind, type PresetKey } from './adsManagerColumns'
 import { CampaignControlPanel } from './CampaignControlPanel'
 import { getCampaign } from './api'
+import { BulkCampaignActions } from './BulkCampaignActions'
+import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
+import { useSpendLimits } from '@/features/budget/spendLimitsApi'
+import { CampaignComparison } from './CampaignComparison'
+import { ProjectChangeHistory } from './ProjectChangeHistory'
+import { listCampaigns } from './api'
 import { AccountCampaigns, AccountCovers, AccountSpark, useAccountCovers } from './AdsManagerAccounts'
 import { objectiveLabel, providerLabel } from './labels'
 
@@ -153,7 +160,7 @@ const DELIVERY_TEXT: Record<Row['delivery'], { ar: string; en: string; dot: stri
 
 const ACCOUNT_DELIVERY: Record<AccountState, Row['delivery']> = { running: 'serving', stopped: 'stopped', error: 'error', disabled: 'error' }
 
-export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
+export function AdsManager() {
   const ar = useUi((s) => s.locale) === 'ar'
   const lang = ar ? 'ar' : 'en'
   const portal = usePortalPath()
@@ -164,7 +171,15 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
   const canPause = useAuth((s) => s.hasPermission('campaigns.pause'))
   const { range } = usePeriod()
 
-  const [level, setLevel] = useState<Level>('campaigns')
+  const [params] = useSearchParams()
+  const [level, setLevel] = useState<Level>(() => {
+    const l = params.get('level')
+    return l === 'accounts' || l === 'ad_sets' || l === 'ads' ? l : 'campaigns'
+  })
+  /** ADS-MANAGER-007 — the advanced view's tools, brought into the one view: selection, bulk pause/resume, comparison. */
+  const [selected, setSelected] = useState<string[]>([])
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [delivery, setDelivery] = useState<Delivery>('all')
   const [search, setSearch] = useState('')
   const [platform, setPlatform] = useState<string>('all')
@@ -211,6 +226,8 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
   const ads = useEntities(projectId, range, 'ad', null, filters)
   const accounts = useAccounts(projectId, range, filters)
   const pulse = useAccountPulse(projectId, range)
+  /** BUDGET-CONNECTED-001 — a campaign over its project's spend limit says so on its row, as it did on the old board. */
+  const spendLimits = useSpendLimits(projectId)
   const currency = summary.data?.currency ?? null
 
   const rowsByLevel = useMemo<Record<Level, Row[]>>(() => {
@@ -327,7 +344,8 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
         title={ar ? 'إدارة الإعلانات' : 'Manage ads'}
         actions={<>
           <DateRangePicker projectId={projectId} testId="ads-manager-period" />
-          <Button variant="secondary" onClick={onAdvanced} data-testid="ads-manager-advanced"><SlidersHorizontal size={15} aria-hidden /> {ar ? 'عرض متقدم' : 'Advanced view'}</Button>
+          <Button variant="secondary" onClick={() => setHistoryOpen(true)} data-testid="ads-manager-history"><History size={15} aria-hidden /> {ar ? 'سجل التغييرات' : 'Change history'}</Button>
+          <Button variant="secondary" onClick={() => { const t = document.querySelector<HTMLTableElement>(`[data-testid="ads-manager-table-${level}-total"]`)?.closest('table'); if (t) downloadTableCsv(t, `ads-manager-${level}-${range.from}-${range.to}`) }} data-testid="ads-manager-export"><Download size={15} aria-hidden /> {ar ? 'تصدير' : 'Export'}</Button>
         </>}
       />
 
@@ -415,7 +433,7 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
             </button>
           ))}
           {canCreate && (
-            <Button size="sm" className="my-2 ms-auto" onClick={() => navigate(portal('/launch'))} data-testid="ads-manager-new"><Plus size={15} aria-hidden /> {ar ? 'حملة جديدة' : 'Create campaign'}</Button>
+            <Button size="sm" className="my-2 ms-auto" onClick={() => navigate(portal('/launch'))} data-testid="ads-manager-new"><Plus size={15} aria-hidden /> {ar ? 'حملة جديدة' : 'New campaign'}</Button>
           )}
         </div>
 
@@ -423,6 +441,24 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
           <p className="flex items-center justify-between gap-2 border-b border-border bg-surface-secondary/60 px-4 py-2 text-sm" data-testid="ads-manager-outcome">
             {outcome}<button type="button" className="text-xs text-text-muted hover:underline" onClick={() => setOutcome(null)}>{ar ? 'إخفاء' : 'Dismiss'}</button>
           </p>
+        )}
+
+        {level === 'campaigns' && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2" data-testid="ads-manager-selection">
+            <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-text-secondary">
+              <input type="checkbox" className="size-4 accent-brand-600" data-testid="ads-manager-select-all"
+                checked={rows.length > 0 && rows.every((r) => r.campaignId && selected.includes(r.campaignId))}
+                onChange={(e) => setSelected(e.target.checked ? rows.flatMap((r) => (r.campaignId ? [r.campaignId] : [])) : [])} />
+              {selected.length > 0 ? (ar ? `محدد: ${selected.length}` : `Selected: ${selected.length}`) : (ar ? 'تحديد الكل' : 'Select all')}
+            </label>
+            {selected.length >= 2 && (
+              <Button size="sm" variant="secondary" onClick={() => setCompareOpen(true)} data-testid="ads-manager-compare-open"><GitCompare size={14} aria-hidden /> {ar ? 'قارن المحدد' : 'Compare selected'}</Button>
+            )}
+            <div className="min-w-0 flex-1">
+              <BulkCampaignActions projectId={projectId} ar={ar} onClear={() => setSelected([])}
+                selected={rowsByLevel.campaigns.filter((r) => r.campaignId && selected.includes(r.campaignId)).map((r) => ({ id: r.campaignId!, name: r.name }))} />
+            </div>
+          </div>
         )}
 
         {parent && level !== 'accounts' && level !== 'campaigns' && (
@@ -465,13 +501,25 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
                 const result = showResult ? campaignResult(r.objective, r.totals) : null
                 const d = DELIVERY_TEXT[r.delivery]
                 return [
-                  <button key="n" type="button" onClick={() => setDetails({ row: r, level })} className="flex w-full items-center gap-2.5 text-start" data-testid="ads-manager-row">
+                  <span key="n" className="flex w-full items-center gap-2.5">
+                  {level === 'campaigns' && r.campaignId && (
+                    <input type="checkbox" checked={selected.includes(r.campaignId)} data-testid="ads-manager-select"
+                      aria-label={ar ? `تحديد ${r.name}` : `Select ${r.name}`}
+                      onChange={() => setSelected((cur) => (cur.includes(r.campaignId!) ? cur.filter((x) => x !== r.campaignId) : [...cur, r.campaignId!]))}
+                      className="size-4 shrink-0 cursor-pointer accent-brand-600" />
+                  )}
+                  <button type="button" onClick={() => setDetails({ row: r, level })} className="flex min-w-0 flex-1 items-center gap-2.5 text-start" data-testid="ads-manager-row">
                     {r.provider && <ProviderMark provider={r.provider} size={20} className="shrink-0" />}
                     <span className="min-w-0">
                       <span className="block truncate font-semibold text-text-primary hover:underline">{r.name}</span>
                       {r.sub && <span className="block truncate text-xs text-text-muted">{r.sub}</span>}
                     </span>
-                  </button>,
+                  </button>
+                  {level === 'campaigns' && r.campaignId && spendLimits.data && (
+                    <SpendLimitChip campaign={{ campaign_id: r.campaignId }} limits={spendLimits.data.limits}
+                      enforcementNote={ar ? spendLimits.data.enforcement_note_ar : spendLimits.data.enforcement_note_en} locale={ar ? 'ar' : 'en'} />
+                  )}
+                  </span>,
                   ...(level === 'campaigns' ? [
                     <button key="s" type="button" role="switch" aria-checked={r.running} disabled={!canPause || r.campaignId === null}
                       title={canPause ? undefined : (ar ? 'يحتاج صلاحية إيقاف الحملات' : 'Needs the pause permission')}
@@ -506,6 +554,13 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
           )}
         </div>
       </section>
+
+      {compareOpen && <CompareDialog projectId={projectId} selected={selected} setSelected={setSelected} range={range} ar={ar} onClose={() => setCompareOpen(false)} />}
+      {historyOpen && (
+        <Modal open onClose={() => setHistoryOpen(false)} size="lg" title={ar ? 'سجل التغييرات' : 'Change history'}>
+          <ProjectChangeHistory projectId={projectId} />
+        </Modal>
+      )}
 
       {details && (
         <EntityDetails
@@ -613,6 +668,39 @@ function EntityDetails({
               <p className="text-xs text-text-muted">{ar ? 'تعذّر تحميل خيارات الإدارة لهذه الحملة.' : 'Could not load the management options for this campaign.'}</p>
             )}
           </section>
+        )}
+      </div>
+    </Modal>
+  )
+}
+
+/** ADS-MANAGER-007 — the comparison the advanced view had, opened over the campaigns the reader ticked. */
+function CompareDialog({ projectId, selected, setSelected, range, ar, onClose }: {
+  projectId: string
+  selected: string[]
+  setSelected: (fn: (cur: string[]) => string[]) => void
+  range: { from: string; to: string }
+  ar: boolean
+  onClose: () => void
+}) {
+  const list = useQuery({
+    queryKey: ['ads-manager', 'compare-list', projectId],
+    queryFn: () => listCampaigns(projectId, { per_page: 100 }),
+    staleTime: 60_000,
+  })
+  return (
+    <Modal open onClose={onClose} size="xl" title={ar ? 'مقارنة الحملات' : 'Compare campaigns'}>
+      <div data-testid="ads-manager-compare-dialog">
+        {list.isPending ? <Skeleton className="h-40" /> : (
+          <CampaignComparison
+            projectId={projectId}
+            campaigns={list.data?.campaigns ?? []}
+            selected={selected}
+            onToggle={(id) => setSelected((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))}
+            onClear={() => setSelected(() => [])}
+            range={range}
+            locale={ar ? 'ar' : 'en'}
+          />
         )}
       </div>
     </Modal>

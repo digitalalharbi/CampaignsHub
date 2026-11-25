@@ -34,8 +34,8 @@ const SURFACES: Array<{ path: string; project?: boolean; projectPath?: boolean; 
   { path: '/agency/portfolio', firstScreen: ['portfolio-intro-kpis', 'portfolio-trend'] },
   /* Named from the live review (LIVE_ROUTE_CHECKLIST.md, 2026-10-09): the KPI row or summary that
      answers each page's question, and the filter block that scopes it. */
-  // CAMPAIGNS-TABLE-FIRST-001 — the section lands on the management table, so its controls are the first-screen block.
-  { path: '/agency/campaigns', project: true, firstScreen: ['campaigns-intro-kpis', 'campaigns-table-controls'] },
+  // ADS-MANAGER-007 — the section is the Ads Manager: its heading and the figures over the chart are the first screen.
+  { path: '/agency/campaigns', project: true, firstScreen: ['ads-manager-intro', 'ads-manager-kpis'] },
   // ANALYTICS-DAILY-MEASURE-001 — the analysis page opens on the daily chart; the overview follows it.
   { path: '/agency/analytics', project: true, firstScreen: ['analytics-filters', 'analytics-daily'] },
   // CONTENT-LIBRARY-SNAP-001 — the bare address is the library: its tabs and the creatives table answer the page's question.

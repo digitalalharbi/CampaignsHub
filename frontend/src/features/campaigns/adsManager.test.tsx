@@ -84,7 +84,7 @@ describe('the ads manager', () => {
     expect(await screen.findByTestId('ads-manager-outcome')).toHaveTextContent('Platform confirmed')
   })
 
-  it('lists the accounts as a level and keeps «Advanced view» one click away', async () => {
+  it('lists the accounts as a level, and there is no advanced view to switch to', async () => {
     renderWithProviders(<CampaignsHome />, { locale: 'en', route: '/agency/campaigns' })
 
     fireEvent.click(await screen.findByTestId('ads-manager-level-accounts'))
@@ -97,8 +97,7 @@ describe('the ads manager', () => {
     expect(screen.getByTestId('ads-manager-level-campaigns')).toHaveAttribute('aria-selected', 'true')
     expect(vi.mocked(useCampaigns)).toHaveBeenLastCalledWith('p1', expect.anything(), { provider: ['snapchat'] })
 
-    fireEvent.click(screen.getByTestId('ads-manager-advanced'))
-    expect(localStorage.getItem('ch-campaigns-layout')).toBe('advanced')
+    expect(screen.queryByTestId('ads-manager-advanced')).toBeNull()
   })
 
   it('lets each figure over the chart be chosen, and the columns follow the chosen objective', async () => {
@@ -165,5 +164,25 @@ describe('the ads manager', () => {
     expect(within(after).getByRole('button', { name: /meta/i })).toBeInTheDocument()
     expect(within(after).getByRole('button', { name: /tiktok/i })).toBeInTheDocument()
     expect(within(after).getByRole('button', { name: /all platforms/i })).toBeInTheDocument()
+  })
+
+  it('brings the advanced tools in: ticked campaigns get bulk actions and a comparison', async () => {
+    renderWithProviders(<CampaignsHome />, { locale: 'en', route: '/agency/campaigns' })
+
+    const boxes = await screen.findAllByTestId('ads-manager-select')
+    expect(screen.queryByTestId('ads-manager-compare-open')).toBeNull()
+    fireEvent.click(boxes[0]!)
+    expect(screen.getByTestId('campaigns-bulk-count')).toHaveTextContent('1')
+    fireEvent.click(boxes[1]!)
+    expect(screen.getByTestId('ads-manager-compare-open')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('ads-manager-select-all'))
+    expect(screen.queryByTestId('campaigns-bulk')).toBeNull()
+    expect(screen.getByTestId('ads-manager-history')).toBeInTheDocument()
+    expect(screen.getByTestId('ads-manager-export')).toBeInTheDocument()
+  })
+
+  it('opens on the level an old address named', async () => {
+    renderWithProviders(<CampaignsHome />, { locale: 'en', route: '/agency/campaigns?level=ad_sets' })
+    expect(await screen.findByTestId('ads-manager-level-ad_sets')).toHaveAttribute('aria-selected', 'true')
   })
 })

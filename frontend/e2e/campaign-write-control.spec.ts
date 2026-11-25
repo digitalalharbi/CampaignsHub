@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, seededProject, selectProject, switchToEnglish } from './helpers'
+import { AUTH, seededProject, selectProject, switchToEnglish, openCampaign } from './helpers'
 
 /**
  * CAMPAIGN-MGMT-DOMAIN-001 / CAMPAIGN-MGMT-SURFACE-001 — the campaign's Settings tab tells the truth
@@ -15,11 +15,9 @@ const SEEDED_CAMPAIGN = 'Always-On — Sales'
 test.use({ storageState: AUTH.advertiser })
 
 async function openSettings(page: import('@playwright/test').Page) {
-  await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
-  await page.goto('/app/campaigns')
-  await page.getByTestId('view-cards').click()
-  await expect(page.getByTestId('campaign-card').first()).toBeVisible({ timeout: 20_000 })
-  await page.getByTestId('campaign-card').filter({ hasText: SEEDED_CAMPAIGN }).first().click()
+  const projectId = await seededProject(page.request, SEEDED_PROJECT)
+  await selectProject(page, projectId)
+  await openCampaign(page, projectId, SEEDED_CAMPAIGN)
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
   await page.getByRole('tab', { name: /Settings|الإعدادات/ }).click()
   await expect(page).toHaveURL(/[?&]tab=settings/)

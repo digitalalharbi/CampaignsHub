@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH } from './helpers'
+import { AUTH, openCampaign, seededProject } from './helpers'
 
 /** Responsive + RTL/LTR + light/dark + console-cleanliness checks for the campaigns surface. */
 /*
@@ -23,7 +23,7 @@ for (const vp of VIEWPORTS) {
     await page.setViewportSize({ width: vp.width, height: vp.height })
     await page.goto('/app/campaigns')
     // The page H1 (not the summary-card H3s, which also contain "الحملات").
-    await expect(page.getByRole('heading', { level: 1, name: /Campaigns|الحملات/ })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: /Campaigns|الحملات|Manage ads|إدارة الإعلانات/ })).toBeVisible()
     await page.waitForLoadState('networkidle') // let the list settle before measuring layout
 
     // Neither the document nor the body may overflow horizontally (1px sub-pixel tolerance).
@@ -85,10 +85,10 @@ test('no console errors while using the campaigns surface', async ({ page }) => 
   page.on('pageerror', (err) => errors.push(String(err)))
 
   await page.goto('/app/campaigns')
-  await expect(page.getByRole('heading', { level: 1, name: /Campaigns|الحملات/ })).toBeVisible()
-  // Each campaign row is itself the button (data-testid="campaign-card") — open the first one.
-  await page.getByTestId('view-cards').click()
-  await page.locator('[data-testid="campaign-card"]').first().click()
+  await expect(page.getByRole('heading', { level: 1, name: /Campaigns|الحملات|Manage ads|إدارة الإعلانات/ })).toBeVisible()
+  // ADS-MANAGER-007 — a campaign's own page is opened by address; the cards list went with the advanced view.
+  const projectId = await seededProject(page.request, 'Growth — Acquisition')
+  await openCampaign(page, projectId, 'Always-On — Sales')
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
   // CAMPAIGN-PAGE-LEAN-001 — «الأداء» lives inside «نظرة عامة» now; open the tabs that remain.
   await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()

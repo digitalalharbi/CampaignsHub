@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { AUTH, openCampaignBuilder, seededProject, switchToEnglish, selectProject } from './helpers'
+import { AUTH, openCampaign, seededProject, switchToEnglish, selectProject } from './helpers'
 
 /**
  * Core campaigns paths (authenticated as the demo owner via reused storage state).
@@ -9,55 +9,6 @@ import { AUTH, openCampaignBuilder, seededProject, switchToEnglish, selectProjec
 /**
  * CAMPAIGN-010 gave the campaigns page five view modes and it opens on the overview, so the card list
  * is one click away. Every spec that works with cards goes through here.
- */
-async function openCardsView(page: import('@playwright/test').Page) {
-  /*
-   * LOST-CLICK-001 — the switcher is clicked once the page above it has stopped changing shape.
-   *
-   * The view switcher sits under the KPI cards and the budget strip, and both change height as their requests answer:
-   * values replace dashes, and the strip's notes wrap onto a second line. A click sent in that window can put its
-   * `mousedown` on «Cards» and its `mouseup` on whatever moved under the pointer, and then the browser fires no
-   * `click`. Playwright checks only the first event of a click against its target, so the click «succeeded». The
-   * firefox gate on #1025 showed it: the screenshot was still on Overview, and the page made no further request for
-   * 20 s.
-   *
-   * `networkidle` is the state that matters here. Every block above the switcher is drawn from an answer, and once
-   * nothing is in flight nothing above it will move. The assertion after the click turns a lost click into a failure
-   * at the click, not a missing card twenty seconds later.
-   */
-  await page.waitForLoadState('networkidle')
-  await page.getByTestId('view-cards').click()
-  await expect(page.getByTestId('view-cards'), 'the Cards view switch did not take').toHaveAttribute('aria-pressed', 'true')
-
-  /*
-   * Wait for the view to BE the cards view before anybody clicks a card in it.
-   *
-   * This returned the moment the switch was pressed, so the next line's `.click()` absorbed the
-   * render — and a `click` auto-waits against the TEST's budget, not its own. When the render was
-   * slow the whole test died at thirty seconds saying «locator.click: Test timeout exceeded», which
-   * names the last thing that happened rather than the thing that was slow.
-   *
-   * It failed that way on the firefox gate while passing locally in 2.3 seconds. The fix is not a
-   * larger budget — the sibling below has one of those and says why — but for the helper to finish
-   * what it started: a caller that asks for the cards view gets the cards view.
-   */
-  await expect(page.getByTestId('campaign-card').first(), 'the cards view never rendered a card')
-    .toBeVisible({ timeout: 20_000 })
-}
-
-/**
- * The project whose campaigns carry real demo data.
- *
- * These specs used to trust that «a demo project is auto-selected by the switcher». That held while
- * the seeded projects were the only ones, and stopped holding as the suite grew: `campaigns-linking`
- * creates a project of its own, and once it exists the switcher's default can land there. The spec
- * then opened `E2E Link B <timestamp>` — a throwaway with no platform bindings — and timed out
- * waiting for a Link button that campaign could never have shown. Firefox only, because the project
- * did not exist yet when chromium ran.
- *
- * Pinning by NAME makes each run independent of what has run before it, which is the same fix
- * `pinnedProject` already applies elsewhere and the fourth time this suite has outgrown a selector
- * that guessed.
  */
 const SEEDED_PROJECT = 'Growth — Acquisition'
 
@@ -87,8 +38,13 @@ const SEEDED_PROJECT = 'Growth — Acquisition'
  */
 const SEEDED_CAMPAIGN = 'Always-On — Sales'
 
-function seededCampaignCard(page: import('@playwright/test').Page) {
-  return page.getByTestId('campaign-card').filter({ hasText: SEEDED_CAMPAIGN }).first()
+/** ADS-MANAGER-007 — the campaigns list is the Ads Manager now; a seeded campaign's page is opened by address. */
+async function openSeededCampaign(page: import('@playwright/test').Page) {
+  const projectId = await seededProject(page.request, SEEDED_PROJECT)
+  await selectProject(page, projectId)
+  await page.goto('/app/campaigns')
+  await switchToEnglish(page)
+  await openCampaign(page, projectId, SEEDED_CAMPAIGN)
 }
 
 /*
@@ -101,39 +57,8 @@ function seededCampaignCard(page: import('@playwright/test').Page) {
  */
 test.use({ storageState: AUTH.advertiser })
 
-test('create a unified campaign and see it in the list', async ({ page }) => {
-  await page.goto('/app/campaigns')
-  await switchToEnglish(page)
-
-  // A demo project is auto-selected by the switcher. The page opens on the overview, which renders four
-  // charts — wait for the view switcher to be interactive before clicking anything, otherwise a slow
-  // parallel run can time out on a button that is still behind chart layout work.
-  await openCampaignBuilder(page)
-
-  const name = `E2E Campaign ${Date.now()}`
-  await page.getByLabel(/Campaign name|اسم الحملة/).fill(name)
-  await page.getByRole('button', { name: /^Save$|^حفظ$/ }).click()
-
-  /*
-   * Refetched from the API — the new campaign appears once the list view is shown.
-   *
-   * With an explicit timeout, because this assertion waits on a ROUND TRIP: the save, the
-   * invalidation and the list's refetch. The default five seconds is a guess about how fast a
-   * machine is, and on a loaded CI runner it is the wrong guess — this failed there at 6.5s while
-   * the same assertion settles in about one second locally. The wait is for a request, so it is
-   * given a request's budget.
-   */
-  await openCardsView(page)
-  await expect(page.getByText(name)).toBeVisible({ timeout: 20000 })
-})
-
 test('open a campaign detail and switch tabs', async ({ page }) => {
-  await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
-  await page.goto('/app/campaigns')
-  await switchToEnglish(page)
-
-  await openCardsView(page)
-  await seededCampaignCard(page).click()
+  await openSeededCampaign(page)
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
 
   /*
@@ -176,11 +101,7 @@ test('open a campaign detail and switch tabs', async ({ page }) => {
 })
 
 test('link-external modal opens and labels sandbox data as Demo', async ({ page }) => {
-  await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
-  await page.goto('/app/campaigns')
-  await switchToEnglish(page)
-  await openCardsView(page)
-  await seededCampaignCard(page).click()
+  await openSeededCampaign(page)
 
   await page.getByRole('tab', { name: /Platforms|المنصات/ }).click()
   await page.getByRole('button', { name: /Link external campaign|ربط حملة خارجية/ }).click()
@@ -201,52 +122,3 @@ test('link-external modal opens and labels sandbox data as Demo', async ({ page 
  * Written against whichever answer the seed produces — figures, or the stated refusal — because both
  * are correct outcomes and pinning the demo's numbers would make this a test of the seeder.
  */
-test('the campaigns overview paces the portfolio budget', async ({ page }) => {
-  // Project first, then the page — the order every passing spec here uses; reversed, the page
-  // renders its «choose a project» state and never reaches the overview.
-  await selectProject(page, await seededProject(page.request, SEEDED_PROJECT))
-  await page.goto('/app/campaigns')
-  await switchToEnglish(page)
-  // The view mode persists between specs, so the overview is SELECTED rather than assumed.
-  await page.getByTestId('view-overview').click()
-
-  const pacing = page.getByTestId('budget-pacing')
-  const refusal = page.getByTestId('budget-pacing-unavailable')
-
-  await expect(pacing.or(refusal).first(), 'the overview says nothing at all about the budget').toBeVisible({ timeout: 20_000 })
-
-  if (await pacing.isVisible()) {
-    /*
-     * The figures, and the sentence — read from the two places that now hold ONE copy each.
-     *
-     * Remaining and Forecast were asserted inside `budget-pacing`, which printed them under the
-     * secondary strip that already carried the same four numbers in the same order and currency.
-     * The duplicate is gone and the strip keeps the figures, because the strip is also where the
-     * budget's refusals are worded. The claim this test makes is unchanged: the overview answers
-     * «what is left» and «where is this heading», and says so in words.
-     */
-    const strip = page.getByTestId('campaigns-secondary-strip')
-    await expect(strip).toContainText(/Remaining|المتبقي/)
-    await expect(strip).toContainText(/Forecast|المتوقع/)
-    await expect(page.getByTestId('budget-pacing-reading')).toContainText(/budget|الميزانية/)
-  } else {
-    /*
-     * A refusal is a correct answer and must SAY which one — «no comparable budget» and «different
-     * currencies» are different facts, and a blank row would be neither.
-     */
-    // Three refusals now, each naming its fact: no comparable budget, different currencies, or a
-    // window nobody measured (Owner directive 2026-10-09 §19) — never a blank row.
-    /*
-     * ONE-BUDGET-001 (builder H) — the line now reads the project's ONE approved budget (`ApprovedBudgetPacing`, same
-     * test ids). A project with none says so in its own words, «No budget / بدون ميزانية», and offers «Add budget»; it
-     * never falls back to a platform's campaign budget. That is a fourth named fact, asserted as one: the words AND the
-     * offer, not a blank row.
-     */
-    await expect(refusal).toContainText(/No budget|بدون ميزانية|comparable budget|currencies|measured|الميزانية|عملات|مقاسة/)
-    if (/No budget|بدون ميزانية/.test(await refusal.innerText())) {
-      await expect(refusal.getByTestId('no-budget')).toBeVisible()
-      // The owner may add one, so the offer is there — a refusal that names the fact and the way out.
-      await expect(refusal.getByTestId('no-budget-add')).toBeVisible()
-    }
-  }
-})

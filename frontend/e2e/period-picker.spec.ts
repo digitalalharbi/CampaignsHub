@@ -47,11 +47,11 @@ test.describe('the period picker', () => {
 
     // Another page, entered by a bare address: the period is the user's, not the page's.
     await page.goto('/agency/campaigns')
-    await expect(page.getByTestId('campaigns-period-picker-summary')).toContainText('آخر 30 يوم: 16 أكتوبر – 14 نوفمبر 2026', { timeout: 30_000 })
+    await expect(page.getByTestId('ads-manager-period-summary')).toContainText('آخر 30 يوم: 16 أكتوبر – 14 نوفمبر 2026', { timeout: 30_000 })
     await expect.poll(() => new URL(page.url()).searchParams.get('from')).toBe('2026-10-16')
 
     await page.reload()
-    await expect(page.getByTestId('campaigns-period-picker-summary')).toContainText('16 أكتوبر – 14 نوفمبر 2026', { timeout: 30_000 })
+    await expect(page.getByTestId('ads-manager-period-summary')).toContainText('16 أكتوبر – 14 نوفمبر 2026', { timeout: 30_000 })
   })
 
   test('opens a shared link on the same two dates; «هذا الشهر» carries no «in progress» badge', async ({ page, request }) => {
@@ -60,41 +60,41 @@ test.describe('the period picker', () => {
     await expect(page.getByTestId('dashboard-period-summary').or(page.getByTestId('analytics-period-summary'))).toContainText('3 سبتمبر – 9 سبتمبر 2026', { timeout: 30_000 })
 
     await page.goto('/agency/campaigns?from=2026-11-01&to=2026-11-15')
-    await expect(page.getByTestId('campaigns-period-picker-summary')).toContainText('1 نوفمبر – 15 نوفمبر 2026', { timeout: 30_000 })
-    await expect(page.getByTestId('campaigns-period-picker-status-ongoing')).toHaveCount(0)
+    await expect(page.getByTestId('ads-manager-period-summary')).toContainText('1 نوفمبر – 15 نوفمبر 2026', { timeout: 30_000 })
+    await expect(page.getByTestId('ads-manager-period-status-ongoing')).toHaveCount(0)
   })
 
   test('picks a range with two clicks and refuses a day that has not come', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, STORE_PROJECT))
     await page.goto('/agency/campaigns')
-    await page.getByTestId('campaigns-period-picker-button').click()
+    await page.getByTestId('ads-manager-period-button').click()
     await page.getByTestId('day-2026-11-03').click()
     await page.getByTestId('day-2026-11-09').click()
     await expect(page.getByTestId('day-2026-11-05')).toHaveAttribute('data-state', 'period')
     await expect(page.getByTestId('day-2026-11-16')).toBeDisabled()
-    await page.getByTestId('campaigns-period-picker-apply').click()
-    await expect(page.getByTestId('campaigns-period-picker-summary')).toContainText('3 نوفمبر – 9 نوفمبر 2026')
+    await page.getByTestId('ads-manager-period-apply').click()
+    await expect(page.getByTestId('ads-manager-period-summary')).toContainText('3 نوفمبر – 9 نوفمبر 2026')
   })
 
   test('on a phone it is a bottom sheet with one month, scrolling presets, and thumb-sized controls', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, STORE_PROJECT))
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/agency/campaigns')
-    await page.getByTestId('campaigns-period-picker-button').click()
-    const sheet = page.getByTestId('campaigns-period-picker-sheet')
+    await page.getByTestId('ads-manager-period-button').click()
+    const sheet = page.getByTestId('ads-manager-period-sheet')
     await expect(sheet).toBeVisible()
-    await expect(sheet.locator('[data-testid^="campaigns-period-picker-cal-"]')).toHaveCount(1)
+    await expect(sheet.locator('[data-testid^="ads-manager-period-cal-"]')).toHaveCount(1)
 
-    const presets = page.getByTestId('campaigns-period-picker-presets')
+    const presets = page.getByTestId('ads-manager-period-presets')
     expect(await presets.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
 
     const box = await page.getByTestId('day-2026-11-10').boundingBox()
     expect(box!.height).toBeGreaterThanOrEqual(44)
-    for (const id of ['campaigns-period-picker-apply', 'campaigns-period-picker-cancel', 'campaigns-period-picker-next']) {
+    for (const id of ['ads-manager-period-apply', 'ads-manager-period-cancel', 'ads-manager-period-next']) {
       const b = await page.getByTestId(id).boundingBox()
       expect(b!.height, id).toBeGreaterThanOrEqual(43.5)
     }
-    for (const id of ['campaigns-period-picker-from', 'campaigns-period-picker-to']) {
+    for (const id of ['ads-manager-period-from', 'ads-manager-period-to']) {
       expect(await page.getByTestId(id).evaluate((el) => parseFloat(getComputedStyle(el).fontSize)), id).toBeGreaterThanOrEqual(16)
     }
     // No sideways scroll on the page itself.
@@ -106,9 +106,9 @@ test.describe('the period picker', () => {
     await selectProject(page, await seededProject(request, STORE_PROJECT))
     await page.setViewportSize({ width: 1366, height: 800 })
     await page.goto('/agency/campaigns')
-    await page.getByTestId('campaigns-period-picker-button').click()
-    await expect(page.getByTestId('campaigns-period-picker-panel').locator('[data-testid^="campaigns-period-picker-cal-"]')).toHaveCount(1)
-    await expect(page.getByTestId('campaigns-period-picker-apply')).toBeInViewport()
-    await expect(page.getByTestId('campaigns-period-picker-cancel')).toBeInViewport()
+    await page.getByTestId('ads-manager-period-button').click()
+    await expect(page.getByTestId('ads-manager-period-panel').locator('[data-testid^="ads-manager-period-cal-"]')).toHaveCount(1)
+    await expect(page.getByTestId('ads-manager-period-apply')).toBeInViewport()
+    await expect(page.getByTestId('ads-manager-period-cancel')).toBeInViewport()
   })
 })
