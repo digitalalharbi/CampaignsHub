@@ -63,7 +63,7 @@ function HeroCard({ testId, icon, label: l, value, delta, spark, color, foot }: 
   )
 }
 
-function MiniCard({ testId, icon, label: l, value, sub, tone = 'neutral' }: { testId: string; icon: ReactNode; label: string; value: string; sub?: string; tone?: 'neutral' | 'warning' | 'success' }) {
+export function MiniCard({ testId, icon, label: l, value, sub, tone = 'neutral' }: { testId: string; icon: ReactNode; label: string; value: string; sub?: string; tone?: 'neutral' | 'warning' | 'success' }) {
   const ring = tone === 'warning' ? 'text-warning' : tone === 'success' ? 'text-success' : 'text-brand-600'
 
   return (

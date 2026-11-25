@@ -174,6 +174,13 @@ describe('StoreFunnelTab', () => {
     renderWithProviders(<StoreFunnelTab projectId="p1" range={RANGE} />, { locale: 'ar' })
 
     expect(await screen.findByTestId('funnel-no-store')).toBeInTheDocument()
+    // STORE-INSIGHTS-002 — with no store, the store-only sections are not drawn empty (show only what's available).
+    expect(screen.queryByTestId('funnel-refunds')).toBeNull()
+    expect(screen.queryByTestId('funnel-attribution')).toBeNull()
+    expect(screen.queryByTestId('store-depth-no_store')).toBeNull()
+    expect(screen.queryByTestId('order-sources-footer')).toBeNull()
+    // The funnel is drawn as bars, not stage cards.
+    expect(screen.getByTestId('funnel-stages').querySelector('[style*="width"]')).not.toBeNull()
   })
 
   /**
