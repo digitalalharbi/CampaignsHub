@@ -6,6 +6,7 @@ import { router } from '@/app/router'
 import { registerServiceWorker } from '@/app/pwa'
 import { captureInstallPrompt } from '@/app/pwaInstall'
 import { installDateInputNormalizer } from '@/lib/dateInputs'
+import { installChunkReloadListener } from '@/lib/chunkReload'
 import { defaultSink, sampleRate, startWebVitals } from '@/lib/perf/webVitals'
 // Self-hosted fonts (no external CDN): Inter for Latin, IBM Plex Sans Arabic for Arabic.
 import '@fontsource-variable/inter'
@@ -14,6 +15,9 @@ import '@fontsource/ibm-plex-sans-arabic/500.css'
 import '@fontsource/ibm-plex-sans-arabic/600.css'
 import '@fontsource/ibm-plex-sans-arabic/700.css'
 import './index.css'
+
+// CHUNK-RELOAD-001 — a code file a deploy removed reloads the page once instead of breaking it.
+installChunkReloadListener()
 
 // Listen for the install prompt BEFORE React mounts: the browser fires it once, early, and does not repeat it.
 captureInstallPrompt()

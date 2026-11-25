@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { lazyWithReload } from '@/lib/chunkReload'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, BadgeCheck, FileText, MessagesSquare, Receipt } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -10,7 +11,7 @@ import { usePortalGuard } from './usePortalGuard'
 import { StatCard, StatGrid } from '@/components/ui/StatCard'
 import { useUi } from '@/stores/ui'
 import { useClientSpacePath } from './clientSpace'
-import { lazy, Suspense, useState } from 'react'
+import { Suspense, useState } from 'react'
 import { ClientLiveDashboard } from './ClientLiveDashboard'
 import { PortalAudience } from './PortalAudience'
 import { listClientReports } from './portalAccountApi'
@@ -159,7 +160,7 @@ function RecentRow({ r, ar, details }: { r: PortalRequestCard; ar: boolean; deta
 }
 
 // Loaded on demand: the shared report is a large page of its own, and its route (/r/) keeps its own budget.
-const PublicReport = lazy(() => import('@/features/reports/PublicReport').then((m) => ({ default: m.PublicReport })))
+const PublicReport = lazyWithReload(() => import('@/features/reports/PublicReport').then((m) => ({ default: m.PublicReport })))
 
 /**
  * PORTAL-REPORT-HOME-001 — the client's shared report, whole, as the first page: the latest one opens directly, and a

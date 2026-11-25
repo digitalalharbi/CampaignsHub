@@ -1271,7 +1271,7 @@ export function CampaignsPage({ onSimpleView }: { onSimpleView?: () => void } = 
                     <ul className="space-y-1">
                       {rows.map((r) => (
                         <li key={r.id} data-testid={`campaigns-mover-${r.id}`} className="flex items-center justify-between gap-3 text-sm">
-                          <Link to={`/app/campaigns/${r.id}`} className="truncate text-text-primary hover:text-brand-600">{r.name}</Link>
+                          <Link to={`${portalBaseOf(location.pathname)}/campaigns/${projectId}/${r.id}`} className="truncate text-text-primary hover:text-brand-600">{r.name}</Link>
                           <TrendPill delta={r.spend_change} />
                         </li>
                       ))}
@@ -1560,7 +1560,7 @@ export function CampaignsPage({ onSimpleView }: { onSimpleView?: () => void } = 
                     ),
                     lastActiveOn: (metricsByCampaign.get(c.id) as { last_active_on?: string | null } | undefined)?.last_active_on ?? null,
                   }}
-                  onOpen={() => navigate(`/campaigns/${projectId}/${c.id}`)}
+                  onOpen={() => navigate(`${portalBaseOf(location.pathname)}/campaigns/${projectId}/${c.id}`)}
                 />
               ))}
             </div>
@@ -1699,7 +1699,7 @@ export function CampaignsPage({ onSimpleView }: { onSimpleView?: () => void } = 
 
         return (
           <DetailPanel open onClose={() => setPeekId(null)} title={pc.name} closeLabel={ar ? 'إغلاق' : 'Close'} testid="campaign-peek" variant="center"
-            footer={<button type="button" data-testid="campaign-peek-open" onClick={() => navigate(`/campaigns/${projectId}/${pc.id}`)} className="w-full rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700">{ar ? 'افتح الحملة' : 'Open the campaign'}</button>}>
+            footer={<button type="button" data-testid="campaign-peek-open" onClick={() => navigate(`${portalBaseOf(location.pathname)}/campaigns/${projectId}/${pc.id}`)} className="w-full rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white hover:bg-brand-700">{ar ? 'افتح الحملة' : 'Open the campaign'}</button>}>
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <Badge tone={campaignStatusTone(pc.status)}>{campaignStatusLabel(pc.status, locale)}</Badge>

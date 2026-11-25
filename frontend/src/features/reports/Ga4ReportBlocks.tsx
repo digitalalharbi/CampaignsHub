@@ -1,4 +1,5 @@
 import { ArrowUpLeft, ArrowUpRight, Globe } from 'lucide-react'
+import { lazyWithReload } from '@/lib/chunkReload'
 import { Badge } from '@/components/ui/Badge'
 import { FixedPageTable } from '@/components/ui/FixedPageTable'
 import { Num } from '@/components/ui/Num'
@@ -8,7 +9,7 @@ import { AttributionMatchBlock } from '@/features/analytics/ga4/Ga4MatchBlock'
 import type { ClassificationRow, GapReasonsPayload, MatchPayload } from '@/features/analytics/ga4/matchTypes'
 import { ChartCard } from '@/features/analytics/charts'
 import { money, num, percent } from '@/features/analytics/format'
-import { lazy, Suspense, useState, type ComponentProps, type ComponentType } from 'react'
+import { Suspense, useState, type ComponentProps, type ComponentType } from 'react'
 import type { FixedColumn } from '@/components/ui/FixedPageTable'
 import { frozenBeforeWebsiteTab, sectionShown, type ReportSectionKey, type WithReportSections } from './reportSections'
 import type * as Visuals from './WebsiteVisuals'
@@ -22,7 +23,7 @@ export const loadWebsiteVisuals = () => import('./WebsiteVisuals')
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function deferred<P extends Record<string, any>>(pick: (m: typeof Visuals) => ComponentType<P>, minHeight: number) {
-  const Lazy = lazy(() => loadWebsiteVisuals().then((m) => ({ default: pick(m) })))
+  const Lazy = lazyWithReload(() => loadWebsiteVisuals().then((m) => ({ default: pick(m) })))
   return function Deferred(props: P) {
     return <Suspense fallback={<div aria-hidden style={{ minHeight }} />}><Lazy {...(props as ComponentProps<typeof Lazy>)} /></Suspense>
   }

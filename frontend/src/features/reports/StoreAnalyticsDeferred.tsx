@@ -1,4 +1,5 @@
-import { lazy, Suspense, type ComponentProps } from 'react'
+import { Suspense, type ComponentProps } from 'react'
+import { lazyWithReload } from '@/lib/chunkReload'
 import type { StoreAnalyticsBlock as Block } from './StoreAnalyticsBlock'
 
 /*
@@ -6,7 +7,7 @@ import type { StoreAnalyticsBlock as Block } from './StoreAnalyticsBlock'
  * `/r/` over its bundle budget (src/build/bundleBudget.ts). The print route awaits `loadStoreAnalytics` before it signals readiness.
  */
 export const loadStoreAnalytics = () => import('./StoreAnalyticsBlock')
-const Lazy = lazy(() => loadStoreAnalytics().then((m) => ({ default: m.StoreAnalyticsBlock })))
+const Lazy = lazyWithReload(() => loadStoreAnalytics().then((m) => ({ default: m.StoreAnalyticsBlock })))
 
 export function StoreAnalyticsBlock(props: ComponentProps<typeof Block>) {
   return <Suspense fallback={<div aria-hidden style={{ minHeight: 320 }} />}><Lazy {...props} /></Suspense>

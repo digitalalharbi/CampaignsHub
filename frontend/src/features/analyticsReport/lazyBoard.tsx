@@ -1,4 +1,5 @@
-import { lazy, Suspense, type ComponentType } from 'react'
+import { Suspense, type ComponentType } from 'react'
+import { lazyWithReload } from '@/lib/chunkReload'
 import { Skeleton } from '@/components/ui/States'
 
 /**
@@ -11,7 +12,7 @@ import { Skeleton } from '@/components/ui/States'
 type ProjectRange = { projectId: string; range: { from: string; to: string } }
 
 function later(load: () => Promise<{ default: ComponentType<ProjectRange> }>) {
-  const Component = lazy(load)
+  const Component = lazyWithReload(load)
 
   return function Later(props: ProjectRange) {
     return (
