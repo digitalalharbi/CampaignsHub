@@ -1,7 +1,8 @@
 import { campaigns as countedCampaigns } from '@/lib/counted'
 import { StatCard } from '@/components/ui/StatCard'
-import { AlertTriangle, Store, TrendingDown } from 'lucide-react'
-import { RankingBarChart } from './charts'
+import { AlertTriangle, Banknote, MousePointerClick, ShoppingCart, Receipt, Store, Target, TrendingDown, UserPlus } from 'lucide-react'
+import { PlatformDonutChart, RankingBarChart } from './charts'
+import { MiniCard } from './StoreInsightsBoard'
 import { providerLabel } from '@/features/campaigns/labels'
 import { canonicalPlatform } from '@/lib/platforms'
 import { MetricTable, type SortValues } from '@/components/ui/MetricTable'
@@ -199,8 +200,8 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         <p data-testid="funnel-no-store" className="flex items-start gap-2 rounded-xl bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
           <Store size={15} className="mt-0.5 shrink-0" />
           {ar
-            ? 'لا يوجد متجر مربوط بهذا المشروع، لذلك مراحل الطلبات والإيرادات لا مصدر لها. اربط سلة أو زد من صفحة التكاملات.'
-            : 'No store is connected to this project, so the order and revenue stages have no source. Connect Salla or Zid from the integrations page.'}
+            ? 'لا يوجد متجر مربوط — الأرقام أدناه من المنصات الإعلانية. اربط سلة أو زد من التكاملات لتظهر تحليلات المتجر كاملة.'
+            : 'No store connected — the figures below come from the ad platforms. Connect Salla or Zid to see the full store analytics.'}
         </p>
       )}
 
@@ -223,39 +224,33 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
           const revenue = stages.find((x) => x.key === 'revenue')?.value ?? null
           const orders = [...stages].reverse().find((x) => x.key === 'orders' && x.value !== null)?.value ?? null
           return [
-            { k: 'revenue', label: ar ? 'الإيراد' : 'Revenue', value: revenue === null ? null : money(revenue, cur) },
-            { k: 'orders', label: ar ? 'الطلبات' : 'Orders', value: orders === null ? null : compact(orders) },
-            { k: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order', value: derived.aov === null ? null : money(derived.aov, cur) },
-            { k: 'roas', label: ar ? 'معدل العائد' : 'ROAS', value: derived.roas === null ? null : ratio(derived.roas) },
-          ].map((t) => (
-            <StatCard key={t.k} testid={`store-hero-${t.k}`} label={t.label} value={t.value ?? '—'} />
+            { k: 'revenue', label: ar ? 'الإيراد' : 'Revenue', value: revenue === null ? null : money(revenue, cur), icon: <Banknote size={14} aria-hidden />, tone: 'success' as const },
+            { k: 'orders', label: ar ? 'الطلبات' : 'Orders', value: orders === null ? null : compact(orders), icon: <Receipt size={14} aria-hidden />, tone: 'brand' as const },
+            { k: 'aov', label: ar ? 'متوسط قيمة الطلب' : 'Average order', value: derived.aov === null ? null : money(derived.aov, cur), icon: <ShoppingCart size={14} aria-hidden />, tone: 'info' as const },
+            { k: 'roas', label: ar ? 'معدل العائد' : 'ROAS', value: derived.roas === null || derived.roas === 0 ? null : ratio(derived.roas), icon: <Target size={14} aria-hidden />, tone: 'neutral' as const },
+          ].filter((t) => t.value !== null).map((t) => (
+            <StatCard key={t.k} testid={`store-hero-${t.k}`} tone={t.tone} label={<span className="inline-flex items-center gap-1.5">{t.icon}{t.label}</span>} value={t.value} />
           ))
         })()}
       </div>
 
+      {/*
+        STORE-INSIGHTS-002 (Owner 2026-11-25) — «لم ألاحظ تحسّن بالشكل والرسوم». The funnel is drawn as a funnel: one tapered bar per
+        stage, centred, its width the stage's share of the widest one, the step between two stages as a conversion chip and a drop
+        chip. The source of each stage stays beside it; a stage nobody measures is an outlined gap, never a zero.
+      */}
       <Panel title={ar ? 'الفانل: من الظهور إلى الإيراد' : 'Funnel: impression to revenue'}>
-        <ol data-testid="funnel-stages" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <ol data-testid="funnel-stages" className="flex flex-col gap-1">
           {stages.map((stage) => {
             const source = SOURCE_LABEL[stage.source.kind]
             const step = stepFrom.get(stage.key)
-            const width = stage.value === null ? 0 : Math.max(4, (stage.value / widest) * 100)
+            const width = stage.value === null ? 100 : Math.max(8, (stage.value / widest) * 100)
+            const fill = stage.source.kind === 'stores' ? 'var(--success)' : stage.source.kind === 'ga4' ? 'var(--info)' : 'var(--brand-600)'
 
             return (
-              <li key={stage.key} data-testid={`funnel-stage-${stage.key}`} title={ar ? stage.source.ar : stage.source.en} className="flex flex-col gap-2 rounded-xl bg-surface-secondary/60 p-3">
-                <span className="flex flex-wrap items-center justify-between gap-1.5">
-                  <span className="text-sm font-semibold text-text-primary">{ar ? stage.label_ar : stage.label_en}</span>
-                  <Badge tone={source.tone}>{ar ? source.ar : source.en}</Badge>
-                </span>
-                <span className="tnum text-xl font-extrabold text-text-primary" title={stage.value !== null && stage.key !== 'revenue' ? num(stage.value) : undefined}>
-                  {stage.value === null
-                    ? <span data-testid={`funnel-unmeasured-${stage.key}`} className="text-sm font-semibold text-text-muted">{ar ? 'لا يُقاس' : 'Not measured'}</span>
-                    : stage.key === 'revenue' ? money(stage.value, cur) : compact(stage.value)}
-                </span>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-surface">
-                  <div className="h-full rounded-full bg-[var(--brand)]" style={{ width: `${width}%` }} />
-                </div>
+              <li key={stage.key} data-testid={`funnel-stage-${stage.key}`} title={ar ? stage.source.ar : stage.source.en} className="flex flex-col gap-1">
                 {step && step.conversion_rate !== null && (
-                  <span className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="flex flex-wrap items-center justify-center gap-1.5 text-xs">
                     <span className="tnum rounded-full bg-success/10 px-2 py-0.5 font-semibold text-success">{ar ? 'تحويل' : 'Conv.'} {rate(step.conversion_rate)}</span>
                     <span className="tnum inline-flex items-center gap-1 rounded-full bg-danger/10 px-2 py-0.5 font-semibold text-danger"><TrendingDown size={11} />{rate(step.drop_off)}</span>
                     {step.spans_unmeasured_stages && (
@@ -263,10 +258,27 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
                     )}
                   </span>
                 )}
-                {stage.value === null && <p className="text-xs leading-snug text-text-muted">{ar ? stage.source.ar : stage.source.en}</p>}
-                {stage.state === 'partial' && <Badge tone="warning">{ar ? 'ناقص' : 'Undercount'}</Badge>}
+                <div className="grid grid-cols-[8.5rem_1fr] items-center gap-3 sm:grid-cols-[10rem_1fr]">
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate text-sm font-bold text-text-primary">{ar ? stage.label_ar : stage.label_en}</span>
+                    <span><Badge tone={source.tone}>{ar ? source.ar : source.en}</Badge></span>
+                  </span>
+                  <div className="flex justify-center">
+                    {stage.value === null ? (
+                      <div className="flex h-11 w-full flex-col items-center justify-center rounded-xl border border-dashed border-border px-3 text-center">
+                        <span data-testid={`funnel-unmeasured-${stage.key}`} className="text-xs font-semibold text-text-muted">{ar ? 'لا يُقاس' : 'Not measured'}</span>
+                        <span className="truncate text-xs text-text-muted">{ar ? stage.source.ar : stage.source.en}</span>
+                      </div>
+                    ) : (
+                      <div className="flex h-11 items-center justify-center rounded-xl px-3 text-white shadow-sm transition-[width]" style={{ width: `${width}%`, minWidth: '5.5rem', background: `linear-gradient(90deg, color-mix(in srgb, ${fill} 75%, transparent), ${fill})` }}>
+                        <span className="tnum truncate text-base font-extrabold" title={stage.key !== 'revenue' ? num(stage.value) : undefined}>{stage.key === 'revenue' ? money(stage.value, cur) : compact(stage.value)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {stage.state === 'partial' && <span className="self-center"><Badge tone="warning">{ar ? 'ناقص' : 'Undercount'}</Badge></span>}
                 {(stage.note_ar || stage.note_en) && (
-                  <p data-testid={`funnel-note-${stage.key}`} className="flex items-start gap-1 text-xs leading-snug text-warning">
+                  <p data-testid={`funnel-note-${stage.key}`} className="flex items-start justify-center gap-1 text-xs leading-snug text-warning">
                     <AlertTriangle size={11} className="mt-0.5 shrink-0" />
                     {ar ? stage.note_ar : stage.note_en}
                   </p>
@@ -277,13 +289,24 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
         </ol>
       </Panel>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label={ar ? 'ROAS المُسند' : 'Attributed ROAS'} value={derived.attributed_roas === null ? null : ratio(derived.attributed_roas)} hint={ar ? 'الطلبات المربوطة بحملة' : 'Orders traced to a campaign'} />
-        <Metric label={ar ? 'تكلفة الطلب' : 'CPA'} value={derived.cpa === null ? null : moneyExact(derived.cpa, cur ?? null)} hint={ar ? 'الإنفاق ÷ الطلبات' : 'Spend ÷ orders'} />
-        <Metric label={ar ? 'تكلفة اكتساب العميل' : 'CAC'} value={derived.cac === null ? null : money(derived.cac, cur)} hint={ar ? 'الإنفاق ÷ العملاء الجدد' : 'Spend ÷ new customers'} />
-        <Metric label={ar ? 'من النقرة إلى الطلب' : 'Click → order'} value={rate(derived.conversion_rate)} />
-      </div>
+      {(() => {
+        // Only the figures this period actually has: a card that reads «—» four times says nothing (show only what's available).
+        const cards = [
+          { k: 'attributed-roas', label: ar ? 'ROAS المُسند' : 'Attributed ROAS', value: derived.attributed_roas === null ? null : ratio(derived.attributed_roas), icon: <Target size={14} aria-hidden />, sub: ar ? 'الطلبات المربوطة بحملة' : 'Orders traced to a campaign' },
+          { k: 'cpa', label: ar ? 'تكلفة الطلب' : 'CPA', value: derived.cpa === null ? null : moneyExact(derived.cpa, cur ?? null), icon: <Receipt size={14} aria-hidden />, sub: ar ? 'الإنفاق ÷ الطلبات' : 'Spend ÷ orders' },
+          { k: 'cac', label: ar ? 'تكلفة اكتساب العميل' : 'CAC', value: derived.cac === null ? null : money(derived.cac, cur), icon: <UserPlus size={14} aria-hidden />, sub: ar ? 'الإنفاق ÷ العملاء الجدد' : 'Spend ÷ new customers' },
+          { k: 'click-order', label: ar ? 'من النقرة إلى الطلب' : 'Click → order', value: derived.conversion_rate === null || derived.conversion_rate === 0 ? null : rate(derived.conversion_rate), icon: <MousePointerClick size={14} aria-hidden />, sub: undefined as string | undefined },
+        ].filter((c) => c.value !== null)
+        if (cards.length === 0) return null
 
+        return (
+          <div data-testid="funnel-derived" className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {cards.map((c) => <MiniCard key={c.k} testId={`funnel-derived-${c.k}`} icon={c.icon} label={c.label} value={c.value as string} sub={c.sub} />)}
+          </div>
+        )
+      })()}
+
+      {coverage.stores > 0 && (
       <div className="grid gap-4 lg:grid-cols-2">
       {/*
         Gross → refunded → net, because the page already subtracts and never says how much.
@@ -387,9 +410,12 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       </Panel>
 
       </div>
+      )}
 
       {comparisons.platforms.length > 0 && (
         <Panel title={ar ? 'المقارنة بين المنصات' : 'Across platforms'}>
+          <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+          <div className="min-w-0">
           <RankingBarChart
             colorByPlatform={false}
             currency={cur ?? ''}
@@ -397,6 +423,14 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
             bars={[{ key: 'spend', name: ar ? 'الإنفاق' : 'Spend', kind: 'money' }, { key: 'revenue', name: ar ? 'الإيراد' : 'Revenue', kind: 'money' }]}
             height={240}
           />
+          </div>
+          {comparisons.platforms.some((p) => p.spend > 0) && (
+            <div data-testid="funnel-platform-donut" className="min-w-0">
+              <PlatformDonutChart height={240} currency={cur ?? ''} centerLabel={ar ? 'الإنفاق' : 'Spend'} centerValue={money(comparisons.platforms.reduce((a, p) => a + p.spend, 0), cur)}
+                data={comparisons.platforms.filter((p) => p.spend > 0).map((p) => ({ key: canonicalPlatform(p.platform), name: providerLabel(canonicalPlatform(p.platform), ar ? 'ar' : 'en'), value: p.spend }))} />
+            </div>
+          )}
+          </div>
           <details className="mt-2 text-xs"><summary className="cursor-pointer select-none font-semibold text-text-muted">{ar ? 'الجدول' : 'Table'}</summary>
           <Table
             head={[ar ? 'المنصة' : 'Platform', ar ? 'الإنفاق' : 'Spend', ar ? 'الطلبات' : 'Orders', ar ? 'الإيراد' : 'Revenue', 'ROAS']}
@@ -446,12 +480,12 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       )}
 
       {/* STORE-ANALYTICS-DEPTH-001 — the store's own reading, each order's source by evidence, and the three sources side by side. */}
-      <StoreDepthPanel projectId={projectId} range={range} ar={ar} />
-      <OrderSourcesPanel projectId={projectId} range={range} ar={ar} />
+      {coverage.stores > 0 && <StoreDepthPanel projectId={projectId} range={range} ar={ar} />}
+      {coverage.stores > 0 && <OrderSourcesPanel projectId={projectId} range={range} ar={ar} />}
       <ThreeSourcesPanel projectId={projectId} range={range} ar={ar} />
 
       {/* The footer that says what this page could NOT see. */}
-      <p data-testid="funnel-coverage" className="rounded-xl bg-surface-hover px-4 py-3 text-[11px] text-text-secondary">
+      <p data-testid="funnel-coverage" className="rounded-xl bg-surface-hover px-4 py-3 text-xs text-text-secondary">
         {ar ? 'التغطية' : 'Coverage'}:{' '}
         <span className="tnum">{coverage.stores}</span> {ar ? 'متجر' : 'store(s)'} ·{' '}
         <span className="tnum">{coverage.orders_in_window}</span> {ar ? 'طلبًا في الفترة' : 'orders in the period'} ·{' '}
@@ -538,7 +572,7 @@ function ShareBar({
         <div className="bg-brand-500" style={{ width: `${100 - lostShare}%` }} />
         <div className="bg-warning" style={{ width: `${lostShare}%` }} />
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-text-secondary">
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
         <span className="inline-flex items-center gap-1.5">
           <span className="size-2 rounded-full bg-brand-500" aria-hidden />
           {keptLabel} <span className="tnum font-semibold">{(100 - lostShare).toFixed(1)}%</span>
@@ -548,16 +582,6 @@ function ShareBar({
           {lostLabel} <span className="tnum font-semibold">{lostShare.toFixed(1)}%</span>
         </span>
       </div>
-    </div>
-  )
-}
-
-function Metric({ label, value, hint }: { label: string; value: string | null; hint?: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-surface p-3">
-      <p className="text-xs text-text-secondary">{label}</p>
-      <p className="tnum mt-0.5 text-xl font-extrabold text-text-primary">{value ?? '—'}</p>
-      {hint && <p className="mt-0.5 text-[11px] text-text-muted">{hint}</p>}
     </div>
   )
 }
@@ -635,30 +659,31 @@ function FunnelReadingBlock({ reading, ar }: { reading: FunnelReading; ar: boole
             : SILENT[reading.silent_reason ?? 'no_stage_could_be_measured']?.en}
         </p>
       ) : (
-        <div className="flex flex-col gap-1.5">
-          <p className="text-sm text-text-primary">
-            {ar ? 'أكبر انخفاض: ' : 'Largest fall: '}
-            <span className="font-bold">{ar ? reading.signal.from.label_ar : reading.signal.from.label_en}</span>
-            {' → '}
-            <span className="font-bold">{ar ? reading.signal.to.label_ar : reading.signal.to.label_en}</span>
-            {' · '}
-            <span dir="ltr" className="tnum">{Math.round(reading.signal.share * 100)}%</span>
-          </p>
-
-          {reading.explanation && (
-            <p className="text-xs leading-relaxed text-text-secondary">{ar ? reading.explanation.ar : reading.explanation.en}</p>
-          )}
-
-          {reading.action && (
-            <p data-testid="funnel-reading-action" className="text-sm font-medium text-text-primary">
-              {ar ? reading.action.ar : reading.action.en}
+        <div className="flex flex-wrap items-center gap-4">
+          <span data-testid="funnel-reading-share" className="grid h-16 w-16 shrink-0 place-items-center rounded-full border-4 border-danger/30 text-lg font-extrabold text-danger" dir="ltr">
+            {Math.round(reading.signal.share * 100)}%
+          </span>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="flex flex-wrap items-center gap-1.5 text-sm text-text-primary">
+              <span className="text-xs text-text-muted">{ar ? 'أكبر انخفاض' : 'Largest fall'}</span>
+              <span className="rounded-full bg-surface px-2 py-0.5 font-bold">{ar ? reading.signal.from.label_ar : reading.signal.from.label_en}</span>
+              <TrendingDown size={14} className="text-danger" aria-hidden />
+              <span className="rounded-full bg-surface px-2 py-0.5 font-bold">{ar ? reading.signal.to.label_ar : reading.signal.to.label_en}</span>
             </p>
-          )}
+            {reading.action && (
+              <p data-testid="funnel-reading-action" className="text-sm font-medium text-text-primary">
+                {ar ? reading.action.ar : reading.action.en}
+              </p>
+            )}
+            {reading.explanation && (
+              <p className="text-xs leading-relaxed text-text-muted">{ar ? reading.explanation.ar : reading.explanation.en}</p>
+            )}
+          </div>
         </div>
       )}
 
       {reading.unmeasured_stages > 0 && (
-        <p data-testid="funnel-reading-unmeasured" className="mt-2 text-[11px] text-text-muted">
+        <p data-testid="funnel-reading-unmeasured" className="mt-2 text-xs text-text-muted">
           {ar
             ? `${reading.unmeasured_stages} مرحلة بلا قياس في هذه الفترة، وليست طرفًا في أي انخفاض أعلاه.`
             : `${reading.unmeasured_stages} stage(s) are unmeasured in this window and are not an end of any fall above.`}
