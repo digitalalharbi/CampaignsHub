@@ -311,7 +311,6 @@ final class ImportExternalStructure
                  */
                 'cards' => $creative['cards'] ?? null,
                 'asset_expires_at' => $this->time($creative['asset_expires_at'] ?? null),
-                'destination_url' => $this->url($creative['destination_url'] ?? null),
                 // OPENAI-CHAT-CARD-TEXT-001 — the copy, when the connector sent it. Only written when it
                 // was sent: a provider that sends none must not blank copy another writer stored.
                 ...array_filter([
@@ -325,6 +324,12 @@ final class ImportExternalStructure
                     'body' => is_string($creative['body'] ?? null) && $creative['body'] !== '' ? $creative['body'] : null,
                     'description' => $this->copy($creative['description'] ?? null, 1000),
                     'cta' => $this->copy($creative['cta'] ?? null, 64),
+                    /*
+                     * CREATIVE-COPY-KEPT-001 — the link too is written only when it was sent. One creative (one TikTok video) runs
+                     * under several ads, and an ad with no `landing_page_url` blanked the link another ad had just written: a
+                     * creative with a link on TikTok read «not sent» here.
+                     */
+                    'destination_url' => $this->url($creative['destination_url'] ?? null),
                     // TIKTOK-MEDIA-001 — the file's own dimensions and length, only when the connector sent them.
                     'width' => is_int($creative['width'] ?? null) ? $creative['width'] : null,
                     'height' => is_int($creative['height'] ?? null) ? $creative['height'] : null,

@@ -168,6 +168,38 @@ final class ContentTextCtaParityTest extends TestCase
         $this->assertNull($noText->cta);
     }
 
+    /**
+     * CREATIVE-COPY-KEPT-001 — one TikTok video runs under two ads; the second carries no link and no text. The creative
+     * keeps the copy, the call to action and the link the first ad sent, instead of the second ad blanking the link.
+     */
+    public function test_a_second_ad_on_the_same_video_does_not_blank_the_copy_the_first_one_sent(): void
+    {
+        $account = $this->account('tiktok');
+        Http::fake([
+            'business-api.tiktok.com/*/file/video/ad/info/*' => Http::response(['code' => 0, 'message' => 'OK', 'data' => ['list' => []]]),
+            'business-api.tiktok.com/*/campaign/get/*' => Http::response(['code' => 0, 'data' => ['list' => [
+                ['campaign_id' => 'c1', 'campaign_name' => 'TT', 'operation_status' => 'ENABLE'],
+            ]]]),
+            'business-api.tiktok.com/*/adgroup/get/*' => Http::response(['code' => 0, 'data' => ['list' => [
+                ['adgroup_id' => 'g1', 'campaign_id' => 'c1', 'adgroup_name' => 'G', 'operation_status' => 'ENABLE'],
+            ]]]),
+            'business-api.tiktok.com/*/ad/get/*' => Http::response(['code' => 0, 'data' => ['list' => [
+                ['ad_id' => 'a1', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'First', 'operation_status' => 'ENABLE',
+                    'video_id' => 'v-shared', 'ad_text' => 'Maamoul in 9 flavours', 'call_to_action' => 'SHOP_NOW',
+                    'landing_page_url' => 'https://shop.example/maamoul'],
+                ['ad_id' => 'a2', 'adgroup_id' => 'g1', 'campaign_id' => 'c1', 'ad_name' => 'Second', 'operation_status' => 'ENABLE',
+                    'video_id' => 'v-shared'],
+            ]]]),
+        ]);
+
+        $this->assertSame('success', app(AccountStructureSyncer::class)->sync($account)->status);
+
+        $row = $this->creativeRow('v-shared');
+        $this->assertSame('Maamoul in 9 flavours', $row->body);
+        $this->assertSame('SHOP_NOW', $row->cta);
+        $this->assertSame('https://shop.example/maamoul', $row->destination_url);
+    }
+
     public function test_a_tiktok_row_synced_before_the_fix_shows_its_kept_ad_text_as_the_body(): void
     {
         $creative = ExternalCreative::withoutGlobalScopes()->create([
