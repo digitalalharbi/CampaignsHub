@@ -22,6 +22,7 @@ import { marketingPathLabel, objectiveLabel, providerLabel } from '@/features/ca
 import { MetricTable } from '@/components/ui/MetricTable'
 import { creativeMoney } from './creativeMoney'
 import { Num } from '@/components/ui/Num'
+import { ProviderMark } from '@/components/ProviderMark'
 import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
@@ -283,6 +284,13 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
   const [grain, setGrain] = useState<'daily' | 'weekly'>('daily')
   const [zoom, setZoom] = useState(1)
   const [fullscreen, setFullscreen] = useState(false)
+  /**
+   * CONTENT-DETAIL-LAYOUT-001 (Owner 2026-11-25, «رتب وحسن وطور على هذه الصفحة يوجد عشوائية») — the page was nine
+   * stacked sections in no reading order. The first screen is the ad and its figures; the rest sits behind four tabs in
+   * the order a reader asks: how it performed, how it compares, what to do, and the record. Inactive panels stay in the
+   * page (hidden), so nothing the page states is dropped.
+   */
+  const [tab, setTab] = useState<'performance' | 'compare' | 'advice' | 'details'>('performance')
 
   // A new creative opens at its own size: inheriting 3× shows a corner of an image and reads as a
   // rendering fault.
@@ -367,8 +375,9 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
 
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-text-primary">{creative.name}</h1>
-          <p className="mt-1 text-sm text-text-secondary">
+          <h1 className="line-clamp-2 text-xl font-bold text-text-primary" title={creative.name}>{creative.name}</h1>
+          <p className="mt-1 flex flex-wrap items-center gap-1 text-sm text-text-secondary">
+            <ProviderMark provider={creative.provider} size={16} className="shrink-0" />
             {providerLabel(creative.provider, locale)}
             {creative.campaign_name ? ` · ${creative.campaign_name}` : ''}
             {creative.objective ? ` · ${objectiveLabel(creative.objective, locale)}` : ''}
@@ -384,15 +393,15 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
             nothing attached reads as a fault in the data rather than as a creative that started on
             Thursday.
           */}
-          <span
-            className={`rounded px-2 py-0.5 text-xs ${FATIGUE_TONE[data.fatigue.status] ?? ''}`}
-            title={(ar ? data.fatigue.reason_ar : data.fatigue.reason_en) || undefined}
-          >
-            {FATIGUE_LABEL[data.fatigue.status]?.[ar ? 'ar' : 'en'] ?? data.fatigue.status}
-          </span>
-          <span className={`rounded px-2 py-0.5 text-xs ${creative.is_demo ? 'bg-warning/15 text-warning' : 'bg-surface-hover text-text-secondary'}`}>
-            {creative.is_demo ? t.demo : t.live}
-          </span>
+          {data.fatigue.status !== 'insufficient_data' && (
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${FATIGUE_TONE[data.fatigue.status] ?? ''}`}
+              title={(ar ? data.fatigue.reason_ar : data.fatigue.reason_en) || undefined}
+            >
+              {FATIGUE_LABEL[data.fatigue.status]?.[ar ? 'ar' : 'en'] ?? data.fatigue.status}
+            </span>
+          )}
+          {creative.is_demo && <span className="rounded-full bg-warning/15 px-2.5 py-0.5 text-xs font-semibold text-warning">{t.demo}</span>}
         </div>
       </header>
 
@@ -403,9 +412,9 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         header: the objective figures — the question this page answers — began at 825 px, below the
         fold. On a wide screen the two sit side by side; on a phone they stack as before.
       */}
-      <div data-testid="creative-first-screen" className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:items-start">
+      <div data-testid="creative-first-screen" className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] lg:items-start">
       {/* ---- the asset itself ---------------------------------------------------------------- */}
-      <section className="rounded-lg border border-border bg-surface p-4">
+      <section className="rounded-2xl border border-border bg-surface p-4">
         {/* The frame is sized for what it holds. A still or a film gets a stage; an absence gets its
             one sentence and no more — at 1366×768 an empty 256 px stage pushed the creative's own
             figures off the first screen, which is the opposite of what a reader without media needs. */}
@@ -464,13 +473,14 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <dl className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-text-secondary">
-            <Fact k={t.dimensions} v={creative.width !== null && creative.height !== null ? `${creative.width}×${creative.height}` : t.notProvided} ltr />
-            <Fact k={t.ratio} v={creative.aspect_ratio ?? aspectOf(creative.width ?? creative.dimensions?.width ?? null, creative.height ?? creative.dimensions?.height ?? null) ?? t.notProvided} ltr />
-            <Fact k={t.size} v={formatBytes(creative.file_size) ?? t.notProvided} ltr />
-            {/* «Not provided» rather than «0s»: a still image has no duration, and a video whose
-                platform omitted it has none either — neither of them lasts zero seconds. */}
-            <Fact k={t.duration} v={creative.duration_seconds === null ? t.notProvided : `${creative.duration_seconds}s`} ltr />
+          {/* Only what the platform sent: an unsent size or length is stated once, in «التفاصيل», not beside the ad. */}
+          <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
+            {creative.width !== null && creative.height !== null && <Fact k={t.dimensions} v={`${creative.width}×${creative.height}`} ltr />}
+            {(creative.aspect_ratio ?? aspectOf(creative.width ?? creative.dimensions?.width ?? null, creative.height ?? creative.dimensions?.height ?? null)) && (
+              <Fact k={t.ratio} v={(creative.aspect_ratio ?? aspectOf(creative.width ?? creative.dimensions?.width ?? null, creative.height ?? creative.dimensions?.height ?? null))!} ltr />
+            )}
+            {formatBytes(creative.file_size) && <Fact k={t.size} v={formatBytes(creative.file_size)!} ltr />}
+            {creative.duration_seconds !== null && <Fact k={t.duration} v={`${creative.duration_seconds}s`} ltr />}
           </dl>
 
           <div className="flex items-center gap-1">
@@ -502,10 +512,11 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
       </section>
 
       {/* ---- the figures first: the question this page answers (directive §7) ---------------- */}
-      <section className="rounded-lg border border-border bg-surface p-4">
-        <h2 className="text-sm font-semibold text-text-primary">{t.figures}</h2>
-        <p className="mt-1 text-xs text-text-secondary">{t.figuresHint}</p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2">
+      <div className="min-w-0 space-y-4">
+      <section className="rounded-2xl border border-border bg-surface p-4">
+        <h2 className="text-sm font-bold text-text-primary">{t.figures}</h2>
+        <p className="mt-0.5 text-xs text-text-muted">{t.figuresHint}</p>
+        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           {data.headline_metrics.map((key) => (
             <MetricBlock
               key={key}
@@ -519,16 +530,33 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           ))}
         </div>
       </section>
-      </div>
 
       {/* ---- CONTENT-WHY-DETAIL-001: why it worked, why it did not ------------------------------ */}
       <CreativeVerdict data={data} ar={ar} mediaHref={film ?? still ?? null} />
+      </div>
+      </div>
 
       {/* ---- a carousel is more than one picture (§15) ---------------------------------------- */}
       <CreativeCarousel preview={creative.preview} locale={locale} />
 
+      <div role="tablist" aria-label={ar ? 'أقسام الإعلان' : 'Ad sections'} data-testid="creative-tabs" className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]">
+        {([
+          ['performance', ar ? 'الأداء' : 'Performance'],
+          ['compare', ar ? 'المقارنة' : 'Comparison'],
+          ['advice', ar ? 'التوصيات' : 'Recommendations'],
+          ['details', ar ? 'التفاصيل' : 'Details'],
+        ] as const).map(([key, label]) => (
+          <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} data-testid={`creative-tab-${key}`}
+            className={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-bold ${tab === key ? 'border-text-primary text-text-primary' : 'border-transparent text-text-secondary hover:text-text-primary'}`}>
+            {label}
+            {key === 'advice' && data.insights.items.length > 0 && <span className="ms-1.5 rounded-full bg-brand-500/15 px-1.5 text-xs text-brand-600"><Num>{data.insights.items.length}</Num></span>}
+          </button>
+        ))}
+      </div>
+
+      <div role="tabpanel" hidden={tab !== 'details'} data-testid="creative-panel-details" className="space-y-4">
       {/* ---- what it is, and where the figures came from ------------------------------------- */}
-      <section className="rounded-lg border border-border bg-surface p-4">
+      <section className="rounded-2xl border border-border bg-surface p-4">
         <h2 className="text-sm font-semibold text-text-primary">{t.identity}</h2>
         <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-3 lg:grid-cols-4">
           <Fact k={t.platform} v={providerLabel(creative.provider, locale)} block />
@@ -575,7 +603,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
 
       {/* ---- the words on it, shown as text and never followed -------------------------------- */}
       {(creative.copy.headline || creative.copy.body || creative.copy.cta || creative.destination_url) && (
-        <section className="rounded-lg border border-border bg-surface p-4">
+        <section className="rounded-2xl border border-border bg-surface p-4">
           <h2 className="text-sm font-semibold text-text-primary">{t.copy}</h2>
           <dl className="mt-3 space-y-2 text-sm">
             {creative.copy.headline && <Fact k={t.headline} v={creative.copy.headline} block />}
@@ -597,8 +625,11 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         </section>
       )}
 
+      </div>
+
+      <div role="tabpanel" hidden={tab !== 'performance'} data-testid="creative-panel-performance" className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       {/* ---- the funnel, with only the steps the platform sent --------------------------------- */}
-      <section className="rounded-lg border border-border bg-surface p-4">
+      <section className="rounded-2xl border border-border bg-surface p-4">
         <h2 className="text-sm font-semibold text-text-primary">{t.funnel}</h2>
         <p className="mt-1 text-xs text-text-secondary">{t.funnelHint}</p>
         {data.funnel.stages.length === 0 ? (
@@ -648,7 +679,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         empty chart on its page would be a question asked of an asset that cannot answer it.
       */}
       {(data.video_retention?.stages.length ?? 0) > 0 && (
-        <section data-testid="creative-video-retention" className="rounded-lg border border-border bg-surface p-4">
+        <section data-testid="creative-video-retention" className="rounded-2xl border border-border bg-surface p-4">
           <h2 className="text-sm font-semibold text-text-primary">{t.retention}</h2>
           <p className="mt-1 text-xs text-text-secondary">{t.retentionHint}</p>
           <div className="mt-4">
@@ -677,7 +708,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
       )}
 
       {/* ---- how it moved ---------------------------------------------------------------------- */}
-      <section className="rounded-lg border border-border bg-surface p-4">
+      <section className="rounded-2xl border border-border bg-surface p-4 xl:col-span-2 xl:row-start-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-text-primary">{t.trend}</h2>
           <div className="flex rounded-md border border-border p-0.5" role="group" aria-label={t.trend}>
@@ -712,12 +743,14 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         )}
       </section>
 
-      {/* ---- the same asset elsewhere ---------------------------------------------------------- */}
-      <section className="rounded-lg border border-border bg-surface p-4">
+      </div>
+
+      <div role="tabpanel" hidden={tab !== 'compare'} data-testid="creative-panel-compare" className="space-y-4">
+      {/* ---- the same asset elsewhere: only where it ran on more than one platform ------------ */}
+      {data.by_platform.length > 1 && (
+      <section className="rounded-2xl border border-border bg-surface p-4">
         <h2 className="text-sm font-semibold text-text-primary">{t.byPlatform}</h2>
-        {data.by_platform.length <= 1 ? (
-          <p className="mt-2 text-sm text-text-secondary">{t.onePlatform}</p>
-        ) : (
+        {(
           <div className="mt-3 overflow-x-auto">
             {/*
               TABLE-NUMERIC-ALIGNMENT-001 §58 — a consumer. It needed nothing the primitive lacks.
@@ -760,9 +793,10 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
           </div>
         )}
       </section>
+      )}
 
       {/* ---- against content doing the same job ------------------------------------------------ */}
-      <section className="rounded-lg border border-border bg-surface p-4">
+      <section className="rounded-2xl border border-border bg-surface p-4">
         <h2 className="text-sm font-semibold text-text-primary">{t.peers}</h2>
         {!data.peers ? (
           <p className="mt-2 text-sm text-text-secondary">{t.peersNone}</p>
@@ -799,8 +833,29 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         )}
       </section>
 
+      </div>
+
+      <div role="tabpanel" hidden={tab !== 'advice'} data-testid="creative-panel-advice" className="space-y-4">
+      {/* ---- what the figures say, and what to do about it ------------------------------------- */}
+      <section className="rounded-2xl border border-border bg-surface p-4">
+        <h2 className="text-sm font-semibold text-text-primary">{t.insights}</h2>
+        <p className="mt-1 text-xs text-text-secondary">
+          {t.comparedAgainst}: <span dir="ltr">{data.insights.compared_against.creatives}</span>{' '}
+          {marketingPathLabel(data.insights.compared_against.path, locale)}
+          {data.insights.compared_against.capped && ` — ${t.capped}`}
+        </p>
+        {data.insights.items.length === 0 ? (
+          <p className="mt-3 text-sm text-text-secondary">{t.insightsNone}</p>
+        ) : (
+          <ul className="mt-3 space-y-3">
+            {data.insights.items.map((item) => (
+              <CreativeInsightCard key={item.id} item={item} locale={locale} />
+            ))}
+          </ul>
+        )}
+      </section>
       {/* ---- the verdict, with what produced it ------------------------------------------------ */}
-      <section className="rounded-lg border border-border bg-surface p-4">
+      <section className="rounded-2xl border border-border bg-surface p-4">
         <h2 className="text-sm font-semibold text-text-primary">{t.fatigue}</h2>
         <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
           <span className={`rounded px-2 py-0.5 text-xs ${FATIGUE_TONE[data.fatigue.status] ?? ''}`}>
@@ -824,24 +879,7 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         )}
       </section>
 
-      {/* ---- what the figures say, and what to do about it ------------------------------------- */}
-      <section className="rounded-lg border border-border bg-surface p-4">
-        <h2 className="text-sm font-semibold text-text-primary">{t.insights}</h2>
-        <p className="mt-1 text-xs text-text-secondary">
-          {t.comparedAgainst}: <span dir="ltr">{data.insights.compared_against.creatives}</span>{' '}
-          {marketingPathLabel(data.insights.compared_against.path, locale)}
-          {data.insights.compared_against.capped && ` — ${t.capped}`}
-        </p>
-        {data.insights.items.length === 0 ? (
-          <p className="mt-3 text-sm text-text-secondary">{t.insightsNone}</p>
-        ) : (
-          <ul className="mt-3 space-y-3">
-            {data.insights.items.map((item) => (
-              <CreativeInsightCard key={item.id} item={item} locale={locale} />
-            ))}
-          </ul>
-        )}
-      </section>
+      </div>
 
       {/*
         AD-PREVIEW-DEFAULT-001 — the same popup every other surface opens.
