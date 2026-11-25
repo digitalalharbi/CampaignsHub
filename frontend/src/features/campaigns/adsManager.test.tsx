@@ -146,4 +146,24 @@ describe('the ads manager', () => {
     const presets = [...within(screen.getByTestId('ads-manager-preset')).getAllByRole('option')].map((o) => o.getAttribute('value'))
     expect(presets).toEqual(['performance', 'sales'])
   })
+
+  it('keeps every platform to choose from after one is picked', async () => {
+    vi.mocked(useAccountPulse).mockReturnValue(ok([
+      { account_id: 'a1', provider: 'snapchat', state: 'running', active_campaigns: 3, daily: [] },
+      { account_id: 'a2', provider: 'meta', state: 'running', active_campaigns: 1, daily: [] },
+      { account_id: 'a3', provider: 'tiktok', state: 'stopped', active_campaigns: 0, daily: [] },
+    ]) as never)
+    const all = vi.mocked(useCampaigns).getMockImplementation()?.('p1' as never, {} as never) ?? ok([])
+    // The campaigns answer is narrowed by the chosen platform, as the server narrows it.
+    vi.mocked(useCampaigns).mockImplementation(((_p: unknown, _r: unknown, f?: { provider?: string[] }) =>
+      (f?.provider?.length ? ok([]) : all)) as never)
+    renderWithProviders(<CampaignsHome />, { locale: 'en', route: '/agency/campaigns' })
+
+    const strip = await screen.findByTestId('ads-manager-platforms')
+    fireEvent.click(within(strip).getByRole('button', { name: /snapchat/i }))
+    const after = screen.getByTestId('ads-manager-platforms')
+    expect(within(after).getByRole('button', { name: /meta/i })).toBeInTheDocument()
+    expect(within(after).getByRole('button', { name: /tiktok/i })).toBeInTheDocument()
+    expect(within(after).getByRole('button', { name: /all platforms/i })).toBeInTheDocument()
+  })
 })
