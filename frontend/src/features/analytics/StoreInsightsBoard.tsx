@@ -20,14 +20,14 @@ import type { ProductRow, StoreDepthPayload, StoreInsightsPayload, StoreMix } fr
 type L = { ar: string; en: string }
 type Depth = Required<Pick<StoreDepthPayload, 'sales' | 'orders' | 'averages' | 'conversion' | 'products' | 'customers' | 'abandoned'>> & StoreDepthPayload
 
-const STATUS: Record<string, L> = {
+export const STATUS: Record<string, L> = {
   completed: { ar: 'مكتمل', en: 'Completed' }, delivered: { ar: 'تم التوصيل', en: 'Delivered' }, delivering: { ar: 'جاري التوصيل', en: 'Delivering' },
   shipped: { ar: 'تم الشحن', en: 'Shipped' }, in_progress: { ar: 'قيد التنفيذ', en: 'In progress' }, processing: { ar: 'قيد التجهيز', en: 'Processing' },
   under_review: { ar: 'بانتظار المراجعة', en: 'Under review' }, payment_pending: { ar: 'بانتظار الدفع', en: 'Awaiting payment' }, pending: { ar: 'معلّق', en: 'Pending' },
   restored: { ar: 'مسترجع', en: 'Returned' }, restoring: { ar: 'قيد الاسترجاع', en: 'Being returned' }, cancelled: { ar: 'ملغي', en: 'Cancelled' }, canceled: { ar: 'ملغي', en: 'Cancelled' },
   paid: { ar: 'مدفوع', en: 'Paid' }, ready: { ar: 'جاهز', en: 'Ready' }, new: { ar: 'جديد', en: 'New' }, unknown: { ar: 'غير محدد', en: 'Not stated' },
 }
-const PAYMENT: Record<string, L> = {
+export const PAYMENT: Record<string, L> = {
   mada: { ar: 'مدى', en: 'mada' }, credit_card: { ar: 'بطاقة ائتمانية', en: 'Credit card' }, creditcard: { ar: 'بطاقة ائتمانية', en: 'Credit card' },
   apple_pay: { ar: 'Apple Pay', en: 'Apple Pay' }, stc_pay: { ar: 'STC Pay', en: 'STC Pay' }, cod: { ar: 'الدفع عند الاستلام', en: 'Cash on delivery' },
   bank: { ar: 'تحويل بنكي', en: 'Bank transfer' }, tabby: { ar: 'تابي', en: 'Tabby' }, tamara: { ar: 'تمارا', en: 'Tamara' }, paypal: { ar: 'PayPal', en: 'PayPal' },
@@ -38,7 +38,7 @@ const DAYS: L[] = [
   { ar: 'الخميس', en: 'Thu' }, { ar: 'الجمعة', en: 'Fri' }, { ar: 'السبت', en: 'Sat' },
 ]
 const tx = (l: L, ar: boolean) => (ar ? l.ar : l.en)
-const label = (map: Record<string, L>, key: string, ar: boolean) => (map[key.toLowerCase()] ? tx(map[key.toLowerCase()], ar) : key)
+export const label = (map: Record<string, L>, key: string, ar: boolean) => (map[key.toLowerCase()] ? tx(map[key.toLowerCase()], ar) : key)
 const hourText = (h: number, ar: boolean) => (ar ? `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'ص' : 'م'}` : `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'am' : 'pm'}`)
 
 /* ───────────────────────────── cards ───────────────────────────── */
@@ -80,7 +80,7 @@ export function MiniCard({ testId, icon, label: l, value, sub, tone = 'neutral' 
 
 /* ───────────────────────────── donuts ───────────────────────────── */
 
-function Donut({ testId, title, icon, rows, center, centerLabel, foot, kind = 'num', cur = '' }: { testId: string; title: string; icon: ReactNode; rows: Array<{ name: string; value: number }>; center?: string; centerLabel?: string; foot?: string; kind?: 'num' | 'money'; cur?: string }) {
+function Donut({ testId, title, icon, rows, center, centerLabel, foot, kind = 'num', cur = '', height = 230 }: { testId: string; title: string; icon: ReactNode; rows: Array<{ name: string; value: number }>; center?: string; centerLabel?: string; foot?: string; kind?: 'num' | 'money'; cur?: string; height?: number }) {
   const data = rows.filter((r) => r.value > 0)
   if (data.length === 0) return null
 
@@ -88,7 +88,7 @@ function Donut({ testId, title, icon, rows, center, centerLabel, foot, kind = 'n
     <ChartCard title={title}>
       <div data-testid={testId} className="min-w-0">
         <span className="mb-1 inline-flex text-text-muted" aria-hidden>{icon}</span>
-        <PlatformDonutChart colorBy="series" height={230} data={data} valueKind={kind} currency={cur} centerValue={center} centerLabel={centerLabel} />
+        <PlatformDonutChart colorBy="series" height={height} data={data} valueKind={kind} currency={cur} centerValue={center} centerLabel={centerLabel} />
         {foot && <p className="mt-1 text-center text-xs text-text-muted"><Num>{foot}</Num></p>}
       </div>
     </ChartCard>
@@ -117,7 +117,7 @@ function Heatmap({ h, ar }: { h: StoreInsightsPayload['heatmap']; ar: boolean })
     <ChartCard title={ar ? 'متى يشتري عملاؤك' : 'When your customers buy'}
       action={h.peak && <span data-testid="store-heatmap-peak" className="rounded-full bg-brand-600/10 px-2.5 py-1 text-xs font-bold text-brand-700"><Num>{ar ? `الذروة: ${tx(DAYS[h.peak.day], ar)} ${hourText(h.peak.hour, ar)} · ${num(h.peak.orders)} طلب` : `Peak: ${tx(DAYS[h.peak.day], ar)} ${hourText(h.peak.hour, ar)} · ${num(h.peak.orders)} orders`}</Num></span>}>
       <div data-testid="store-heatmap" className="min-w-0 overflow-x-auto">
-        <div className="grid min-w-[560px] gap-[3px]" style={{ gridTemplateColumns: '4.5rem repeat(24, minmax(0, 1fr))' }} dir="ltr">
+        <div className="grid min-w-[560px] gap-[3px]" style={{ gridTemplateColumns: '4rem repeat(24, minmax(0, 1fr))' }} dir="ltr">
           <span />
           {Array.from({ length: 24 }, (_, i) => <span key={i} className="text-center text-xs text-text-muted">{i % 3 === 0 ? hourText(i, ar) : ''}</span>)}
           {h.cells.map((hours, d) => (
@@ -125,7 +125,7 @@ function Heatmap({ h, ar }: { h: StoreInsightsPayload['heatmap']; ar: boolean })
               <span className={`truncate pe-1 text-end text-xs font-semibold ${d === bestDay ? 'text-brand-700' : 'text-text-secondary'}`} dir="auto">{tx(DAYS[d], ar)}</span>
               {hours.map((n, hr) => (
                 <span key={hr} data-testid={`store-heat-${d}-${hr}`} title={`${tx(DAYS[d], ar)} ${hourText(hr, ar)} · ${num(n)}`}
-                  className="aspect-square rounded-[4px]" style={{ background: n === 0 ? 'var(--surface-secondary)' : `color-mix(in srgb, var(--brand-600) ${Math.round(18 + (n / h.max) * 82)}%, transparent)` }} />
+                  className="h-3.5 rounded-sm" style={{ background: n === 0 ? 'var(--surface-secondary)' : `color-mix(in srgb, var(--brand-600) ${Math.round(18 + (n / h.max) * 82)}%, transparent)` }} />
               ))}
             </div>
           ))}
@@ -148,13 +148,13 @@ function Basket({ b, ar, cur }: { b: StoreInsightsPayload['basket']; ar: boolean
 
   return (
     <ChartCard title={ar ? 'حجم السلة' : 'Basket size'}
-      action={b.median !== null && <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-bold text-text-secondary"><Num>{ar ? `الوسيط ${money(b.median, cur)}` : `Median ${money(b.median, cur)}`}</Num></span>}>
-      <div data-testid="store-basket" className="flex h-44 items-end gap-2" dir="ltr">
+      action={b.median !== null && <span className="rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-bold text-text-secondary"><Num>{ar ? `الوسيط ${money(b.median, cur)} · ${cur}` : `Median ${money(b.median, cur)} · ${cur}`}</Num></span>}>
+      <div data-testid="store-basket" className="flex h-36 items-end gap-2" dir="ltr">
         {b.bands.map((band) => (
           <div key={band.from} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
             <span className="tnum text-xs font-bold text-text-primary"><Num>{num(band.orders)}</Num></span>
             <div className="w-full rounded-t-lg bg-brand-600/80" style={{ height: `${Math.max(3, (band.orders / max) * 100)}%` }} />
-            <span className="tnum truncate text-xs text-text-muted"><Num>{band.to === null ? `${money(band.from, cur)}+` : `${money(band.from, cur)}–${money(band.to, cur)}`}</Num></span>
+            <span className="tnum truncate text-xs text-text-muted" dir="ltr"><Num>{band.to === null ? `${num(band.from)}+` : `${num(band.from)}–${num(band.to)}`}</Num></span>
           </div>
         ))}
       </div>
@@ -174,7 +174,11 @@ function Coupons({ c, ar, cur }: { c: StoreInsightsPayload['coupons']; ar: boole
           <li key={r.code}>
             <div className="flex items-baseline justify-between gap-3 text-sm">
               <span className="truncate font-mono text-xs font-bold text-text-primary" dir="ltr">{r.code}</span>
-              <span className="tnum shrink-0 text-xs text-text-secondary"><Num>{`${num(r.orders)} ${ar ? 'طلب' : 'orders'}${r.net !== null ? ` · ${money(r.net, cur)}` : ''}${r.discount ? ` · −${money(r.discount, cur)}` : ''}`}</Num></span>
+              <span className="flex shrink-0 items-center gap-1.5 text-xs text-text-secondary">
+                <span className="tnum rounded-full bg-surface-secondary px-1.5"><Num>{num(r.orders)}</Num> {ar ? 'طلب' : 'orders'}</span>
+                {r.net !== null && <span className="tnum font-bold text-text-primary"><Num>{money(r.net, cur)}</Num></span>}
+                {r.discount ? <span className="tnum text-warning"><Num>{`−${money(r.discount, cur)}`}</Num></span> : null}
+              </span>
             </div>
             <div className="mt-1 h-2 overflow-hidden rounded-full bg-surface-secondary"><div className="h-full rounded-full bg-warning" style={{ width: `${(r.orders / max) * 100}%` }} /></div>
           </li>
@@ -184,16 +188,16 @@ function Coupons({ c, ar, cur }: { c: StoreInsightsPayload['coupons']; ar: boole
   )
 }
 
-function ProductGallery({ rows, ar, cur }: { rows: ProductRow[]; ar: boolean; cur: string }) {
+function ProductGallery({ rows, ar, cur, compact = false }: { rows: ProductRow[]; ar: boolean; cur: string; compact?: boolean }) {
   if (rows.length === 0) return null
   const total = rows.reduce((a, r) => a + r.revenue, 0) || 1
 
   return (
     <ChartCard title={ar ? 'الأكثر مبيعًا' : 'Best sellers'}>
-      <ol data-testid="store-gallery" className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {rows.slice(0, 10).map((r, i) => (
+      <ol data-testid="store-gallery" className={`grid gap-2.5 ${compact ? 'grid-cols-3 sm:grid-cols-4 lg:grid-cols-6' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'}`}>
+        {rows.slice(0, compact ? 6 : 10).map((r, i) => (
           <li key={`${r.name}-${i}`} data-testid={`store-gallery-${i}`} className="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-surface">
-            <div className="relative aspect-square bg-surface-secondary">
+            <div className={`relative bg-surface-secondary ${compact ? 'aspect-[4/3]' : 'aspect-square'}`}>
               {localStill(r.image_url)
                 ? <img src={localStill(r.image_url) ?? undefined} alt="" loading="lazy" className={`h-full w-full ${mediaFitClass(null, null, 'thumb')}`} />
                 : <span className="grid h-full w-full place-items-center text-text-muted"><Package size={28} aria-hidden /></span>}
@@ -265,6 +269,35 @@ export function StoreInsightsBoard({ d, ar }: { d: Depth; ar: boolean }) {
         {products.categories.length > 0 && <Donut testId="store-donut-categories" kind="money" cur={cur} title={ar ? 'التصنيفات' : 'Categories'} icon={<Package size={15} aria-hidden />} rows={products.categories.map((c) => ({ name: c.category, value: c.revenue }))} />}
       </div>
 
+      {i && (i.basket.bands.length > 0 || i.coupons.rows.length > 0) && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Basket b={i.basket} ar={ar} cur={cur} />
+          <Coupons c={i.coupons} ar={ar} cur={cur} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * STORE-MIRROR-001 — what only a store can tell, after the website-shaped part: when people buy, the best sellers with their
+ * pictures, and how the orders are made up. Smaller than before (Owner: «قلّل الأبعاد»): one row of four circles, a six-wide gallery.
+ */
+export function StoreExtras({ d, ar }: { d: Depth; ar: boolean }) {
+  const cur = d.currency ?? ''
+  const i = d.insights
+  const known = d.customers.new + d.customers.returning
+
+  return (
+    <div data-testid="store-extras" className="flex min-w-0 flex-col gap-4">
+      {i && <Heatmap h={i.heatmap} ar={ar} />}
+      <ProductGallery rows={d.products.best_by_revenue} ar={ar} cur={cur} compact />
+      <div data-testid="store-donuts" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {i && <Donut height={170} testId="store-donut-status" title={ar ? 'حالات الطلبات' : 'Order states'} icon={<Receipt size={14} aria-hidden />} rows={i.status_mix.map((r) => ({ name: label(STATUS, r.key, ar), value: r.orders }))} center={num(d.orders.total)} />}
+        {i && <Donut height={170} testId="store-donut-city" title={ar ? 'المدن' : 'Cities'} icon={<MapPin size={14} aria-hidden />} rows={mixRows(i.city_mix, null, ar)} foot={unstatedFoot(i.city_mix, ar)} />}
+        <Donut height={170} testId="store-donut-customers" title={ar ? 'جديد مقابل عائد' : 'New vs returning'} icon={<Users size={14} aria-hidden />} rows={[{ name: ar ? 'جديد' : 'New', value: d.customers.new }, { name: ar ? 'عائد' : 'Returning', value: d.customers.returning }]} center={known > 0 ? percent(d.customers.returning / known, 0) : undefined} />
+        {d.products.categories.length > 0 && <Donut height={170} testId="store-donut-categories" kind="money" cur={cur} title={ar ? 'التصنيفات' : 'Categories'} icon={<Package size={14} aria-hidden />} rows={d.products.categories.map((c) => ({ name: c.category, value: c.revenue }))} />}
+      </div>
       {i && (i.basket.bands.length > 0 || i.coupons.rows.length > 0) && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Basket b={i.basket} ar={ar} cur={cur} />

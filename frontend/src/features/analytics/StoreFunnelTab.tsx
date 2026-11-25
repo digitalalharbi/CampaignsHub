@@ -17,7 +17,7 @@ import { useUi } from '@/stores/ui'
 import { QueryFailure } from '@/components/ui/QueryFailure'
 import { Explainer } from '@/components/ui/Explainer'
 import { OrderSourcesPanel } from './OrderSourcesPanel'
-import { StoreDepthPanel } from './StoreDepthPanel'
+import { StoreMirror } from './StoreMirror'
 import { ThreeSourcesPanel } from './ThreeSourcesPanel'
 import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
@@ -196,22 +196,29 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
   return (
     <div data-testid="store-funnel" aria-busy={q.isShowingPrevious} className={`space-y-4 transition-opacity duration-[var(--motion-panel)] ease-[var(--motion-ease)] ${q.isShowingPrevious ? 'opacity-60' : ''}`}>
       <div className="flex min-h-5 items-center">{note}</div>
-      {coverage.stores === 0 && (
-        <p data-testid="funnel-no-store" className="flex items-start gap-2 rounded-xl bg-[var(--warning-background)] px-4 py-3 text-sm text-warning">
-          <Store size={15} className="mt-0.5 shrink-0" />
-          {ar
-            ? 'لا يوجد متجر مربوط — الأرقام أدناه من المنصات الإعلانية. اربط سلة أو زد من التكاملات لتظهر تحليلات المتجر كاملة.'
-            : 'No store connected — the figures below come from the ad platforms. Connect Salla or Zid to see the full store analytics.'}
-        </p>
+      {/*
+        STORE-MIRROR-001 (Owner 2026-11-25) — «اجعلها بنفس فكرة تحليلات الموقع … جزء المتجر يوازي جزء الموقع». The tab opens the way the
+        website tab does: one header line, then the store's own reading in the website's own shapes. Without a store it is the
+        website tab's not-connected state: one chip and where to connect it. What this tab used to open on — the platform-pixel
+        funnel and its tables — is kept, folded, under «التفاصيل الفنية».
+      */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-secondary">
+        <Badge tone="success">{ar ? 'المتجر' : 'Store'}</Badge>
+        {coverage.store_last_synced_at && <span data-testid="store-synced">{ar ? 'آخر تحديث' : 'Updated'} <span className="tnum" dir="ltr">{new Date(coverage.store_last_synced_at).toLocaleString(ar ? 'ar-SA-u-nu-latn' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span></span>}
+        <Badge tone="neutral">{ar ? 'مستقل عن المنصات' : 'Separate from platforms'}</Badge>
+      </div>
+      {coverage.stores === 0 ? (
+        <div data-testid="funnel-no-store" className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-border bg-surface p-5">
+          <Badge tone="warning"><span className="inline-flex items-center gap-1"><Store size={12} aria-hidden />{ar ? 'المتجر غير مربوط' : 'Store not connected'}</span></Badge>
+          <span className="text-xs text-text-muted">{ar ? 'يُربط سلة أو زد من قسم الربط والتكاملات.' : 'Connect Salla or Zid from the integrations section.'}</span>
+        </div>
+      ) : (
+        <StoreMirror projectId={projectId} range={range} ar={ar} spend={totals.spend ?? null} />
       )}
 
-      {/*
-        The reading before the stages, not after them.
-
-        The drop between two stages is the only thing anybody opens this section for, and it was left
-        for the reader to compute — every time, from figures whose sources differ: the click is the
-        platform's claim, the order is the merchant's ledger.
-      */}
+      <details data-testid="store-technical-details" className="rounded-2xl border border-border bg-surface">
+        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-extrabold text-text-primary">{coverage.stores === 0 ? (ar ? 'قمع المنصات الإعلانية' : 'Ad-platform funnel') : (ar ? 'التفاصيل الفنية' : 'Technical details')}</summary>
+        <div className="space-y-4 border-t border-border p-3">
       {q.data.reading && <FunnelReadingBlock reading={q.data.reading} ar={ar} />}
 
       {/*
@@ -480,7 +487,6 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
       )}
 
       {/* STORE-ANALYTICS-DEPTH-001 — the store's own reading, each order's source by evidence, and the three sources side by side. */}
-      {coverage.stores > 0 && <StoreDepthPanel projectId={projectId} range={range} ar={ar} />}
       {coverage.stores > 0 && <OrderSourcesPanel projectId={projectId} range={range} ar={ar} />}
       <ThreeSourcesPanel projectId={projectId} range={range} ar={ar} />
 
@@ -533,6 +539,8 @@ export function StoreFunnelTab({ projectId, range }: { projectId: string | null;
           </span>
         )}
       </p>
+        </div>
+      </details>
     </div>
   )
 }

@@ -42,10 +42,10 @@ const MARKETING = ['add_to_carts', 'checkouts', 'new_users', 'avg_session_second
 const LOWER_IS_BETTER = new Set(['bounce_rate'])
 const TILE_COLOR: Record<string, string> = { bounce_rate: 'var(--warning)', engagement_rate: 'var(--info)' }
 
-function Delta({ k }: { k: StoreKpi }) {
+function Delta({ k, lower }: { k: StoreKpi; lower?: string[] }) {
   const c = k.change_pct
   if (c === null || c === undefined || Math.abs(c) < 0.0005) return null
-  const good = LOWER_IS_BETTER.has(k.key) ? c < 0 : c > 0
+  const good = (lower ? lower.includes(k.key) : LOWER_IS_BETTER.has(k.key)) ? c < 0 : c > 0
   const Icon = c > 0 ? ArrowUpRight : ArrowDownRight
 
   return (
@@ -57,24 +57,41 @@ function Delta({ k }: { k: StoreKpi }) {
 
 const value = (k: StoreKpi) => kpiText(k, k.current, k.kind === 'money' ? k.current_usd : undefined)
 
-export function CompactTiles({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
+/**
+ * STORE-MIRROR-001 — the same tiles for another source. The store tab passes its own keys, groups and labels and gets the
+ * website's exact drawing; with no layout the tiles are the website's, unchanged.
+ */
+export interface TileLayout {
+  primary: string[]
+  groups: Array<{ key: string; icon: typeof ShoppingBag; color: string; label: L; keys: string[] }>
+  labels: Record<string, L>
+  lowerIsBetter?: string[]
+  testId?: string
+  ariaLabel?: L
+}
+
+export function CompactTiles({ kpis, ar, layout }: { kpis: StoreKpi[]; ar: boolean; layout?: TileLayout }) {
   const by = new Map(kpis.map((k) => [k.key, k]))
   const pick = (keys: string[]) => keys.map((k) => by.get(k)).filter((k): k is StoreKpi => k !== undefined)
-  const known = new Set([...PRIMARY, ...SALES, ...MARKETING])
-  const primary = pick(PRIMARY)
-  const groups = [
-    { key: 'sales', icon: ShoppingBag, color: 'var(--success)', label: { ar: 'المبيعات', en: 'Sales' }, items: pick(SALES) },
-    { key: 'marketing', icon: Megaphone, color: 'var(--brand-600)', label: { ar: 'التسويق', en: 'Marketing' }, items: [...pick(MARKETING), ...kpis.filter((k) => !known.has(k.key))] },
-  ].filter((g) => g.items.length > 0)
+  const labels = layout?.labels ?? KPI_LABEL
+  const known = new Set(layout ? [...layout.primary, ...layout.groups.flatMap((g) => g.keys)] : [...PRIMARY, ...SALES, ...MARKETING])
+  const primary = pick(layout?.primary ?? PRIMARY)
+  const groups = (layout
+    ? layout.groups.map((g) => ({ key: g.key, icon: g.icon, color: g.color, label: g.label, items: pick(g.keys) }))
+    : [
+      { key: 'sales', icon: ShoppingBag, color: 'var(--success)', label: { ar: 'المبيعات', en: 'Sales' }, items: pick(SALES) },
+      { key: 'marketing', icon: Megaphone, color: 'var(--brand-600)', label: { ar: 'التسويق', en: 'Marketing' }, items: [...pick(MARKETING), ...kpis.filter((k) => !known.has(k.key))] },
+    ]).filter((g) => g.items.length > 0)
+  const lower = layout?.lowerIsBetter
 
   return (
-    <section data-testid="ga4-tiles" data-layout="compact" aria-label={ar ? 'مؤشرات الموقع' : 'Website KPIs'} className="flex min-w-0 flex-col gap-2.5">
+    <section data-testid={layout?.testId ?? 'ga4-tiles'} data-layout="compact" aria-label={layout?.ariaLabel ? tx(layout.ariaLabel, ar) : (ar ? 'مؤشرات الموقع' : 'Website KPIs')} className="flex min-w-0 flex-col gap-2.5">
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         {primary.map((k) => (
           <div key={k.key} data-testid={`ga4-tile-${k.key}`} data-tier="primary" className="flex min-w-0 flex-col gap-1.5 overflow-hidden rounded-2xl border border-border bg-surface px-4 pb-1 pt-3">
             <div className="flex items-center justify-between gap-1">
-              <span className="truncate text-xs font-semibold text-text-muted">{tx(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
-              <Delta k={k} />
+              <span className="truncate text-xs font-semibold text-text-muted">{tx(labels[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
+              <Delta k={k} lower={lower} />
             </div>
             <span className="tnum truncate text-2xl font-extrabold leading-tight text-text-primary"><Num>{value(k)}</Num></span>
             {(k.trend?.length ?? 0) >= 2 ? <div className="-mx-4"><KpiSparkline points={(k.trend ?? []).map((p) => p.value)} height={36} color={TILE_COLOR[k.key]} /></div> : <div className="h-[36px]" />}
@@ -89,8 +106,8 @@ export function CompactTiles({ kpis, ar }: { kpis: StoreKpi[]; ar: boolean }) {
               {g.items.map((k) => (
                 <div key={k.key} data-testid={`ga4-tile-${k.key}`} data-tier="secondary" className="flex min-w-0 flex-col gap-0.5 rounded-xl bg-surface-secondary/60 px-2.5 py-2">
                   <span className="flex items-center justify-between gap-1">
-                    <span className="truncate text-xs font-semibold text-text-muted">{tx(KPI_LABEL[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
-                    <Delta k={k} />
+                    <span className="truncate text-xs font-semibold text-text-muted">{tx(labels[k.key] ?? { ar: k.key, en: k.key }, ar)}</span>
+                    <Delta k={k} lower={lower} />
                   </span>
                   <span className="tnum truncate text-sm font-extrabold text-text-primary"><Num>{value(k)}</Num></span>
                 </div>
@@ -127,28 +144,38 @@ function Coverage({ testId, meta, ar }: { testId: string; meta?: StoreBreakdownM
   )
 }
 
-function Panel({ testId, title, icon, total, children, className = '' }: { testId: string; title: string; icon: ReactNode; total?: number; children: ReactNode; className?: string }) {
+function Panel({ testId, title, icon, total, children, className = '', unit: Unit = Users }: { testId: string; title: string; icon: ReactNode; total?: number; children: ReactNode; className?: string; unit?: typeof Users }) {
   return (
     <section className={`flex min-w-0 flex-col gap-3 rounded-2xl border border-border bg-surface p-4 ${className}`}>
       <div className="flex items-center justify-between gap-2">
         <h3 className="inline-flex items-center gap-1.5 text-sm font-extrabold text-text-primary">{icon}{title}</h3>
-        {total !== undefined && <span data-testid={`${testId}-total`} className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-bold text-text-primary"><Users size={12} aria-hidden /><Num>{num(total)}</Num></span>}
+        {total !== undefined && <span data-testid={`${testId}-total`} className="tnum inline-flex items-center gap-1 rounded-full bg-surface-secondary px-2.5 py-1 text-xs font-bold text-text-primary"><Unit size={12} aria-hidden /><Num>{num(total)}</Num></span>}
       </div>
       {children}
     </section>
   )
 }
 
-export function AcquisitionVisual({ channels, devices, funnel, channelsMeta, devicesMeta, ar }: { channels: StoreSlice[] | null | undefined; devices: StoreSlice[] | null | undefined; funnel: StoreFunnelStep[]; channelsMeta?: StoreBreakdownMeta | null; devicesMeta?: StoreBreakdownMeta | null; ar: boolean }) {
-  const ch = channels ? donutRows(channels, CHANNEL, ar) : []
-  const dv = devices ? donutRows(devices, DEVICE, ar) : []
+/** STORE-MIRROR-001 — the same panels for the store: its own titles, label maps and icons, the website's drawing. */
+export interface AcquisitionLabels {
+  channels: { title: L; icon: typeof Route; labels: Record<string, L> }
+  devices: { title: L; icon: typeof Route; labels: Record<string, L> }
+  funnel: { title: L; labels: Record<string, L> }
+  unit?: typeof Users
+}
+
+export function AcquisitionVisual({ channels, devices, funnel, channelsMeta, devicesMeta, ar, labels }: { channels: StoreSlice[] | null | undefined; devices: StoreSlice[] | null | undefined; funnel: StoreFunnelStep[]; channelsMeta?: StoreBreakdownMeta | null; devicesMeta?: StoreBreakdownMeta | null; ar: boolean; labels?: AcquisitionLabels }) {
+  const ch = channels ? donutRows(channels, labels?.channels.labels ?? CHANNEL, ar) : []
+  const dv = devices ? donutRows(devices, labels?.devices.labels ?? DEVICE, ar) : []
+  const ChIcon = labels?.channels.icon ?? Route
+  const DvIcon = labels?.devices.icon ?? Smartphone
   const chTotal = ch.reduce((a, r) => a + r.value, 0)
   const dvTotal = dv.reduce((a, r) => a + r.value, 0)
   const DEVICE_COLOR = ['var(--teal)', 'var(--info)', 'var(--purple)', 'var(--warning)', 'var(--text-muted)']
 
   return (
     <div data-testid="ga4-acquisition" className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-5">
-      <Panel testId="ga4-channels" title={ar ? 'القنوات' : 'Channels'} icon={<Route size={15} aria-hidden />} total={ch.length ? chTotal : undefined} className="lg:col-span-3">
+      <Panel testId="ga4-channels" title={labels ? tx(labels.channels.title, ar) : (ar ? 'القنوات' : 'Channels')} icon={<ChIcon size={15} aria-hidden />} unit={labels?.unit} total={ch.length ? chTotal : undefined} className="lg:col-span-3">
         {ch.length === 0 ? <span data-testid="ga4-channels-absent" className="text-xs text-text-muted">{ar ? 'غير متاح' : 'Unavailable'}</span> : (
           <div data-testid="ga4-channels" data-slices={ch.length} className="flex flex-col gap-2">
             <span className="sr-only"><Num>{num(chTotal)}</Num></span>
@@ -157,7 +184,7 @@ export function AcquisitionVisual({ channels, devices, funnel, channelsMeta, dev
           </div>
         )}
       </Panel>
-      <Panel testId="ga4-devices" title={ar ? 'الأجهزة' : 'Devices'} icon={<Smartphone size={15} aria-hidden />} total={dv.length ? dvTotal : undefined} className="lg:col-span-2">
+      <Panel testId="ga4-devices" title={labels ? tx(labels.devices.title, ar) : (ar ? 'الأجهزة' : 'Devices')} icon={<DvIcon size={15} aria-hidden />} unit={labels?.unit} total={dv.length ? dvTotal : undefined} className="lg:col-span-2">
         {dv.length === 0 ? <span data-testid="ga4-devices-absent" className="text-xs text-text-muted">{ar ? 'غير متاح' : 'Unavailable'}</span> : (
           <div data-testid="ga4-devices" data-slices={dv.length} className="flex flex-col gap-3">
             <span className="sr-only"><Num>{num(dvTotal)}</Num></span>
@@ -187,9 +214,9 @@ export function AcquisitionVisual({ channels, devices, funnel, channelsMeta, dev
         )}
       </Panel>
       {hasFunnel(funnel) && (
-        <ChartCard className="lg:col-span-5" title={ar ? 'قمع الموقع' : 'Website funnel'}>
+        <ChartCard className="lg:col-span-5" title={labels ? tx(labels.funnel.title, ar) : (ar ? 'قمع الموقع' : 'Website funnel')}>
           <div data-testid="ga4-funnel">
-            <ConversionFunnelChart ar={ar} differLabel={ar ? 'تعريفات مختلفة' : 'Definitions differ'} stages={funnel.map((s) => ({ stage: s.stage, label: tx(FUNNEL[s.stage] ?? { ar: s.stage, en: s.stage }, ar), count: s.count, step_rate: s.step_rate, cost_per: null, exceeds_previous: s.exceeds_previous }))} />
+            <ConversionFunnelChart ar={ar} differLabel={ar ? 'تعريفات مختلفة' : 'Definitions differ'} stages={funnel.map((s) => ({ stage: s.stage, label: tx((labels?.funnel.labels ?? FUNNEL)[s.stage] ?? { ar: s.stage, en: s.stage }, ar), count: s.count, step_rate: s.step_rate, cost_per: null, exceeds_previous: s.exceeds_previous }))} />
           </div>
         </ChartCard>
       )}
