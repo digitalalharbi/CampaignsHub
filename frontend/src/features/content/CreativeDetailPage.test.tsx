@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { CreativeDetailPage } from './CreativeDetailPage'
 import type { CreativeDetail, CreativeMetrics } from './api'
 import { renderWithProviders } from '@/test/utils'
@@ -408,11 +408,13 @@ describe('CreativeDetailPage', () => {
     await screen.findByText('Hero image')
 
     const row = screen.getByTestId('creative-first-screen')
-    expect(row.className).toContain('lg:grid-cols-2')
+    // CONTENT-DETAIL-LAYOUT-001 — the ad in a fixed column, its figures beside it on a wide screen.
+    expect(row.className).toMatch(/lg:grid-cols-\[minmax\(0,400px\)_minmax\(0,1fr\)\]/)
     expect(row.contains(screen.getByTestId('creative-media-frame'))).toBe(true)
     expect(row.contains(screen.getByText(/Metrics for this objective|المؤشرات حسب الهدف/))).toBe(true)
-    // Exactly the two sections — the carousel and the identity block stay below the row.
-    expect(row.querySelectorAll(':scope > section')).toHaveLength(2)
+    // The stage, then one column (figures and verdict) — the carousel and the tabs stay below the row.
+    expect(row.children).toHaveLength(2)
+    expect(row.contains(screen.getByTestId('creative-tabs'))).toBe(false)
   })
 
   it('gives a drawn image its full stage', async () => {
@@ -434,12 +436,12 @@ describe('CreativeDetailPage', () => {
     render()
     await screen.findByText('Hero image')
 
+    // CONTENT-DETAIL-LAYOUT-001 — the identity reference is a tab of its own, not the first thing after the figures.
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
-    const figures = headings.indexOf('Metrics for this objective')
-    const identity = headings.indexOf('Identity and source')
-    expect(figures).toBeGreaterThan(-1)
-    expect(identity).toBeGreaterThan(-1)
-    expect(figures).toBeLessThan(identity)
+    expect(headings).toContain('Metrics for this objective')
+    expect(headings).not.toContain('Identity and source')
+    fireEvent.click(screen.getByTestId('creative-tab-details'))
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toContain('Identity and source')
   })
 
   /** A video arms nothing: metadata only, no autoplay, and the source is not fetched up front. */
