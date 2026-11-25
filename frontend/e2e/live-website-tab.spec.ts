@@ -25,6 +25,8 @@ test.describe('the website tab of a live link', () => {
     for (const mode of ['summary', 'dashboard', 'platforms', 'content', 'tables', 'website']) {
       await page.getByTestId(`live-mode-tab-${mode}`).click()
       await expect(page.getByTestId(`live-mode-${mode}`)).toBeVisible()
+      // The website's visuals are deferred chunks (Ga4ReportBlocks): count them once they have drawn, not before.
+      if (mode === 'website') for (const id of WEBSITE_FIGURES) await expect(page.getByTestId(id).first()).toBeVisible({ timeout: 30_000 })
       let n = 0
       for (const id of WEBSITE_FIGURES) n += await page.getByTestId(id).count()
       where[mode] = n
