@@ -268,8 +268,6 @@ export function RecordTab({ data, locale }: { data: CreativeDetail; locale: Loca
       <Field label={L.prev} value={formatPeriodRange(data.previous_period.from, data.previous_period.to, ar ? 'ar' : 'en')} />
     </dl>
   )
-  const copy = c.copy
-  const hasCopy = !!(copy.headline || copy.body || copy.cta || c.destination_url)
 
   return (
     <div className="space-y-4" data-testid="creative-record">
@@ -294,18 +292,7 @@ export function RecordTab({ data, locale }: { data: CreativeDetail; locale: Loca
         </RecordCard>
       </div>
 
-      {hasCopy && (
-        <RecordCard icon={<Type size={15} aria-hidden />} title={L.copy}>
-          <div className="space-y-2 rounded-xl bg-surface-secondary p-4">
-            {copy.headline && <p className="text-base font-bold text-text-primary">{copy.headline}</p>}
-            {copy.body && <p className="whitespace-pre-line text-sm text-text-secondary">{copy.body}</p>}
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              {copy.cta && <span className="rounded-lg bg-brand-600 px-3 py-1 text-xs font-bold text-white">{copy.cta}</span>}
-              {c.destination_url && <span className="inline-flex min-w-0 items-center gap-1 break-all font-mono text-xs text-text-secondary"><Link2 size={12} aria-hidden /><Num>{c.destination_url}</Num></span>}
-            </div>
-          </div>
-        </RecordCard>
-      )}
+      <CopyCard data={data} ar={ar} title={L.copy} />
 
       {missing.length > 0 && (
         <p className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted" data-testid="creative-record-missing">
@@ -431,5 +418,89 @@ export function ContentEvaluation({ data }: { data: CreativeDetail }) {
         </div>
       )}
     </section>
+  )
+}
+
+/**
+ * CREATIVE-COPY-ANALYSIS-001 (Owner 2026-11-25, «التفاصيل ليش ما يظهر فيه الهيد لاين والرابط التوجيه وCTA … هل يمدي تضيف
+ * التحليل») — the ad's words, its call to action and its link, read against the Owner's own ad standards: a call to
+ * action always, a destination, no hashtags, no emoji, short enough to read in the first seconds. When the platform sent
+ * none of it, the card says so — it never disappears, so «no copy» is never confused with «nothing to show».
+ */
+const CTA_AR: Record<string, string> = {
+  SHOP_NOW: 'تسوّق الآن', ORDER_NOW: 'اطلب الآن', BUY_NOW: 'اشترِ الآن', LEARN_MORE: 'اعرف المزيد', SIGN_UP: 'سجّل الآن',
+  DOWNLOAD: 'حمّل الآن', INSTALL_NOW: 'ثبّت الآن', BOOK_NOW: 'احجز الآن', CONTACT_US: 'تواصل معنا', APPLY_NOW: 'قدّم الآن',
+  GET_OFFER: 'احصل على العرض', SUBSCRIBE: 'اشترك', WATCH_MORE: 'شاهد المزيد', VISIT_STORE: 'زر المتجر', GET_QUOTE: 'اطلب عرض سعر',
+}
+const ctaText = (cta: string, ar: boolean) => (ar && CTA_AR[cta.toUpperCase()]) || cta.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (x) => x.toUpperCase())
+const MAX_TEXT = 100
+
+function CopyCard({ data, ar, title }: { data: CreativeDetail; ar: boolean; title: string }) {
+  const c = data.creative
+  const copy = c.copy
+  const words = [copy.headline, copy.body, copy.description].filter((x): x is string => !!x).join(' ')
+  const sent = !!(words || copy.cta || c.destination_url)
+  const provider = providerLabel(c.provider, ar ? 'ar' : 'en')
+
+  if (!sent) {
+    return (
+      <RecordCard icon={<Type size={15} aria-hidden />} title={title}>
+        <p className="rounded-xl border border-dashed border-border p-4 text-sm text-text-secondary" data-testid="creative-copy-none">
+          {ar
+            ? `${provider} ما أرسلت نص هذا الإعلان ولا زر الإجراء ولا رابط التوجيه في المزامنة. يظهر التحليل هنا أول ما تصل.`
+            : `${provider} sent no text, call to action or link for this ad in the sync. The analysis appears here once they arrive.`}
+          {c.provider === 'tiktok' && (
+            <span className="mt-1 block text-xs text-text-muted">{ar ? 'تيك توك ما فيه حقل عنوان للإعلان؛ عنده النص وزر الإجراء والرابط.' : 'TikTok has no headline field; it has the ad text, the call to action and the link.'}</span>
+          )}
+        </p>
+      </RecordCard>
+    )
+  }
+
+  const hashtags = (words.match(/#[\p{L}\p{N}_]+/gu) ?? []).length
+  const emoji = /\p{Extended_Pictographic}/u.test(words)
+  const checks: Array<{ ok: boolean; label: string; note?: string }> = [
+    { ok: !!copy.cta, label: ar ? 'زر إجراء' : 'Call to action', note: copy.cta ? ctaText(copy.cta, ar) : (ar ? 'غير موجود' : 'missing') },
+    { ok: !!c.destination_url, label: ar ? 'رابط توجيه' : 'Destination link', note: c.destination_url ? undefined : (ar ? 'غير موجود' : 'missing') },
+    ...(words ? [
+      { ok: words.length <= MAX_TEXT, label: ar ? 'طول النص' : 'Text length', note: ar ? `${words.length} حرف` : `${words.length} chars` },
+      { ok: hashtags === 0, label: ar ? 'بدون هاشتاقات' : 'No hashtags', note: hashtags ? (ar ? `${hashtags} هاشتاق` : `${hashtags} hashtags`) : undefined },
+      { ok: !emoji, label: ar ? 'بدون إيموجي' : 'No emoji', note: emoji ? (ar ? 'فيه إيموجي' : 'has emoji') : undefined },
+    ] : [{ ok: false, label: ar ? 'نص الإعلان' : 'Ad text', note: ar ? 'لم يُرسل' : 'not sent' }]),
+  ]
+  const passed = checks.filter((x) => x.ok).length
+
+  return (
+    <RecordCard icon={<Type size={15} aria-hidden />} title={title}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)]">
+        <div className="space-y-2 rounded-xl bg-surface-secondary p-4" data-testid="creative-copy">
+          {copy.headline && <p className="text-base font-bold text-text-primary">{copy.headline}</p>}
+          {copy.body && <p className="whitespace-pre-line text-sm text-text-primary">{copy.body}</p>}
+          {copy.description && <p className="text-sm text-text-secondary">{copy.description}</p>}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {copy.cta && <span className="rounded-lg bg-brand-600 px-3 py-1 text-xs font-bold text-white">{ctaText(copy.cta, ar)}</span>}
+            {c.destination_url && (
+              <span className="inline-flex min-w-0 items-center gap-1 break-all font-mono text-xs text-text-secondary"><Link2 size={12} className="shrink-0" aria-hidden /><Num>{c.destination_url}</Num></span>
+            )}
+          </div>
+        </div>
+        <div data-testid="creative-copy-analysis">
+          <p className="mb-2 text-xs font-semibold text-text-secondary">
+            {ar ? 'تحليل النص' : 'Copy check'} · <Num>{`${passed}/${checks.length}`}</Num>
+          </p>
+          <ul className="space-y-1.5">
+            {checks.map((x) => (
+              <li key={x.label} className="flex items-center justify-between gap-2 rounded-lg bg-surface-secondary px-3 py-2 text-sm">
+                <span className="inline-flex items-center gap-2 font-semibold text-text-primary">
+                  {x.ok ? <BadgeCheck size={15} className="text-success" aria-hidden /> : <CircleAlert size={15} className="text-warning" aria-hidden />}
+                  {x.label}
+                </span>
+                {x.note && <span className={`text-xs ${x.ok ? 'text-text-secondary' : 'text-warning'}`}>{x.note}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </RecordCard>
   )
 }
