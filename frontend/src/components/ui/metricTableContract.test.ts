@@ -231,8 +231,21 @@ describe('the analytical table contract', () => {
  * front of somebody rather than quietly adding a line to EXEMPT.
  */
 describe('the analytics tabs use the product’s table', () => {
+  /*
+   * STORE-TAB-STORE-ONLY-001 (Owner 2026-11-26) — the store tab no longer draws a table of its own: its tables are the order
+   * sources and the three-sources panels, which render through the primitive themselves. The direction this pinned still holds —
+   * no hand-rolled table there and no way back onto the exempt list.
+   */
+  it('the store tab draws no hand-rolled table and is not exempt', () => {
+    const path = 'src/features/analytics/StoreFunnelTab.tsx'
+    const source = TREE['/' + path] ?? ''
+
+    expect(source).not.toBe('')
+    expect(source).not.toMatch(/<table\b/)
+    expect(Object.keys(EXEMPT)).not.toContain(path)
+  })
+
   it.each([
-    'src/features/analytics/StoreFunnelTab.tsx',
     'src/features/analytics/AttributionPanel.tsx',
   ])('%s renders through the primitive and is no longer exempt', (path) => {
     const source = TREE['/' + path] ?? ''
