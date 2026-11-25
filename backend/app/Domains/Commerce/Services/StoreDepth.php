@@ -41,6 +41,7 @@ final class StoreDepth
         private readonly CommerceCurrency $currency,
         private readonly ReportingTimezone $timezones,
         private readonly Ga4SiteAnalytics $site,
+        private readonly StoreInsights $insights,
     ) {}
 
     /**
@@ -121,6 +122,7 @@ final class StoreDepth
             'abandoned' => $this->abandoned($projectId, $window),
             'customers' => $this->customers($projectId, $current, $window['from'], $excludeDemo, $loaded['duplicates_collapsed']),
             'trend' => $this->trend($current, $window['timezone']),
+            'insights' => $this->insights->build($current, $window['timezone']),
             'coverage' => [
                 'orders_with_money_withheld' => $now['withheld'],
                 'money_withheld_currencies' => $current->filter(static fn (CommerceOrder $o): bool => $o->cancelled_at === null && $o->moneyWithheld())->pluck('original_currency')->filter()->unique()->values()->all(),
@@ -183,7 +185,7 @@ final class StoreDepth
             ->where('commerce_order_items.tenant_id', $tenantId)
             ->whereIn('commerce_order_items.commerce_order_id', $ids)
             ->selectRaw('COALESCE(commerce_order_items.commerce_product_id::text, commerce_order_items.name) AS item_key')
-            ->selectRaw('MAX(commerce_order_items.name) AS item_name, MAX(commerce_products.category) AS category')
+            ->selectRaw('MAX(commerce_order_items.name) AS item_name, MAX(commerce_products.category) AS category, MAX(commerce_products.image_url) AS image_url')
             ->selectRaw('SUM(commerce_order_items.quantity) AS quantity, SUM(commerce_order_items.total) AS revenue')
             ->selectRaw('COUNT(DISTINCT commerce_order_items.commerce_order_id) AS orders')
             ->groupByRaw('COALESCE(commerce_order_items.commerce_product_id::text, commerce_order_items.name)')
@@ -193,6 +195,7 @@ final class StoreDepth
                 'key' => (string) $r->item_key,
                 'name' => (string) $r->item_name,
                 'category' => $r->category === null ? null : (string) $r->category,
+                'image_url' => $r->image_url === null ? null : (string) $r->image_url,
                 'quantity' => round((float) $r->quantity, 2),
                 'revenue' => round((float) $r->revenue, 2),
                 'orders' => (int) $r->orders,
@@ -205,7 +208,7 @@ final class StoreDepth
      */
     private function products(string $projectId, Collection $items): array
     {
-        $public = static fn (array $r): array => ['name' => $r['name'], 'quantity' => $r['quantity'], 'revenue' => $r['revenue'], 'orders' => $r['orders']];
+        $public = static fn (array $r): array => ['name' => $r['name'], 'image_url' => $r['image_url'] ?? null, 'quantity' => $r['quantity'], 'revenue' => $r['revenue'], 'orders' => $r['orders']];
         $byRevenue = $items->sortByDesc('revenue')->values();
         $top = $byRevenue->take(self::RANKED)->pluck('key')->all();
         // The lowest earners of what sold, without repeating the leaders unless the catalogue is too small to tell them apart.

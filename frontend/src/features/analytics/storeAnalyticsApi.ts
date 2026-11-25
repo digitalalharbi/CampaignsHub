@@ -1,6 +1,24 @@
 /** STORE-ANALYTICS-DEPTH-001 — what the store's endpoints answer. A null is «not stated», never zero. */
 export interface Compared { current: number | null; previous: number | null; change_pct: number | null }
-export interface ProductRow { name: string; quantity: number; revenue: number; orders: number }
+export interface ProductRow { name: string; image_url?: string | null; quantity: number; revenue: number; orders: number }
+
+/** STORE-INSIGHTS-001 — one field's split of the period's orders, folded to six slices and «أخرى». */
+export interface StoreMix {
+  rows: Array<{ key: string; orders: number; net: number | null; share: number }>
+  other: { orders: number; net: number | null; keys: number; share: number } | null
+  unstated: number
+  stated: number
+}
+
+export interface StoreInsightsPayload {
+  status_mix: Array<{ key: string; orders: number; share: number }>
+  payment_mix: StoreMix
+  city_mix: StoreMix
+  heatmap: { cells: number[][]; max: number; peak: { day: number; hour: number; orders: number } | null; by_day: number[]; by_hour: number[]; timezone: string }
+  basket: { bands: Array<{ from: number; to: number | null; orders: number; net: number }>; median: number | null }
+  coupons: { rows: Array<{ code: string; orders: number; discount: number | null; net: number | null }>; orders_with_coupon: number; share: number | null }
+  composition: Record<'products' | 'shipping' | 'tax' | 'discounts' | 'refunded', number | null>
+}
 
 export interface StoreDepthPayload {
   state: 'no_store' | 'empty' | 'ready'
@@ -16,6 +34,7 @@ export interface StoreDepthPayload {
   abandoned?: { carts: number; value: number | null; by_product: null; by_product_reason: { ar: string; en: string } }
   customers?: { new: number; returning: number; without_customer: number; repeat_rate: number | null; customers_in_ledger: number; ledger_since: string | null; lifetime_value: number | null; lifetime_value_reason: string | null; lifetime_value_basis: { ar: string; en: string } }
   trend?: Array<{ date: string; orders: number; net: number }>
+  insights?: StoreInsightsPayload
   coverage?: { orders_with_money_withheld: number; money_withheld_currencies: string[]; duplicate_orders_collapsed: number }
 }
 
