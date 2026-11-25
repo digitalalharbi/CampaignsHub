@@ -1,5 +1,5 @@
-import { Link, useLocation } from 'react-router-dom'
-import { Building2, Image as ImageIcon, Layers, Megaphone } from 'lucide-react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Building2, Image as ImageIcon, Layers, LayoutDashboard, Megaphone } from 'lucide-react'
 import { usePortalPath } from '@/app/portalPath'
 import { useUi } from '@/stores/ui'
 
@@ -25,6 +25,16 @@ export function LevelTabs() {
   const ar = useUi((s) => s.locale) === 'ar'
   const { pathname, search } = useLocation()
   const to = usePortalPath()
+  const navigate = useNavigate()
+  const onCampaigns = pathname === to('/campaigns')
+  /*
+   * Owner 2026-11-24 — from the advanced view, opening Accounts, Ad groups or Ads left the way back to the simple view
+   * behind on the campaigns page. Every level of the advanced view carries it, and it lands on the simple Ads Manager.
+   */
+  const toSimple = () => {
+    try { localStorage.setItem('ch-campaigns-layout', 'simple') } catch { /* a private window keeps the choice for this visit */ }
+    navigate(`${to('/campaigns')}${search}`)
+  }
 
   return (
     <nav aria-label={ar ? 'مستويات الحساب' : 'Account levels'} data-testid="campaign-levels" className="-mx-0.5 flex min-w-0 max-w-full gap-1 overflow-x-auto px-0.5 pb-0.5 [scrollbar-width:none]">
@@ -47,6 +57,13 @@ export function LevelTabs() {
           </Link>
         )
       })}
+      {!onCampaigns && (
+        <button type="button" onClick={toSimple} data-testid="levels-simple-view"
+          className="ms-auto inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-sm font-bold text-text-secondary hover:bg-surface-hover hover:text-text-primary">
+          <LayoutDashboard size={15} aria-hidden />
+          {ar ? 'العرض المبسّط' : 'Simple view'}
+        </button>
+      )}
     </nav>
   )
 }

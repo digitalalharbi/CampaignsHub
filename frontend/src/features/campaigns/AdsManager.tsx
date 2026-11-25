@@ -243,7 +243,15 @@ export function AdsManager({ onAdvanced }: { onAdvanced: () => void }) {
   }, [campaigns.data, adSets.data, ads.data, accounts.data, pulse.data, range.to, lang, ar])
 
   const pending = { campaigns: campaigns.isPending, ad_sets: adSets.isPending, ads: ads.isPending, accounts: accounts.isPending }[level]
-  const platforms = useMemo(() => [...new Set((campaigns.data ?? []).map((c) => c.provider))].sort(), [campaigns.data])
+  /*
+   * Owner 2026-11-24: picking Snapchat hid every other platform's mark — the list was read from the campaigns, which the
+   * chosen platform had already narrowed. It is read from the project's ad accounts (never narrowed by the platform
+   * filter) together with the campaigns, so a choice can always be undone or changed in place.
+   */
+  const platforms = useMemo(() => [...new Set([
+    ...(pulse.data ?? []).map((p) => p.provider),
+    ...(platform === 'all' ? (campaigns.data ?? []).map((c) => c.provider) : [platform]),
+  ])].sort(), [pulse.data, campaigns.data, platform])
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
