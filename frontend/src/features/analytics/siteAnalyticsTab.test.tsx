@@ -40,9 +40,9 @@ describe('the site analytics tab', () => {
     renderWithProviders(<SiteAnalyticsTab projectId="p1" range={range} />, { route: '/agency/analytics', locale: 'en' })
 
     expect(await screen.findByTestId('ga4-tile-sessions')).toHaveTextContent('1,000')
-    // Money reads in USD; the property's own currency stays beside it.
+    // ANALYTICS-REPORT-PARITY-001 — the report's own tiles: money in USD, exactly as the shared report reads.
+    expect(screen.getByTestId('ga4-tiles')).toHaveAttribute('data-layout', 'compact')
     expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('1.38K $')
-    expect(screen.getByTestId('ga4-tile-revenue')).toHaveTextContent('5.5K ر.س')
     // REPORT-WEBSITE-TAB-001 — the match below replaces the older comparison card.
     expect(screen.queryByTestId('ga4-gap-chip-meta')).toBeNull()
     expect(screen.getByTestId('site-not-summed')).toBeInTheDocument()
@@ -79,11 +79,12 @@ describe('the site analytics tab', () => {
 
     const bounce = await screen.findByTestId('ga4-tile-bounce_rate')
     expect(bounce).toHaveTextContent('30.0%')
-    expect(bounce).toHaveTextContent('60.0%')
-    expect(screen.getByTestId('ga4-delta-bounce_rate')).toHaveTextContent('50.0%')
+    expect(screen.getByTestId('ga4-delta-bounce_rate')).toHaveTextContent('50%')
     // A falling bounce rate is the good direction, and is coloured as one.
-    expect(screen.getByTestId('ga4-delta-bounce_rate')).toHaveAttribute('data-good', 'yes')
+    expect(screen.getByTestId('ga4-delta-bounce_rate').className).toContain('text-success')
     expect(screen.getByTestId('ga4-tile-aov')).toHaveTextContent('200 ر.س')
+    // The previous period and each figure's definition stay, under «تحليل إضافي».
+    expect(screen.getByTestId('site-more-analysis')).toContainElement(screen.getByTestId('site-kpi-def-bounce_rate'))
     const absent = screen.getByTestId('site-kpi-items_per_order')
     expect(absent).toHaveTextContent('—')
     expect(absent).not.toHaveTextContent('0.00')

@@ -18,6 +18,8 @@ import { CLASSIFY_GROUPS, type ClassificationPayload, type ClassificationRow, ty
 import { hideParam } from './visibility'
 import { promptDialog } from '@/stores/dialogs'
 import { PeriodText } from '@/components/ui/PeriodText'
+import { AttributionVisual, GapStory, type AttributionBasis } from '@/features/reports/WebsiteVisuals'
+import type { StorePayload } from './storeTypes'
 
 /**
  * GA4-ATTRIBUTION-MATCH-001 — the Analytics GA4 tab as one workbench: a visibility control, a filter bar of chips,
@@ -61,6 +63,13 @@ export function Ga4Workbench({ projectId, range, ar }: { projectId: string; rang
     queryFn: () => getData<GapReasonsPayload>(`/projects/${projectId}/measurement/gap${qs(range, {}, hidden)}`),
   })
 
+  // The same query Ga4StoreSection draws from (one cache entry): the website's orders and sales are the attribution's basis.
+  const hideCsv = [...hidden].sort().join(',')
+  const store = useSwrQuery({
+    name: 'ga4-store', scope: [projectId, hideCsv], window: [range.from, range.to],
+    queryFn: () => getData<StorePayload>(`/projects/${projectId}/measurement/store?from=${range.from}&to=${range.to}${hideParam(hidden)}`),
+  })
+
   const platforms = Array.isArray(match.data?.platforms) ? match.data!.platforms! : []
   const platformChips = useMemo(() => platforms.map((p) => p.platform), [platforms])
 
@@ -76,11 +85,28 @@ export function Ga4Workbench({ projectId, range, ar }: { projectId: string; rang
       {/* REPORT-WEBSITE-TAB-001 — the match below sets the website beside each platform; the older comparison card stands only without it. */}
       <Ga4StoreSection projectId={projectId} range={range} ar={ar} hide={hidden} showGap={match.data?.state !== 'ready'} />
 
-      <MatchSection q={match} ar={ar} drill={drill} setDrill={setDrill} projectId={projectId} range={range} hidden={hidden} compare={f.compare} />
+      {/*
+        ANALYTICS-REPORT-PARITY-001 (Owner 2026-11-25) — «أجزاء تعدّلت في التقارير لكن لم تتعدل في التحليلات». The website reading is
+        drawn with the report's own components: «المنصة مقابل الموقع» with «ليش الفرق؟», real orders, cost per order and the return,
+        then the gap as a picture. The analyst's drill-downs stay one click away under «التفاصيل الفنية», nothing removed.
+      */}
+      {match.data?.state === 'ready' && (
+        <div data-testid="analytics-attribution-visual" className="min-w-0">
+          <AttributionVisual data={match.data} ar={ar} basis={basisFor(match.data, store.data)} />
+        </div>
+      )}
+      {gap.data?.state === 'ready' && Array.isArray(gap.data.reasons) ? (
+        <div data-testid="analytics-gap-story" className="min-w-0"><GapStory data={gap.data} ar={ar} platforms={platformChips} /></div>
+      ) : null}
 
-      {gap.data?.state === 'ready' && Array.isArray(gap.data.reasons) ? <GapPanel data={gap.data} ar={ar} /> : null}
-
-      <ClassifySection projectId={projectId} range={range} ar={ar} f={f} setF={setF} hidden={hidden} drillCampaign={drill?.campaign ?? null} />
+      <details data-testid="analytics-technical-details" className="group rounded-2xl border border-border bg-surface">
+        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-extrabold text-text-primary">{ar ? 'التفاصيل الفنية' : 'Technical details'}</summary>
+        <div className="space-y-4 border-t border-border p-3">
+          <MatchSection q={match} ar={ar} drill={drill} setDrill={setDrill} projectId={projectId} range={range} hidden={hidden} compare={f.compare} />
+          {gap.data?.state === 'ready' && Array.isArray(gap.data.reasons) ? <GapPanel data={gap.data} ar={ar} /> : null}
+          <ClassifySection projectId={projectId} range={range} ar={ar} f={f} setF={setF} hidden={hidden} drillCampaign={drill?.campaign ?? null} />
+        </div>
+      </details>
     </div>
   )
 }
@@ -258,4 +284,21 @@ function ViewsRow({ projectId, range, ar, hidden, filters, onApply }: { projectI
         onClick={async () => { const name = await promptDialog({ title: ar ? 'احفظ العرض' : 'Save this view', label: ar ? 'الاسم' : 'Name' }); if (name) save.mutate({ name, filters: { hidden, ga4: filters } as never, date_range: { days } }) }}>{ar ? 'حفظ' : 'Save'}</button>
     </div>
   )
+}
+
+/**
+ * ANALYTICS-REPORT-PARITY-001 — what the attribution reading judges against, as the report does (`basisOf` in Ga4ReportBlocks):
+ * the website's orders and its sales in dollars, and the spend the platforms reported in dollars. Spend is summed only from
+ * figures the server sent; with none, cost per order and the return are not drawn rather than guessed.
+ */
+export function basisFor(match: MatchPayload, store: StorePayload | undefined): AttributionBasis {
+  const kpi = (k: string) => store?.kpis?.find((x) => x.key === k)
+  const spends = (match.platforms ?? []).map((p) => p.claimed?.spend_usd).filter((v): v is number => typeof v === 'number')
+
+  return {
+    orders: kpi('transactions')?.current ?? null,
+    ordersSource: 'site',
+    spendUsd: spends.length > 0 ? spends.reduce((a, b) => a + b, 0) : null,
+    revenueUsd: kpi('revenue')?.current_usd ?? null,
+  }
 }
