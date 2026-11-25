@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { metricSourceLabel } from './metricSource'
-import { creativeKindLabel } from './CreativesPage'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, Maximize2, Minus, Plus, RotateCcw } from 'lucide-react'
 import { AdPreviewDialog } from './AdPreviewDialog'
 import { CreativeVideoPlayer } from './CreativeVideoPlayer'
-import { CreativeInsightCard } from './CreativeInsightCard'
+import { AdviceTab, ContentEvaluation, RecordTab } from './CreativeDetailTabs'
 import { CreativeCarousel } from './CreativeCarousel'
 import { formatMetric, metricLabel, metricState } from './metrics'
 import { formatBytes, imageLoading } from './format'
@@ -23,7 +22,6 @@ import { MetricTable } from '@/components/ui/MetricTable'
 import { creativeMoney } from './creativeMoney'
 import { Num } from '@/components/ui/Num'
 import { ProviderMark } from '@/components/ProviderMark'
-import { formatPeriodRange } from '@/lib/period/formatPeriodLabel'
 
 /**
  * §15.6 — one creative, on its own page.
@@ -536,6 +534,9 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
       </div>
       </div>
 
+      {/* ---- CONTENT-EVALUATION-001: is this content working, and what to change ------------------ */}
+      <ContentEvaluation data={data} />
+
       {/* ---- a carousel is more than one picture (§15) ---------------------------------------- */}
       <CreativeCarousel preview={creative.preview} locale={locale} />
 
@@ -554,77 +555,8 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
         ))}
       </div>
 
-      <div role="tabpanel" hidden={tab !== 'details'} data-testid="creative-panel-details" className="space-y-4">
-      {/* ---- what it is, and where the figures came from ------------------------------------- */}
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="text-sm font-semibold text-text-primary">{t.identity}</h2>
-        <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-3 lg:grid-cols-4">
-          <Fact k={t.platform} v={providerLabel(creative.provider, locale)} block />
-          <Fact k={t.campaign} v={creative.campaign_name ?? t.notProvided} block />
-          <Fact k={t.adSet} v={creative.external_ids.ad_set ?? t.notProvided} block ltr />
-          {/*
-            Every ad's provider id, not one of them.
-
-            This read `external_ids.ad`, which was whichever ad the importer wrote last — a single
-            value under a label that reads as «the ad's id», on an account where four ads routinely
-            share a creative. The ads come from `external_ads.creative_id` now, so the fact is the
-            same kind of fact and is no longer a false singular.
-          */}
-          <Fact
-            k={t.ad}
-            v={(creative.ads ?? []).length > 0
-              ? (creative.ads ?? []).map((ad) => ad.external_id).join(' · ')
-              : t.notProvided}
-            block
-            ltr
-          />
-          <Fact k={t.objective} v={creative.objective ? objectiveLabel(creative.objective, locale) : t.notProvided} block />
-          <Fact k={t.path} v={marketingPathLabel(data.path, locale)} block />
-          <Fact k={t.kind} v={creativeKindLabel(preview.kind, ar)} block />
-          {/* SNAP-OCT26-AI-MEDIA-DECLARATION — only what the platform stated; «not declared» is not «not AI». */}
-          <Fact
-            k={t.aiMedia}
-            v={creative.ai_media?.declared ? ((ar ? creative.ai_media.label_ar : creative.ai_media.label_en) ?? creative.ai_media.source ?? t.aiMediaNotDeclared) : t.aiMediaNotDeclared}
-            block
-          />
-          <Fact k={t.firstSeen} v={creative.freshness.first_seen_at?.slice(0, 10) ?? t.notProvided} block ltr />
-          <Fact k={t.lastActive} v={creative.freshness.last_active_at?.slice(0, 10) ?? t.notProvided} block ltr />
-          <Fact k={t.lastSync} v={creative.freshness.last_synced_at?.slice(0, 16).replace('T', ' ') ?? t.notProvided} block ltr />
-          <Fact k={t.sourceUpdated} v={creative.freshness.source_updated_at?.slice(0, 16).replace('T', ' ') ?? t.notProvided} block ltr />
-          <Fact k={t.currency} v={data.currency ?? t.notProvided} block ltr />
-          <Fact k={t.timezone} v={data.timezone ?? t.notProvided} block ltr />
-          <Fact k={t.period} v={formatPeriodRange(data.period.from, data.period.to, ar ? 'ar' : 'en')} block ltr />
-          <Fact k={t.previousPeriod} v={formatPeriodRange(data.previous_period.from, data.previous_period.to, ar ? 'ar' : 'en')} block ltr />
-        </dl>
-        <p className="mt-3 text-xs text-text-secondary">
-          {t.attribution}: {ar ? data.attribution.note_ar : data.attribution.note_en}
-        </p>
-      </section>
-
-      {/* ---- the words on it, shown as text and never followed -------------------------------- */}
-      {(creative.copy.headline || creative.copy.body || creative.copy.cta || creative.destination_url) && (
-        <section className="rounded-2xl border border-border bg-surface p-4">
-          <h2 className="text-sm font-semibold text-text-primary">{t.copy}</h2>
-          <dl className="mt-3 space-y-2 text-sm">
-            {creative.copy.headline && <Fact k={t.headline} v={creative.copy.headline} block />}
-            {creative.copy.body && <Fact k={t.body} v={creative.copy.body} block />}
-            {creative.copy.cta && <Fact k={t.cta} v={creative.copy.cta} block />}
-            {creative.destination_url && (
-              <div>
-                <dt className="text-xs text-text-secondary">{t.destination}</dt>
-                {/*
-                  Text, not a link.
-                  It is the advertiser's own URL rather than the platform's, so it carries no
-                  credential of ours — but it is still an address chosen by whoever wrote the ad, and
-                  a page that made it clickable would be offering to follow it on the reader's behalf.
-                */}
-                <dd className="break-all font-mono text-xs text-text-primary"><Num>{creative.destination_url}</Num></dd>
-              </div>
-            )}
-          </dl>
-        </section>
-      )}
-
+      <div role="tabpanel" hidden={tab !== 'details'} data-testid="creative-panel-details">
+        <RecordTab data={data} locale={locale} />
       </div>
 
       <div role="tabpanel" hidden={tab !== 'performance'} data-testid="creative-panel-performance" className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -835,50 +767,8 @@ export function CreativeDetailPage({ portal }: { portal: 'app' | 'agency' }) {
 
       </div>
 
-      <div role="tabpanel" hidden={tab !== 'advice'} data-testid="creative-panel-advice" className="space-y-4">
-      {/* ---- what the figures say, and what to do about it ------------------------------------- */}
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="text-sm font-semibold text-text-primary">{t.insights}</h2>
-        <p className="mt-1 text-xs text-text-secondary">
-          {t.comparedAgainst}: <span dir="ltr">{data.insights.compared_against.creatives}</span>{' '}
-          {marketingPathLabel(data.insights.compared_against.path, locale)}
-          {data.insights.compared_against.capped && ` — ${t.capped}`}
-        </p>
-        {data.insights.items.length === 0 ? (
-          <p className="mt-3 text-sm text-text-secondary">{t.insightsNone}</p>
-        ) : (
-          <ul className="mt-3 space-y-3">
-            {data.insights.items.map((item) => (
-              <CreativeInsightCard key={item.id} item={item} locale={locale} />
-            ))}
-          </ul>
-        )}
-      </section>
-      {/* ---- the verdict, with what produced it ------------------------------------------------ */}
-      <section className="rounded-2xl border border-border bg-surface p-4">
-        <h2 className="text-sm font-semibold text-text-primary">{t.fatigue}</h2>
-        <p className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-          <span className={`rounded px-2 py-0.5 text-xs ${FATIGUE_TONE[data.fatigue.status] ?? ''}`}>
-            {FATIGUE_LABEL[data.fatigue.status]?.[ar ? 'ar' : 'en'] ?? data.fatigue.status}
-          </span>
-          <span className="text-text-secondary">{ar ? data.fatigue.reason_ar : data.fatigue.reason_en}</span>
-        </p>
-        {data.fatigue.signals.length > 0 && (
-          <>
-            <h3 className="mt-3 text-xs font-semibold text-text-secondary">{t.evidence}</h3>
-            <ul className="mt-1 space-y-1 text-xs text-text-secondary">
-              {data.fatigue.signals.map((signal) => (
-                <li key={`${signal.metric}-${signal.direction}`} className="flex flex-wrap gap-2">
-                  <span className="font-medium text-text-primary">{metricLabel(signal.metric, locale)}</span>
-                  <span>{signal.direction}</span>
-                  {signal.change !== null && <span dir="ltr" className="tabular-nums">{(signal.change * 100).toFixed(1)}%</span>}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
-
+      <div role="tabpanel" hidden={tab !== 'advice'} data-testid="creative-panel-advice">
+        <AdviceTab data={data} locale={locale} currency={currency} />
       </div>
 
       {/*
