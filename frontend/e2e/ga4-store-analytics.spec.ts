@@ -78,6 +78,8 @@ test.describe('GA4 store analytics', () => {
     const toggle = page.getByTestId('ga4-table-toggle')
     await toggle.scrollIntoViewIfNeeded()
     if (!(await toggle.evaluate((d) => (d as HTMLDetailsElement).open))) await toggle.locator('summary').click()
+    // Start on «المنتجات» and come back to it: the bars above the table follow the tab, the table's box does not.
+    await page.getByTestId('ga4-table-tab-products').click()
     const table = page.getByTestId('ga4-table-box')
     await table.scrollIntoViewIfNeeded()
     const first = await box(table)
@@ -154,7 +156,7 @@ test.describe('GA4 store analytics', () => {
     await expect(page.getByTestId('ga4-match')).toBeVisible({ timeout: 30000 })
     // The report's own match picture above carries a table of the same name; the drill is the analyst's one.
     const match = page.getByTestId('ga4-match')
-    await expect(match.getByTestId('match-basis')).toHaveText(/Website|الموقع/)
+    await expect(page.getByTestId('match-basis')).toHaveText(/Website|الموقع/)
     const table = match.getByTestId('match-table-box')
     await table.scrollIntoViewIfNeeded()
     // Measure the page only once everything below the match has loaded, so the comparison after the
