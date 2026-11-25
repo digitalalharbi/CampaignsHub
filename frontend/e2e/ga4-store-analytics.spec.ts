@@ -43,6 +43,13 @@ const settledHeight = async (page: Page) => {
   return last
 }
 
+/** ANALYTICS-REPORT-PARITY-001 — the analyst's drill-downs live under «التفاصيل الفنية», one click away. */
+async function openTechnical(page: Page) {
+  const details = page.getByTestId('analytics-technical-details')
+  await expect(details).toBeVisible({ timeout: 30000 })
+  if (!(await details.evaluate((d) => (d as HTMLDetailsElement).open))) await details.locator('summary').click()
+}
+
 test.describe('GA4 store analytics', () => {
   test.use({ storageState: AUTH.owner })
 
@@ -55,12 +62,12 @@ test.describe('GA4 store analytics', () => {
     for (const key of ['sessions', 'bounce_rate', 'revenue', 'aov', 'conversion_rate']) {
       await expect(page.getByTestId(`ga4-tile-${key}`)).toBeVisible()
     }
-    // Money reads in USD with the property's own currency kept beside it.
+    // Money reads in USD, the way the client's report reads it (ANALYTICS-REPORT-PARITY-001).
     await expect(page.getByTestId('ga4-tile-revenue')).toContainText(/\$|USD/)
-    await expect(page.getByTestId('ga4-tile-revenue')).toContainText(/ر\.س|SAR/)
     await expect(page.getByTestId('ga4-channels')).toBeVisible()
     await expect(page.getByTestId('ga4-devices')).toBeVisible()
     // The match section below replaces the older comparison card on this tab.
+    await openTechnical(page)
     await expect(page.getByTestId('ga4-match')).toBeVisible({ timeout: 30000 })
     await expect(page.getByTestId('ga4-gap')).toHaveCount(0)
 
@@ -139,6 +146,7 @@ test.describe('GA4 store analytics', () => {
     await selectProject(page, await seededProject(request, STORE_PROJECT))
     await page.goto('/agency/analytics?tab=site')
 
+    await openTechnical(page)
     await expect(page.getByTestId('ga4-match')).toBeVisible({ timeout: 30000 })
     await expect(page.getByTestId('match-basis')).toHaveText(/Website|الموقع/)
     const table = page.getByTestId('match-table-box')
@@ -176,6 +184,7 @@ test.describe('GA4 store analytics', () => {
     test.setTimeout(120_000)
     await selectProject(page, await seededProject(request, STORE_PROJECT))
     await page.goto('/agency/analytics?tab=site')
+    await openTechnical(page)
     await expect(page.getByTestId('ga4-classify')).toBeVisible({ timeout: 30000 })
 
     const table = page.getByTestId('ga4-classify-table-box')
@@ -192,20 +201,23 @@ test.describe('GA4 store analytics', () => {
     test.setTimeout(120_000)
     await selectProject(page, await seededProject(request, STORE_PROJECT))
     await page.goto('/agency/analytics?tab=site')
-    await expect(page.getByTestId('gap-reasons')).toBeVisible({ timeout: 30000 })
+    // The gap is drawn as a picture above; its measured reasons and their rows are the analyst's panel underneath.
+    await expect(page.getByTestId('analytics-gap-story')).toBeVisible({ timeout: 30000 })
+    await openTechnical(page)
+    const panel = page.getByTestId('ga4-gap-panel').getByTestId('gap-reasons')
+    await expect(panel).toBeVisible({ timeout: 30000 })
 
-    await expect(page.getByTestId('gap-headline-gap')).toBeVisible()
-    await expect(page.getByTestId('gap-bar')).toBeVisible()
-    await expect(page.getByTestId('gap-unexplained')).toBeVisible()
-    const unmeasured = page.getByTestId('gap-unmeasured-view_through')
+    await expect(panel.getByTestId('gap-headline-gap')).toBeVisible()
+    await expect(panel.getByTestId('gap-bar')).toBeVisible()
+    await expect(panel.getByTestId('gap-unexplained')).toBeVisible()
+    const unmeasured = panel.getByTestId('gap-unmeasured-view_through')
     await expect(unmeasured).toBeVisible()
     expect(((await unmeasured.textContent()) ?? '').replace(/[^0-9]/g, '')).toBe('')
     // REPORT-WEBSITE-GAP-READING-001 — tracking paths, no source named, a visible sum, windows in words.
-    const panel = page.getByTestId('gap-reasons')
     await expect(panel.getByTestId('gap-sum')).toBeVisible()
     await expect(panel.getByTestId('gap-reason-no_platform_trace')).toBeVisible()
     expect(await panel.innerText()).not.toMatch(/GA4|Google|بلا منصة|بلا أثر|بلا حملة|من خارج الحملات|\d+d_(click|view)|سجل المتجر/i)
-    await page.getByTestId('gap-reason-no_trace').click()
+    await panel.getByTestId('gap-reason-no_trace').click()
     await expect(page.getByTestId('gap-reason-drill')).toBeVisible()
   })
 
