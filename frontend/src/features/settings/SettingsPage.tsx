@@ -1,4 +1,5 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
+import { lazyWithReload } from '@/lib/chunkReload'
 import { UsageMeterPanel } from '@/features/subscriptions/UsageMeterPanel'
 import { useSearchParams } from 'react-router-dom'
 import { Building2, FileText, Palette, ShieldCheck, Users, Briefcase, FolderKanban, Bell, Blocks, LayoutDashboard } from 'lucide-react'
@@ -41,7 +42,7 @@ export const SETTINGS_TABS = [
 const TABS = SETTINGS_TABS
 
 /** NOTIF-V2-SETTINGS-UI-001 — the one shared notification settings page, for every workspace type. */
-const WorkspaceNotificationsPage = lazy(() => import('@/features/notifications/workspace/WorkspaceNotificationsPage').then((m) => ({ default: m.WorkspaceNotificationsPage })))
+const WorkspaceNotificationsPage = lazyWithReload(() => import('@/features/notifications/workspace/WorkspaceNotificationsPage').then((m) => ({ default: m.WorkspaceNotificationsPage })))
 
 export type SettingsTabId = (typeof SETTINGS_TABS)[number]['id']
 type TabId = SettingsTabId

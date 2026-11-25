@@ -1,4 +1,5 @@
-import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useMemo, useRef, useState } from 'react'
+import { lazyWithReload } from '@/lib/chunkReload'
 import { createPortal } from 'react-dom'
 import { useSearchParams } from 'react-router-dom'
 import { FileText, Globe, Image as ImageIcon, LayoutDashboard, Layers, RefreshCw, Table as TableIcon } from 'lucide-react'
@@ -26,14 +27,14 @@ import { LiveDeliveryNote } from './live/LiveDeliveryNote'
  * REPORT-DATE-PICKER-001 — the picker (calendar, presets, typed fields) is loaded when the period bar renders, not with the
  * route: it pulled the /r/ closure 11.8 KB over PUBLIC_REPORT_BUDGET_BYTES. The fallback is the same-size button, so nothing shifts.
  */
-const DateRangeField = lazy(() => import('@/components/ui/DateRangeField').then((m) => ({ default: m.DateRangeField })))
+const DateRangeField = lazyWithReload(() => import('@/components/ui/DateRangeField').then((m) => ({ default: m.DateRangeField })))
 
 /*
  * ANALYTICS-REPORT-LOGIC-001 — the platform drawer is read after a click, so it is loaded then, not with the route.
  * Moving the report's logic into the shared layer put the /r/ closure over its byte budget; the drawer is the largest piece of the
  * page that nobody sees on arrival.
  */
-const LivePlatformDrawer = lazy(() => import('./live/LivePlatformDrawer').then((m) => ({ default: m.LivePlatformDrawer })))
+const LivePlatformDrawer = lazyWithReload(() => import('./live/LivePlatformDrawer').then((m) => ({ default: m.LivePlatformDrawer })))
 
 /**
  * LIVEREP-001 — the client's own view of a live shared link.

@@ -55,3 +55,25 @@ export function usePortalPath(): (suffix: string) => string {
     return `${base}${suffix.startsWith('/') ? suffix : `/${suffix}`}`
   }
 }
+
+/**
+ * ROUTE-HOME-001 — «العودة إلى الصفحة الرئيسية» means the reader's OWN home, not the marketing page.
+ *
+ * The button linked to `/`, which is the public homepage. An agency operator who hit an error on
+ * `/agency/analytics` pressed it and landed on the sales page (Owner, 2026-11-25). The current address already says
+ * which portal the reader is in, so the way back is that portal's own landing page. Outside any portal, a signed-in
+ * reader goes to `/dashboard`, which the legacy resolver sends into their own portal; only a guest gets `/`.
+ */
+const PORTAL_HOMES: ReadonlyArray<readonly [prefix: string, home: string]> = [
+  ['/agency', '/agency/dashboard'],
+  ['/app', '/app/dashboard'],
+  ['/admin', '/admin'],
+  ['/influencers', '/influencers'],
+  ['/portal', '/portal'],
+]
+
+export function homeFor(pathname: string, signedIn: boolean): string {
+  const portal = PORTAL_HOMES.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))
+  if (portal) return portal[1]
+  return signedIn ? '/dashboard' : '/'
+}

@@ -1,4 +1,5 @@
-import { lazy, Suspense, type ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
+import { lazyWithReload } from '@/lib/chunkReload'
 import type { LucideNamed } from './lucideCatalog'
 
 /**
@@ -9,7 +10,7 @@ import type { LucideNamed } from './lucideCatalog'
  * Until it arrives nothing is drawn (a 14-pixel glyph a few milliseconds late is not a state worth a
  * skeleton); an unknown name renders `fallback`, exactly as the four resolvers this replaces did.
  */
-const Loaded = lazy(() => import('./lucideCatalog').then((m) => ({ default: m.LucideByNameLoaded })))
+const Loaded = lazyWithReload(() => import('./lucideCatalog').then((m) => ({ default: m.LucideByNameLoaded })))
 
 export function LucideByName({
   name,

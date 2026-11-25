@@ -1,6 +1,10 @@
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useRouteError } from 'react-router-dom'
-import { Compass } from 'lucide-react'
+import { Compass, RefreshCw } from 'lucide-react'
 import { CampaignsHubLogo } from '@/components/brand/CampaignsHubLogo'
+import { isChunkLoadError, scheduleChunkReload } from '@/lib/chunkReload'
+import { homeFor } from './portalPath'
+import { useAuth } from '@/stores/auth'
 import { useUi } from '@/stores/ui'
 
 /**
@@ -25,6 +29,19 @@ export function NotFoundPage() {
   const error = useRouteError()
 
   const isError = error !== undefined && error !== null
+  const signedIn = useAuth((st) => st.status === 'authenticated')
+  const home = homeFor(location.pathname, signedIn)
+
+  /*
+   * CHUNK-RELOAD-001 — an update landed while this tab was open. A file the old page asked for is gone; the fix is
+   * the new page, so reload once rather than showing an error. If the one reload was already spent, the message
+   * below says so and the reader can still reload by hand.
+   */
+  const staleCode = isError && isChunkLoadError(error)
+  const [reloading, setReloading] = useState(false)
+  useEffect(() => {
+    if (staleCode && scheduleChunkReload()) setReloading(true)
+  }, [staleCode])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-5">
@@ -42,12 +59,18 @@ export function NotFoundPage() {
         </span>
         <Compass className="mx-auto text-text-muted" size={30} aria-hidden />
         <h1 className="mt-4 font-heading text-xl font-extrabold text-text-primary">
-          {isError
-            ? ar ? 'حدث خطأ في عرض هذه الصفحة' : 'Something went wrong on this page'
-            : ar ? 'الصفحة غير موجودة' : 'That page does not exist'}
+          {staleCode
+            ? ar ? 'تم تحديث النظام' : 'CampaignsHub was updated'
+            : isError
+              ? ar ? 'حدث خطأ في عرض هذه الصفحة' : 'Something went wrong on this page'
+              : ar ? 'الصفحة غير موجودة' : 'That page does not exist'}
         </h1>
         <p className="mt-2 text-sm text-text-secondary">
-          {isError
+          {staleCode
+            ? reloading
+              ? ar ? 'جارٍ تحميل النسخة الجديدة…' : 'Loading the new version…'
+              : ar ? 'حدّث الصفحة لتحميل النسخة الجديدة.' : 'Reload the page to load the new version.'
+            : isError
             ? ar
               ? 'جرّب تحديث الصفحة. إن تكرّر الأمر فأبلغ فريق الدعم بالعنوان أدناه.'
               : 'Try reloading. If it keeps happening, report the address below to support.'
@@ -59,12 +82,25 @@ export function NotFoundPage() {
         <p dir="ltr" className="mt-3 truncate rounded-lg bg-surface-secondary px-3 py-2 font-mono text-xs text-text-muted">
           {location.pathname}
         </p>
-        <Link
-          to="/"
-          className="mt-5 inline-block rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
-        >
-          {ar ? 'العودة إلى الصفحة الرئيسية' : 'Back to the home page'}
-        </Link>
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {isError && (
+            <button
+              type="button"
+              data-testid="error-reload"
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-text-primary hover:border-brand-400"
+            >
+              <RefreshCw size={15} aria-hidden /> {ar ? 'تحديث الصفحة' : 'Reload'}
+            </button>
+          )}
+          <Link
+            to={home}
+            data-testid="error-home"
+            className="inline-block rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+          >
+            {ar ? 'العودة إلى الصفحة الرئيسية' : 'Back to the home page'}
+          </Link>
+        </div>
       </div>
     </div>
   )

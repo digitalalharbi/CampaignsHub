@@ -1,4 +1,5 @@
-import { lazy, Suspense } from 'react'
+import { Suspense } from 'react'
+import { lazyWithReload } from '@/lib/chunkReload'
 import { useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Bell, CheckCircle2, Clock, EyeOff, ListChecks, MailX, Send, ShieldAlert, UserMinus, Users } from 'lucide-react'
 import { FitPage } from '@/components/fit/FitPage'
@@ -11,9 +12,9 @@ import { useExternalKpis, useKpis, useUsage, useWorkspaceSettings, useEntitlemen
 import { useTypeWords } from './typeWords'
 import { UsagePanel } from './UsagePanel'
 
-const InternalSection = lazy(() => import('./InternalSection').then((m) => ({ default: m.InternalSection })))
-const ExternalSection = lazy(() => import('./ExternalSection').then((m) => ({ default: m.ExternalSection })))
-const FirstRunWizard = lazy(() => import('./FirstRunWizard').then((m) => ({ default: m.FirstRunWizard })))
+const InternalSection = lazyWithReload(() => import('./InternalSection').then((m) => ({ default: m.InternalSection })))
+const ExternalSection = lazyWithReload(() => import('./ExternalSection').then((m) => ({ default: m.ExternalSection })))
+const FirstRunWizard = lazyWithReload(() => import('./FirstRunWizard').then((m) => ({ default: m.FirstRunWizard })))
 
 type SectionKey = 'internal' | 'external' | 'usage'
 
