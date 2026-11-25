@@ -113,6 +113,7 @@ Even then, the documentation is not skipped — it moves after the fix instead o
 | Date (UTC) | PR | Commit on `main` | What was overridden | Why | Follow-up |
 |---|---|---|---|---|---|
 | 2026-11-21 11:05 | #1262 TIKTOK-PERIOD-REACH-001 | `f2e2ab245` | Required CI checks (backend tests 1–8, frontend, gate) still queued on head `21512cf`; merged by the Owner with «bypass rules». Earlier heads had green static and backend shards 1, 2, 5; 4 and 7 had been fixed in the PR | Owner: the Buzz client report showed «التكرار: غير متاح» and he wanted it fixed without waiting on a stalled Actions queue | Deploy Production run 44897410229 succeeded at 11:12. The full backend suite runs again on the next PR off `main`; the Buzz report's frequency is to be read on Production |
+| 2026-11-25 18:17 | #1320 CHUNK-RELOAD-001, ROUTE-HOME-001, ROUTE-LINKS-001 | `cd268513f` | Required CI (frontend unit 1–3, chromium gate shards 1–6, backend guards) still running; merged by the Owner with «bypass rules». `frontend (static)`, `image`, `changes` were green; locally tsc, oxlint, vitest 841 files / 5,962 tests and build passed | Owner: «انشر مباشرة» — the agency analytics page broke after every release | Deploy Production run 45673543547 succeeded. Production read 2026-11-25: /agency/analytics opens; served `index-DgJg5i6U.js` carries «تم تحديث النظام» and `chunkReload-*.js` carries the reload guard. The full CI runs again on the next PR off `main` |
 
 ## 6. Secrets — the strategy, in full
 
