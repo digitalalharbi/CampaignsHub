@@ -439,9 +439,9 @@ describe('CreativeDetailPage', () => {
     // CONTENT-DETAIL-LAYOUT-001 — the identity reference is a tab of its own, not the first thing after the figures.
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
     expect(headings).toContain('Metrics for this objective')
-    expect(headings).not.toContain('Identity and source')
+    expect(headings).not.toContain('Measurement')
     fireEvent.click(screen.getByTestId('creative-tab-details'))
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toContain('Identity and source')
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toContain('Measurement')
   })
 
   /** A video arms nothing: metadata only, no autoplay, and the source is not fetched up front. */
@@ -519,7 +519,8 @@ describe('CreativeDetailPage', () => {
     render()
     await screen.findByText('Not enough days yet')
 
-    expect(screen.getAllByText('Insufficient data').length).toBeGreaterThan(0)
+    // CONTENT-DETAIL-TABS-002 — not enough data is one quiet line with its reason, never a verdict.
+    expect(screen.getByTestId('creative-fatigue')).toHaveTextContent('Not enough days yet')
     expect(screen.queryByText('Stable')).toBeNull()
   })
 
@@ -527,8 +528,8 @@ describe('CreativeDetailPage', () => {
   it('shows the evidence behind the fatigue verdict', async () => {
     render()
 
-    await screen.findByText('Evidence')
-    expect(screen.getByText('-22.0%')).toBeInTheDocument()
+    // The signals are chips on the fatigue card, each with its change.
+    expect(await within(await screen.findByTestId('creative-fatigue')).findByText('-22.0%')).toBeInTheDocument()
   })
 
   /** A finding carries its own window, its confidence, and what it was compared against. */
@@ -538,8 +539,8 @@ describe('CreativeDetailPage', () => {
     await screen.findByText('Click-through rate is falling')
     // The label lives in its own span, so the assertion is on the line that holds both.
     expect(screen.getByText(/Suggested action/).parentElement).toHaveTextContent('Try a fresh image.')
-    expect(screen.getByText(/Compared against/)).toHaveTextContent('12')
-    expect(screen.getByText(/Confidence/)).toHaveTextContent('High')
+    expect(screen.getByText(/Compared with/)).toHaveTextContent('12')
+    expect(screen.getByText(/High confidence/)).toBeInTheDocument()
   })
 
   /** An empty findings list says nothing moved — it does not disappear silently. */
@@ -549,7 +550,7 @@ describe('CreativeDetailPage', () => {
     )
 
     render()
-    expect(await screen.findByText(/nothing crossed a material threshold/)).toBeInTheDocument()
+    expect(await screen.findByText(/Nothing calls for action in this period/)).toBeInTheDocument()
   })
 
   /** Changing the period rewrites the address and refetches — a control that changes the answer. */
@@ -566,7 +567,7 @@ describe('CreativeDetailPage', () => {
   it('states where the figures came from and how fresh they are', async () => {
     render()
 
-    await screen.findByText('Identity and source')
+    await screen.findByText('Measurement')
     expect(screen.getByText('Asia/Riyadh')).toBeInTheDocument()
     expect(screen.getByText('SAR')).toBeInTheDocument()
     expect(screen.getByText(/Figures as the ad platform reported them/)).toBeInTheDocument()
