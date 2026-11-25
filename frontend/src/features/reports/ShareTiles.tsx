@@ -1,5 +1,5 @@
 import {
-  CheckCircle2, CircleHelp, Handshake, Keyboard, Leaf, Mail, Megaphone, MessageSquare, Monitor, MoreHorizontal, Network, Play, RotateCcw,
+  Banknote, CheckCircle2, CircleHelp, CreditCard, Landmark, Wallet, Handshake, Keyboard, Leaf, Mail, Megaphone, MessageSquare, Monitor, MoreHorizontal, Network, Play, RotateCcw,
   Search, Share2, ShoppingCart, Smartphone, Tablet, Tv, Users, XCircle, type LucideIcon,
 } from 'lucide-react'
 import { Num } from '@/components/ui/Num'
@@ -37,6 +37,12 @@ export function partIcon(key: string): LucideIcon {
   if (k === 'affiliates') return Handshake
   if (k.includes('cross')) return Network
   if (k === 'other') return MoreHorizontal
+  // STORE-MIRROR-001 — the store's own splits: how people paid, and the ad platform an order came from.
+  if (['mada', 'credit_card', 'creditcard', 'apple_pay', 'stc_pay', 'card'].includes(k)) return CreditCard
+  if (k === 'cod' || k === 'cash') return Banknote
+  if (k === 'bank' || k === 'bank_transfer') return Landmark
+  if (['tabby', 'tamara', 'wallet', 'paypal'].includes(k)) return Wallet
+  if (['meta', 'snapchat', 'tiktok', 'google', 'x', 'linkedin', 'openai_ads'].includes(k)) return Megaphone
 
   return CircleHelp
 }
