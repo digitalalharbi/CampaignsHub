@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { AUTH, createCampaign, pinnedProject, seedExternals, switchToEnglish, unlinkExternalByName, selectProject } from './helpers'
+import { AUTH, createCampaign, pinnedProject, seedExternals, switchToEnglish, unlinkExternalByName, selectProject, openCampaign } from './helpers'
 
 /**
  * Full external-linking E2E (the acceptance-critical path):
@@ -24,10 +24,9 @@ test.use({ storageState: AUTH.advertiser })
 const TARGET_EXTERNAL = 'Sandbox Awareness'
 
 async function openCampaignLinkedTab(page: Page, name: string) {
-  // The rebuilt list navigates via clickable campaign cards (no "Open" button), and the page opens on
-  // the overview mode, so switch to the card list first (CAMPAIGN-010).
-  await page.getByTestId('view-cards').click()
-  await page.getByTestId('campaign-card').filter({ hasText: name }).first().click()
+  // ADS-MANAGER-007 — the campaign's own page is opened by address (the cards list went with the advanced view).
+  const projectId = await page.evaluate(() => JSON.parse(localStorage.getItem('campaign-hub-project-storage') ?? '{}')?.state?.currentProjectId as string)
+  await openCampaign(page, projectId, name)
   await expect(page).toHaveURL(/\/campaigns\/[^/]+\/[^/]+$/)
 
   /*

@@ -6,7 +6,6 @@ import { registerFit, type Fitted } from './agency-fit-2.shared'
 test.use({ storageState: AUTH.owner })
 
 const FITTED: Fitted[] = [
-  { path: '/agency/ads', tabs: { testid: 'entity-tabs-ad', count: 2 } },
   { path: '/agency/recommendations', tabs: { testid: 'recommendations-tabs', count: 2 } },
   { path: '/agency/delivery' },
   { path: '/agency/messages' },

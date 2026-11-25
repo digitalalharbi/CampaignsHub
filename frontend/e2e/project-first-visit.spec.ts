@@ -32,8 +32,8 @@ test('campaigns: the chooser lists reachable projects and a click lands on the c
 
   await choices.first().click()
   await expect(page.getByTestId('project-chooser')).toHaveCount(0)
-  // The page now carries the project's own surface: the view switch and either cards or rows.
-  await expect(page.getByTestId('view-cards')).toBeVisible({ timeout: 20_000 })
+  // The page now carries the project's own surface: the Ads Manager (ADS-MANAGER-007).
+  await expect(page.getByTestId('ads-manager')).toBeVisible({ timeout: 20_000 })
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
   expect(overflow, 'page-level horizontal overflow').toBeLessThanOrEqual(0)

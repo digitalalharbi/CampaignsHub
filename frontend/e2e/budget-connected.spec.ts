@@ -42,9 +42,10 @@ test('a campaign over its project spend limit says so on the campaigns board', a
 
   try {
     await selectProject(page, projectId)
-    await page.goto('/agency/campaigns?view=cards')
+    // ADS-MANAGER-007 — the campaigns board is the Ads Manager; the chip sits on each campaign row.
+    await page.goto('/agency/campaigns')
 
-    await expect(page.getByTestId('campaign-card').first()).toBeVisible({ timeout: 30000 })
+    await expect(page.getByTestId('ads-manager-row').first()).toBeVisible({ timeout: 30000 })
 
     const chip = page.getByTestId('spend-limit-chip').first()
     await expect(chip, 'the campaigns board never asked for the project’s spend limits').toBeVisible({
@@ -69,9 +70,9 @@ test('a campaign over its project spend limit says so on the campaigns board', a
 /** With no limit on the project, the board draws no chip — the feature is silent when it should be. */
 test('a project with no spend limit shows no chip at all', async ({ page, request }) => {
   await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
-  await page.goto('/agency/campaigns?view=cards')
+  await page.goto('/agency/campaigns')
 
-  await expect(page.getByTestId('campaign-card').first()).toBeVisible({ timeout: 30000 })
+  await expect(page.getByTestId('ads-manager-row').first()).toBeVisible({ timeout: 30000 })
   await page.waitForLoadState('networkidle')
 
   await expect(page.getByTestId('spend-limit-chip')).toHaveCount(0)

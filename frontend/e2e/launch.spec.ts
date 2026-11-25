@@ -24,7 +24,7 @@ test.describe('the launcher (advertiser)', () => {
   test('«حملة جديدة» on the campaigns page opens /app/launch, a page of its own with the steps and the launch history', async ({ page }) => {
     // NAV-HOME-PLANS-001 — the launch page left the rail; the campaigns page's button opens it.
     await page.goto('/app/campaigns')
-    await page.getByTestId('new-campaign').click()
+    await page.getByTestId('ads-manager-new').click()
     await expect(page).toHaveURL(/\/app\/launch$/)
     await expect(page.getByTestId('launch-page')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByTestId('launch-history')).toBeVisible()

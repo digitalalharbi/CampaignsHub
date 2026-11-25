@@ -19,13 +19,12 @@ const ResetPasswordPage = lazyPage(() => import('@/features/auth/ResetPasswordPa
 const RequireAuth = lazyPage(() => import('@/features/auth/RequireAuth'), 'RequireAuth')
 const CampaignDetailPage = lazyPage(() => import('@/features/campaigns/CampaignDetailPage'), 'CampaignDetailPage')
 const RoleDashboardPage = lazyPage(() => import('@/features/roleDashboard/RoleDashboardPage'), 'RoleDashboardPage')
+const LevelRedirect = lazyPage(() => import('@/features/campaigns/LevelRedirect'), 'LevelRedirect')
 const CampaignsHome = lazyPage(() => import('@/features/campaigns/CampaignsHome'), 'CampaignsHome')
 const AnalyticsPage = lazyPage(() => import('@/features/analytics/AnalyticsPage'), 'AnalyticsPage')
 const RecommendationsPage = lazyPage(() => import('@/features/recommendations/RecommendationsPage'), 'RecommendationsPage')
 const AgentCenterPage = lazyPage(() => import('@/features/agents/AgentCenterPage'), 'AgentCenterPage')
 const AutomationPage = lazyPage(() => import('@/features/automation/AutomationPage'), 'AutomationPage')
-const AccountsWorkspacePage = lazyPage(() => import('@/features/campaigns/AccountsWorkspacePage'), 'AccountsWorkspacePage')
-const EntityWorkspacePage = lazyPage(() => import('@/features/campaigns/EntityWorkspacePage'), 'EntityWorkspacePage')
 const LaunchPage = lazyPage(() => import('@/features/launch/LaunchPage'), 'LaunchPage')
 const ApprovalsPage = lazyPage(() => import('@/features/agents/ApprovalsPage'), 'ApprovalsPage')
 const FollowUpWorkspacePage = lazyPage(() => import('@/features/crm/FollowUpWorkspacePage'), 'FollowUpWorkspacePage')
@@ -405,12 +404,12 @@ export const router = createBrowserRouter(withErrorBoundary([
           { path: 'projects/:projectId/team', element: <ProjectTeamPage /> },
                     { path: 'design', element: <DesignSystemPage /> },
           { path: 'campaigns', element: <CampaignsHome /> },
-          /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
+          /* ADS-MANAGER-007 — the accounts, ad groups and ads are levels of the Ads Manager; old addresses redirect there. */
           /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
           { path: 'launch', element: <LaunchPage /> },
-          { path: 'accounts', element: <AccountsWorkspacePage /> },
-          { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
-          { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
+          { path: 'accounts', element: <LevelRedirect level="accounts" /> },
+          { path: 'ad-groups', element: <LevelRedirect level="ad_sets" /> },
+          { path: 'ads', element: <LevelRedirect level="ads" /> },
           { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
           /*
            * REG-001: the multi-client surfaces MOVED to /agency — they were never the advertiser's.
@@ -676,12 +675,12 @@ export const router = createBrowserRouter(withErrorBoundary([
              */
             { path: 'analytics', element: <AnalyticsPage /> },
             { path: 'campaigns', element: <CampaignsHome /> },
-            /* ADV-CAMPAIGN-TABLES-001 — ad groups and ads as operational tables of their own. */
+            /* ADS-MANAGER-007 — the accounts, ad groups and ads are levels of the Ads Manager; old addresses redirect there. */
             /* LAUNCH-001 — a real multi-platform launch, not the internal draft form. */
             { path: 'launch', element: <LaunchPage /> },
-            { path: 'accounts', element: <AccountsWorkspacePage /> },
-            { path: 'ad-groups', element: <EntityWorkspacePage level="ad_set" /> },
-            { path: 'ads', element: <EntityWorkspacePage level="ad" /> },
+            { path: 'accounts', element: <LevelRedirect level="accounts" /> },
+            { path: 'ad-groups', element: <LevelRedirect level="ad_sets" /> },
+            { path: 'ads', element: <LevelRedirect level="ads" /> },
             { path: 'campaigns/:projectId/:campaignId', element: <CampaignDetailPage /> },
             { path: 'content', element: <ContentHub /> },
             // MOUNTED, not copied — the same page, told which portal to return to (ADR 0002).
