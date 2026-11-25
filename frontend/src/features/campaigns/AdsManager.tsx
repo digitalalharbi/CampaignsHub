@@ -13,6 +13,7 @@ import { Num } from '@/components/ui/Num'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { Skeleton } from '@/components/ui/States'
 import { MetricLineChart } from '@/features/analytics/charts'
+import { ProvenanceBadge } from '@/features/analytics/components'
 import { compact, money, moneyFromTotals, num, percent, ratio } from '@/features/analytics/format'
 import {
   useAccountPulse, useAccounts, useCampaigns, useEntities, useSummary, useTimeseries,
@@ -294,7 +295,14 @@ export function AdsManager() {
 
   const isAccounts = level === 'accounts'
   const covers = useAccountCovers(projectId, range, isAccounts)
-  if (!projectId) return <ProjectChooser purpose="analytics" />
+  if (!projectId) {
+    return (
+      <div className="space-y-4" data-testid="ads-manager-no-project">
+        <PageIntro testid="ads-manager-intro" title={ar ? 'إدارة الإعلانات' : 'Manage ads'} />
+        <ProjectChooser purpose="analytics" />
+      </div>
+    )
+  }
 
   const meta = (m: MetricKey) => METRICS.find((x) => x.key === m) ?? METRICS[0]!
   const label = (m: MetricKey) => meta(m)[ar ? 'ar' : 'en']
@@ -342,6 +350,7 @@ export function AdsManager() {
       <PageIntro
         testid="ads-manager-intro"
         title={ar ? 'إدارة الإعلانات' : 'Manage ads'}
+        badges={<ProvenanceBadge provenance={summary.data?.provenance} />}
         actions={<>
           <DateRangePicker projectId={projectId} testId="ads-manager-period" />
           <Button variant="secondary" onClick={() => setHistoryOpen(true)} data-testid="ads-manager-history"><History size={15} aria-hidden /> {ar ? 'سجل التغييرات' : 'Change history'}</Button>
