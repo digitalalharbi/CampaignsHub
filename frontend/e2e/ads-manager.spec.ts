@@ -45,7 +45,7 @@ test.describe('the ads manager (agency)', () => {
     }
   })
 
-  test('ticked campaigns: the pause dialog names them before anything is sent; compare and history open', async ({ page, request }) => {
+  test('ticked campaigns: the pause dialog names them before anything is sent; compare opens', async ({ page, request }) => {
     await selectProject(page, await seededProject(request, 'متجر تجريبي — Demo'))
     await page.goto('/agency/campaigns')
     const rows = page.getByTestId('ads-manager-select')
@@ -69,8 +69,5 @@ test.describe('the ads manager (agency)', () => {
     await page.getByTestId('ads-manager-compare-open').click()
     await expect(page.getByTestId('ads-manager-compare-dialog')).toBeVisible({ timeout: 30_000 })
     await page.keyboard.press('Escape')
-
-    await page.getByTestId('ads-manager-history').click()
-    await expect(page.getByRole('dialog')).toBeVisible()
   })
 })

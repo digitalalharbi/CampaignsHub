@@ -177,8 +177,8 @@ describe('the ads manager', () => {
     expect(screen.getByTestId('ads-manager-compare-open')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('ads-manager-select-all'))
     expect(screen.queryByTestId('campaigns-bulk')).toBeNull()
-    expect(screen.getByTestId('ads-manager-history')).toBeInTheDocument()
-    expect(screen.getByTestId('ads-manager-export')).toBeInTheDocument()
+    expect(screen.queryByTestId('ads-manager-history')).toBeNull()
+    expect(screen.queryByTestId('ads-manager-export')).toBeNull()
   })
 
   it('opens on the level an old address named', async () => {

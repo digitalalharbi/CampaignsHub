@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, ChevronDown, ChevronUp, Columns3, Download, GitCompare, History, Image as ImageIcon, Layers, Megaphone, Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { Building2, ChevronDown, ChevronUp, Columns3, GitCompare, Image as ImageIcon, Layers, Megaphone, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import { usePortalPath } from '@/app/portalPath'
 import { ProviderMark } from '@/components/ProviderMark'
 import { Button } from '@/components/ui/Button'
 import { DateRangePicker } from '@/components/ui/DateRangePicker'
 import { Modal } from '@/components/ui/Modal'
 import { MetricTable } from '@/components/ui/MetricTable'
-import { downloadTableCsv } from '@/lib/tableCsv'
 import { Num } from '@/components/ui/Num'
 import { PageIntro } from '@/components/ui/PageIntro'
 import { Skeleton } from '@/components/ui/States'
@@ -34,7 +33,6 @@ import { BulkCampaignActions } from './BulkCampaignActions'
 import { SpendLimitChip } from '@/features/budget/SpendLimitChip'
 import { useSpendLimits } from '@/features/budget/spendLimitsApi'
 import { CampaignComparison } from './CampaignComparison'
-import { ProjectChangeHistory } from './ProjectChangeHistory'
 import { listCampaigns } from './api'
 import { AccountCampaigns, AccountCovers, AccountSpark, useAccountCovers } from './AdsManagerAccounts'
 import { objectiveLabel, providerLabel } from './labels'
@@ -46,7 +44,7 @@ import { objectiveLabel, providerLabel } from './labels'
  *
  * Every figure comes from the same metric endpoints the analysis pages read; every switch goes through the provider write
  * path the bulk actions use (`runBulk`), after a confirmation, and changes nothing locally before the platform answers.
- * The full toolset (cards, comparison, causes, change history, saved views) stays one click away in «عرض متقدم».
+ * The advanced view is retired (ADS-MANAGER-007); its bulk actions and comparison live here, over ticked campaigns.
  */
 type Level = 'accounts' | 'campaigns' | 'ad_sets' | 'ads'
 type Delivery = 'all' | 'serving' | 'off'
@@ -180,7 +178,6 @@ export function AdsManager() {
   /** ADS-MANAGER-007 — the advanced view's tools, brought into the one view: selection, bulk pause/resume, comparison. */
   const [selected, setSelected] = useState<string[]>([])
   const [compareOpen, setCompareOpen] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
   const [delivery, setDelivery] = useState<Delivery>('all')
   const [search, setSearch] = useState('')
   const [platform, setPlatform] = useState<string>('all')
@@ -353,8 +350,6 @@ export function AdsManager() {
         badges={<ProvenanceBadge provenance={summary.data?.provenance} />}
         actions={<>
           <DateRangePicker projectId={projectId} testId="ads-manager-period" />
-          <Button variant="secondary" onClick={() => setHistoryOpen(true)} data-testid="ads-manager-history"><History size={15} aria-hidden /> {ar ? 'سجل التغييرات' : 'Change history'}</Button>
-          <Button variant="secondary" onClick={() => { const t = document.querySelector<HTMLTableElement>(`[data-testid="ads-manager-table-${level}-total"]`)?.closest('table'); if (t) downloadTableCsv(t, `ads-manager-${level}-${range.from}-${range.to}`) }} data-testid="ads-manager-export"><Download size={15} aria-hidden /> {ar ? 'تصدير' : 'Export'}</Button>
         </>}
       />
 
@@ -565,11 +560,6 @@ export function AdsManager() {
       </section>
 
       {compareOpen && <CompareDialog projectId={projectId} selected={selected} setSelected={setSelected} range={range} ar={ar} onClose={() => setCompareOpen(false)} />}
-      {historyOpen && (
-        <Modal open onClose={() => setHistoryOpen(false)} size="lg" title={ar ? 'سجل التغييرات' : 'Change history'}>
-          <ProjectChangeHistory projectId={projectId} />
-        </Modal>
-      )}
 
       {details && (
         <EntityDetails
