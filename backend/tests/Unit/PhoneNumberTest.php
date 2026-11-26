@@ -62,6 +62,18 @@ final class PhoneNumberTest extends TestCase
         $this->assertSame('+971501234567', PhoneNumber::normalise('0501234567', '971'));
     }
 
+    /** PHONE-CHOSEN-COUNTRY-001 — Production 2026-11-26: +20 chosen, «1012345678» typed, +1012345678 stored. */
+    public function test_a_bare_national_number_stays_in_the_chosen_country(): void
+    {
+        $this->assertSame('+201012345678', PhoneNumber::normalise('1012345678', '20'));
+        $this->assertSame('+201012345678', PhoneNumber::normalise('01012345678', '20'));
+        $this->assertSame('+201012345678', PhoneNumber::normalise('201012345678', '20'));
+        $this->assertSame('+447700900123', PhoneNumber::normalise('447700900123', '44'));
+        // No country chosen: a bare foreign number keeps its own code, as before.
+        $this->assertSame('+201012345678', PhoneNumber::normalise('201012345678'));
+        $this->assertSame('+14155550100', PhoneNumber::normalise('+1 415 555 0100', '20'));
+    }
+
     /** @return iterable<string, array{0: string|null}> */
     public static function unreadable(): iterable
     {
