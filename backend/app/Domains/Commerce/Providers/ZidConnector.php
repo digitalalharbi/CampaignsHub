@@ -98,18 +98,24 @@ final class ZidConnector extends ApiCommerceConnector
 
             /** @var array<string,mixed> $customer */
             $customer = (array) ($o['customer'] ?? []);
+            $invoice = $this->invoice($o);
 
             $orders[] = [
                 'external_id' => (string) $o['id'],
                 'reference' => $this->str($o['code'] ?? null),
                 'status' => strtolower($this->str($o['order_status'] ?? null, ['code', 'name']) ?? 'unknown'),
-                'payment_status' => ($this->str($o['payment_status'] ?? null) === null ? null : strtolower((string) $this->str($o['payment_status'] ?? null))),
+                // ZID-ORDER-MONEY-001 — this column is the payment METHOD for every store (Salla fills it from
+                // `payment_method`); Zid's method is `payment.method` ({name, code}), then the card network.
+                // `payment_status` (pending / paid) is a state, not a method, and is only the last resort.
+                'payment_status' => $this->paymentMethod($o),
                 'placed_at' => $this->str($o['created_at'] ?? null),
                 'currency' => $this->str($o['currency_code'] ?? null),
-                'subtotal' => $this->amount($o['products_subtotal'] ?? $o['sub_total'] ?? null),
-                'shipping_total' => $this->amount($o['shipping_cost'] ?? null),
-                'tax_total' => $this->amount($o['tax_amount'] ?? null),
-                'discount_total' => $this->amount($o['discount_amount'] ?? null),
+                // Zid states an order's money as invoice lines (`payment.invoice[] {code, value}`), not as flat
+                // fields; the flat names are kept first for the older shape.
+                'subtotal' => $this->amount($o['products_subtotal'] ?? $o['sub_total'] ?? null) ?? $invoice['sub_totals'] ?? $invoice['subtotal'] ?? null,
+                'shipping_total' => $this->amount($o['shipping_cost'] ?? null) ?? $invoice['shipping'] ?? null,
+                'tax_total' => $this->amount($o['tax_amount'] ?? null) ?? $invoice['tax'] ?? $invoice['vat'] ?? null,
+                'discount_total' => $this->amount($o['discount_amount'] ?? null) ?? $this->discount($o, $invoice),
                 'total' => $this->amount($o['order_total'] ?? $o['total'] ?? null),
                 'customer' => ($customer['id'] ?? null) === null ? null : [
                     'external_id' => (string) $customer['id'],
@@ -312,5 +318,69 @@ final class ZidConnector extends ApiCommerceConnector
         }
 
         return is_numeric($value) ? (float) $value : null;
+    }
+
+    /**
+     * ZID-ORDER-MONEY-001 — the payment method a shopper chose: `payment.method` name (e.g. «مدى», «الدفع عند
+     * الاستلام»), else its code, else the card network (`mada`, `visa`, `apple_pay`). Null when Zid states none —
+     * never the payment state.
+     */
+    private function paymentMethod(array $o): ?string
+    {
+        $method = is_array($o['payment'] ?? null) ? ($o['payment']['method'] ?? null) : null;
+
+        return $this->str($method, ['name', 'code'])
+            ?? $this->str($o['payment_method'] ?? null, ['name', 'code'])
+            ?? $this->str($o['payment_network'] ?? null);
+    }
+
+    /**
+     * The order's invoice lines by code (`sub_totals`, `shipping`, `tax`, `discount`, `total`, …) as numbers.
+     *
+     * @param  array<string,mixed>  $o
+     * @return array<string,float>
+     */
+    private function invoice(array $o): array
+    {
+        $lines = is_array($o['payment'] ?? null) && is_array($o['payment']['invoice'] ?? null) ? $o['payment']['invoice'] : [];
+        $out = [];
+
+        foreach ($lines as $line) {
+            if (! is_array($line) || ! is_string($line['code'] ?? null)) {
+                continue;
+            }
+            $value = $this->amount($line['value'] ?? null) ?? $this->number($line['value_string'] ?? null);
+            if ($value !== null) {
+                $out[strtolower($line['code'])] = $value;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * A discount is a positive amount taken off: the coupon's own figure (Zid sends it negative), else a
+     * discount line on the invoice.
+     *
+     * @param  array<string,mixed>  $o
+     * @param  array<string,float>  $invoice
+     */
+    private function discount(array $o, array $invoice): ?float
+    {
+        $coupon = is_array($o['coupon'] ?? null) ? ($this->amount($o['coupon']['discount'] ?? null) ?? $this->number($o['coupon']['discount_string'] ?? null)) : null;
+        $value = $coupon ?? $invoice['discount'] ?? $invoice['discounts'] ?? $invoice['coupon'] ?? null;
+
+        return $value === null ? null : abs($value);
+    }
+
+    /** «6,954.64 ج.م» → 6954.64; anything without a number → null. */
+    private function number(mixed $value): ?float
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+        $latin = str_replace([',', '٬'], '', strtr($value, ['٠' => '0', '١' => '1', '٢' => '2', '٣' => '3', '٤' => '4', '٥' => '5', '٦' => '6', '٧' => '7', '٨' => '8', '٩' => '9', '٫' => '.']));
+
+        return preg_match('/-?\d+(?:\.\d+)?/', $latin, $m) === 1 ? (float) $m[0] : null;
     }
 }

@@ -300,6 +300,9 @@ final class StoreAttributionDepthTest extends TestCase
         $this->assertEquals(20.0, $i['coupons']['rows'][0]['discount']);
         $this->assertEquals(0.2, $i['coupons']['share']);
         $this->assertEquals(110.0, $i['composition']['products']);
+        // STORE-ANALYTICS-PLUS-001 — whether a coupon moves the basket: one order with it, four without (200..500).
+        $this->assertEquals(100.0, $i['coupons']['aov_with']);
+        $this->assertEquals(350.0, $i['coupons']['aov_without']);
 
         // No contact field leaves the server.
         $body = (string) json_encode($i);
