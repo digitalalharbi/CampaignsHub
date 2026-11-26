@@ -165,10 +165,10 @@ final class StoreInsights
     /**
      * Coupons that carried orders: how many orders, the discount they gave and the net they brought.
      *
-     * @param  Collection<int, CommerceOrder>  $live
      * STORE-ANALYTICS-PLUS-001 — and whether a coupon moves the basket: the average net of an order with a coupon beside one
      * without, each null when its side has no order or an order with no stated money.
      *
+     * @param  Collection<int, CommerceOrder>  $live
      * @return array{rows: list<array{code: string, orders: int, discount: ?float, net: ?float}>, orders_with_coupon: int, share: ?float, aov_with: ?float, aov_without: ?float}
      */
     private function coupons(Collection $live): array
