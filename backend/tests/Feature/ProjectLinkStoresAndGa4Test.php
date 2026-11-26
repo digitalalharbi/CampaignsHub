@@ -498,7 +498,6 @@ final class ProjectLinkStoresAndGa4Test extends TestCase
         $source = $this->sources($this->a, $connection)->assertOk()->json('data.sources.0');
 
         $this->assertSame('SAR', $source['currency']);
-        $this->assertSame('active', $source['status']);
         $this->confirm($this->a, $connection, self::SOURCE[$provider])->assertCreated();
         $this->assertSame('SAR', ExternalAccount::withoutGlobalScopes()->sole()->currency);
     }

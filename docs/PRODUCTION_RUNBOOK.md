@@ -270,7 +270,7 @@ What each provider can do lives in one place: `ProviderCatalogue`, one declarati
 | linkedin | ads | ad_account | oauth | yes | yes | yes | no | no | no | no | yes | yes | no | no | yes |
 | openai_ads | ads | ad_account | api_key | yes | no | no | no | no | no | yes | no | no | no | no | yes |
 | salla | commerce | store | oauth | yes | yes | yes | no | yes | no | no | no | no | yes | no | yes |
-| zid | commerce | store | oauth | yes | yes | yes | no | yes | no | no | no | no | no | no | yes |
+| zid | commerce | store | oauth | yes | yes | yes | no | yes | no | no | no | no | yes | no | yes |
 | ga4 | analytics | property | oauth | yes | yes | yes | no | no | yes | no | no | no | no | no | yes |
 | sandbox | ads | ad_account | oauth | no | no | no | no | no | no | no | no | no | no | no | no |
 
