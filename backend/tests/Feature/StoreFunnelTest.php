@@ -128,7 +128,13 @@ final class StoreFunnelTest extends TestCase
         $this->holdingTenant((string) $this->tenant->id);
         // ZID-ABANDONED-CARTS-001 — Zid now reports carts, so the store that cannot is a platform the catalogue
         // does not declare carts for; the rule is about the capability, not about any one platform's name.
-        $noCarts = $this->account('woocommerce', 'store');
+        // A platform with no OAuth configuration of its own cannot open a connection through the vault, so the store
+        // rides on an existing connection: what is under test is the store's provider, not how it was connected.
+        $noCarts = ExternalAccount::withoutGlobalScopes()->create([
+            'tenant_id' => $this->tenant->id, 'provider_connection_id' => $this->store->provider_connection_id,
+            'provider' => 'woocommerce', 'account_type' => 'store', 'external_id' => 'woocommerce-store', 'name' => 'Woocommerce',
+            'currency' => 'SAR', 'status' => 'active',
+        ]);
         app(TenantContext::class)->forget();
 
         $this->seedOrder('o1', total: 100, status: 'completed');
