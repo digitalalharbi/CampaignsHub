@@ -8,6 +8,7 @@ import { ChartCard, MetricLineChart, RankingBarChart } from './charts'
 import { money, num, percent } from './format'
 import type { ProductRow, StoreDepthPayload } from './storeAnalyticsApi'
 import { StoreInsightsBoard } from './StoreInsightsBoard'
+import { StoreLatestJump } from './StoreLatestJump'
 
 /**
  * STORE-ANALYTICS-DEPTH-001 — the store's own reading of the period: cards first, then charts.
@@ -53,6 +54,7 @@ export function StoreDepthPanel({ projectId, range, ar }: { projectId: string; r
   }
 
   const d = q.data
+  if (d.state === 'empty') return <StoreLatestJump latest={d.latest_order} ar={ar} testId="store-depth-empty" />
   if (d.state !== 'ready' || !d.sales || !d.orders || !d.averages || !d.conversion || !d.products || !d.customers || !d.abandoned) {
     return (
       <p data-testid={`store-depth-${d.state}`} className="rounded-xl bg-surface-hover px-4 py-3 text-sm text-text-secondary">

@@ -82,7 +82,13 @@ final class StoreDepth
         ];
 
         if ($current->isEmpty()) {
-            return ['state' => 'empty', 'period' => $period, 'previous_period' => $previous, 'basis' => $basis];
+            return [
+                'state' => 'empty',
+                'period' => $period,
+                'previous_period' => $previous,
+                'basis' => $basis,
+                'latest_order' => $this->latestOrder($projectId, $window['timezone'], $excludeDemo),
+            ];
         }
 
         $now = $this->tally($current);
@@ -371,5 +377,28 @@ final class StoreDepth
         ksort($days);
 
         return array_map(static fn (array $d): array => ['date' => $d['date'], 'orders' => $d['orders'], 'net' => round($d['net'], 2)], array_values($days));
+    }
+
+    /**
+     * STORE-LATEST-DATA-001 — an empty period on a store that HAS sold says where its sales are: the day of its
+     * latest order (on the store's clock) and that day's month, so the page can offer it in one tap instead of
+     * leaving a connected store looking blank.
+     *
+     * @return array{date: string, from: string, to: string}|null
+     */
+    private function latestOrder(string $projectId, string $timezone, bool $excludeDemo): ?array
+    {
+        $at = $this->orders->latestPlacedAt($projectId, $excludeDemo);
+        if ($at === null) {
+            return null;
+        }
+
+        $local = $at->copy()->setTimezone($timezone);
+
+        return [
+            'date' => $local->toDateString(),
+            'from' => $local->copy()->startOfMonth()->toDateString(),
+            'to' => $local->copy()->endOfMonth()->min(Carbon::now($timezone))->toDateString(),
+        ];
     }
 }

@@ -337,6 +337,21 @@ final class StoreAttributionDepthTest extends TestCase
         $this->assertSame('store_confirmed', $d['basis']['source']);
     }
 
+    /**
+     * STORE-LATEST-DATA-001 — a connected store whose sales all sit outside the chosen period is empty for that
+     * period, and says where its sales are: the day of its latest order and that month, for a one-tap jump.
+     */
+    public function test_an_empty_period_names_the_stores_latest_order_and_its_month(): void
+    {
+        $this->order('a', 100, ['status' => 'completed', 'placed_at' => '2026-10-14 11:59:00']);
+
+        $d = $this->data('commerce/depth?from=2026-11-01&to=2026-11-10');
+
+        $this->assertSame('empty', $d['state']);
+        $this->assertSame('2026-10-14', $d['latest_order']['date']);
+        $this->assertSame('2026-10-01', $d['latest_order']['from']);
+    }
+
     public function test_a_figure_no_order_states_is_absent_not_zero(): void
     {
         $this->order('a', 100, ['status' => 'completed']);

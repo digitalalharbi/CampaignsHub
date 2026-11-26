@@ -66,6 +66,25 @@ final class ProjectOrders
      *     duplicated_shops: list<array{provider:string,shop_external_id:string,connections:int,names:list<string>}>
      * }
      */
+    /**
+     * STORE-LATEST-DATA-001 — when this project's selected stores last sold anything, by the same visibility rule
+     * as {@see forWindow()}. Null when none of them has an order at all.
+     */
+    public function latestPlacedAt(string $projectId, bool $excludeDemo = false): ?Carbon
+    {
+        $query = BoundAccountVisibility::apply(
+            CommerceOrder::withoutGlobalScopes()->where('project_id', $projectId)->whereNotNull('placed_at'),
+            'commerce_orders',
+        );
+        if ($excludeDemo) {
+            $query->where('is_demo', false);
+        }
+
+        $latest = $query->max('placed_at');
+
+        return $latest === null ? null : Carbon::parse((string) $latest);
+    }
+
     public function forWindow(string $tenantId, string $projectId, Carbon $from, Carbon $to): array
     {
         // SEC-3 — only the orders of a store that is still SELECTED for this project (BoundAccountVisibility):

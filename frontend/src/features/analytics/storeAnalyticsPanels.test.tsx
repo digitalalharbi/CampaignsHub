@@ -91,6 +91,24 @@ describe('the store panels', () => {
     expect(await screen.findByTestId('store-depth-no_store')).toHaveTextContent('لا يوجد متجر')
   })
 
+  it('an empty period on a store that has sold names its latest order and opens that month in one tap (STORE-LATEST-DATA-001)', async () => {
+    vi.mocked(getData).mockResolvedValue({
+      state: 'empty', period: { ...range, timezone: 'Asia/Riyadh' }, previous_period: range,
+      latest_order: { date: '2026-10-14', from: '2026-10-01', to: '2026-10-31' },
+    })
+    renderWithProviders(<StoreDepthPanel projectId="p1" range={{ from: '2026-11-01', to: '2026-11-26' }} ar={false} />, { route: '/agency/analytics', locale: 'en' })
+    expect(await screen.findByTestId('store-depth-empty-date')).toHaveTextContent('14 October 2026')
+    expect(screen.getByTestId('store-depth-empty-jump')).toHaveTextContent('Show October 2026')
+    fireEvent.click(screen.getByTestId('store-depth-empty-jump'))
+  })
+
+  it('an empty store with no order at all says so, with no jump', async () => {
+    vi.mocked(getData).mockResolvedValue({ state: 'empty', period: { ...range, timezone: 'UTC' }, previous_period: range, latest_order: null })
+    renderWithProviders(<StoreDepthPanel projectId="p1" range={range} ar={false} />, { route: '/agency/analytics', locale: 'en' })
+    expect(await screen.findByTestId('store-depth-empty')).toHaveTextContent('has not recorded an order yet')
+    expect(screen.queryByTestId('store-depth-empty-jump')).toBeNull()
+  })
+
   const sources = {
     state: 'ready', total: 2, currency: 'USD', ga4_available: true,
     totals: { orders: 5, net_revenue: 500, cancelled_excluded: 1, money_withheld_orders: 0, money_withheld_currencies: [] },
