@@ -19,10 +19,12 @@ use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Metrics\Services\InsightRowNormaliser;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Projects\Models\Project;
+use App\Domains\Reports\Support\ReportScopeHierarchy;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -168,6 +170,16 @@ final class SharedAccountProjectsTest extends TestCase
         $this->assertTrue($assignment->isActivelyAssignedTo($this->account, $this->hankah->id));
         $this->assertTrue($assignment->isActivelyAssignedTo($this->account, $this->buzz->id));
         $this->assertFalse($assignment->isActivelyAssignedTo($this->account, $other->id));
+    }
+
+    public function test_a_saved_report_naming_an_account_this_project_unlinked_drops_it_instead_of_refusing(): void
+    {
+        $this->bind($this->buzz, ['campaign_external_ids' => [], 'name_contains' => []]);
+        ProjectIntegrationBinding::withoutGlobalScopes()->where('project_id', $this->buzz->id)->update(['is_active' => false]);
+        $stranger = (string) Str::uuid();
+
+        $this->assertSame([$stranger], ReportScopeHierarchy::withoutUnlinked($this->buzz->id, [(string) $this->account->id, $stranger]));
+        $this->assertSame([(string) $this->account->id], ReportScopeHierarchy::withoutUnlinked($this->hankah->id, [(string) $this->account->id]));
     }
 
     private function import(): void
