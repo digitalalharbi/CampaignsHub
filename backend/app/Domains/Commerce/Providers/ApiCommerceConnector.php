@@ -179,7 +179,7 @@ abstract class ApiCommerceConnector implements CommerceConnector
     /**
      * The authenticated client for this provider.
      *
-     * Zid needs BOTH of the values its token exchange returned — the bearer and the manager token —
+     * Zid needs BOTH of the values its token exchange returned — `authorization` as the bearer and `access_token` as the manager token —
      * on every single call. Putting that in one place is what stops it from being right in three
      * methods and missing from the fourth, which is a bug that only shows on the endpoint nobody
      * tested.
@@ -187,24 +187,25 @@ abstract class ApiCommerceConnector implements CommerceConnector
     protected function api(): PendingRequest
     {
         $tokens = $this->tokens();
-        $request = PlatformHttp::client($this->platform())->withToken($tokens->accessToken);
 
-        if ($this->platform() === 'zid') {
-            $manager = $tokens->raw['authorization'] ?? null;
-
-            if (! is_string($manager) || $manager === '') {
-                throw new RuntimeException($this->label().' has no manager token stored; the merchant must authorise again.');
-            }
-
-            $request = $request->withHeaders([
-                'X-Manager-Token' => $manager,
-                // Zid answers in the store's own language unless told otherwise; Arabic names in a
-                // product table are the point, so the store's locale is asked for explicitly.
-                'Accept-Language' => 'ar',
-            ]);
+        if ($this->platform() !== 'zid') {
+            return PlatformHttp::client($this->platform())->withToken($tokens->accessToken);
         }
 
-        return $request;
+        // ZID-AUTH-HEADERS-001 — Zid's docs: the exchange's `authorization` value is the Bearer, and its
+        // `access_token` is the X-Manager-Token. Swapped, every call is refused.
+        $authorization = $tokens->raw['authorization'] ?? null;
+
+        if (! is_string($authorization) || $authorization === '') {
+            throw new RuntimeException($this->label().' has no authorization token stored; the merchant must authorise again.');
+        }
+
+        return PlatformHttp::client($this->platform())->withToken($authorization)->withHeaders([
+            'X-Manager-Token' => $tokens->accessToken,
+            // Zid answers in the store's own language unless told otherwise; Arabic names in a
+            // product table are the point, so the store's locale is asked for explicitly.
+            'Accept-Language' => 'ar',
+        ]);
     }
 
     protected function url(string $path): string

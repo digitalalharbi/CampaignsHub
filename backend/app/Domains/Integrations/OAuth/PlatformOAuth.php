@@ -352,8 +352,8 @@ final class PlatformOAuth
         /*
          * COMMERCE-001 — Zid hands back TWO credentials, and one of them is not called a token.
          *
-         * `access_token` goes in `Authorization: Bearer`, and a separate `authorization` value goes in
-         * `X-Manager-Token`. A call carrying only the first is refused by every endpoint. It survives
+         * `authorization` goes in `Authorization: Bearer`, and `access_token` goes in `X-Manager-Token`
+         * (ZID-AUTH-HEADERS-001). A call carrying only the first is refused by every endpoint. It survives
          * inside `raw`, but a token set arriving WITHOUT it is a connection that will exchange
          * perfectly and then fail on its first read — which is the exact «connected, and your numbers
          * are zero» state this product refuses to enter. So it is checked here, at the one moment the
