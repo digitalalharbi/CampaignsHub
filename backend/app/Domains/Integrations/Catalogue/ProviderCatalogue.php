@@ -756,12 +756,12 @@ final class ProviderCatalogue
             webhookSignatureHeader: 'Authorization',
             prerequisites: [
                 'A Zid partners account and an app with the redirect URI below registered.',
-                'The app approved for the order, product and customer scopes it reads.',
+                'The app approved for the order, product, customer and abandoned-cart scopes it reads.',
                 'The webhook subscription created against the URL below WITH a username and password — Zid sends those back as HTTP Basic authentication, and publishes no signature scheme. Deliveries are refused until the same pair is entered above.',
             ],
             prerequisitesAr: [
                 'حساب في شركاء زد وتطبيق مسجَّل عليه رابط العودة أدناه.',
-                'اعتماد التطبيق للصلاحيات التي يقرأها: الطلبات والمنتجات والعملاء.',
+                'اعتماد التطبيق للصلاحيات التي يقرأها: الطلبات والمنتجات والعملاء والسلات المتروكة.',
                 'إنشاء اشتراك الـ Webhook على الرابط أدناه مع اسم مستخدم وكلمة مرور — تعيدهما زد في كل حدث ضمن مصادقة Basic، ولا تنشر أي آلية توقيع. تُرفض الأحداث حتى يُدخل الزوج نفسه أعلاه.',
             ],
             docsUrl: 'https://docs.zid.sa/',
@@ -771,7 +771,8 @@ final class ProviderCatalogue
                 resourceType: ResourceType::Store,
                 accountType: 'store',
                 tokenExpiry: true,
-                // Zid publishes no abandoned-cart endpoint: `fetchAbandonedCarts()` asks nothing.
+                // ZID-ABANDONED-CARTS-001 — `v1/managers/store/abandoned-carts`.
+                abandonedCarts: true,
                 webhookVerification: WebhookVerification::HttpBasic,
             ),
         );

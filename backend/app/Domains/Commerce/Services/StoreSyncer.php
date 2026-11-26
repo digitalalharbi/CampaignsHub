@@ -30,12 +30,12 @@ use Throwable;
  * every order at its most provisional state — showing a paid order as pending and a refunded one as
  * revenue — so the window reaches back and the upsert is idempotent.
  *
- * ## Partial is a real outcome, and Zid makes it the normal one
+ * ## Partial is a real outcome
  *
- * Zid publishes no abandoned-cart endpoint and its connector REFUSES rather than returning an empty
- * list. That refusal is recorded as a problem on the run and reads as `partial`, which is exactly
- * right: three of the four reads worked, and the funnel's checkout stage will have no cart data for
- * this store. An empty success would have quietly claimed a perfect checkout rate.
+ * A connector that cannot read one of the four streams REFUSES rather than returning an empty list.
+ * That refusal is recorded as a problem on the run and reads as `partial`: three of the four reads
+ * worked, and the funnel says which data is missing. An empty success would have quietly claimed a
+ * perfect checkout rate. (Zid used to refuse carts here; it reads them since ZID-ABANDONED-CARTS-001.)
  */
 final class StoreSyncer
 {

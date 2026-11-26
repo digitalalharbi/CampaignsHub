@@ -132,9 +132,9 @@ final class StoreController extends Controller
                 /*
                  * Abandoned carts, said per PROVIDER rather than left to look like zero.
                  *
-                 * Zid publishes no abandoned-cart endpoint. A funnel that showed «0 سلة متروكة» for a
-                 * Zid store would claim a perfect checkout rate for a merchant who is losing carts
-                 * every day, so the absence is stated as a capability rather than a count.
+                 * A platform with no abandoned-cart endpoint must not show «0 سلة متروكة»: that would claim
+                 * a perfect checkout rate for a merchant who is losing carts every day, so the absence is
+                 * stated as a capability rather than a count. Salla and Zid both report carts today.
                  */
                 'supports_abandoned_carts' => ProviderCatalogue::supports($key, ProviderCapability::AbandonedCarts),
             ];

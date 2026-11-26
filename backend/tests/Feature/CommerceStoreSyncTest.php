@@ -243,12 +243,10 @@ final class CommerceStoreSyncTest extends TestCase
     // ── Zid, which agrees with Salla about nothing ────────────────────────────────────────────
 
     /**
-     * Zid localises every name, and its store has no abandoned carts to offer.
-     *
-     * The refusal is the point: an empty SUCCESS would be indistinguishable from a store where nobody
-     * abandoned anything, and a funnel built on that claims a perfect checkout rate.
+     * Zid localises every name, and its abandoned carts come from `managers/store/abandoned-carts`
+     * (ZID-ABANDONED-CARTS-001) — the sync no longer refuses them and no longer ends partial for it.
      */
-    public function test_zid_reads_localised_names_and_reports_partial_because_it_has_no_abandoned_carts(): void
+    public function test_zid_reads_localised_names_and_its_abandoned_carts(): void
     {
         $this->configure('zid');
         $store = $this->store('zid');
@@ -259,6 +257,19 @@ final class CommerceStoreSyncTest extends TestCase
                 'total_count' => 1,
             ]),
             'api.zid.sa/*/customers*' => Http::response(['data' => [], 'total_count' => 0]),
+            'api.zid.sa/*/abandoned-carts*' => Http::response([
+                'abandoned_carts' => [[
+                    'id' => 'b978fcc2-ccd0-45f6-81a7-7ab1f3b8f85d',
+                    'url' => 'https://demo.zid.store/checkout/fromBasket/3:abc',
+                    'products_count' => 2,
+                    'customer_id' => 15141670,
+                    'customer_email' => 'buyer@example.sa',
+                    'cart_total' => 509.8254,
+                    'cart_total_string' => '509.83 ر.س',
+                    'created_at' => '2026-08-03 14:45:44',
+                ]],
+                'total_count' => 1,
+            ]),
             'api.zid.sa/*/orders*' => Http::response([
                 'data' => [[
                     'id' => 'zo1', 'code' => 'Z-77', 'order_status' => ['code' => 'delivered'],
@@ -273,14 +284,18 @@ final class CommerceStoreSyncTest extends TestCase
 
         $run = app(StoreSyncer::class)->sync($store, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
 
-        $this->assertSame('partial_mapping', $run->status);
-        $this->assertStringContainsString('does not expose abandoned carts', (string) $run->error);
+        $this->assertStringNotContainsString('abandoned carts', (string) $run->error);
 
         // The Arabic name, not «Array» and not the English placeholder.
         $this->assertSame('حذاء', CommerceProduct::withoutGlobalScopes()->value('name'));
         $this->assertSame('delivered', CommerceOrder::withoutGlobalScopes()->value('status'));
         $this->assertSame('Z-77', CommerceOrder::withoutGlobalScopes()->value('reference'));
-        $this->assertSame(0, CommerceAbandonedCart::withoutGlobalScopes()->count());
+        $cart = CommerceAbandonedCart::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame('b978fcc2-ccd0-45f6-81a7-7ab1f3b8f85d', $cart->external_id);
+        $this->assertSame(2, (int) $cart->items_count);
+        $this->assertSame('buyer@example.sa', $cart->customer_email);
+        $this->assertSame('https://demo.zid.store/checkout/fromBasket/3:abc', $cart->checkout_url);
+        $this->assertEqualsWithDelta(509.8254, (float) $cart->original_total, 0.0001);
     }
 
     /**

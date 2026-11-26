@@ -224,8 +224,8 @@ final class CommerceOAuthAndBoardTest extends TestCase
             ->assertJsonPath('data.1.key', 'zid');
 
         $this->assertStringNotContainsString('client_secret', $response->getContent());
-        // Zid's inability to report abandoned carts is a stated capability, never a zero.
-        $this->assertFalse($response->json('data.1.supports_abandoned_carts'));
+        // ZID-ABANDONED-CARTS-001 — both stores report abandoned carts through their APIs.
+        $this->assertTrue($response->json('data.1.supports_abandoned_carts'));
         $this->assertTrue($response->json('data.0.supports_abandoned_carts'));
     }
 
