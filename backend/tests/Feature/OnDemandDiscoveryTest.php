@@ -216,7 +216,7 @@ final class OnDemandDiscoveryTest extends TestCase
         $bBinding = ProjectIntegrationBinding::withoutGlobalScopes()->where('project_id', $this->projectB->id)->firstOrFail();
         $this->assertSame((string) $home->id, (string) $bBinding->external_account_id);
         $this->assertFalse($bBinding->is_primary);
-        $this->assertSame(['campaign_external_ids' => [], 'name_contains' => []], $bBinding->settings['shared_scope']);
+        $this->assertEquals(['campaign_external_ids' => [], 'name_contains' => []], $bBinding->settings['shared_scope']);
         $this->assertSame((string) $this->projectA->id, app(AccountAssignment::class)->projectIdFor($home));
 
         // Linking it again is idempotent.
