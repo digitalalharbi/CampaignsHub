@@ -119,18 +119,20 @@ final class StoreFunnelTest extends TestCase
      * A store on a platform with no cart data makes the add-to-cart stage an UNDERCOUNT, and it says
      * so instead of reporting a near-perfect checkout rate.
      *
-     * The Zid store files an order of its own, because that is what makes it THIS project's store
+     * The cart-less store files an order of its own, because that is what makes it THIS project's store
      * (UNIFIED-001): a shop belongs to the project its data was filed under, not to every project of
      * the tenant that owns it.
      */
     public function test_add_to_cart_is_partial_when_a_store_cannot_report_carts(): void
     {
         $this->holdingTenant((string) $this->tenant->id);
-        $zid = $this->account('zid', 'store');
+        // ZID-ABANDONED-CARTS-001 — Zid now reports carts, so the store that cannot is a platform the catalogue
+        // does not declare carts for; the rule is about the capability, not about any one platform's name.
+        $noCarts = $this->account('woocommerce', 'store');
         app(TenantContext::class)->forget();
 
         $this->seedOrder('o1', total: 100, status: 'completed');
-        $this->seedOrder('z1', total: 80, status: 'completed', store: $zid, provider: 'zid');
+        $this->seedOrder('z1', total: 80, status: 'completed', store: $noCarts, provider: 'woocommerce');
 
         $stages = collect($this->funnel()->json('data.stages'))->keyBy('key');
 

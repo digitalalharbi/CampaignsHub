@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Domains\Commerce\Providers;
 
 use App\Domains\Commerce\ValueObjects\Attribution;
-use App\Domains\Integrations\ValueObjects\SyncResult;
 
 /**
  * Zid Merchant API (`api.zid.sa/v1`).
@@ -18,10 +17,9 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
  * - **Names are localised objects**, `{ "ar": "قميص", "en": "Shirt" }`, so reading `name` as a string
  *   yields `Array` in a product table. `text()` resolves them, preferring Arabic — this product's
  *   customers are Saudi merchants and the Arabic name is the one their team recognises.
- * - **No abandoned-cart endpoint.** Zid does not expose them, and that is stated as a refusal rather
- *   than returned as an empty success: «this store had no abandoned carts» and «this platform will
- *   not tell us» are different answers, and a funnel that shows the second as the first invents a
- *   perfect checkout rate.
+ * - **Abandoned carts live under `managers/store/abandoned-carts`** (ZID-ABANDONED-CARTS-001). An earlier
+ *   reading said Zid published none and refused the sync on purpose; Zid's docs list the endpoint, so the
+ *   refusal was wrong and every Zid sync came back partial for no reason.
  *
  * Awaiting credentials on this install; every response the tests exercise is faked.
  */
@@ -165,20 +163,36 @@ final class ZidConnector extends ApiCommerceConnector
     }
 
     /**
-     * Zid publishes no abandoned-cart endpoint.
+     * ZID-ABANDONED-CARTS-001 — `GET v1/managers/store/abandoned-carts` (docs.zid.sa «List Abandoned Carts»).
      *
-     * Overridden rather than left to return `[]`, because an empty SUCCESS would be indistinguishable
-     * from a store where nobody abandoned anything — and a checkout funnel built on that would show a
-     * hundred-percent completion rate to a client who is losing carts every day.
+     * Field names follow Zid's own cart object: `cart_total`, `customer_*`, `products_count`, `url` (the
+     * checkout link the merchant can send back), `created_at`. Money is the store's currency; Zid sends the
+     * formatted string beside the number, never a currency code, so the currency is left to the store.
      */
-    public function syncAbandonedCarts(string $storeId, string $from, string $to): SyncResult
-    {
-        return SyncResult::failed($this->label().' does not expose abandoned carts through its API.');
-    }
-
     protected function fetchAbandonedCarts(string $storeId, string $from, string $to): array
     {
-        return [];
+        $carts = [];
+
+        foreach ($this->pages('managers/store/abandoned-carts', [], 'abandoned carts') as $c) {
+            if (($c['id'] ?? null) === null) {
+                continue;
+            }
+
+            $carts[] = [
+                'external_id' => (string) $c['id'],
+                'abandoned_at' => $this->str($c['created_at'] ?? $c['updated_at'] ?? null),
+                'currency' => null,
+                'total' => $this->amount($c['cart_total'] ?? null),
+                'items_count' => isset($c['products_count']) && is_numeric($c['products_count']) ? (int) $c['products_count'] : null,
+                'customer_external_id' => ($c['customer_id'] ?? null) === null ? null : (string) $c['customer_id'],
+                'customer_email' => $this->str($c['customer_email'] ?? null),
+                'checkout_url' => $this->str($c['url'] ?? null),
+                'attribution' => Attribution::read(explicit: [], landingUrl: null, referrer: null),
+                'raw' => (array) $c,
+            ];
+        }
+
+        return $carts;
     }
 
     // ── Zid's own shapes ──────────────────────────────────────────────────────────────────────
@@ -204,7 +218,7 @@ final class ZidConnector extends ApiCommerceConnector
             );
 
             // Zid names the list after the resource on some endpoints and `data` on others.
-            $list = $body['data'] ?? $body['orders'] ?? $body['products'] ?? $body['customers'] ?? [];
+            $list = $body['data'] ?? $body['orders'] ?? $body['products'] ?? $body['customers'] ?? $body['abandoned_carts'] ?? $body['carts'] ?? $body['results'] ?? [];
 
             foreach ((array) $list as $row) {
                 if (is_array($row)) {

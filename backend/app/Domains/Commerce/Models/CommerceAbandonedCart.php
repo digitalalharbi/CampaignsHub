@@ -12,8 +12,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * A cart that never became an order.
  *
- * Only Salla reports these. Zid does not expose them at all, which is why its connector REFUSES rather
- * than returning an empty list — an absent row here must never be read as «nobody abandoned anything».
+ * Salla and Zid both report these (Zid since ZID-ABANDONED-CARTS-001). A platform that cannot must
+ * REFUSE rather than return an empty list — an absent row must never be read as «nobody abandoned anything».
  */
 final class CommerceAbandonedCart extends Model
 {

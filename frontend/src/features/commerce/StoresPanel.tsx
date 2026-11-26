@@ -74,7 +74,7 @@ function StoreCard({ store, provider, ar, onSync, syncing }: {
         <div>
           <dt className="inline text-text-muted">{ar ? 'السلات المتروكة' : 'Abandoned carts'}: </dt>
           <dd className="inline font-semibold">
-            {/* Zid publishes no abandoned carts: a stated absence, never a zero that reads as a perfect checkout. */}
+            {/* A platform with no cart data: a stated absence, never a zero that reads as a perfect checkout. */}
             {provider.supports_abandoned_carts
               ? <span className="tnum">{store.counts.abandoned_carts.toLocaleString('en-US')}</span>
               : <span data-testid="carts-unsupported" className="text-text-muted">—</span>}
