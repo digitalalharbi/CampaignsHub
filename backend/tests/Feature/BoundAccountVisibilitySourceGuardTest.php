@@ -37,6 +37,9 @@ final class BoundAccountVisibilitySourceGuardTest extends TestCase
         'Domains/Metrics/Actions/UpsertDailyMetrics.php' => 'writer',
         'Domains/Campaigns/Actions/UpsertCreativeDailyMetrics.php' => 'writer, scoped to the syncing account through its campaigns',
         'Domains/Campaigns/Actions/ImportExternalStructure.php' => 'writer',
+        // SHARED-ACCOUNT-PROJECTS-001 — moves ONE campaign's stored rows between two projects that both read its account, inside the
+        // importer's transaction; it must see every row of that campaign to move them all. A writer; returns no figure, for no viewer.
+        'Domains/Campaigns/Actions/MoveSharedCampaignHistory.php' => 'writer, moves one campaign\'s rows between two projects of a shared account',
         // META-MEDIA-RENEWAL-001 — runs only inside a structure sync, which has already proved the assignment. Rewrites links; returns no figure, for no viewer.
         'Domains/Campaigns/Actions/RenewExpiredCreativeMedia.php' => 'writer, scoped to the syncing account through its campaigns; reads and rewrites media links, never a figure',
         // Client-facing creative lists: every one starts a bare creative query and hands it to

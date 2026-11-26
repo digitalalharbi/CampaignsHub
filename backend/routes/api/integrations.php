@@ -237,5 +237,8 @@ Route::middleware(['auth:sanctum', 'tenant', 'portal:app,agency', 'project'])
         Route::post('bindings/{binding}/sync', [ProjectIntegrationController::class, 'sync'])->middleware('project.can:integrations.manage')->name('sync');
         // INTEGRATION-UNLINK-001 — take ONE account off this project, addressed by the account (the binding id is not what an operator holds).
         Route::post('accounts/{account}/unlink', [ProjectIntegrationController::class, 'unlinkAccount'])->middleware('project.can:integrations.manage')->name('accounts.unlink');
+        // SHARED-ACCOUNT-PROJECTS-001 — one ad account read by several projects, split by campaign: the split, and THIS project's part of it.
+        Route::get('accounts/{account}/shared-campaigns', [ProjectIntegrationController::class, 'sharedCampaigns'])->whereUuid('account')->middleware('project.can:integrations.manage')->name('accounts.shared-campaigns');
+        Route::put('accounts/{account}/shared-campaigns', [ProjectIntegrationController::class, 'updateSharedCampaigns'])->whereUuid('account')->middleware(['project.can:integrations.manage', 'throttle:30,1'])->name('accounts.shared-campaigns.update');
         Route::delete('bindings/{binding}', [ProjectIntegrationController::class, 'detach'])->middleware('project.can:integrations.manage')->name('detach');
     });

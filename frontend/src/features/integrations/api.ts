@@ -942,8 +942,13 @@ export interface LinkAccountOption {
   name: string
   currency: string | null
   status: string
-  /** `here` — already linked to this project; `elsewhere` — feeds another project and cannot be chosen. */
+  /**
+   * `here` — already linked to this project; `elsewhere` — another project of this workspace reads it. Since
+   * SHARED-ACCOUNT-PROJECTS-001 an `elsewhere` ad account can still be chosen: it is SHARED, split by campaign.
+   */
   linked: 'here' | 'elsewhere' | null
+  /** The other projects that read it now (only for `elsewhere`). */
+  linked_projects?: { id: string; name: string }[]
 }
 
 export function fetchLinkOrganisations(projectId: string, connectionId: string): Promise<{ organisations: LinkOrganisation[] }> {
@@ -1006,7 +1011,7 @@ export async function confirmLinkAccount(input: {
   connectionId: string
   externalId: string
   organisation: string | null
-}): Promise<{ account_id: string; relinked: boolean }> {
+}): Promise<{ account_id: string; relinked: boolean; shared?: boolean }> {
   await ensureCsrfCookie()
   return postData(`/projects/${input.projectId}/integrations/link/${input.connectionId}/accounts`, {
     external_id: input.externalId,
@@ -1029,4 +1034,44 @@ export interface ClientIntegrationRow {
 
 export function fetchClientsIntegrationOverview(): Promise<ClientIntegrationRow[]> {
   return getData<ClientIntegrationRow[]>('/integrations/clients-overview')
+}
+
+/**
+ * SHARED-ACCOUNT-PROJECTS-001 (Owner 2026-11-26) — one ad account read by several projects, split by campaign.
+ * Every campaign is in exactly ONE project; `home` is the project the account was linked to first, `shared` a project
+ * that receives only the campaigns it picked.
+ */
+export interface SharedCampaignsSplit {
+  account: { id: string; name: string | null; provider: string; external_id: string }
+  role: 'home' | 'shared'
+  editable: boolean
+  scope: { campaign_external_ids: string[]; name_contains: string[] } | null
+  projects: { id: string; name: string; role: 'home' | 'shared'; is_this: boolean; campaigns: number }[]
+  campaigns: {
+    external_id: string
+    name: string
+    status: string
+    project_id: string
+    project_name: string | null
+    here: boolean
+    /** Another shared project already picked it — it cannot be picked here too. */
+    locked_by: string | null
+  }[]
+}
+
+export function fetchSharedCampaigns(projectId: string, accountId: string): Promise<SharedCampaignsSplit> {
+  return getData(`/projects/${projectId}/integrations/accounts/${accountId}/shared-campaigns`)
+}
+
+export async function saveSharedCampaigns(input: {
+  projectId: string
+  accountId: string
+  campaignExternalIds: string[]
+  nameContains: string[]
+}): Promise<SharedCampaignsSplit> {
+  await ensureCsrfCookie()
+  return putData(`/projects/${input.projectId}/integrations/accounts/${input.accountId}/shared-campaigns`, {
+    campaign_external_ids: input.campaignExternalIds,
+    name_contains: input.nameContains,
+  })
 }

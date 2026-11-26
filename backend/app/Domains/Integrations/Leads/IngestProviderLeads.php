@@ -8,6 +8,7 @@ use App\Domains\CRM\Actions\LinkDuplicateLead;
 use App\Domains\CRM\Models\Lead;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\SharedAccounts;
 use App\Support\PhoneNumber;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
@@ -100,6 +101,25 @@ final class IngestProviderLeads
     }
 
     /**
+     * The account's binding decides, never the payload. SHARED-ACCOUNT-PROJECTS-001 — for an account shared by campaign,
+     * the lead goes to the project its campaign is filed under (by the same scope that files the campaign); every other
+     * account answers exactly as before.
+     */
+    private function projectFor(?ExternalAccount $account, ProviderLead $lead): ?string
+    {
+        if ($account === null) {
+            return null;
+        }
+
+        $home = app(AccountAssignment::class)->projectIdFor($account);
+        if ($home === null || $lead->campaignId === null || $lead->campaignId === '') {
+            return $home;
+        }
+
+        return app(SharedAccounts::class)->projectForCampaign($account, $home, (string) $lead->campaignId, $lead->campaignName);
+    }
+
+    /**
      * @return array<string,mixed>
      */
     private function attributes(string $tenantId, ProviderLead $lead): array
@@ -111,7 +131,7 @@ final class IngestProviderLeads
             // The project comes off the ACCOUNT's binding, never off the payload. A body that could
             // name its own project is a body that could name somebody else's — the same rule the
             // webhook ledger already follows for tenants.
-            'project_id' => $account === null ? null : app(AccountAssignment::class)->projectIdFor($account),
+            'project_id' => $this->projectFor($account, $lead),
 
             'name' => $lead->name ?? '',
             'email' => $lead->email,

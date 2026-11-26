@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -186,23 +187,61 @@ final class OnDemandDiscoveryTest extends TestCase
         $this->assertSame(0, ExternalAccount::withoutGlobalScopes()->count());
     }
 
-    public function test_an_account_feeding_another_project_is_refused_and_leaves_no_row_behind(): void
+    /**
+     * SHARED-ACCOUNT-PROJECTS-001 (Owner 2026-11-26) — an account another project of the workspace reads is no longer
+     * refused: it is SHARED. The second project gets a binding on the SAME row (one fetch, one seat), named in the
+     * listing, with an empty campaign scope, and no second row is stored for its own sign-in.
+     */
+    public function test_an_account_feeding_another_project_is_shared_on_the_same_row_and_feeds_nothing_until_campaigns_are_picked(): void
     {
         Queue::fake();
         $a = $this->signIn($this->projectA);
         $this->confirm($this->projectA, $a, self::LINKED, 'org-1')->assertCreated();
+        $home = ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $a->id)->firstOrFail();
 
         $b = $this->signIn($this->projectB);
         $this->assertNotSame((string) $a->id, (string) $b->id);
 
         $listed = $this->directory($this->projectB, $b, 'accounts?organisation=org-1&q=count+07')->json('data.accounts');
         $this->assertSame('elsewhere', $listed[0]['linked']);
+        $this->assertSame([['id' => (string) $this->projectA->id, 'name' => 'Project A']], $listed[0]['linked_projects']);
 
-        $refused = $this->confirm($this->projectB, $b, self::LINKED, 'org-1')->assertStatus(409);
-        $this->assertSame((string) $this->projectA->id, $refused->json('meta.assigned_project_id'));
+        $shared = $this->confirm($this->projectB, $b, self::LINKED, 'org-1')->assertCreated();
+        $this->assertTrue($shared->json('data.shared'));
+        $this->assertSame((string) $home->id, $shared->json('data.account_id'));
 
-        $this->assertSame(0, ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $b->id)->count(), 'a refused link left a stored account behind');
-        $this->assertSame(1, ProjectIntegrationBinding::withoutGlobalScopes()->count());
+        $this->assertSame(0, ExternalAccount::withoutGlobalScopes()->where('provider_connection_id', $b->id)->count(), 'a second row was stored for the same account');
+        $this->assertSame((string) $a->id, (string) $home->fresh()->provider_connection_id, 'the home row was moved off its connection');
+
+        $bBinding = ProjectIntegrationBinding::withoutGlobalScopes()->where('project_id', $this->projectB->id)->firstOrFail();
+        $this->assertSame((string) $home->id, (string) $bBinding->external_account_id);
+        $this->assertFalse($bBinding->is_primary);
+        $this->assertEquals(['campaign_external_ids' => [], 'name_contains' => []], $bBinding->settings['shared_scope']);
+        $this->assertSame((string) $this->projectA->id, app(AccountAssignment::class)->projectIdFor($home));
+
+        // Linking it again is idempotent.
+        $this->confirm($this->projectB, $b, self::LINKED, 'org-1')->assertSuccessful();
+        $this->assertSame(2, ProjectIntegrationBinding::withoutGlobalScopes()->where('is_active', true)->count());
+
+        // The split, read from both projects: B edits its part, A sees it.
+        $split = $this->actingAs($this->owner, 'sanctum')->withHeader('X-Project-Id', $this->projectB->id)
+            ->getJson("/api/v1/projects/{$this->projectB->id}/integrations/accounts/{$home->id}/shared-campaigns")->assertOk();
+        $this->assertSame('shared', $split->json('data.role'));
+        $this->assertTrue($split->json('data.editable'));
+        $this->assertCount(2, $split->json('data.projects'));
+
+        $homeView = $this->actingAs($this->owner, 'sanctum')->withHeader('X-Project-Id', $this->projectA->id)
+            ->getJson("/api/v1/projects/{$this->projectA->id}/integrations/accounts/{$home->id}/shared-campaigns")->assertOk();
+        $this->assertSame('home', $homeView->json('data.role'));
+        $this->assertFalse($homeView->json('data.editable'));
+
+        // A campaign that is not this account's is refused; the home project cannot pick for itself.
+        $this->actingAs($this->owner, 'sanctum')->withHeader('X-Project-Id', $this->projectB->id)
+            ->putJson("/api/v1/projects/{$this->projectB->id}/integrations/accounts/{$home->id}/shared-campaigns", ['campaign_external_ids' => ['not-mine']])
+            ->assertStatus(422);
+        $this->actingAs($this->owner, 'sanctum')->withHeader('X-Project-Id', $this->projectA->id)
+            ->putJson("/api/v1/projects/{$this->projectA->id}/integrations/accounts/{$home->id}/shared-campaigns", ['campaign_external_ids' => []])
+            ->assertStatus(422);
     }
 
     /**

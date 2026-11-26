@@ -6,6 +6,7 @@ namespace App\Domains\Integrations\Http\Controllers;
 
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Campaigns\Actions\ImportExternalCampaigns;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Actions\ApplyAccountSelection;
 use App\Domains\Integrations\Actions\ConfirmAccountSelection;
 use App\Domains\Integrations\Actions\EstablishSandboxConnection;
@@ -16,7 +17,9 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\FirstSync;
 use App\Domains\Integrations\Services\ManualSyncDebounce;
+use App\Domains\Integrations\Services\SharedAccounts;
 use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Context\ProjectContext;
 use App\Domains\Projects\Lifecycle\ArchiveEffects;
@@ -75,7 +78,12 @@ final class ProjectIntegrationController extends Controller
             ->map(fn (ProjectIntegrationBinding $b) => $this->bindingArray($b) + ['shared_with' => array_map(
                 static fn (array $p): array => ['id' => $p['id'], 'name' => $p['name']],
                 $shared[(string) $b->external_account_id] ?? [],
-            )]);
+            ),
+                // SHARED-ACCOUNT-PROJECTS-001 — `home`: this project is the account's home and shares some campaigns out;
+                // `shared`: this project receives only the campaigns its scope names. Null when the account is not shared.
+                'shared_role' => SharedAccounts::isShared($b) ? 'shared' : (($shared[(string) $b->external_account_id] ?? []) !== [] ? 'home' : null),
+                'shared_campaigns' => SharedAccounts::isShared($b) ? count(SharedAccounts::scopeOf($b)['campaign_external_ids']) + count(SharedAccounts::scopeOf($b)['name_contains']) : null,
+            ]);
 
         return ApiResponse::success($bindings, 'Project integrations retrieved.');
     }
@@ -506,7 +514,14 @@ final class ProjectIntegrationController extends Controller
         }
 
         $result = $connector->syncCampaigns($model->externalAccount->external_id);
-        $imported = $import->execute($model->externalAccount, $result);
+        /*
+         * SHARED-ACCOUNT-PROJECTS-001 — a shared account's campaigns live in several projects; the request's project scope
+         * would hide the other projects' rows and the import would try to insert them again. So for a shared account the
+         * project is stated (the guard above proved it is the home project) and each campaign is filed by its scope.
+         * Every other account keeps the request-scoped import it always had.
+         */
+        $isShared = count(app(SharedAccounts::class)->projectsFed($model->externalAccount, (string) $model->project_id)) > 1;
+        $imported = $import->execute($model->externalAccount, $result, $isShared ? (string) $model->project_id : null);
 
         $run->update([
             'status' => $result->success ? 'success' : 'failed',
@@ -572,6 +587,168 @@ final class ProjectIntegrationController extends Controller
             'project_id' => $project,
             'history_rows_kept' => $kept,
         ], 'Account removed from this project. Its history is kept and linking it again restores it.');
+    }
+
+    /**
+     * SHARED-ACCOUNT-PROJECTS-001 — how a shared account's campaigns are split between the projects that read it.
+     *
+     * Readable from every project that reads the account (the home project sees the split; a shared project also edits
+     * its own part). Every campaign is listed with the ONE project it is filed under now.
+     */
+    public function sharedCampaigns(Request $request, string $project, string $account): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.view'), 403);
+
+        [$external, $binding] = $this->sharedBindingOfThisProject($project, $account);
+
+        return ApiResponse::success($this->sharedCampaignsPayload($external, $binding), __('api.ok'));
+    }
+
+    /** SHARED-ACCOUNT-PROJECTS-001 — choose which campaigns of a shared account feed THIS project. */
+    public function updateSharedCampaigns(Request $request, AuditLogger $audit, FirstSync $firstSync, string $project, string $account): JsonResponse
+    {
+        abort_unless($request->user()->hasPermission('integrations.connect'), 403);
+
+        [$external, $binding] = $this->sharedBindingOfThisProject($project, $account);
+        abort_unless(SharedAccounts::isShared($binding), 422, 'This project is the account\'s home; its campaigns are chosen in the projects it is shared with.');
+
+        $validated = $request->validate([
+            'campaign_external_ids' => ['present', 'array', 'max:500'],
+            'campaign_external_ids.*' => ['string', 'max:191'],
+            'name_contains' => ['sometimes', 'array', 'max:20'],
+            'name_contains.*' => ['string', 'min:2', 'max:120'],
+        ]);
+
+        $known = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $external->getKey())
+            ->pluck('external_id')
+            ->map(static fn ($id): string => (string) $id)
+            ->all();
+        $ids = array_values(array_unique(array_map('strval', $validated['campaign_external_ids'])));
+        $unknown = array_diff($ids, $known);
+        if ($unknown !== []) {
+            return ApiResponse::error(__('validation.invalid'), errors: ['campaign_external_ids' => ['A campaign that is not this account\'s was named.']], status: 422);
+        }
+
+        $before = SharedAccounts::scopeOf($binding);
+        $scope = [
+            'campaign_external_ids' => $ids,
+            'name_contains' => array_values(array_unique(array_filter(array_map(static fn ($v): string => trim((string) $v), (array) ($validated['name_contains'] ?? [])), static fn (string $v): bool => $v !== ''))),
+        ];
+
+        $saved = DB::transaction(function () use ($external, $binding, $scope): ?array {
+            // Two shared projects never claim the same campaign by id: a campaign is in ONE project, never two.
+            $others = ProjectIntegrationBinding::withoutGlobalScopes()
+                ->where('external_account_id', $external->getKey())
+                ->where('is_active', true)
+                ->where('id', '!=', $binding->getKey())
+                ->lockForUpdate()
+                ->get()
+                ->filter(static fn (ProjectIntegrationBinding $b): bool => SharedAccounts::isShared($b));
+            $taken = [];
+            foreach ($others as $other) {
+                $taken = array_merge($taken, SharedAccounts::scopeOf($other)['campaign_external_ids']);
+            }
+            $clash = array_values(array_intersect($scope['campaign_external_ids'], $taken));
+            if ($clash !== []) {
+                return $clash;
+            }
+
+            $binding->forceFill(['settings' => array_merge((array) $binding->settings, [SharedAccounts::KEY => $scope])])->save();
+
+            return null;
+        });
+
+        if ($saved !== null) {
+            return ApiResponse::error('A chosen campaign already belongs to another project.', errors: ['campaign_external_ids' => $saved], meta: ['taken' => $saved], status: 422);
+        }
+
+        $audit->log(
+            action: 'integration.shared_account.scope_updated',
+            entityType: ExternalAccount::class,
+            entityId: (string) $external->getKey(),
+            before: ['project' => $project, 'scope' => $before],
+            after: ['project' => $project, 'scope' => $scope],
+        );
+
+        // The next fetch of the account re-files its campaigns between the projects; start it now rather than at the sweep.
+        $firstSync->start([(string) $external->getKey()], 'shared-scope');
+
+        return ApiResponse::success($this->sharedCampaignsPayload($external, $binding->fresh() ?? $binding), 'Campaigns saved for this project.');
+    }
+
+    /** @return array{0: ExternalAccount, 1: ProjectIntegrationBinding} */
+    private function sharedBindingOfThisProject(string $project, string $account): array
+    {
+        $external = ExternalAccount::query()->find($account);
+        abort_if($external === null, 404, 'Account not found.');
+
+        $binding = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('tenant_id', $external->tenant_id)
+            ->where('project_id', $project)
+            ->where('external_account_id', $external->getKey())
+            ->where('is_active', true)
+            ->first();
+        abort_if($binding === null, 404, 'This account is not linked to this project.');
+
+        return [$external, $binding];
+    }
+
+    /** @return array<string,mixed> */
+    private function sharedCampaignsPayload(ExternalAccount $external, ProjectIntegrationBinding $binding): array
+    {
+        $bindings = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('external_account_id', $external->getKey())
+            ->where('is_active', true)
+            ->orderBy('created_at')
+            ->get();
+        $names = Project::withoutGlobalScopes()
+            ->whereIn('id', $bindings->pluck('project_id')->all())
+            ->whereNull('deleted_at')
+            ->pluck('name', 'id')
+            ->map(static fn ($n): string => (string) $n)
+            ->all();
+
+        $campaigns = ExternalCampaign::withoutGlobalScopes()
+            ->where('external_account_id', $external->getKey())
+            ->orderBy('name')
+            ->get(['external_id', 'name', 'status', 'project_id']);
+
+        $claimedByOthers = [];
+        foreach ($bindings as $b) {
+            if ((string) $b->getKey() !== (string) $binding->getKey() && SharedAccounts::isShared($b)) {
+                foreach (SharedAccounts::scopeOf($b)['campaign_external_ids'] as $id) {
+                    $claimedByOthers[$id] = (string) $b->project_id;
+                }
+            }
+        }
+
+        $counts = $campaigns->countBy(static fn ($c): string => (string) $c->project_id)->all();
+
+        return [
+            'account' => ['id' => (string) $external->getKey(), 'name' => $external->name, 'provider' => $external->provider, 'external_id' => $external->external_id],
+            'role' => SharedAccounts::isShared($binding) ? 'shared' : 'home',
+            'editable' => SharedAccounts::isShared($binding),
+            'scope' => SharedAccounts::isShared($binding) ? SharedAccounts::scopeOf($binding) : null,
+            'projects' => $bindings
+                ->filter(static fn (ProjectIntegrationBinding $b): bool => isset($names[(string) $b->project_id]))
+                ->map(static fn (ProjectIntegrationBinding $b): array => [
+                    'id' => (string) $b->project_id,
+                    'name' => $names[(string) $b->project_id],
+                    'role' => SharedAccounts::isShared($b) ? 'shared' : 'home',
+                    'is_this' => (string) $b->project_id === (string) $binding->project_id,
+                    'campaigns' => (int) ($counts[(string) $b->project_id] ?? 0),
+                ])->values()->all(),
+            'campaigns' => $campaigns->map(fn ($c): array => [
+                'external_id' => (string) $c->external_id,
+                'name' => (string) $c->name,
+                'status' => (string) $c->status,
+                'project_id' => (string) $c->project_id,
+                'project_name' => $names[(string) $c->project_id] ?? null,
+                'here' => (string) $c->project_id === (string) $binding->project_id,
+                'locked_by' => isset($claimedByOthers[(string) $c->external_id]) ? ($names[$claimedByOthers[(string) $c->external_id]] ?? null) : null,
+            ])->values()->all(),
+        ];
     }
 
     /** Detach a binding from the project. Does NOT revoke the underlying OAuth connection. */

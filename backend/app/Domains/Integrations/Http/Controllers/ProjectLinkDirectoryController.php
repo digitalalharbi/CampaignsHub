@@ -81,6 +81,7 @@ final class ProjectLinkDirectoryController extends Controller
         }
 
         $taken = $this->linkStates((string) $model->tenant_id, (string) $model->provider, array_column($page['items'], 'external_id'));
+        $names = $this->linkedProjectNames((string) $model->tenant_id, (string) $model->provider, array_keys(array_filter($taken, static fn (string $v): bool => $v === 'elsewhere')));
 
         return ApiResponse::success([
             'accounts' => array_map(fn (array $a): array => [
@@ -90,6 +91,9 @@ final class ProjectLinkDirectoryController extends Controller
                 'status' => $a['status'],
                 // `here` — already linked to THIS project; `elsewhere` — feeds another project (never named here).
                 'linked' => $taken[$a['external_id']] ?? null,
+                // SHARED-ACCOUNT-PROJECTS-001 — an account another project of THIS workspace reads may be shared with this
+                // one by campaign; the operator sees which projects already read it before choosing.
+                'linked_projects' => $names[$a['external_id']] ?? [],
             ], $page['items']),
             'total' => $page['total'],
             'page' => $page['page'],
@@ -143,6 +147,8 @@ final class ProjectLinkDirectoryController extends Controller
         return ApiResponse::success([
             'account_id' => (string) $result['account']->getKey(),
             'relinked' => $result['relinked'],
+            // SHARED-ACCOUNT-PROJECTS-001 — linked as a shared account: it feeds this project only the campaigns chosen next.
+            'shared' => (bool) ($result['shared'] ?? false),
         ], 'Account linked.', status: $result['created'] ? 201 : 200);
     }
 
@@ -192,6 +198,47 @@ final class ProjectLinkDirectoryController extends Controller
             });
 
         return $states;
+    }
+
+    /**
+     * The names of the OTHER projects of this workspace that read each listed account now.
+     *
+     * @param  list<string>  $externalIds
+     * @return array<string, list<array{id: string, name: string}>>
+     */
+    private function linkedProjectNames(string $tenantId, string $provider, array $externalIds): array
+    {
+        if ($externalIds === []) {
+            return [];
+        }
+
+        $out = [];
+        ProjectIntegrationBinding::withoutGlobalScopes()
+            ->toBase()
+            ->join('external_accounts', 'external_accounts.id', '=', 'project_integration_bindings.external_account_id')
+            ->join('projects', 'projects.id', '=', 'project_integration_bindings.project_id')
+            ->where('project_integration_bindings.is_active', true)
+            ->where('project_integration_bindings.project_id', '!=', (string) $this->project->projectId())
+            ->where('projects.tenant_id', $tenantId)
+            ->whereNull('projects.deleted_at')
+            ->where('external_accounts.tenant_id', $tenantId)
+            ->where('external_accounts.provider', $provider)
+            ->where('external_accounts.account_type', 'ad_account')
+            ->where('external_accounts.status', '!=', 'superseded')
+            ->whereIn('external_accounts.external_id', $externalIds)
+            ->orderBy('projects.name')
+            ->get(['external_accounts.external_id as external_id', 'projects.id as id', 'projects.name as name'])
+            ->each(function (object $row) use (&$out): void {
+                $key = (string) $row->external_id;
+                foreach ($out[$key] ?? [] as $seen) {
+                    if ($seen['id'] === (string) $row->id) {
+                        return;
+                    }
+                }
+                $out[$key][] = ['id' => (string) $row->id, 'name' => (string) $row->name];
+            });
+
+        return $out;
     }
 
     private function refused(Throwable $e): JsonResponse

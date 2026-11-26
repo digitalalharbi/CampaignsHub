@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Campaigns\Services\CampaignObjectiveResolver;
 use App\Domains\Campaigns\Services\PlatformObjectiveMap;
 use App\Domains\Integrations\Models\ExternalAccount;
+use App\Domains\Integrations\Services\SharedAccounts;
 use App\Domains\Integrations\ValueObjects\SyncResult;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\SourceCurrency;
@@ -37,6 +38,11 @@ use Illuminate\Support\Facades\DB;
  */
 final class ImportExternalCampaigns
 {
+    public function __construct(
+        private readonly SharedAccounts $shared,
+        private readonly MoveSharedCampaignHistory $moveHistory,
+    ) {}
+
     /** Adopted without a person: by this sync, or by the scope cleanup re-filing a campaign. Their status is the platform's. */
     private const FOLLOWS_PLATFORM = ['sync', 'scope-cleanup'];
 
@@ -53,6 +59,7 @@ final class ImportExternalCampaigns
 
         $count = 0;
         $touched = [];
+        $this->shared->forget();
 
         DB::transaction(function () use ($account, $result, $projectId, &$count, &$touched): void {
             foreach ($result->records as $row) {
@@ -89,9 +96,31 @@ final class ImportExternalCampaigns
                  */
                 $isNew = ! $campaign->exists;
 
-                if ($projectId !== null && ($isNew || (string) $campaign->project_id !== (string) $projectId)) {
+                /*
+                 * SHARED-ACCOUNT-PROJECTS-001 — an account shared with other projects files each campaign under the ONE
+                 * project whose scope claims it (otherwise the run's own project). Null: no project may take it (the run's
+                 * project is itself only a shared one and did not pick this campaign) — the row is not written or moved.
+                 */
+                $target = $projectId === null
+                    ? null
+                    : $this->shared->projectForCampaign($account, $projectId, $externalId, isset($row['name']) ? (string) $row['name'] : $campaign->name);
+
+                if ($projectId !== null && $target === null) {
+                    continue;
+                }
+
+                $movedFrom = null;
+
+                if ($target !== null && ($isNew || (string) $campaign->project_id !== (string) $target)) {
+                    // A move between two projects that BOTH read this shared account carries the campaign's history along.
+                    if (! $isNew && $campaign->project_id !== null
+                        && in_array((string) $campaign->project_id, $this->shared->projectsFed($account, $projectId), true)
+                        && in_array((string) $target, $this->shared->projectsFed($account, $projectId), true)) {
+                        $movedFrom = (string) $campaign->project_id;
+                    }
+
                     $campaign->tenant_id = $account->tenant_id;
-                    $campaign->project_id = $projectId;
+                    $campaign->project_id = $target;
 
                     if (! $isNew) {
                         $campaign->unified_campaign_id = null;
@@ -158,6 +187,10 @@ final class ImportExternalCampaigns
                 } elseif ($campaign->unified_campaign_id !== null) {
                     $this->releaseWithheldBudget($campaign, $account);
                     $this->followPlatformStatus($campaign);
+                }
+
+                if ($movedFrom !== null) {
+                    $this->moveHistory->execute($campaign, $movedFrom);
                 }
 
                 /*

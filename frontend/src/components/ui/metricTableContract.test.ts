@@ -231,8 +231,19 @@ describe('the analytical table contract', () => {
  * front of somebody rather than quietly adding a line to EXEMPT.
  */
 describe('the analytics tabs use the product’s table', () => {
+  /*
+   * STORE-TAB-STORE-ONLY-001 (#1326) — the store tab now draws no table at all (chips, cards and donuts), so it cannot
+   * «render through the primitive». It must still never hand-roll one, and it must not reappear in EXEMPT.
+   */
+  it('src/features/analytics/StoreFunnelTab.tsx draws no hand-rolled table and is not exempt', () => {
+    const source = TREE['/src/features/analytics/StoreFunnelTab.tsx'] ?? ''
+
+    expect(source, 'the file moved — this guard is watching nothing').not.toBe('')
+    expect(withoutComments(source), 'a hand-rolled table came back').not.toMatch(/<table[\s>]/)
+    expect(Object.keys(EXEMPT)).not.toContain('src/features/analytics/StoreFunnelTab.tsx')
+  })
+
   it.each([
-    'src/features/analytics/StoreFunnelTab.tsx',
     'src/features/analytics/AttributionPanel.tsx',
   ])('%s renders through the primitive and is no longer exempt', (path) => {
     const source = TREE['/' + path] ?? ''

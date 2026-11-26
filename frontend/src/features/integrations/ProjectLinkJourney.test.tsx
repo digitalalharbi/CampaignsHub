@@ -26,6 +26,9 @@ const calls = vi.hoisted(() => ({
   confirmed: [] as Array<{ projectId: string; connectionId: string; externalId: string; organisation: string | null }>,
   removed: [] as Array<{ id: string; unconfirmedOnly?: boolean }>,
 }))
+const shared = vi.hoisted(() => ({
+  saved: [] as Array<{ projectId: string; accountId: string; campaignExternalIds: string[]; nameContains: string[] }>,
+}))
 const directory = vi.hoisted(() => ({
   organisations: [{ id: 'biz-1', name: 'Acme Business' }, { id: 'biz-2', name: 'Nova Business' }] as Array<{ id: string | null; name: string | null }>,
   refuse: false,
@@ -61,7 +64,7 @@ vi.mock('./api', async (importOriginal) => {
       calls.accounts.push({ projectId, connectionId, ...params })
       const all = [
         { external_id: 'act_1', name: 'Riyadh Retail', currency: 'SAR', status: 'active', linked: null },
-        { external_id: 'act_2', name: 'Jeddah Outlet', currency: 'USD', status: 'active', linked: 'elsewhere' as const },
+        { external_id: 'act_2', name: 'Jeddah Outlet', currency: 'USD', status: 'active', linked: 'elsewhere' as const, linked_projects: [{ id: 'p-9', name: 'حنكة' }] },
       ].filter((a) => a.name.toLowerCase().includes((params.q ?? '').toLowerCase()))
       return Promise.resolve({ accounts: all, total: all.length, page: 1, per_page: 25 })
     },
@@ -69,7 +72,29 @@ vi.mock('./api', async (importOriginal) => {
       calls.confirmed.push(input)
       return directory.refuse
         ? Promise.reject({ isAxiosError: true, response: { status: 409, data: { message: 'elsewhere' } } })
-        : Promise.resolve({ account_id: 'a-1', relinked: false })
+        : Promise.resolve({ account_id: input.externalId === 'act_2' ? 'a-2' : 'a-1', relinked: false, shared: input.externalId === 'act_2' })
+    },
+    fetchSharedCampaigns: (projectId: string, accountId: string) => Promise.resolve({
+      account: { id: accountId, name: 'Jeddah Outlet', provider: 'meta', external_id: 'act_2' },
+      role: 'shared' as const,
+      editable: true,
+      scope: { campaign_external_ids: [], name_contains: [] },
+      projects: [
+        { id: 'p-9', name: 'حنكة', role: 'home' as const, is_this: false, campaigns: 2 },
+        { id: projectId, name: 'باز', role: 'shared' as const, is_this: true, campaigns: 0 },
+      ],
+      campaigns: [
+        { external_id: 'cmp-1', name: 'Hankah Sale', status: 'active', project_id: 'p-9', project_name: 'حنكة', here: false, locked_by: null },
+        { external_id: 'cmp-2', name: 'Buzz Installs', status: 'active', project_id: 'p-9', project_name: 'حنكة', here: false, locked_by: null },
+      ],
+    }),
+    saveSharedCampaigns: (input: { projectId: string; accountId: string; campaignExternalIds: string[]; nameContains: string[] }) => {
+      shared.saved.push(input)
+      return Promise.resolve({
+        account: { id: input.accountId, name: 'Jeddah Outlet', provider: 'meta', external_id: 'act_2' },
+        role: 'shared' as const, editable: true, scope: { campaign_external_ids: input.campaignExternalIds, name_contains: [] },
+        projects: [], campaigns: [],
+      })
     },
   }
 })
@@ -244,8 +269,9 @@ describe('the project link journey: platform and authorisation', () => {
     const account = await screen.findByTestId('picker-account-act_1')
     expect(calls.accounts.every((c) => c.organisation === 'biz-1' && c.projectId === 'p-1')).toBe(true)
     expect(screen.getByTestId('picker-currency-act_1')).toHaveTextContent('SAR')
-    // An account feeding another project is shown and cannot be chosen.
-    expect(screen.getByTestId('picker-account-act_2')).toBeDisabled()
+    // SHARED-ACCOUNT-PROJECTS-001 — an account another project reads can be chosen, and says which project reads it.
+    expect(screen.getByTestId('picker-account-act_2')).not.toBeDisabled()
+    expect(screen.getByTestId('picker-shared-act_2')).toHaveTextContent('مرتبط أيضًا بـ حنكة')
     expect(screen.getByTestId('link-next')).toBeDisabled()
 
     fireEvent.click(account)
@@ -259,6 +285,31 @@ describe('the project link journey: platform and authorisation', () => {
 
     fireEvent.click(screen.getByTestId('link-return'))
     expect(onReturn).toHaveBeenCalledTimes(1)
+  })
+
+  it('links an account another project reads as SHARED, then picks this project\'s campaigns', async () => {
+    shared.saved.length = 0
+    const onReturn = vi.fn()
+    renderWithProviders(
+      <ProjectLinkFlow projectId="p-1" resume={{ id: 'c-1', provider: 'meta', has_parent: true, projects: [] }} onClose={() => {}} onReturn={onReturn} />,
+      { locale: 'ar' },
+    )
+    fireEvent.click(await screen.findByTestId('picker-organisation-biz-1'))
+    fireEvent.click(screen.getByTestId('link-next'))
+    fireEvent.click(await screen.findByTestId('picker-account-act_2'))
+    fireEvent.click(screen.getByTestId('link-next'))
+
+    // The last step is the campaign split, not «تم الربط»: a shared account feeds nothing until its campaigns are picked.
+    expect(await screen.findByTestId('shared-campaigns-panel')).toBeInTheDocument()
+    expect(screen.queryByTestId('link-success-title')).toBeNull()
+    expect(screen.getByTestId('shared-campaigns-projects')).toHaveTextContent('حنكة')
+    expect(screen.getByTestId('shared-campaigns-projects')).toHaveTextContent('باز')
+
+    fireEvent.click(screen.getByTestId('shared-campaign-cmp-2'))
+    fireEvent.click(screen.getByTestId('shared-campaigns-save'))
+
+    await waitFor(() => expect(shared.saved).toEqual([{ projectId: 'p-1', accountId: 'a-2', campaignExternalIds: ['cmp-2'], nameContains: [] }]))
+    await waitFor(() => expect(onReturn).toHaveBeenCalledTimes(1))
   })
 
   it('filters accounts as the reader types, on the server', async () => {

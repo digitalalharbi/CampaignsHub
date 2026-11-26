@@ -7,6 +7,7 @@ namespace App\Domains\Metrics\Services;
 use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\SharedAccounts;
 use App\Domains\Metrics\DTO\NormalizedMetric;
 use Illuminate\Support\Carbon;
 
@@ -56,6 +57,13 @@ final class InsightRowNormaliser
          */
         $projectId ??= app(AccountAssignment::class)->projectIdFor($account);
 
+        /*
+         * SHARED-ACCOUNT-PROJECTS-001 — an account shared by campaign feeds its home project and each project that picked
+         * some of its campaigns. A campaign filed under any of them is current; its figures are stamped with ITS project
+         * (one project per campaign, so nothing is counted twice). A campaign filed anywhere else is still misfiled.
+         */
+        $fed = app(SharedAccounts::class)->projectsFed($account, $projectId);
+
         // Provider campaign id → the external campaign row we already know about.
         $known = ExternalCampaign::withoutGlobalScopes()
             ->where('external_account_id', $account->id)
@@ -73,12 +81,14 @@ final class InsightRowNormaliser
                 continue;
             }
 
-            if ($projectId === null || (string) $link->project_id !== $projectId) {
+            if ($projectId === null || ! in_array((string) $link->project_id, $fed, true)) {
                 $skipped++;
                 $misfiled++;
 
                 continue;
             }
+
+            $rowProject = (string) $link->project_id;
 
             $date = Carbon::parse((string) ($row['date'] ?? Carbon::now()->toDateString()));
 
@@ -95,7 +105,7 @@ final class InsightRowNormaliser
              * way. A null source withholds the money (see `ReportingCurrency::normalise`) and the row
              * is counted, so the run reports «currency unknown» instead of a wrong number.
              */
-            $reporting = $this->currency->forProject($projectId);
+            $reporting = $this->currency->forProject($rowProject);
             $source = SourceCurrency::of($row, $account);
             $withheldForCurrency = false;
 
@@ -129,7 +139,7 @@ final class InsightRowNormaliser
                  * be nonsense that still looks like a number — precisely the kind that survives review.
                  */
                 if (! $this->currency->isMonetary($key)) {
-                    $metrics[] = $this->metric($account, $link, $projectId, $key, $date, $amount, $window);
+                    $metrics[] = $this->metric($account, $link, $rowProject, $key, $date, $amount, $window);
 
                     continue;
                 }
@@ -138,7 +148,7 @@ final class InsightRowNormaliser
                 $withheldForCurrency = $withheldForCurrency || $source === null;
 
                 $metrics[] = $this->metric(
-                    $account, $link, $projectId, $key, $date,
+                    $account, $link, $rowProject, $key, $date,
                     // Null when no rate could be vouched for. NOT zero, and not the unconverted
                     // figure — see the FX-001 migration for why both alternatives are worse.
                     $money['value'],

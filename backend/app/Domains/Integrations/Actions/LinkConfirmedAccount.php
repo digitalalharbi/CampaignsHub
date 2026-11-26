@@ -10,6 +10,8 @@ use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\Services\FirstSync;
 use App\Domains\Integrations\Services\LinkDirectory;
+use App\Domains\Integrations\Services\SharedAccounts;
+use App\Domains\Projects\Concerns\ProjectScope;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Subscriptions\Exceptions\PlanLimitReached;
 use Illuminate\Support\Carbon;
@@ -44,7 +46,7 @@ final class LinkConfirmedAccount
 
     /**
      * @param  array<string,mixed>  $listed
-     * @return array{account: ExternalAccount, relinked: bool, created: bool}
+     * @return array{account: ExternalAccount, relinked: bool, created: bool, shared?: bool}
      *
      * @throws AccountAssignedElsewhere 409 — the same real account already feeds another project
      * @throws PlanLimitReached 422 — no seat left for one more account
@@ -85,6 +87,15 @@ final class LinkConfirmedAccount
 
             $older = $this->readByThisProjectThroughAnotherConnection($connection, $project, $externalId, $accountType);
 
+            /*
+             * SHARED-ACCOUNT-PROJECTS-001 — this project already reads the account as a SHARED one (another project is
+             * its home). Linking it again is idempotent: the row stays on the home project's connection, which is the
+             * one that fetches it, and nothing is moved.
+             */
+            if ($older !== null && $this->sharesHere($older, $project)) {
+                return ['account' => $older, 'relinked' => false, 'created' => false, 'shared' => true];
+            }
+
             if ($older !== null) {
                 if ($here !== null) {
                     // A never-used double on this connection gives way to the row that carries the history.
@@ -112,6 +123,21 @@ final class LinkConfirmedAccount
                 return ['account' => $older, 'relinked' => true, 'created' => false];
             }
 
+            /*
+             * SHARED-ACCOUNT-PROJECTS-001 (Owner 2026-11-26) — the same real ad account already feeds another project of
+             * this workspace. It is no longer refused: this project gets a SHARED binding on the row that project reads
+             * (one fetch, one seat, one history), with an empty campaign scope — it receives nothing until its campaigns
+             * are chosen, so no figure is counted in two projects. The client fence still holds: an account discovered
+             * for one client never feeds another client's project.
+             */
+            if ($accountType === 'ad_account') {
+                $holder = $this->heldElsewhere($connection, $project, $externalId);
+
+                if ($holder !== null) {
+                    return $this->share($holder, $project, $purpose);
+                }
+            }
+
             $created = $here === null;
             $account = $here ?? new ExternalAccount;
             // Absent stays absent, and a currency already known is never replaced by «not stated».
@@ -131,6 +157,100 @@ final class LinkConfirmedAccount
 
             return ['account' => $account, 'relinked' => false, 'created' => $created];
         });
+    }
+
+    /**
+     * The row of the same REAL ad account that ANOTHER project of this tenant reads now — its home binding first — or null.
+     *
+     * @throws AccountAssignedElsewhere when that row may not feed this project (another client's account)
+     */
+    private function heldElsewhere(ProviderConnection $connection, Project $project, string $externalId): ?ExternalAccount
+    {
+        $bindings = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('is_active', true)
+            ->where('project_id', '!=', $project->getKey())
+            ->whereIn('external_account_id', ExternalAccount::withoutGlobalScopes()
+                ->where('tenant_id', $connection->tenant_id)
+                ->where('provider', $connection->provider)
+                ->where('external_id', $externalId)
+                ->where('account_type', 'ad_account')
+                ->where('status', '!=', 'superseded')
+                ->select('id'))
+            ->orderBy('created_at')
+            ->get()
+            ->sortBy(static fn (ProjectIntegrationBinding $b): int => SharedAccounts::isShared($b) ? 1 : 0)
+            ->values();
+
+        $binding = $bindings->first();
+        if ($binding === null) {
+            return null;
+        }
+
+        $holder = ExternalAccount::withoutGlobalScopes()->lockForUpdate()->find($binding->external_account_id);
+        if ($holder === null) {
+            return null;
+        }
+
+        if ((string) $holder->tenant_id !== (string) $project->tenant_id
+            || ($holder->client_workspace_id !== null && (string) $holder->client_workspace_id !== (string) $project->client_workspace_id)) {
+            throw new AccountAssignedElsewhere((string) $holder->getKey(), (string) $binding->project_id);
+        }
+
+        return $holder;
+    }
+
+    /**
+     * Bind the holder row to this project as a SHARED account: revived if this project held it before (its old scope kept),
+     * created otherwise. No seat is claimed — the real account is already connected — and no sync is started: the home
+     * project's fetch files the chosen campaigns here once they are picked.
+     *
+     * @return array{account: ExternalAccount, relinked: bool, created: bool, shared: bool}
+     */
+    private function share(ExternalAccount $holder, Project $project, string $purpose): array
+    {
+        $existing = ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)
+            ->where('project_id', $project->getKey())
+            ->where('external_account_id', $holder->getKey())
+            ->where('purpose', $purpose)
+            ->lockForUpdate()
+            ->first();
+
+        if ($existing !== null) {
+            $existing->forceFill([
+                'is_active' => true,
+                'is_primary' => false,
+                'settings' => SharedAccounts::isShared($existing) ? $existing->settings : SharedAccounts::emptySettings($existing->settings),
+            ])->save();
+
+            return ['account' => $holder, 'relinked' => false, 'created' => false, 'shared' => true];
+        }
+
+        ProjectIntegrationBinding::withoutGlobalScope(ProjectScope::class)->create([
+            'tenant_id' => $holder->tenant_id,
+            'project_id' => $project->getKey(),
+            'client_workspace_id' => $project->client_workspace_id,
+            'external_account_id' => $holder->getKey(),
+            'provider' => $holder->provider,
+            'purpose' => $purpose,
+            'is_primary' => false,
+            'is_active' => true,
+            'campaign_management_enabled' => $purpose === 'advertising',
+            'tracking_enabled' => false,
+            'settings' => SharedAccounts::emptySettings(),
+        ]);
+
+        return ['account' => $holder, 'relinked' => false, 'created' => true, 'shared' => true];
+    }
+
+    private function sharesHere(ExternalAccount $account, Project $project): bool
+    {
+        $binding = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('project_id', $project->getKey())
+            ->where('external_account_id', $account->getKey())
+            ->where('is_active', true)
+            ->first();
+
+        return $binding !== null && SharedAccounts::isShared($binding);
     }
 
     /** The row of the same REAL account that this project already holds actively, on a different connection. */
