@@ -3,6 +3,7 @@ import {
   Search, Share2, ShoppingCart, Smartphone, Tablet, Tv, Users, XCircle, type LucideIcon,
 } from 'lucide-react'
 import { Num } from '@/components/ui/Num'
+import { PLATFORM_ORDER, canonicalPlatform } from '@/lib/platforms'
 import { num, percent } from '@/features/analytics/format'
 
 /**
@@ -42,7 +43,8 @@ export function partIcon(key: string): LucideIcon {
   if (k === 'cod' || k === 'cash') return Banknote
   if (k === 'bank' || k === 'bank_transfer') return Landmark
   if (['tabby', 'tamara', 'wallet', 'paypal'].includes(k)) return Wallet
-  if (['meta', 'snapchat', 'tiktok', 'google', 'x', 'linkedin', 'openai_ads'].includes(k)) return Megaphone
+  // The ad platforms come from the one canonical list (CanonicalPlatformOrderTest), never a second copy written here.
+  if ((PLATFORM_ORDER as readonly string[]).includes(canonicalPlatform(k))) return Megaphone
 
   return CircleHelp
 }
