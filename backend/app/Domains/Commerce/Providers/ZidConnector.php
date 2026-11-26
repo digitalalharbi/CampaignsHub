@@ -50,10 +50,10 @@ final class ZidConnector extends ApiCommerceConnector
         return [[
             'external_id' => (string) $store['id'],
             'name' => $this->text($store['title'] ?? $store['name'] ?? null) ?? (string) $store['id'],
-            'domain' => isset($store['url']) ? (string) $store['url'] : null,
-            'currency' => isset($store['currency']) ? (string) $store['currency'] : null,
+            'domain' => $this->str($store['url'] ?? null),
+            'currency' => $this->str($store['currency'] ?? null),
             'timezone' => null,
-            'status' => (string) ($store['status'] ?? 'active'),
+            'status' => $this->str($store['status'] ?? null) ?? 'active',
             'plan' => isset($store['package']['name']) ? $this->text($store['package']['name']) : null,
             'raw' => $store,
         ]];
@@ -71,14 +71,14 @@ final class ZidConnector extends ApiCommerceConnector
             $products[] = [
                 'external_id' => (string) $p['id'],
                 'name' => $this->text($p['name'] ?? null) ?? (string) $p['id'],
-                'sku' => isset($p['sku']) ? (string) $p['sku'] : null,
+                'sku' => $this->str($p['sku'] ?? null),
                 'status' => ($p['is_published'] ?? true) ? 'active' : 'draft',
                 'price' => isset($p['price']) ? (float) $p['price'] : null,
-                'currency' => isset($p['currency']) ? (string) $p['currency'] : null,
+                'currency' => $this->str($p['currency'] ?? null),
                 'quantity' => isset($p['quantity']) ? (int) $p['quantity'] : null,
                 'category' => isset($p['categories'][0]['name']) ? $this->text($p['categories'][0]['name']) : null,
-                'url' => isset($p['html_url']) ? (string) $p['html_url'] : null,
-                'image_url' => isset($p['images'][0]['image']['full_size']) ? (string) $p['images'][0]['image']['full_size'] : null,
+                'url' => $this->str($p['html_url'] ?? null),
+                'image_url' => $this->str($p['images'][0]['image']['full_size'] ?? null),
                 'raw' => (array) $p,
             ];
         }
@@ -100,11 +100,11 @@ final class ZidConnector extends ApiCommerceConnector
 
             $orders[] = [
                 'external_id' => (string) $o['id'],
-                'reference' => isset($o['code']) ? (string) $o['code'] : null,
-                'status' => strtolower((string) ($o['order_status']['code'] ?? $o['order_status']['name'] ?? 'unknown')),
-                'payment_status' => isset($o['payment_status']) ? strtolower((string) $o['payment_status']) : null,
-                'placed_at' => isset($o['created_at']) ? (string) $o['created_at'] : null,
-                'currency' => isset($o['currency_code']) ? (string) $o['currency_code'] : null,
+                'reference' => $this->str($o['code'] ?? null),
+                'status' => strtolower($this->str($o['order_status'] ?? null, ['code', 'name']) ?? 'unknown'),
+                'payment_status' => ($this->str($o['payment_status'] ?? null) === null ? null : strtolower((string) $this->str($o['payment_status'] ?? null))),
+                'placed_at' => $this->str($o['created_at'] ?? null),
+                'currency' => $this->str($o['currency_code'] ?? null),
                 'subtotal' => $this->amount($o['products_subtotal'] ?? $o['sub_total'] ?? null),
                 'shipping_total' => $this->amount($o['shipping_cost'] ?? null),
                 'tax_total' => $this->amount($o['tax_amount'] ?? null),
@@ -112,11 +112,11 @@ final class ZidConnector extends ApiCommerceConnector
                 'total' => $this->amount($o['order_total'] ?? $o['total'] ?? null),
                 'customer' => ($customer['id'] ?? null) === null ? null : [
                     'external_id' => (string) $customer['id'],
-                    'name' => trim(((string) ($customer['name'] ?? '')).' '.((string) ($customer['last_name'] ?? ''))) ?: null,
-                    'email' => isset($customer['email']) ? (string) $customer['email'] : null,
-                    'phone' => isset($customer['mobile']) ? (string) $customer['mobile'] : null,
-                    'city' => isset($o['shipping']['address']['city']) ? (string) $o['shipping']['address']['city'] : null,
-                    'country' => isset($o['shipping']['address']['country']) ? (string) $o['shipping']['address']['country'] : null,
+                    'name' => trim(($this->str($customer['name'] ?? null) ?? '').' '.($this->str($customer['last_name'] ?? null) ?? '')) ?: null,
+                    'email' => $this->str($customer['email'] ?? null),
+                    'phone' => $this->str($customer['mobile'] ?? null),
+                    'city' => $this->str($o['shipping']['address']['city'] ?? null),
+                    'country' => $this->str($o['shipping']['address']['country'] ?? null),
                 ],
                 'items' => $this->items($o['products'] ?? null),
                 'attribution' => Attribution::read(
@@ -146,14 +146,14 @@ final class ZidConnector extends ApiCommerceConnector
 
             $customers[] = [
                 'external_id' => (string) $c['id'],
-                'name' => trim(((string) ($c['name'] ?? '')).' '.((string) ($c['last_name'] ?? ''))) ?: null,
-                'email' => isset($c['email']) ? (string) $c['email'] : null,
-                'phone' => isset($c['mobile']) ? (string) $c['mobile'] : null,
-                'city' => isset($c['city']) ? (string) $c['city'] : null,
-                'country' => isset($c['country']) ? (string) $c['country'] : null,
+                'name' => trim(($this->str($c['name'] ?? null) ?? '').' '.($this->str($c['last_name'] ?? null) ?? '')) ?: null,
+                'email' => $this->str($c['email'] ?? null),
+                'phone' => $this->str($c['mobile'] ?? null),
+                'city' => $this->str($c['city'] ?? null),
+                'country' => $this->str($c['country'] ?? null),
                 'orders_count' => isset($c['orders_count']) ? (int) $c['orders_count'] : null,
                 'total_spent' => $this->amount($c['total_spent'] ?? null),
-                'first_seen_at' => isset($c['created_at']) ? (string) $c['created_at'] : null,
+                'first_seen_at' => $this->str($c['created_at'] ?? null),
                 'raw' => (array) $c,
             ];
         }
@@ -230,8 +230,8 @@ final class ZidConnector extends ApiCommerceConnector
 
             $rows[] = [
                 'external_id' => (string) $item['id'],
-                'product_external_id' => isset($item['product_id']) ? (string) $item['product_id'] : null,
-                'sku' => isset($item['sku']) ? (string) $item['sku'] : null,
+                'product_external_id' => $this->str($item['product_id'] ?? null),
+                'sku' => $this->str($item['sku'] ?? null),
                 'name' => $this->text($item['name'] ?? null) ?? (string) $item['id'],
                 'quantity' => (float) ($item['quantity'] ?? 1),
                 'unit_price' => $this->amount($item['price'] ?? null),

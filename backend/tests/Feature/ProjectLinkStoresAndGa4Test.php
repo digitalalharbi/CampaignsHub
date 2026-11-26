@@ -66,6 +66,9 @@ final class ProjectLinkStoresAndGa4Test extends TestCase
     /** What the store platform says its currency is; null = it does not say. */
     private ?string $storeCurrency = 'SAR';
 
+    /** @var array<string,mixed> fields the platform sends as objects, merged over the plain profile */
+    private array $storeShape = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -474,6 +477,32 @@ final class ProjectLinkStoresAndGa4Test extends TestCase
         $this->assertSame('SAR', ExternalAccount::withoutGlobalScopes()->sole()->currency);
     }
 
+    /**
+     * COMMERCE-PROVIDER-SHAPES-001 — the Zid review meeting, 2026-11-26: the store step answered
+     * «The platform refused the request» with `Array to string conversion`, because the profile sends
+     * currency, status and the name as objects and the connector cast them to text. Every such field
+     * is read safely now, for Salla and Zid alike, and the store is listed with its real values.
+     */
+    #[DataProvider('stores')]
+    public function test_a_store_whose_profile_fields_are_objects_is_listed_not_refused(string $provider): void
+    {
+        $this->storeCurrency = null;
+        $this->storeShape = [
+            'currency' => ['id' => 1, 'code' => 'SAR', 'symbol' => 'ر.س'],
+            'status' => ['code' => 'active', 'name' => ['ar' => 'نشط', 'en' => 'Active']],
+            'plan' => ['id' => 3, 'name' => ['ar' => 'احترافي', 'en' => 'Pro']],
+            'timezone' => ['name' => 'Asia/Riyadh'],
+        ];
+        $connection = $this->signIn($provider, $this->a);
+
+        $source = $this->sources($this->a, $connection)->assertOk()->json('data.sources.0');
+
+        $this->assertSame('SAR', $source['currency']);
+        $this->assertSame('active', $source['status']);
+        $this->confirm($this->a, $connection, self::SOURCE[$provider])->assertCreated();
+        $this->assertSame('SAR', ExternalAccount::withoutGlobalScopes()->sole()->currency);
+    }
+
     /** @return array<string, array{0:string}> */
     public static function stores(): array
     {
@@ -541,11 +570,11 @@ final class ProjectLinkStoresAndGa4Test extends TestCase
                 str_contains($url, 'accounts.salla.sa/oauth2/token') => Http::response(['access_token' => 'AT', 'refresh_token' => 'RT', 'expires_in' => 1209600]),
                 str_contains($url, '/store/info') => Http::response(['data' => array_filter([
                     'id' => 'store-9', 'name' => 'متجر تجريبي', 'domain' => 'demo.salla.sa', 'currency' => $this->storeCurrency,
-                ], static fn ($v) => $v !== null)]),
+                ], static fn ($v) => $v !== null) + $this->storeShape]),
                 str_contains($url, 'oauth.zid.sa/oauth/token') => Http::response(['access_token' => 'AT', 'authorization' => 'MGR', 'refresh_token' => 'RT', 'expires_in' => 3600]),
                 str_contains($url, 'managers/account/profile') => Http::response(['user' => ['store' => array_filter([
                     'id' => 'zid-7', 'title' => 'متجر زد', 'url' => 'https://shop.zid.store', 'currency' => $this->storeCurrency,
-                ], static fn ($v) => $v !== null)]]),
+                ], static fn ($v) => $v !== null) + $this->storeShape]]),
                 str_contains($url, 'oauth2.googleapis.com') => Http::response(['access_token' => 'AT', 'refresh_token' => 'RT', 'expires_in' => 3600]),
                 str_contains($url, 'analyticsadmin.googleapis.com') => Http::response(['accountSummaries' => [
                     ['account' => 'accounts/100', 'displayName' => 'Acme Group', 'propertySummaries' => [

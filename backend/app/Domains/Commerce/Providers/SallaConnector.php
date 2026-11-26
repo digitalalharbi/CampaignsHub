@@ -49,11 +49,11 @@ final class SallaConnector extends ApiCommerceConnector
             // SALLA-SYNC-RUN-001 — a store Salla sends with an empty name (a demo store does) is named by
             // its domain, then by its id; an empty string is not a name and left the card blank.
             'name' => self::nameOf($store),
-            'domain' => isset($store['domain']) ? (string) $store['domain'] : null,
-            'currency' => isset($store['currency']) ? (string) $store['currency'] : null,
-            'timezone' => isset($store['timezone']) ? (string) $store['timezone'] : null,
-            'status' => (string) ($store['status'] ?? 'active'),
-            'plan' => isset($store['plan']) ? (string) $store['plan'] : null,
+            'domain' => $this->str($store['domain'] ?? null),
+            'currency' => $this->str($store['currency'] ?? null),
+            'timezone' => $this->str($store['timezone'] ?? null),
+            'status' => $this->str($store['status'] ?? null) ?? 'active',
+            'plan' => $this->str($store['plan'] ?? null),
             'raw' => $store,
         ]];
     }
@@ -61,7 +61,7 @@ final class SallaConnector extends ApiCommerceConnector
     /** @param  array<string,mixed>  $store */
     private static function nameOf(array $store): string
     {
-        $name = trim((string) ($store['name'] ?? ''));
+        $name = $this->str($store['name'] ?? null) ?? '';
         if ($name !== '') {
             return $name;
         }
@@ -86,14 +86,14 @@ final class SallaConnector extends ApiCommerceConnector
             $products[] = [
                 'external_id' => (string) $p['id'],
                 'name' => (string) ($p['name'] ?? $p['id']),
-                'sku' => isset($p['sku']) ? (string) $p['sku'] : null,
-                'status' => (string) ($p['status'] ?? 'active'),
+                'sku' => $this->str($p['sku'] ?? null),
+                'status' => $this->str($p['status'] ?? null) ?? 'active',
                 'price' => $this->money($p['price'] ?? null),
                 'currency' => $this->currency($p['price'] ?? null),
                 'quantity' => isset($p['quantity']) ? (int) $p['quantity'] : null,
                 'category' => $this->firstCategory($p['categories'] ?? null),
-                'url' => isset($p['urls']['customer']) ? (string) $p['urls']['customer'] : null,
-                'image_url' => isset($p['main_image']) ? (string) $p['main_image'] : null,
+                'url' => $this->str($p['urls']['customer'] ?? null),
+                'image_url' => $this->str($p['main_image'] ?? null),
                 'raw' => (array) $p,
             ];
         }
@@ -133,10 +133,10 @@ final class SallaConnector extends ApiCommerceConnector
 
             $orders[] = [
                 'external_id' => (string) $o['id'],
-                'reference' => isset($o['reference_id']) ? (string) $o['reference_id'] : null,
+                'reference' => $this->str($o['reference_id'] ?? null),
                 'status' => $this->statusSlug($o['status'] ?? null),
                 // Salla states the payment side separately from the fulfilment side.
-                'payment_status' => isset($o['payment_method']) ? (string) $o['payment_method'] : null,
+                'payment_status' => $this->str($o['payment_method'] ?? null),
                 'placed_at' => $this->date($o['date'] ?? null),
                 'currency' => $this->currency($amounts['total'] ?? null),
                 'subtotal' => $this->money($amounts['sub_total'] ?? null),
@@ -146,11 +146,11 @@ final class SallaConnector extends ApiCommerceConnector
                 'total' => $this->money($amounts['total'] ?? null),
                 'customer' => ($customer['id'] ?? null) === null ? null : [
                     'external_id' => (string) $customer['id'],
-                    'name' => trim(((string) ($customer['first_name'] ?? '')).' '.((string) ($customer['last_name'] ?? ''))) ?: null,
-                    'email' => isset($customer['email']) ? (string) $customer['email'] : null,
-                    'phone' => isset($customer['mobile']) ? (string) $customer['mobile'] : null,
-                    'city' => isset($customer['city']) ? (string) $customer['city'] : null,
-                    'country' => isset($customer['country']) ? (string) $customer['country'] : null,
+                    'name' => trim(($this->str($customer['first_name'] ?? null) ?? '').' '.($this->str($customer['last_name'] ?? null) ?? '')) ?: null,
+                    'email' => $this->str($customer['email'] ?? null),
+                    'phone' => $this->str($customer['mobile'] ?? null),
+                    'city' => $this->str($customer['city'] ?? null),
+                    'country' => $this->str($customer['country'] ?? null),
                 ],
                 'items' => $this->items($o['items'] ?? null),
                 'attribution' => $this->attributionOf($o),
@@ -172,11 +172,11 @@ final class SallaConnector extends ApiCommerceConnector
 
             $customers[] = [
                 'external_id' => (string) $c['id'],
-                'name' => trim(((string) ($c['first_name'] ?? '')).' '.((string) ($c['last_name'] ?? ''))) ?: null,
-                'email' => isset($c['email']) ? (string) $c['email'] : null,
-                'phone' => isset($c['mobile']) ? (string) $c['mobile'] : null,
-                'city' => isset($c['city']) ? (string) $c['city'] : null,
-                'country' => isset($c['country']) ? (string) $c['country'] : null,
+                'name' => trim(($this->str($c['first_name'] ?? null) ?? '').' '.($this->str($c['last_name'] ?? null) ?? '')) ?: null,
+                'email' => $this->str($c['email'] ?? null),
+                'phone' => $this->str($c['mobile'] ?? null),
+                'city' => $this->str($c['city'] ?? null),
+                'country' => $this->str($c['country'] ?? null),
                 'orders_count' => isset($c['orders_count']) ? (int) $c['orders_count'] : null,
                 'total_spent' => $this->money($c['total_spent'] ?? null),
                 'first_seen_at' => $this->date($c['created_at'] ?? null),
@@ -206,8 +206,8 @@ final class SallaConnector extends ApiCommerceConnector
                 'total' => $this->money($c['total'] ?? null),
                 'items_count' => isset($c['items']) && is_array($c['items']) ? count($c['items']) : null,
                 'customer_external_id' => ($customer['id'] ?? null) === null ? null : (string) $customer['id'],
-                'customer_email' => isset($customer['email']) ? (string) $customer['email'] : null,
-                'checkout_url' => isset($c['checkout_url']) ? (string) $c['checkout_url'] : null,
+                'customer_email' => $this->str($customer['email'] ?? null),
+                'checkout_url' => $this->str($c['checkout_url'] ?? null),
                 'attribution' => $this->attributionOf($c),
                 'raw' => (array) $c,
             ];
@@ -294,8 +294,8 @@ final class SallaConnector extends ApiCommerceConnector
 
             $rows[] = [
                 'external_id' => (string) $item['id'],
-                'product_external_id' => isset($item['product']['id']) ? (string) $item['product']['id'] : null,
-                'sku' => isset($item['sku']) ? (string) $item['sku'] : null,
+                'product_external_id' => $this->str($item['product']['id'] ?? null),
+                'sku' => $this->str($item['sku'] ?? null),
                 'name' => (string) ($item['name'] ?? $item['id']),
                 'quantity' => (float) ($item['quantity'] ?? 1),
                 'unit_price' => $this->money($item['amounts']['price_without_tax'] ?? $item['amounts']['total'] ?? null),
@@ -318,16 +318,16 @@ final class SallaConnector extends ApiCommerceConnector
 
     private function currency(mixed $value): ?string
     {
-        return is_array($value) && isset($value['currency']) ? (string) $value['currency'] : null;
+        return is_array($value) ? $this->str($value['currency'] ?? null) : null;
     }
 
     private function statusSlug(mixed $status): string
     {
         if (is_array($status)) {
-            return strtolower((string) ($status['slug'] ?? $status['name'] ?? 'unknown'));
+            return strtolower($this->str($status, ['slug', 'name']) ?? 'unknown');
         }
 
-        return strtolower((string) ($status ?: 'unknown'));
+        return strtolower($this->str($status) ?? 'unknown');
     }
 
     /**
@@ -350,8 +350,8 @@ final class SallaConnector extends ApiCommerceConnector
     private function date(mixed $value): array|string|null
     {
         if (is_array($value)) {
-            $date = isset($value['date']) ? trim((string) $value['date']) : '';
-            $zone = isset($value['timezone']) ? trim((string) $value['timezone']) : '';
+            $date = $this->str($value['date'] ?? null) ?? '';
+            $zone = $this->str($value['timezone'] ?? null) ?? '';
 
             return $date === '' ? null : ['date' => $date, 'timezone' => $zone === '' ? null : $zone];
         }
@@ -366,8 +366,8 @@ final class SallaConnector extends ApiCommerceConnector
         }
 
         foreach ($categories as $category) {
-            if (is_array($category) && isset($category['name'])) {
-                return (string) $category['name'];
+            if (is_array($category) && ($name = $this->str($category['name'] ?? null)) !== null) {
+                return $name;
             }
         }
 
