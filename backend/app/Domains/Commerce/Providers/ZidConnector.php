@@ -63,7 +63,10 @@ final class ZidConnector extends ApiCommerceConnector
     {
         $products = [];
 
-        foreach ($this->pages('products', [], 'products') as $p) {
+        // ZID-PRODUCTS-HEADERS-001 — the products endpoints, unlike the managers/* ones, do not find the store from
+        // the manager token: Zid's docs require `Store-Id` and `Role: Manager`. Without them Zid answers
+        // 401 «No such user» and the store syncs orders with no catalogue.
+        foreach ($this->pages('products', [], 'products', ['Store-Id' => $storeId, 'Role' => 'Manager']) as $p) {
             if (($p['id'] ?? null) === null) {
                 continue;
             }
@@ -186,14 +189,17 @@ final class ZidConnector extends ApiCommerceConnector
      * @param  array<string,mixed>  $query
      * @return list<array<string,mixed>>
      */
-    private function pages(string $path, array $query, string $what): array
+    /**
+     * @param  array<string,string>  $headers  extra headers a particular endpoint requires
+     */
+    private function pages(string $path, array $query, string $what, array $headers = []): array
     {
         $rows = [];
         $page = 1;
 
         do {
             $body = $this->read(
-                $this->api()->get($this->url($path), [...$query, 'page' => $page, 'perPage' => self::PER_PAGE]),
+                $this->api()->withHeaders($headers)->get($this->url($path), [...$query, 'page' => $page, 'perPage' => self::PER_PAGE]),
                 $what,
             );
 

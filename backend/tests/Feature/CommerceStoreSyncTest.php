@@ -302,6 +302,25 @@ final class CommerceStoreSyncTest extends TestCase
             && ($request->header('Authorization') !== ['Bearer MANAGER'] || $request->header('X-Manager-Token') !== ['AT']));
     }
 
+    /**
+     * ZID-PRODUCTS-HEADERS-001 — Zid's products endpoints need the store named in `Store-Id` and the caller in
+     * `Role: Manager`; without them Zid answered 401 «No such user» on the review store and the sync came back
+     * with orders and no catalogue.
+     */
+    public function test_zid_names_the_store_and_the_manager_role_on_the_products_call(): void
+    {
+        $this->configure('zid');
+        $store = $this->store('zid');
+
+        Http::fake(['api.zid.sa/*' => Http::response(['data' => [], 'total_count' => 0])]);
+
+        app(StoreSyncer::class)->sync($store, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
+
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), '/products')
+            && $request->header('Store-Id') === [(string) $store->external_id]
+            && $request->header('Role') === ['Manager']);
+    }
+
     // ── Attribution: the link between an order and the ad that produced it ────────────────────
 
     /**
