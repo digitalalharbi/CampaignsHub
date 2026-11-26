@@ -12,8 +12,8 @@ use App\Domains\Integrations\ValueObjects\SyncResult;
  *
  * Three things that are Zid's and nobody else's:
  *
- * - **Two credentials on every call.** `Authorization: Bearer <access_token>` AND
- *   `X-Manager-Token: <authorization>`. Both come out of one token exchange, and a call with only the
+ * - **Two credentials on every call.** `Authorization: Bearer <authorization>` AND
+ *   `X-Manager-Token: <access_token>`. Both come out of one token exchange, and a call with only the
  *   first is refused. Handled once in `ApiCommerceConnector::api()`.
  * - **Names are localised objects**, `{ "ar": "قميص", "en": "Shirt" }`, so reading `name` as a string
  *   yields `Array` in a product table. `text()` resolves them, preferring Arabic — this product's

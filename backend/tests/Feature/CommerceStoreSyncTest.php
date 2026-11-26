@@ -283,6 +283,25 @@ final class CommerceStoreSyncTest extends TestCase
         $this->assertSame(0, CommerceAbandonedCart::withoutGlobalScopes()->count());
     }
 
+    /**
+     * ZID-AUTH-HEADERS-001 — Zid's own docs: the token response's `authorization` goes in
+     * `Authorization: Bearer`, and its `access_token` goes in `X-Manager-Token`. They were swapped,
+     * so every Zid call (store listing first) was refused: «The platform refused the request».
+     */
+    public function test_zid_sends_authorization_as_bearer_and_access_token_as_manager_token(): void
+    {
+        $this->configure('zid');
+        $store = $this->store('zid'); // tokens: access 'AT', authorization 'MANAGER'
+
+        Http::fake(['api.zid.sa/*' => Http::response(['data' => [], 'total_count' => 0])]);
+
+        app(StoreSyncer::class)->sync($store, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
+
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), 'api.zid.sa'));
+        Http::assertNotSent(fn ($request): bool => str_contains($request->url(), 'api.zid.sa')
+            && ($request->header('Authorization') !== ['Bearer MANAGER'] || $request->header('X-Manager-Token') !== ['AT']));
+    }
+
     // ── Attribution: the link between an order and the ad that produced it ────────────────────
 
     /**
