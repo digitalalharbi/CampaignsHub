@@ -215,12 +215,12 @@ final class ZidConnector extends ApiCommerceConnector
 
         do {
             $body = $this->read(
-                $this->api()->withHeaders($headers)->get($this->url($path), [...$query, 'page' => $page, 'perPage' => self::PER_PAGE]),
+                $this->api()->withHeaders($headers)->get($this->url($path), [...$query, 'page' => $page, 'perPage' => self::PER_PAGE, 'page_size' => self::PER_PAGE]),
                 $what,
             );
 
             // Zid names the list after the resource on some endpoints and `data` on others.
-            $list = $body['data'] ?? $body['orders'] ?? $body['products'] ?? $body['customers'] ?? $body['abandoned_carts'] ?? $body['carts'] ?? $body['results'] ?? [];
+            $list = $body['data'] ?? $body['orders'] ?? $body['products'] ?? $body['customers'] ?? $body['abandoned-carts'] ?? $body['abandoned_carts'] ?? $body['carts'] ?? $body['results'] ?? [];
 
             foreach ((array) $list as $row) {
                 if (is_array($row)) {
@@ -228,10 +228,26 @@ final class ZidConnector extends ApiCommerceConnector
                 }
             }
 
-            $count = (int) ($body['total_count'] ?? $body['count'] ?? count((array) $list));
             $seen = count($rows);
             $page++;
-        } while ($seen < $count && $list !== [] && $page <= self::MAX_PAGES);
+
+            // ZID-PRODUCTS-PAGING-001 — Zid pages three ways: `total_count` on managers/*, Django-style
+            // `count`/`next`/`results` on products, and a `pagination` object on abandoned carts, where
+            // `page_size` is required (≤ 100; products cap it at 50, so 50 is sent everywhere). A `next` link is the page's own answer to «is there more?»; on
+            // that listing `count` is not reliably the total (Zid's example: count 15 beside
+            // total_products_count 125), so where `next` is present it decides.
+            if (array_key_exists('next', $body)) {
+                $more = is_string($body['next']) && $body['next'] !== '';
+            } elseif (is_array($body['pagination'] ?? null)) {
+                // The abandoned-carts listing pages in `pagination` (`next_page`, `last_page`).
+                $p = $body['pagination'];
+                $more = ($p['next_page'] ?? null) !== null
+                    || (isset($p['last_page']) && (int) $p['last_page'] >= $page);
+            } else {
+                $count = (int) ($body['total_count'] ?? $body['count'] ?? count((array) $list));
+                $more = $seen < $count;
+            }
+        } while ($more && $list !== [] && $page <= self::MAX_PAGES);
 
         return $rows;
     }

@@ -340,6 +340,62 @@ final class CommerceStoreSyncTest extends TestCase
             && $request->header('Role') === ['Manager']);
     }
 
+    /**
+     * ZID-PRODUCTS-PAGING-001 — the products listing answers `{count, next, previous, results}`, and its `count`
+     * is not the catalogue total. Every page is followed until `next` is null, and the page size is asked for.
+     */
+    public function test_zid_follows_the_products_next_link_to_the_last_page(): void
+    {
+        $this->configure('zid');
+        $store = $this->store('zid');
+
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), '/products')) {
+                parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $q);
+                $page = (int) ($q['page'] ?? 1);
+
+                return Http::response([
+                    'count' => 1,
+                    'next' => $page === 1 ? 'https://api.zid.sa/v1/products/?page=2' : null,
+                    'previous' => null,
+                    'results' => [['id' => "p{$page}", 'name' => ['ar' => "منتج {$page}"], 'price' => 10]],
+                ]);
+            }
+
+            return Http::response(['data' => [], 'total_count' => 0]);
+        });
+
+        app(StoreSyncer::class)->sync($store, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
+
+        $this->assertSame(2, CommerceProduct::withoutGlobalScopes()->count());
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), '/products') && str_contains($request->url(), 'page_size='));
+    }
+
+    /**
+     * ZID-PRODUCTS-PAGING-001 — the abandoned-carts listing refuses a call without `page_size` (422 on the review
+     * store) and answers under `abandoned-carts` with a `pagination` object; both are honoured.
+     */
+    public function test_zid_sends_page_size_and_reads_abandoned_carts_under_their_hyphenated_key(): void
+    {
+        $this->configure('zid');
+        $store = $this->store('zid');
+
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), 'abandoned-carts')) {
+                return str_contains($request->url(), 'page_size=')
+                    ? Http::response(['status' => 'object', 'abandoned-carts' => [['id' => 'c1', 'cart_total' => 50]], 'pagination' => ['page' => 1, 'page_size' => 50, 'next_page' => null, 'last_page' => 1, 'result_count' => 1]])
+                    : Http::response(['status' => 'validation_error'], 422);
+            }
+
+            return Http::response(['data' => [], 'total_count' => 0]);
+        });
+
+        app(StoreSyncer::class)->sync($store, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
+
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), 'abandoned-carts') && str_contains($request->url(), 'page_size=50'));
+        Http::assertNotSent(fn ($request): bool => str_contains($request->url(), 'abandoned-carts') && ! str_contains($request->url(), 'page_size='));
+    }
+
     // ── Attribution: the link between an order and the ad that produced it ────────────────────
 
     /**
