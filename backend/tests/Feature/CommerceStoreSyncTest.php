@@ -290,6 +290,10 @@ final class CommerceStoreSyncTest extends TestCase
         $this->assertSame('حذاء', CommerceProduct::withoutGlobalScopes()->value('name'));
         $this->assertSame('delivered', CommerceOrder::withoutGlobalScopes()->value('status'));
         $this->assertSame('Z-77', CommerceOrder::withoutGlobalScopes()->value('reference'));
+        // Zid refuses the carts list with 422 unless `page_size` is sent.
+        Http::assertSent(fn ($request): bool => str_contains($request->url(), 'abandoned-carts')
+            && str_contains($request->url(), 'page_size=50'));
+
         $cart = CommerceAbandonedCart::withoutGlobalScopes()->firstOrFail();
         $this->assertSame('b978fcc2-ccd0-45f6-81a7-7ab1f3b8f85d', $cart->external_id);
         $this->assertSame(2, (int) $cart->items_count);
