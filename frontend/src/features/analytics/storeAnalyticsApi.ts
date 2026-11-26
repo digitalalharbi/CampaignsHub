@@ -16,7 +16,7 @@ export interface StoreInsightsPayload {
   city_mix: StoreMix
   heatmap: { cells: number[][]; max: number; peak: { day: number; hour: number; orders: number } | null; by_day: number[]; by_hour: number[]; timezone: string }
   basket: { bands: Array<{ from: number; to: number | null; orders: number; net: number }>; median: number | null }
-  coupons: { rows: Array<{ code: string; orders: number; discount: number | null; net: number | null }>; orders_with_coupon: number; share: number | null }
+  coupons: { rows: Array<{ code: string; orders: number; discount: number | null; net: number | null }>; orders_with_coupon: number; share: number | null; aov_with?: number | null; aov_without?: number | null }
   composition: Record<'products' | 'shipping' | 'tax' | 'discounts' | 'refunded', number | null>
 }
 

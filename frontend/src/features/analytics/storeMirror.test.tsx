@@ -71,4 +71,24 @@ describe('the store tab mirrors the website tab', () => {
     expect(screen.getByTestId('store-vs-snapchat')).toHaveTextContent('90')
     expect(screen.getByTestId('store-extras')).toBeInTheDocument()
   })
+
+  it('adds the deeper reading: only the figures that exist, the money split and the product lists (STORE-ANALYTICS-PLUS-001)', async () => {
+    const rich = {
+      ...depth,
+      products: { ...depth.products, best_by_orders: [{ name: 'Ring', image_url: null, quantity: 5, revenue: 3000, orders: 5 }], weak: [{ name: 'Pen', image_url: null, quantity: 1, revenue: 90, orders: 1 }], unsold_active: { count: 3, sample: ['Box'] } },
+      insights: { ...depth.insights, coupons: { ...depth.insights.coupons, aov_with: 210, aov_without: 260 } },
+    }
+    vi.mocked(getData).mockImplementation(async (url: string) => (url.includes('/measurement/compare') ? compare : rich))
+    renderWithProviders(<StoreMirror projectId="p1" range={range} ar={false} spend={2000} />, { route: '/agency/analytics', locale: 'en' })
+
+    expect(await screen.findByTestId('store-deeper')).toBeInTheDocument()
+    expect(screen.getByTestId('store-deeper-conversion')).toHaveTextContent('2.00%')
+    expect(screen.getByTestId('store-deeper-repeat')).toHaveTextContent('20%')
+    expect(screen.getByTestId('store-deeper-aov-coupon')).toHaveTextContent('without')
+    expect(screen.getByTestId('store-deeper-unsold')).toHaveTextContent('3')
+    expect(screen.queryByTestId('store-deeper-ltv')).toBeNull()
+    expect(screen.getByTestId('store-deeper-asked')).toHaveTextContent('Ring')
+    expect(screen.getByTestId('store-deeper-weak')).toHaveTextContent('Pen')
+    expect(screen.getByTestId('store-deeper-unsold-list')).toHaveTextContent('Box')
+  })
 })

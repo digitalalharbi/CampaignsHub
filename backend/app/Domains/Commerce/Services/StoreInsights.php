@@ -165,8 +165,11 @@ final class StoreInsights
     /**
      * Coupons that carried orders: how many orders, the discount they gave and the net they brought.
      *
+     * STORE-ANALYTICS-PLUS-001 — and whether a coupon moves the basket: the average net of an order with a coupon beside one
+     * without, each null when its side has no order or an order with no stated money.
+     *
      * @param  Collection<int, CommerceOrder>  $live
-     * @return array{rows: list<array{code: string, orders: int, discount: ?float, net: ?float}>, orders_with_coupon: int, share: ?float}
+     * @return array{rows: list<array{code: string, orders: int, discount: ?float, net: ?float}>, orders_with_coupon: int, share: ?float, aov_with: ?float, aov_without: ?float}
      */
     private function coupons(Collection $live): array
     {
@@ -179,7 +182,20 @@ final class StoreInsights
                 'net' => self::net($g),
             ])->sortByDesc('orders')->values()->take(self::COUPONS)->all();
 
-        return ['rows' => $rows, 'orders_with_coupon' => $with->count(), 'share' => $live->isEmpty() ? null : round($with->count() / $live->count(), 4)];
+        $without = $live->reject(static fn (CommerceOrder $o): bool => self::clean($o->coupon_code) !== null);
+        $aov = static function (Collection $g): ?float {
+            $net = self::net($g);
+
+            return $g->isEmpty() || $net === null ? null : round($net / $g->count(), 2);
+        };
+
+        return [
+            'rows' => $rows,
+            'orders_with_coupon' => $with->count(),
+            'share' => $live->isEmpty() ? null : round($with->count() / $live->count(), 4),
+            'aov_with' => $aov($with),
+            'aov_without' => $aov($without),
+        ];
     }
 
     /**

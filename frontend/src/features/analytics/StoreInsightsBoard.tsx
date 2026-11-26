@@ -304,6 +304,84 @@ export function StoreExtras({ d, ar }: { d: Depth; ar: boolean }) {
           <Coupons c={i.coupons} ar={ar} cur={cur} />
         </div>
       )}
+      <StoreDeeper d={d} ar={ar} />
     </div>
+  )
+}
+
+/**
+ * STORE-ANALYTICS-PLUS-001 (Owner 2026-11-26: «اكثر تحليلات ممكنة من المتجر») — what the store's own orders can still tell after
+ * the design's sections: how visits turn into orders, what a customer is worth and how often they come back, how full a basket
+ * is, whether a coupon moves it, what the money is made of, which products are asked for most, which lag and which never sold.
+ * Each card is drawn only when its figure exists («اعرض المتاح فقط»); with none of them the section is not drawn.
+ */
+function StoreDeeper({ d, ar }: { d: Depth; ar: boolean }) {
+  const cur = d.currency ?? ''
+  const m = (n: number | null | undefined) => (n == null ? null : money(n, cur))
+  const i = d.insights
+  const comp = i?.composition
+  const { conversion, customers, averages, products } = d
+
+  const cards: Array<{ key: string; icon: ReactNode; label: string; value: string | null; sub?: string; tone?: 'neutral' | 'warning' | 'success' }> = [
+    { key: 'conversion', icon: <ArrowUpRight size={14} aria-hidden />, tone: 'success', label: ar ? 'من زيارة إلى شراء' : 'Visit to purchase',
+      value: conversion.value === null ? null : percent(conversion.value, 2),
+      sub: conversion.visits_source === 'ga4' ? (ar ? 'من زيارات الموقع' : 'of website visits') : (ar ? 'من زيارات المنصات' : 'of platform visits') },
+    { key: 'ltv', icon: <Users size={14} aria-hidden />, label: ar ? 'قيمة العميل' : 'Customer value', value: m(customers.lifetime_value) },
+    { key: 'repeat', icon: <RotateCcw size={14} aria-hidden />, label: ar ? 'نسبة العملاء العائدين' : 'Repeat customers', value: customers.repeat_rate === null ? null : percent(customers.repeat_rate, 0) },
+    { key: 'items', icon: <ShoppingCart size={14} aria-hidden />, label: ar ? 'منتجات في الطلب' : 'Items per order', value: averages.items_per_order === null ? null : formatFixed(averages.items_per_order, 2) },
+    { key: 'discount-share', icon: <Percent size={14} aria-hidden />, label: ar ? 'الخصم من المبيعات' : 'Discount of sales', value: averages.discount_share === null ? null : percent(averages.discount_share, 1) },
+    { key: 'aov-coupon', icon: <Tag size={14} aria-hidden />, label: ar ? 'متوسط الطلب بكوبون' : 'Average order, coupon', value: m(i?.coupons.aov_with),
+      sub: i?.coupons.aov_without == null ? undefined : (ar ? `بدون كوبون ${money(i.coupons.aov_without, cur)}` : `without ${money(i.coupons.aov_without, cur)}`) },
+    { key: 'unsold', icon: <Package size={14} aria-hidden />, tone: products.unsold_active.count > 0 ? 'warning' : 'neutral', label: ar ? 'منتجات بلا مبيعات' : 'Products not sold',
+      value: products.unsold_active.count > 0 ? num(products.unsold_active.count) : null },
+  ]
+  const shown = cards.filter((c) => c.value !== null)
+  const money5 = comp ? [
+    { name: ar ? 'المنتجات' : 'Products', value: comp.products ?? 0 }, { name: ar ? 'الشحن' : 'Shipping', value: comp.shipping ?? 0 },
+    { name: ar ? 'الضريبة' : 'Tax', value: comp.tax ?? 0 }, { name: ar ? 'الخصومات' : 'Discounts', value: comp.discounts ?? 0 },
+    { name: ar ? 'المسترد' : 'Refunded', value: comp.refunded ?? 0 },
+  ] : []
+  const hasMoney = money5.some((r) => r.value > 0)
+  const asked = products.best_by_orders.slice(0, 5)
+  const weak = products.weak.slice(0, 5)
+  const unsold = products.unsold_active.sample.slice(0, 5)
+  const hasLists = asked.length > 0 || weak.length > 0 || unsold.length > 0
+  if (shown.length === 0 && !hasMoney && !hasLists) return null
+
+  return (
+    <section data-testid="store-deeper" className="flex min-w-0 flex-col gap-3">
+      <h3 className="text-sm font-extrabold text-text-primary">{ar ? 'تحليلات أعمق' : 'Deeper analytics'}</h3>
+      {shown.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          {shown.map((c) => <MiniCard key={c.key} testId={`store-deeper-${c.key}`} icon={c.icon} label={c.label} value={c.value ?? '—'} sub={c.sub} tone={c.tone} />)}
+        </div>
+      )}
+      {(hasMoney || hasLists) && (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {hasMoney && <Donut height={170} testId="store-deeper-money" kind="money" cur={cur} title={ar ? 'مكوّنات المبالغ' : 'What the money is'} icon={<Banknote size={14} aria-hidden />} rows={money5} center={m(d.sales.net.current) ?? undefined} centerLabel={ar ? 'الصافي' : 'Net'} />}
+          <RankList testId="store-deeper-asked" title={ar ? 'الأكثر طلبًا' : 'Most ordered'} rows={asked.map((r) => ({ name: r.name, value: ar ? `${num(r.orders)} طلب` : `${num(r.orders)} orders` }))} />
+          <RankList testId="store-deeper-weak" title={ar ? 'الأضعف مبيعًا' : 'Weakest sellers'} rows={weak.map((r) => ({ name: r.name, value: money(r.revenue, cur) }))} />
+          <RankList testId="store-deeper-unsold-list" title={ar ? 'لم تُبع في الفترة' : 'Not sold this period'} rows={unsold.map((n) => ({ name: n, value: '' }))} />
+        </div>
+      )}
+    </section>
+  )
+}
+
+function RankList({ testId, title, rows }: { testId: string; title: string; rows: Array<{ name: string; value: string }> }) {
+  if (rows.length === 0) return null
+
+  return (
+    <ChartCard title={title}>
+      <ol data-testid={testId} className="flex flex-col gap-1.5">
+        {rows.map((r, idx) => (
+          <li key={`${r.name}-${idx}`} className="flex min-w-0 items-center gap-2 text-xs">
+            <span className="tnum grid h-5 min-w-5 place-items-center rounded-full bg-surface-secondary px-1 font-bold text-text-secondary"><Num>{num(idx + 1)}</Num></span>
+            <span className="min-w-0 flex-1 truncate font-semibold text-text-primary" dir="auto" title={r.name}>{r.name}</span>
+            {r.value && <span className="tnum shrink-0 text-text-muted"><Num>{r.value}</Num></span>}
+          </li>
+        ))}
+      </ol>
+    </ChartCard>
   )
 }

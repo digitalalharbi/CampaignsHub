@@ -396,6 +396,44 @@ final class CommerceStoreSyncTest extends TestCase
         Http::assertNotSent(fn ($request): bool => str_contains($request->url(), 'abandoned-carts') && ! str_contains($request->url(), 'page_size='));
     }
 
+    /**
+     * ZID-ORDER-MONEY-001 — a Zid order's payment method is `payment.method` (never its payment state), and its
+     * subtotal, shipping, tax and discount come from the invoice lines and the coupon, as Zid states them.
+     */
+    public function test_zid_reads_the_payment_method_and_the_invoice_lines_of_an_order(): void
+    {
+        $this->configure('zid');
+        $store = $this->store('zid');
+
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), 'managers/store/orders')) {
+                return Http::response(['total_count' => 1, 'orders' => [[
+                    'id' => 77, 'code' => 'Z77', 'order_status' => ['code' => 'delivered', 'name' => 'تم التوصيل'],
+                    'payment_status' => 'paid', 'created_at' => '2026-08-02 10:00:00', 'currency_code' => 'USD', 'order_total' => '115.00', // the reporting currency: no rate between them
+                    'payment' => ['method' => ['name' => 'مدى', 'code' => 'mada'], 'invoice' => [
+                        ['code' => 'sub_totals', 'value' => '100.00', 'value_string' => '100.00 ر.س'],
+                        ['code' => 'shipping', 'value_string' => '25.00 ر.س'],
+                        ['code' => 'tax', 'value' => '15.00'],
+                        ['code' => 'total', 'value' => '115.00'],
+                    ]],
+                    'coupon' => ['code' => 'NOOR', 'discount' => '-25.00'],
+                    'shipping' => ['address' => ['city' => ['id' => 1, 'name' => 'Riyadh']]],
+                ]]]);
+            }
+
+            return Http::response(['data' => [], 'total_count' => 0]);
+        });
+
+        app(StoreSyncer::class)->sync($store, Carbon::parse('2026-08-01'), Carbon::parse('2026-08-05'));
+
+        $order = CommerceOrder::withoutGlobalScopes()->where('external_id', '77')->firstOrFail();
+        $this->assertSame('مدى', $order->payment_status, 'the method the shopper paid with, not «paid»');
+        $this->assertEquals(100.0, (float) $order->subtotal);
+        $this->assertEquals(25.0, (float) $order->shipping_total);
+        $this->assertEquals(15.0, (float) $order->tax_total);
+        $this->assertEquals(25.0, (float) $order->discount_total);
+    }
+
     // ── Attribution: the link between an order and the ad that produced it ────────────────────
 
     /**
