@@ -267,4 +267,42 @@ abstract class ApiCommerceConnector implements CommerceConnector
 
         return $taken;
     }
+
+    /**
+     * COMMERCE-PROVIDER-SHAPES-001 — one safe reader for every provider field that is meant to be text.
+     *
+     * Salla and Zid both send some "text" fields as objects: Zid's store profile carries `currency` as
+     * `{id, code, symbol}`, `status` as `{code, name}`, cities as `{id, name}` and names as `{ar, en}`.
+     * A bare `(string)` cast on any of them throws «Array to string conversion», and because the store
+     * listing is the first read of a new connection, ONE such field failed the whole link wizard with
+     * «The platform refused the request». Every connector reads text through here instead:
+     * a scalar is returned as-is, an object yields its first meaningful key (code before name, Arabic
+     * before English), and anything else is null — never a guess, never an exception.
+     *
+     * @param  list<string>  $keys  keys to prefer on an object, before the generic order
+     */
+    protected static function str(mixed $value, array $keys = []): ?string
+    {
+        if (is_string($value)) {
+            $value = trim($value);
+
+            return $value === '' ? null : $value;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        if (is_bool($value) || ! is_array($value)) {
+            return null;
+        }
+
+        foreach ([...$keys, 'code', 'slug', 'iso', 'value', 'name', 'title', 'ar', 'en', 'full_size', 'url', 'date'] as $key) {
+            if (array_key_exists($key, $value) && ($found = self::str($value[$key])) !== null) {
+                return $found;
+            }
+        }
+
+        return null;
+    }
 }

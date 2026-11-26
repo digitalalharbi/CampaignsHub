@@ -136,19 +136,19 @@ final class SourceLinkDirectory
 
         $rows = [];
         foreach ($connector->withConnection($connection)->fetchStores() as $store) {
-            $currency = strtoupper(trim((string) ($store['currency'] ?? '')));
+            $currency = strtoupper(self::text($store['currency'] ?? null) ?? '');
             // The platform's raw body is not kept, even for ten minutes.
             $rows[] = [
                 'external_id' => (string) $store['external_id'],
-                'name' => (string) ($store['name'] ?? $store['external_id']),
+                'name' => self::text($store['name'] ?? null) ?? (string) $store['external_id'],
                 // A store that does not state its currency has none here: its money is withheld, never assumed.
                 'currency' => $currency === '' ? null : $currency,
-                'timezone' => $store['timezone'] ?? null,
-                'status' => ($store['status'] ?? '') === '' ? 'active' : (string) $store['status'],
+                'timezone' => self::text($store['timezone'] ?? null),
+                'status' => self::text($store['status'] ?? null) ?? 'active',
                 'parent_external_id' => null,
                 'parent_name' => null,
-                'detail' => $store['domain'] ?? null,
-                'metadata' => ['domain' => $store['domain'] ?? null, 'plan' => $store['plan'] ?? null],
+                'detail' => self::text($store['domain'] ?? null),
+                'metadata' => ['domain' => self::text($store['domain'] ?? null), 'plan' => self::text($store['plan'] ?? null)],
             ];
         }
 
@@ -180,5 +180,25 @@ final class SourceLinkDirectory
             <=> [mb_strtolower((string) $y['parent_name']), mb_strtolower($y['name']), $y['external_id']]);
 
         return $rows;
+    }
+
+    /**
+     * COMMERCE-PROVIDER-SHAPES-001 — a connector's row is read as text only where it IS text. A field a
+     * platform sent as an object never reaches a cast here; it is null rather than a thrown
+     * «Array to string conversion» that fails the whole listing.
+     */
+    private static function text(mixed $value): ?string
+    {
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return $value === '' ? null : $value;
     }
 }
