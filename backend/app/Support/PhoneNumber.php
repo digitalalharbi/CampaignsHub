@@ -133,7 +133,14 @@ final class PhoneNumber
          * zero. «9660501234567» is somebody who pasted the country code in front of the national form;
          * reading the 966 and keeping the 0 would produce +9660501234567, a number that does not exist.
          */
-        foreach (self::KNOWN_CODES as $code) {
+        /*
+         * PHONE-CHOSEN-COUNTRY-001 — other countries' codes are a guess, and a guess is only allowed
+         * when nobody chose a country. An Egyptian applicant who picks +20 and types «1012345678»
+         * (the national form without its 0) means +201012345678; scanning every known code read the
+         * leading «1» as the US and produced +1012345678, a number Twilio refuses to send to.
+         */
+        $codes = $defaultCountry === self::DEFAULT_COUNTRY ? self::KNOWN_CODES : [$defaultCountry];
+        foreach ($codes as $code) {
             if (str_starts_with($digits, $code) && strlen($digits) > strlen($code) + 5) {
                 $rest = substr($digits, strlen($code));
                 $rest = ltrim($rest, '0');

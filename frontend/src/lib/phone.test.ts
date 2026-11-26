@@ -38,6 +38,18 @@ describe('normalisePhone', () => {
     expect(normalisePhone('0090 532 123 4567')).toBe('+905321234567')
   })
 
+  it('reads a bare national number in the chosen country, not as another country code (PHONE-CHOSEN-COUNTRY-001)', () => {
+    // Production 2026-11-26: an Egyptian applicant chose +20, typed 1012345678, and was stored as +1012345678.
+    expect(normalisePhone('1012345678', '20')).toBe('+201012345678')
+    expect(normalisePhone('01012345678', '20')).toBe('+201012345678')
+    expect(normalisePhone('201012345678', '20')).toBe('+201012345678')
+    expect(normalisePhone('447700900123', '44')).toBe('+447700900123')
+    expect(normalisePhone('0501234567', '971')).toBe('+971501234567')
+    // With no country chosen, a bare foreign number keeps its own code, as before.
+    expect(normalisePhone('201012345678')).toBe('+201012345678')
+    expect(normalisePhone('+1 415 555 0100', '20')).toBe('+14155550100')
+  })
+
   it.each([null, undefined, '', 'not a phone', '---', '123', '+9665012345678901234'])(
     'returns null for unreadable input %s',
     (input) => {

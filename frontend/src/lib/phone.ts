@@ -54,7 +54,11 @@ export function normalisePhone(input: string | null | undefined, defaultCountry 
 
   if (explicit) return plausible(digits) ? `+${digits}` : null
 
-  for (const code of KNOWN_CODES) {
+  // PHONE-CHOSEN-COUNTRY-001 — a bare number that opens with the CHOSEN country's code is read as that
+  // country. Other countries' codes are guessed only when nobody chose a country (the Saudi default):
+  // an Egyptian who picks +20 and types 1012345678 means +201012345678, not the US number +1012345678.
+  const codes = defaultCountry === DEFAULT_COUNTRY ? KNOWN_CODES : [defaultCountry]
+  for (const code of codes) {
     if (digits.startsWith(code) && digits.length > code.length + 5) {
       const rest = digits.slice(code.length).replace(/^0+/, '')
       return plausible(code + rest) ? `+${code}${rest}` : null
