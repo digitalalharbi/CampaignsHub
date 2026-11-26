@@ -173,7 +173,9 @@ final class ZidConnector extends ApiCommerceConnector
     {
         $carts = [];
 
-        foreach ($this->pages('managers/store/abandoned-carts', [], 'abandoned carts') as $c) {
+        // ZID-ABANDONED-CARTS-001 — this endpoint requires `page_size` (Production 2026-11-26: HTTP 422
+        // «page_size … مطلوب»); `perPage`, which the other Zid lists read, is not enough here.
+        foreach ($this->pages('managers/store/abandoned-carts', ['page_size' => self::PER_PAGE], 'abandoned carts') as $c) {
             if (($c['id'] ?? null) === null) {
                 continue;
             }
