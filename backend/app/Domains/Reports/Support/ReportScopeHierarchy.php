@@ -6,6 +6,7 @@ namespace App\Domains\Reports\Support;
 
 use App\Domains\Campaigns\Models\ExternalAd;
 use App\Domains\Campaigns\Models\ExternalCampaign;
+use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
 use App\Domains\Metrics\Models\DailyMetric;
 
@@ -95,6 +96,39 @@ final class ReportScopeHierarchy
     }
 
     /**
+     * SHARED-ACCOUNT-PROJECTS-001 — the accounts a saved scope names that THIS project unlinked since, taken out.
+     *
+     * A report saved while an account was linked keeps naming it after the account is unlinked (or re-linked under a new
+     * sign-in, which is a new account row). That id is not another project's account: it is this project's own history,
+     * hidden by the selection rule. Refusing it as «not part of this project» locked the report editor shut, with no way
+     * to re-pick. It is dropped instead, so the editor opens and the account can be chosen again. An account that was
+     * never this project's is untouched and still refused below.
+     *
+     * @param  list<string>  $accountIds
+     * @return list<string>
+     */
+    public static function withoutUnlinked(string $project, array $accountIds): array
+    {
+        if ($accountIds === []) {
+            return [];
+        }
+
+        $current = self::accountsOf($project);
+        $once = ProjectIntegrationBinding::withoutGlobalScopes()
+            ->where('project_id', $project)
+            ->where('is_active', false)
+            ->whereIn('external_account_id', $accountIds)
+            ->pluck('external_account_id')
+            ->map(static fn ($id): string => (string) $id)
+            ->all();
+
+        return array_values(array_filter(
+            $accountIds,
+            static fn (string $id): bool => in_array($id, $current, true) || ! in_array($id, $once, true),
+        ));
+    }
+
+    /**
      * INTEG-PROJECT-SPACE-001 — an account of ANOTHER project named in a scope is refused, never dropped.
      *
      * The pickers used to drop an id that was not this project's and carry on. Nothing leaked — every read
@@ -151,7 +185,7 @@ final class ReportScopeHierarchy
         $projects = array_values(array_unique(array_filter((array) ($scope['project_ids'] ?? []), 'is_string')));
         abort_unless(array_diff($projects, [$project]) === [], 422, 'A report scope can only name its own project.');
 
-        $accounts = array_values(array_unique(array_filter((array) ($scope['account_ids'] ?? []), 'is_string')));
+        $accounts = self::withoutUnlinked($project, array_values(array_unique(array_filter((array) ($scope['account_ids'] ?? []), 'is_string'))));
         $byAccount = self::campaignsByAccount($project, $accounts);
         $within = array_values(array_unique(array_merge(...array_values($byAccount))));
 

@@ -100,7 +100,8 @@ final class ReportScopeController extends Controller
         ]);
 
         $fProviders = array_values(array_map('strtolower', array_filter((array) $request->input('providers', []), 'is_string')));
-        $fAccounts = array_values(array_filter((array) $request->input('account_ids', []), 'is_string'));
+        // SHARED-ACCOUNT-PROJECTS-001 — an account this project unlinked since the report was saved is dropped, not refused.
+        $fAccounts = ReportScopeHierarchy::withoutUnlinked($project, array_values(array_filter((array) $request->input('account_ids', []), 'is_string')));
         ReportScopeHierarchy::refuseForeignAccounts($project, $fAccounts);
         $fDestinations = array_values(array_filter((array) $request->input('destinations', []), 'is_string'));
 
@@ -809,7 +810,7 @@ final class ReportScopeController extends Controller
         $submitted = ReportScope::fromReport((array) $request->input('scope', []));
 
         // Another project's account is refused outright; the other axes keep their drop-or-impossible rule below.
-        ReportScopeHierarchy::refuseForeignAccounts($project, $submitted->accountIds);
+        ReportScopeHierarchy::refuseForeignAccounts($project, ReportScopeHierarchy::withoutUnlinked($project, $submitted->accountIds));
 
         $keep = function (array $asked, array $available): array {
             if ($asked === []) {
