@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\PlatformCredentials;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Integrations\Services\AccountAssignment;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Tenant;
@@ -216,7 +217,7 @@ final class OnDemandDiscoveryTest extends TestCase
         $this->assertSame((string) $home->id, (string) $bBinding->external_account_id);
         $this->assertFalse($bBinding->is_primary);
         $this->assertSame(['campaign_external_ids' => [], 'name_contains' => []], $bBinding->settings['shared_scope']);
-        $this->assertSame((string) $this->projectA->id, app(\App\Domains\Integrations\Services\AccountAssignment::class)->projectIdFor($home));
+        $this->assertSame((string) $this->projectA->id, app(AccountAssignment::class)->projectIdFor($home));
 
         // Linking it again is idempotent.
         $this->confirm($this->projectB, $b, self::LINKED, 'org-1')->assertSuccessful();
