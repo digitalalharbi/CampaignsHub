@@ -61,7 +61,7 @@ final class SallaConnector extends ApiCommerceConnector
     /** @param  array<string,mixed>  $store */
     private static function nameOf(array $store): string
     {
-        $name = $this->str($store['name'] ?? null) ?? '';
+        $name = self::str($store['name'] ?? null) ?? '';
         if ($name !== '') {
             return $name;
         }

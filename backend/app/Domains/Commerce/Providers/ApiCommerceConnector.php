@@ -281,7 +281,7 @@ abstract class ApiCommerceConnector implements CommerceConnector
      *
      * @param  list<string>  $keys  keys to prefer on an object, before the generic order
      */
-    protected function str(mixed $value, array $keys = []): ?string
+    protected static function str(mixed $value, array $keys = []): ?string
     {
         if (is_string($value)) {
             $value = trim($value);
@@ -298,7 +298,7 @@ abstract class ApiCommerceConnector implements CommerceConnector
         }
 
         foreach ([...$keys, 'code', 'slug', 'iso', 'value', 'name', 'title', 'ar', 'en', 'full_size', 'url', 'date'] as $key) {
-            if (array_key_exists($key, $value) && ($found = $this->str($value[$key])) !== null) {
+            if (array_key_exists($key, $value) && ($found = self::str($value[$key])) !== null) {
                 return $found;
             }
         }
