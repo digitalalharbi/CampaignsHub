@@ -8,6 +8,7 @@ use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\ExternalCreative;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\SharedAccounts;
 use App\Domains\Metrics\Services\ReportingCurrency;
 use App\Domains\Metrics\Services\SourceCurrency;
 use App\Support\GroupedUpsert;
@@ -114,11 +115,14 @@ final class UpsertCreativeDailyMetrics
          * unassigned account before it gets here) keeps the account-scoped behaviour.
          */
         $boundProject = app(AccountAssignment::class)->projectIdFor($account);
+        // SHARED-ACCOUNT-PROJECTS-001 — an account shared by campaign also feeds the projects that picked its campaigns;
+        // each creative row carries its own project, so a creative under any of them is current and lands there only.
+        $fedProjects = app(SharedAccounts::class)->projectsFed($account, $boundProject);
 
         $scoped = ExternalCreative::withoutGlobalScopes()
             ->where('provider', $account->provider)
             ->where('tenant_id', $account->tenant_id)
-            ->when($boundProject !== null, fn ($q) => $q->where('project_id', $boundProject))
+            ->when($boundProject !== null, fn ($q) => $q->whereIn('project_id', $fedProjects))
             ->whereIn('external_creative_id', $ids)
             ->where(fn ($q) => $q
                 ->where('external_account_id', $account->getKey())
@@ -128,7 +132,23 @@ final class UpsertCreativeDailyMetrics
                     ->whereIn('external_campaign_id', ExternalCampaign::withoutGlobalScopes()
                         ->where('external_account_id', $account->getKey())
                         ->select('id'))))
-            ->get(['id', 'tenant_id', 'project_id', 'campaign_id', 'external_creative_id']);
+            ->get(['id', 'tenant_id', 'project_id', 'campaign_id', 'external_campaign_id', 'external_creative_id']);
+
+        /*
+         * SHARED-ACCOUNT-PROJECTS-001 — when a campaign of a shared account moved to another project, its creative has a
+         * row under each. Only the row filed where its campaign is filed NOW is current; the other is history and is not
+         * a candidate, so the move does not turn every creative of that campaign «ambiguous».
+         */
+        if (count($fedProjects) > 1) {
+            $campaignProject = ExternalCampaign::withoutGlobalScopes()
+                ->where('external_account_id', $account->getKey())
+                ->pluck('project_id', 'id')
+                ->map(static fn ($p): string => (string) $p)
+                ->all();
+            $scoped = $scoped->filter(static fn ($c): bool => $c->external_campaign_id === null
+                || ! isset($campaignProject[(string) $c->external_campaign_id])
+                || $campaignProject[(string) $c->external_campaign_id] === (string) $c->project_id)->values();
+        }
 
         $byProviderId = [];
         $ambiguous = [];

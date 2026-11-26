@@ -107,6 +107,13 @@ final class ConfirmAccountSelection
                 ->whereIn('external_account_id', $accounts->map(fn (ExternalAccount $a): string => (string) $a->getKey())->all())
                 ->where('is_active', true)
                 ->get()
+                /*
+                 * SHARED-ACCOUNT-PROJECTS-001 — this project's own binding is the one that says «already here». With an
+                 * account shared by campaign, another project's binding on the same row would otherwise be picked by
+                 * `keyBy` and re-saving the home project's selection would read as «linked elsewhere».
+                 */
+                ->sortBy(fn (ProjectIntegrationBinding $b): int => (string) $b->project_id === (string) $project->getKey() ? 0 : 1)
+                ->unique('external_account_id')
                 ->keyBy('external_account_id');
 
             foreach ($accounts as $account) {

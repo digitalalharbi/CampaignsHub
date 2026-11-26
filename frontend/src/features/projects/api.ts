@@ -85,6 +85,10 @@ export interface Binding {
   created_at: string | null
   /** PROJECT-LIFECYCLE-001 §8 — other projects this account is ALSO actively linked to («مشترك»). Absent from an older server. */
   shared_with?: { id: string; name: string }[]
+  /** SHARED-ACCOUNT-PROJECTS-001 — `home`: shares some campaigns out; `shared`: receives only the campaigns it picked. */
+  shared_role?: 'home' | 'shared' | null
+  /** For a `shared` binding: how many campaigns (and name rules) it picked; 0 means it receives nothing yet. */
+  shared_campaigns?: number | null
 }
 
 /**

@@ -3,6 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { ArrowLeft, ArrowRight, Building2, Search } from 'lucide-react'
 import { confirmLinkAccount, fetchLinkAccounts, fetchLinkOrganisations, removeConnection } from './api'
 import { LinkSuccess } from './LinkSuccess'
+import { SharedCampaignsPanel } from './SharedCampaigns'
 import { LinkSteps, type LinkStep } from './ProjectLinkFlow'
 import { useDebouncedValue } from '@/components/forms/useTypeahead'
 import { Badge } from '@/components/ui/Badge'
@@ -42,6 +43,8 @@ export function ProjectAccountPicker({ projectId, projectName, connection, onClo
   const [orgSearch, setOrgSearch] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  /** The account linked as SHARED (another project of this workspace already reads it), or null. */
+  const [shared, setShared] = useState<string | null>(null)
   const q = useDebouncedValue(search.trim(), 250)
 
   const organisations = useQuery({
@@ -69,10 +72,12 @@ export function ProjectAccountPicker({ projectId, projectName, connection, onClo
 
   const confirm = useMutation({
     mutationFn: () => confirmLinkAccount({ projectId, connectionId: connection.id, externalId: account ?? '', organisation: organisation ?? null }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: ['project-bindings', projectId] })
       void qc.invalidateQueries({ queryKey: ['connection-hub'] })
       void qc.invalidateQueries({ queryKey: ['project-link', projectId] })
+      // SHARED-ACCOUNT-PROJECTS-001 — a shared account feeds nothing until its campaigns are picked: that is the last step.
+      setShared(data.shared === true ? data.account_id : null)
       setStep('done')
     },
   })
@@ -119,7 +124,9 @@ export function ProjectAccountPicker({ projectId, projectName, connection, onClo
 
         <LinkSteps steps={steps} current={step} ar={ar} />
 
-        {step === 'done' ? (
+        {step === 'done' && shared !== null ? (
+          <SharedCampaignsPanel projectId={projectId} accountId={shared} onSaved={onReturn} />
+        ) : step === 'done' ? (
           <LinkSuccess projectId={projectId} connectionId={connection.id} onReturn={onReturn} />
         ) : organisations.isLoading ? (
           <Skeleton className="h-40 w-full" />
@@ -161,14 +168,21 @@ export function ProjectAccountPicker({ projectId, projectName, connection, onClo
                     key={a.external_id}
                     name="link-account"
                     checked={account === a.external_id}
-                    disabled={a.linked === 'elsewhere'}
                     onChange={() => setAccount(a.external_id)}
                     testId={`picker-account-${a.external_id}`}
                     title={a.name}
                     end={(
                       <>
                         {a.linked === 'here' && <Badge tone="success">{ar ? 'مرتبط' : 'Linked'}</Badge>}
-                        {a.linked === 'elsewhere' && <Badge tone="warning">{ar ? 'مشروع آخر' : 'Other project'}</Badge>}
+                        {a.linked === 'elsewhere' && (
+                          <span title={(a.linked_projects ?? []).map((p) => p.name).join('، ')} data-testid={`picker-shared-${a.external_id}`}>
+                            <Badge tone="warning">
+                              {(a.linked_projects?.length ?? 0) > 0
+                                ? (ar ? `مرتبط أيضًا بـ ${(a.linked_projects ?? []).map((p) => p.name).join('، ')}` : `Also in ${(a.linked_projects ?? []).map((p) => p.name).join(', ')}`)
+                                : (ar ? 'مشروع آخر' : 'Other project')}
+                            </Badge>
+                          </span>
+                        )}
                         {a.currency !== null && <Badge tone="neutral" data-testid={`picker-currency-${a.external_id}`}>{a.currency}</Badge>}
                       </>
                     )}

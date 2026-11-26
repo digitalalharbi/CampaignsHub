@@ -13,6 +13,7 @@ import {
 import { PlatformIntegrationsPanel } from './PlatformIntegrationsPanel'
 import { ProjectLinkFlow, type LinkConnection } from '@/features/integrations/ProjectLinkFlow'
 import { fetchProjectLink } from '@/features/integrations/api'
+import { SharedAccountMark, SharedCampaignsDialog } from '@/features/integrations/SharedCampaigns'
 import { useAuth } from '@/stores/auth'
 import { ProjectStores } from '@/features/commerce/ProjectStores'
 import { ProjectSyncHistory } from './ProjectSyncHistory'
@@ -102,6 +103,8 @@ export function ProjectIntegrationsPage() {
   const [params, setParams] = useSearchParams()
   const [linking, setLinking] = useState<{ resume: LinkConnection | null } | null>(null)
   const [returned, setReturned] = useState<{ outcome: string; link: string | null } | null>(null)
+  /** SHARED-ACCOUNT-PROJECTS-001 — the shared account whose campaign split is open, or null. */
+  const [sharedOpen, setSharedOpen] = useState<string | null>(null)
 
   useEffect(() => {
     const outcome = params.get('outcome')
@@ -341,6 +344,14 @@ export function ProjectIntegrationsPage() {
         </Button>
       </div>
 
+      {sharedOpen !== null && projectId && (
+        <SharedCampaignsDialog
+          projectId={projectId}
+          accountId={sharedOpen}
+          onClose={() => { setSharedOpen(null); void invalidate() }}
+        />
+      )}
+
       {linking !== null && projectId && (
         <ProjectLinkFlow
           projectId={projectId}
@@ -408,9 +419,15 @@ export function ProjectIntegrationsPage() {
                     {!b.is_active && <Badge tone="danger">{t('disabled')}</Badge>}
                     {/* PROJECT-LIFECYCLE-001 §8 — «مشترك»: the same account feeds another project too. */}
                     {(b.shared_with?.length ?? 0) > 0 && (
-                      <span title={(b.shared_with ?? []).map((p) => p.name).join('، ')} data-testid={`binding-shared-${b.id}`}>
-                        <Badge tone="warning">{lt('projects.lifecycle.shared.badge', lang === 'ar')}</Badge>
-                      </span>
+                      /* SHARED-ACCOUNT-PROJECTS-001 — «مشترك · N مشاريع», the projects named; opens the campaign split. */
+                      <SharedAccountMark
+                        projects={[{ id: projectId, name: projectName ?? (lang === 'ar' ? 'هذا المشروع' : 'This project') }, ...(b.shared_with ?? [])]}
+                        onOpen={b.account ? () => setSharedOpen(b.account?.id ?? null) : undefined}
+                        testId={`binding-shared-${b.id}`}
+                      />
+                    )}
+                    {b.shared_role === 'shared' && (b.shared_campaigns ?? 0) === 0 && (
+                      <Badge tone="danger" data-testid={`binding-shared-empty-${b.id}`}>{lang === 'ar' ? 'اختر الحملات' : 'Pick campaigns'}</Badge>
                     )}
                     {/*
                       The CONNECTION's health, which this row has always been sent and never shown.

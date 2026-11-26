@@ -52,11 +52,21 @@ final class AccountAssignment
      */
     public function projectIdFor(ExternalAccount $account): ?string
     {
-        $candidates = ProjectIntegrationBinding::withoutGlobalScopes()
+        $bindings = ProjectIntegrationBinding::withoutGlobalScopes()
             ->where('external_account_id', $account->getKey())
             ->where('is_active', true)
             ->orderByDesc('is_primary')
             ->orderBy('created_at')
+            ->get(['project_id', 'settings']);
+
+        /*
+         * SHARED-ACCOUNT-PROJECTS-001 — a SHARED binding (one that feeds only the campaigns it picked) is never the
+         * account's home while a home binding stands: the home project is the one the account is fetched for, and the
+         * shared projects receive their campaigns from that one fetch. Only when no home binding is left does a shared
+         * one carry the account, so unlinking the home project never strands the others.
+         */
+        $candidates = $bindings
+            ->sortBy(static fn (ProjectIntegrationBinding $b): int => SharedAccounts::isShared($b) ? 1 : 0)
             ->pluck('project_id')
             ->map(static fn ($id): string => (string) $id)
             ->filter(static fn (string $id): bool => $id !== '')
@@ -333,7 +343,17 @@ final class AccountAssignment
      */
     public function isActivelyAssignedTo(ExternalAccount $account, string $projectId): bool
     {
-        return $this->projectIdFor($account) === $projectId && $this->isActivelyAssigned($account);
+        $home = $this->projectIdFor($account);
+
+        /*
+         * SHARED-ACCOUNT-PROJECTS-001 — a project the account is SHARED with may also ask for a fetch. The job it queues
+         * resolves the home project itself and files each campaign under its own project, so the button cannot write
+         * anything into the wrong place; refusing it would leave the shared project's «تحديث البيانات» dead.
+         */
+        $mine = $home === $projectId
+            || ($home !== null && in_array($projectId, app(SharedAccounts::class)->projectsFed($account, $home), true));
+
+        return $mine && $this->isActivelyAssigned($account);
     }
 
     /**

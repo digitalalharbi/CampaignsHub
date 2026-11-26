@@ -19,6 +19,7 @@ use App\Domains\Integrations\Providers\ReportsEntityGrains;
 use App\Domains\Integrations\Providers\SnapchatConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\AccountAssignment;
+use App\Domains\Integrations\Services\SharedAccounts;
 use App\Domains\Integrations\Services\AccountCurrencyLookup;
 use App\Domains\Integrations\Support\InsightsAuthorisation;
 use App\Domains\Integrations\Support\ProviderErrorText;
@@ -833,7 +834,7 @@ final class AccountMetricsSyncer
         }
 
         // SEC-CLUSTER-2 — only entities filed under the project the account is bound to are written to.
-        $knownSquads = $this->filedUnder($knownSquads, (string) $run->project_id);
+        $knownSquads = $this->filedUnder($knownSquads, $account, (string) $run->project_id);
 
         // INTEG-UNIFIED-BOUNDARIES-001 — each grain's write re-proves the binding, like the campaign write.
         $unlinked = false;
@@ -894,7 +895,7 @@ final class AccountMetricsSyncer
             ];
         }
 
-        $knownAds = $this->filedUnder($knownAds, (string) $run->project_id);
+        $knownAds = $this->filedUnder($knownAds, $account, (string) $run->project_id);
 
         $adResult = $unlinked
             ? ['upserted' => 0, 'skipped' => 0, 'unkeyed' => 0, 'currency_unknown' => 0]
@@ -957,9 +958,13 @@ final class AccountMetricsSyncer
      * @param  array<string,array{id:string,project_id:string,tenant_id:string,campaign_id:?string,ad_set_id:?string}>  $known
      * @return array<string,array{id:string,project_id:string,tenant_id:string,campaign_id:?string,ad_set_id:?string}>
      */
-    private function filedUnder(array $known, string $projectId): array
+    private function filedUnder(array $known, ExternalAccount $account, string $projectId): array
     {
-        return array_filter($known, static fn (array $e): bool => $e['project_id'] === $projectId);
+        // SHARED-ACCOUNT-PROJECTS-001 — an account shared by campaign feeds its home project AND each project whose
+        // campaigns it carries; an entity filed under any of them is current, and its row keeps the entity's project.
+        $fed = app(SharedAccounts::class)->projectsFed($account, $projectId);
+
+        return array_filter($known, static fn (array $e): bool => in_array($e['project_id'], $fed, true));
     }
 
     /**
