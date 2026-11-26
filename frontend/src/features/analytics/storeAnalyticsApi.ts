@@ -22,6 +22,8 @@ export interface StoreInsightsPayload {
 
 export interface StoreDepthPayload {
   state: 'no_store' | 'empty' | 'ready'
+  /** STORE-LATEST-DATA-001 — on an empty period: when the store last sold, and that month. */
+  latest_order?: { date: string; from: string; to: string } | null
   period: { from: string; to: string; timezone: string }
   previous_period: { from: string; to: string }
   currency?: string

@@ -13,6 +13,7 @@ import type { StoreFunnelStep, StoreKpi, StoreSlice } from './ga4/storeTypes'
 import { ChartCard, MetricLineChart } from './charts'
 import { money, num, ratio } from './format'
 import { PAYMENT, StoreExtras } from './StoreInsightsBoard'
+import { StoreLatestJump } from './StoreLatestJump'
 import type { StoreDepthPayload, ThreeSourcesPayload } from './storeAnalyticsApi'
 
 /**
@@ -103,6 +104,7 @@ export function StoreMirror({ projectId, range, ar, spend }: { projectId: string
     return <QueryFailure error={depth.error} ar={ar} testId="store-mirror-failure" onRetry={() => void depth.refetch()} fallbackTitle={ar ? 'تعذّرت قراءة المتجر' : 'The store could not be read'} />
   }
   const d = depth.data
+  if (d.state === 'empty') return <StoreLatestJump latest={d.latest_order} ar={ar} testId="store-mirror-empty" />
   if (d.state !== 'ready' || !d.sales || !d.orders || !d.averages || !d.conversion || !d.products || !d.customers || !d.abandoned) {
     return <Badge tone="info" data-testid={`store-mirror-${d.state}`}>{ar ? 'لا طلبات في هذه الفترة' : 'No orders in this period'}</Badge>
   }

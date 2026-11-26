@@ -18,8 +18,11 @@ use Illuminate\Support\Carbon;
  */
 final class StoreSyncQueue
 {
-    /** The window a first read covers, in days. Products are read whole whatever the window. */
-    public const BACKFILL_DAYS = 90;
+    /**
+     * The window a first read covers, in days — the most {@see queue()} allows, so a store linked today opens
+     * with six months of sales instead of three (STORE-LATEST-DATA-001). Products are read whole whatever the window.
+     */
+    public const BACKFILL_DAYS = 180;
 
     public function queue(ExternalAccount $store, int $days, string $source): IntegrationSyncRun
     {
