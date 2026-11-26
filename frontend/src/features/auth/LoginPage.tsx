@@ -12,6 +12,7 @@ import { OAuthLinkCard, type LinkedSignIn } from './OAuthLinkCard'
 import { OtpField } from './OtpField'
 import { HelpRequestModal } from './HelpRequestModal'
 import { ErrorNote, IconField } from './loginFields'
+import { KnownAccountsPicker } from './KnownAccountsPicker'
 import { Button } from '@/components/ui/Button'
 import { PhoneField, phoneFieldValue, DEFAULT_DIAL_CODE } from '@/components/ui/PhoneField'
 import { toApiError } from '@/lib/api/client'
@@ -479,6 +480,19 @@ export function LoginPage() {
         <p data-testid="login-code-destination" dir="ltr" className="mt-1 truncate font-mono text-sm text-text-primary">
           {identifier}
         </p>
+      )}
+
+      {/* LOGIN-KNOWN-ACCOUNTS-001 — the accounts this browser signed in with; picking one fills the email, nothing more. */}
+      {step === 'credentials' && !phoneCompat && (
+        <KnownAccountsPicker
+          ar={ar}
+          selected={email}
+          onPick={(picked) => {
+            setEmail(picked)
+            setPassword('')
+            window.setTimeout(() => document.getElementById('login-password-field')?.focus(), 0)
+          }}
+        />
       )}
 
       <div className="mt-5 rounded-2xl border border-border bg-surface p-5 shadow-[var(--shadow-small)] sm:p-6">

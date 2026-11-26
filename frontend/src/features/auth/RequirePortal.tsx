@@ -59,6 +59,15 @@ export function RequirePortal({ portal }: { portal: PortalKey }) {
   const held = state.data?.memberships ?? []
 
   /*
+   * ADMIN-NO-WORKSPACE-001 — Owner 2026-11-26: admin@ opened /app/dashboard and met «البوابة غير متاحة لحسابك» with
+   * «أكمل إعداد الحساب», as if he were a stranger with no account. The platform admin holds no workspace by design; his
+   * place is /admin, which is what the server's own `destination` already says. Send him there instead of a wall.
+   */
+  if (held.length === 0 && (state.data?.platform_admin === true || isAdmin)) {
+    return <Navigate to="/admin" replace />
+  }
+
+  /*
    * MAIL-LINK-PORTAL-001 — Owner 2026-11-21: «افتح أداء المحتوى» and «افتح التقرير» in a digest opened a wall, and the
    * wall's one button opened the home page, so the link led nowhere clear. Every mail link is written under `/app/…`, and
    * an agency member holds no advertiser membership. The agency tree serves the same pages at the same paths
