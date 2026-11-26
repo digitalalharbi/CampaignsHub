@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { AuthUser } from '@/lib/api/types'
+import { rememberAccount } from '@/features/auth/knownAccounts'
 
 /**
  * Auth state for the SPA. Authentication itself lives in an HttpOnly session cookie (ADR 0001);
@@ -23,7 +24,11 @@ interface AuthState {
 export const useAuth = create<AuthState>((set, get) => ({
   user: null,
   status: 'loading',
-  setUser: (user) => set({ user, status: user ? 'authenticated' : 'guest' }),
+  setUser: (user) => {
+    // LOGIN-KNOWN-ACCOUNTS-001 — every way in (password, code, Google, the session probe) passes here once.
+    if (user) rememberAccount(user)
+    set({ user, status: user ? 'authenticated' : 'guest' })
+  },
   setStatus: (status) => set({ status }),
   hasPermission: (key) => {
     const user = get().user
