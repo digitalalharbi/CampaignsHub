@@ -16,6 +16,7 @@ use App\Domains\Projects\Models\Project;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
 
@@ -69,7 +70,7 @@ final class ProposalService
             'target_external_id' => (string) ($input['target_external_id'] ?? ''),
             'action' => (string) ($input['action'] ?? ''),
             'payload' => $payload === [] ? null : $payload,
-            'currency' => $this->currencyOf((string) ($input['external_account_id'] ?? '')),
+            'currency' => $this->currencyOf($project, (string) ($input['external_account_id'] ?? '')),
             'reason' => (string) ($input['reason'] ?? ''),
             'evidence' => isset($input['evidence']) && is_array($input['evidence']) ? $input['evidence'] : null,
             'status' => ActionProposal::PENDING,
@@ -311,13 +312,27 @@ final class ProposalService
         ]));
     }
 
-    private function currencyOf(string $accountId): ?string
+    /**
+     * The currency of an account — only one this project actually holds (same tenant, actively bound).
+     *
+     * Read by id alone this answered for ANY account in the database and the proposal returned it, so a caller who knew a foreign
+     * account's id learned that it exists and what it is denominated in. The rules block such a proposal afterwards; the read must not
+     * have happened first.
+     */
+    private function currencyOf(Project $project, string $accountId): ?string
     {
-        if ($accountId === '') {
+        if ($accountId === '' || ! Str::isUuid($accountId)) {
             return null;
         }
 
-        $currency = DB::table('external_accounts')->where('id', $accountId)->value('currency');
+        $currency = DB::table('external_accounts')
+            ->where('id', $accountId)
+            ->where('tenant_id', $project->tenant_id)
+            ->whereExists(fn ($b) => $b->selectRaw('1')->from('project_integration_bindings as pib')
+                ->whereColumn('pib.external_account_id', 'external_accounts.id')
+                ->where('pib.project_id', $project->getKey())
+                ->where('pib.is_active', true))
+            ->value('currency');
 
         return is_string($currency) && $currency !== '' ? $currency : null;
     }
