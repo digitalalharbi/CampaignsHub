@@ -19,6 +19,7 @@ use App\Domains\Reports\Models\ReportShare;
 use App\Domains\Reports\Support\AccountCampaignCeiling;
 use App\Domains\Reports\Support\ContentCopy;
 use App\Domains\Reports\Support\CreativeVisibility;
+use App\Domains\Reports\Support\HiddenMoney;
 use App\Domains\Reports\Support\ReportScope;
 use App\Domains\Tenancy\Context\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
@@ -685,6 +686,15 @@ final class SharedCreativeView
                 unset($row['previous'][$key]);
             }
         }
+
+        /*
+         * HIDDEN-MONEY-RATIO-INPUTS-001 — and the two numbers each hidden ratio was divided from.
+         *
+         * `metrics.ratio_inputs` (and `previous.ratio_inputs`) holds metric => [numerator, denominator]. The loops above remove
+         * `spend` and `cpc` and left `ratio_inputs.cpc` = [the spend, the clicks] beside them. One rule, shared with the live
+         * page's sanitiser, at whatever depth the row carries the map.
+         */
+        $row = HiddenMoney::withoutHiddenRatioInputs($row, $visibility->hiddenMetrics());
 
         /*
          * The headline metric LIST is filtered too, not only the figures.

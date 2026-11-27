@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Reports\Support;
 
 use App\Domains\Campaigns\Creative\RankingMetric;
+use App\Domains\Campaigns\Services\CreativeMetrics;
 
 /**
  * SHARED-PDF-HIDE-FLAGS-001 — the ONE definition of what a link that hides spend or revenue withholds.
@@ -113,6 +114,11 @@ final class HiddenMoney
             }
         }
 
+        // A content row’s `ratio_inputs` holds the hidden figure as one side of a pair — see withoutHiddenRatioInputs().
+        if (isset($node['ratio_inputs']) && is_array($node['ratio_inputs'])) {
+            $node['ratio_inputs'] = self::visibleRatioInputs($node['ratio_inputs'], $keys);
+        }
+
         /*
          * A pacing row's planned budget: `budget` is not in the key list because the same word names
          * the link's section flag (`sections.budget`), but beside `spent`/`pace` it is the money the
@@ -155,6 +161,65 @@ final class HiddenMoney
         }
 
         return $node;
+    }
+
+    /**
+     * HIDDEN-MONEY-RATIO-INPUTS-001 — every `ratio_inputs` map below a node, without the pairs made of a hidden figure.
+     *
+     * A content row carries `ratio_inputs`, metric => [numerator, denominator]: the two numbers each of its ratios was divided
+     * from, kept so a set of rows can be pooled without dividing across grains. The numerator of `cpc`, `cpm`, `cpa` and `cpl`
+     * IS the spend, the denominator of `roas` is, and the numerator of `roas` and `aov` is the revenue. The key rule above
+     * nulls a hidden key's SCALAR, and these values are arrays, so a link hiding spend removed `spend` and `cpc` and still
+     * published `"cpc": [283, 257]` — on the live page, the platform drawers and the content endpoints.
+     *
+     * A pair goes when its ratio is hidden or when either side is a hidden figure, read from the one definition of what each
+     * ratio divides ({@see CreativeMetrics::ratioInputKeys()}). A ratio that definition does not know cannot say what its sides
+     * are, and goes too — fail closed. Removed rather than nulled: `[null, null]` already means «not measurable», which is a
+     * statement about a figure the reader was not to know this row holds.
+     *
+     * Both sanitisers reach this through {@see self::redact()}; the content endpoints, whose rows are redacted by the link's
+     * content permissions instead, call it with those.
+     *
+     * @param  array<string|int, mixed>  $node
+     * @param  list<string>  $keys  the hidden keys
+     * @return array<string|int, mixed>
+     */
+    public static function withoutHiddenRatioInputs(array $node, array $keys): array
+    {
+        if ($keys === []) {
+            return $node;
+        }
+
+        foreach ($node as $key => $value) {
+            if (! is_array($value)) {
+                continue;
+            }
+            $node[$key] = $key === 'ratio_inputs'
+                ? self::visibleRatioInputs($value, $keys)
+                : self::withoutHiddenRatioInputs($value, $keys);
+        }
+
+        return $node;
+    }
+
+    /**
+     * @param  array<string|int, mixed>  $pairs  metric => [numerator, denominator]
+     * @param  list<string>  $keys
+     * @return array<string|int, mixed>
+     */
+    private static function visibleRatioInputs(array $pairs, array $keys): array
+    {
+        $madeOf = CreativeMetrics::ratioInputKeys();
+
+        foreach (array_keys($pairs) as $metric) {
+            $sides = $madeOf[$metric] ?? null;
+
+            if ($sides === null || in_array($metric, $keys, true) || array_intersect($sides, $keys) !== []) {
+                unset($pairs[$metric]);
+            }
+        }
+
+        return $pairs;
     }
 
     /** A row that names a piece of content — the only kind whose `reason` is a ranking sentence. */

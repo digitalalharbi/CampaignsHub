@@ -100,6 +100,23 @@ final class CreativeMetrics
     ];
 
     /**
+     * The figures each ratio is divided from, by ratio — every numerator candidate and the denominator.
+     *
+     * HIDDEN-MONEY-RATIO-INPUTS-001. `ratio_inputs` travels on every content row as metric => [numerator, denominator], and a
+     * client link that withholds a figure has to withhold the pairs made of it. The pair itself is two bare numbers, so which
+     * figure each side IS can only be read from this map, and a second copy of it in the redaction would be the copy that drifts.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function ratioInputKeys(): array
+    {
+        return array_map(
+            static fn (array $inputs): array => [...$inputs[0], $inputs[1]],
+            self::RATIO_INPUTS,
+        );
+    }
+
+    /**
      * Single-row COLUMNS, which are not derived — carried over from CONTENT-KPI-COLLAPSE-001.
      *
      * REACH-DEDUP-001: `frequency` is no longer averaged. It is the provider's own figure where a
