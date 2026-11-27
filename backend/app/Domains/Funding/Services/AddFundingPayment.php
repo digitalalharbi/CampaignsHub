@@ -51,7 +51,7 @@ final class AddFundingPayment
      * FIN-WALLET-001 — `$actor` is null for a SYSTEM entry (a confirmed payment of a top-up invoice): no person's reach
      * applies, so the client and the project must be named by id, and the entry records its `source`.
      *
-     * @param  array{client_workspace_id?: string|null, client_name?: string|null, project_id?: string|null, project_name?: string|null, amount?: float|int|string|null, payment_mode?: string|null, platform_plan?: array<int, mixed>|null, currency?: string|null, paid_on: string, period_start?: string|null, period_end?: string|null, reference?: string|null, note?: string|null, idempotency_key: string, source?: array<string, string>|null}  $input
+     * @param  array{client_workspace_id?: string|null, client_name?: string|null, project_id?: string|null, project_name?: string|null, amount?: float|int|string|null, payment_mode?: string|null, platform_plan?: array<int, mixed>|null, currency?: string|null, paid_on: string, period_start?: string|null, period_end?: string|null, extend_to?: string|null, reference?: string|null, note?: string|null, idempotency_key: string, source?: array<string, string>|null}  $input
      * @return array{payment: FundingPayment, created: bool}
      */
     public function __invoke(?User $actor, array $input, bool $retried = false): array
@@ -127,6 +127,21 @@ final class AddFundingPayment
                 }
                 $before = $isFirst ? null : $this->balance->of($funding)['remaining'];
 
+                // BUDGET-CARRY-001 — «ترحيل للشهر الجديد»: a renewal may move a CLOSED period's end forward, so what was left
+                // carries into the new month and the new month's spend is counted against it. Only forward, only when the
+                // budget has an end; the period before and after go in the entry, so undo puts the old end back.
+                $periodMeta = [];
+                $extendTo = $input['extend_to'] ?? null;
+                if (! $isFirst && is_string($extendTo) && $extendTo !== '' && $funding->ends_on !== null
+                    && $extendTo > $funding->ends_on->toDateString()) {
+                    $periodMeta = [
+                        'period_before' => ['start' => $funding->starts_on?->toDateString(), 'end' => $funding->ends_on->toDateString()],
+                        'period_after' => ['start' => $funding->starts_on?->toDateString(), 'end' => $extendTo],
+                        'carried' => $before,
+                    ];
+                    $funding->forceFill(['ends_on' => $extendTo])->save();
+                }
+
                 $payment = FundingPayment::query()->create([
                     'tenant_id' => $tenantId,
                     'client_workspace_id' => $client->id,
@@ -146,7 +161,7 @@ final class AddFundingPayment
                     'idempotency_key' => $input['idempotency_key'],
                     'created_by' => $actor?->id,
                     // FIN-WALLET-001 — where the money came from: a payment in the system (`source`), else a manual entry and its reference.
-                    'meta' => ($isFirst ? ['payment_mode' => $mode, 'platform_plan' => $planned] : [])
+                    'meta' => ($isFirst ? ['payment_mode' => $mode, 'platform_plan' => $planned] : $periodMeta)
                         + ['source' => $input['source'] ?? ['type' => 'manual', 'reference' => $input['reference'] ?? null]],
                 ]);
 
@@ -167,7 +182,7 @@ final class AddFundingPayment
                         'project_id' => $project->id, 'kind' => $payment->kind, 'amount' => $amount, 'currency' => $currency,
                         'amount_sar' => $amountSar, 'paid_on' => $paidOn->toDateString(), 'reference' => $payment->reference,
                         'remaining' => $after, 'payment_mode' => $funding->payment_mode, 'platform_plan' => $funding->platform_plan,
-                    ],
+                    ] + ($periodMeta === [] ? [] : ['period_before' => $periodMeta['period_before'], 'period_after' => $periodMeta['period_after'], 'carried' => $periodMeta['carried']]),
                     userId: $actor?->id,
                     tenantId: $tenantId,
                 );

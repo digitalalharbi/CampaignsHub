@@ -44,12 +44,12 @@ test('add → edit → delete → undo → export', async ({ page }) => {
   await drawer.getByTestId('history-undo').click()
   await expect(drawer.getByTestId('budget-remaining')).toContainText('20,000')
 
-  // DELETE — a reason is required; the budget leaves the board and sits under «المحذوفة».
+  // DELETE — a reason is required; the budget leaves the board and sits under «المؤرشفة».
   await drawer.getByTestId('budget-delete').click()
   await expect(page.getByTestId('budget-delete-submit')).toBeDisabled()
   await page.locator('#delete-reason').fill('اختبار الحذف')
   await page.getByTestId('budget-delete-submit').click()
-  await expect(page.getByTestId('undo-toast')).toContainText('حُذفت الميزانية')
+  await expect(page.getByTestId('undo-toast')).toContainText('أُرشفت الميزانية')
   await expect(page.getByText(project)).toHaveCount(0)
 
   // UNDO the delete from the toast — the budget is back with its figure.

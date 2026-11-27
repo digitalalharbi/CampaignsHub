@@ -258,6 +258,10 @@ final class FundingLedgerActions
                     if ($target->kind === 'reallocation') {
                         $funding->forceFill(['platform_plan' => $meta['plan_before'] ?? null])->save();
                     }
+                    // BUDGET-CARRY-001 — undoing a carry-over renewal puts the period's old end back.
+                    if ($target->kind === 'top_up' && isset($meta['period_before'])) {
+                        $funding->forceFill(['ends_on' => $meta['period_before']['end'] ?? null])->save();
+                    }
                     if ($target->kind === 'void') {
                         $funding->forceFill(['voided_at' => null, 'void_reason' => null, 'voided_by' => null])->save();
                     }

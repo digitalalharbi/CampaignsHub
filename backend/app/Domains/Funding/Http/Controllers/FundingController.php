@@ -159,6 +159,8 @@ final class FundingController extends Controller
             'remaining_after' => $p->remaining_after === null ? null : (float) $p->remaining_after,
             'added_by' => $p->author?->name, 'added_at' => $p->created_at->toIso8601String(),
             'plan_before' => $p->meta['plan_before'] ?? null, 'plan_after' => $p->meta['plan_after'] ?? null,
+            // BUDGET-CARRY-001 — a renewal that moved the period says so: the new end and what was carried into it.
+            'period_after' => $p->meta['period_after']['end'] ?? null, 'carried' => isset($p->meta['carried']) ? (float) $p->meta['carried'] : null,
             // FIN-WALLET-001 — every deposit says where it came from: a payment in the system, or a manual entry with its reference.
             'source' => in_array($p->kind, ['initial', 'top_up'], true) ? ($p->meta['source'] ?? ['type' => 'manual', 'reference' => $p->reference]) : null,
         ])->values()->all();
@@ -196,6 +198,8 @@ final class FundingController extends Controller
             // BUDGET-MODES-001 — a period may start in the future («next month»): spend before it is simply not counted.
             'period_start' => ['nullable', 'date_format:Y-m-d'],
             'period_end' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:period_start'],
+            // BUDGET-CARRY-001 — a renewal that carries the remaining into the new month moves the period's end to this day.
+            'extend_to' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.now('Asia/Riyadh')->addMonths(2)->endOfMonth()->toDateString()],
             'reference' => ['nullable', 'string', 'max:120'],
             'note' => ['nullable', 'string', 'max:500'],
             'idempotency_key' => ['required', 'string', 'max:80'],

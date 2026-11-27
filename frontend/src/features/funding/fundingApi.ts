@@ -117,6 +117,9 @@ export interface BudgetPayment {
   added_at: string
   plan_before?: { provider: string; percent: number }[] | null
   plan_after?: { provider: string; percent: number }[] | null
+  /** BUDGET-CARRY-001 — a renewal that moved the period: its new end, and the remaining it carried into it. */
+  period_after?: string | null
+  carried?: number | null
   /** FIN-WALLET-001 — where a deposit came from: a payment in the system (an invoice), or a manual entry with its reference. */
   source?: { type: 'invoice_payment'; invoice_number?: string; via?: 'manual' | 'gateway' } | { type: 'manual'; reference: string | null } | { type: 'spend_limit' } | null
 }
@@ -262,6 +265,8 @@ export interface NewBudget {
   paid_on: string
   period_start?: string | null
   period_end?: string | null
+  /** BUDGET-CARRY-001 — on a renewal: move a closed period's end to this day, so the remaining carries into the new month. */
+  extend_to?: string
   reference?: string
   idempotency_key: string
 }
