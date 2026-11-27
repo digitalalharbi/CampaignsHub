@@ -99,6 +99,28 @@ describe('the launch page', () => {
     expect(screen.getByTestId('launch-publish')).toBeDisabled()
   })
 
+  /** LAUNCH-CLAIM-RELEASE-001 — the person never reads the raw «launch_in_progress» code. */
+  it('reads a held publish as a sentence, not the server code', async () => {
+    vi.mocked(publishPlan).mockRejectedValue({ isAxiosError: true, response: { status: 409, data: { success: false, message: 'launch_in_progress', data: null, errors: null, meta: { request_id: 'r1' } } } } as never)
+    renderWithProviders(<LaunchPage />, { locale: 'ar', route: '/agency/launch' })
+    await chooseObjective()
+    fireEvent.click(await screen.findByTestId('launch-account-acc1'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.change(screen.getByTestId('launch-name'), { target: { value: 'Ramadan' } })
+    fireEvent.click(screen.getByRole('combobox', { name: /الهدف/ }))
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /OUTCOME_SALES|المبيعات/ }))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.click(screen.getByTestId('launch-save'))
+    await screen.findByTestId('launch-review')
+    fireEvent.click(screen.getByTestId('launch-publish'))
+    fireEvent.click(await screen.findByTestId('launch-confirm'))
+
+    const error = await screen.findByTestId('launch-publish-error')
+    expect(error).toHaveTextContent('محاولة نشر سابقة')
+    expect(error).not.toHaveTextContent('launch_in_progress')
+  })
   it('shows a partial launch as partial with the provider error and a retry', async () => {
     const partial = plan({ status: 'partial', unified_campaign_id: 'uc1', steps: [{ account_id: 'acc1', provider: 'meta', campaign: { status: 'done', external_id: '5001' }, ad_set: { status: 'failed', error: '(#100) Bad targeting' }, ad: { status: 'pending' }, launched: null }] })
     vi.mocked(useLaunchPlans).mockReturnValue(ok([partial]) as never)

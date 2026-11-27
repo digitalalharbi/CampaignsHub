@@ -8,6 +8,7 @@ use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\Campaigns\Launch\LaunchPlan;
 use App\Domains\Campaigns\Models\ExternalCreative;
+use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
@@ -23,6 +24,7 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use RuntimeException;
 use Tests\TestCase;
 
 /**
@@ -126,6 +128,41 @@ final class LaunchSafetyTest extends TestCase
         LaunchPlan::query()->whereKey($plan['id'])->update(['status' => LaunchPlan::PUBLISHING, 'updated_at' => Carbon::now()->subMinutes(30)]);
 
         $this->publish($plan)->assertOk();
+    }
+
+    /**
+     * LAUNCH-CLAIM-RELEASE-001 — fail-first: a run that throws used to leave the plan in PUBLISHING, so every retry for ten minutes
+     * answered «launch_in_progress» (409) and the cause was lost. The claim is now released with the cause kept.
+     */
+    public function test_a_run_that_throws_releases_the_claim_keeps_the_cause_and_can_be_retried_at_once(): void
+    {
+        $this->configure('meta');
+        Http::fake(['graph.facebook.com/*' => Http::sequence()->push(['id' => '5001'])->push(['id' => '6001'])->push(['id' => '7001'])]);
+        $plan = $this->draft(launch: false);
+
+        $explode = true;
+        UnifiedCampaign::creating(static function () use (&$explode): void {
+            if ($explode) {
+                throw new RuntimeException('provider exploded');
+            }
+        });
+        $this->withoutExceptionHandling();
+        try {
+            $this->publish($plan);
+            $this->fail('The run should have thrown.');
+        } catch (RuntimeException $e) {
+            $this->assertSame('provider exploded', $e->getMessage());
+        }
+        $this->withExceptionHandling();
+        $explode = false;
+
+        $stored = LaunchPlan::query()->findOrFail($plan['id']);
+        $this->assertSame(LaunchPlan::FAILED, $stored->status);
+        $this->assertSame('provider exploded', $stored->last_error);
+        Http::assertNothingSent();
+
+        // No ten-minute wait: the retry goes through and clears the stored cause.
+        $this->publish($plan)->assertOk()->assertJsonPath('data.status', LaunchPlan::PUBLISHED)->assertJsonPath('data.last_error', null);
     }
 
     public function test_automated_mode_is_named_in_the_review_and_refused_at_publish_before_any_call(): void

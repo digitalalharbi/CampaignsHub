@@ -121,6 +121,8 @@ export interface LaunchPlan {
   spec: LaunchSpec
   steps: LaunchStep[]
   published_at: string | null
+  /** LAUNCH-CLAIM-RELEASE-001 — why the last publish stopped, when it stopped on an error. */
+  last_error?: string | null
   created_at: string | null
   review?: LaunchReviewRow[]
   spend?: SpendSummary

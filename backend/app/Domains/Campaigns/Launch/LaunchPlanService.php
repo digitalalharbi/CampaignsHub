@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * LAUNCH-001 — one plan, published through the SAME write services a campaign's control tab uses.
@@ -287,18 +288,40 @@ final class LaunchPlanService
             throw new InvalidArgumentException('launch_in_progress', 409);
         }
         $plan->refresh();
-        $this->recordJourney($user, $project, $plan);
-        $campaign = $this->campaignFor($user, $project, $plan);
 
-        $steps = $plan->steps;
-        foreach ($steps as $i => $step) {
-            $steps[$i] = $this->runAccount($user, (string) $project->getKey(), $campaign, $plan, $step);
-            $plan->forceFill(['steps' => $steps])->save();
+        // LAUNCH-CLAIM-RELEASE-001 — the claim is released on EVERY exit. A run that throws (a provider SDK error, a database error,
+        // a timeout) used to leave the plan in PUBLISHING, so every retry for ten minutes answered «launch_in_progress» and the real
+        // cause was lost. Now the plan settles on FAILED or PARTIAL, keeps the cause in `last_error`, and can be retried at once.
+        try {
+            $this->recordJourney($user, $project, $plan);
+            $campaign = $this->campaignFor($user, $project, $plan);
+
+            $steps = $plan->steps;
+            foreach ($steps as $i => $step) {
+                // Each provider id is saved the moment the platform returns it, so a run that dies mid-account never sends a step twice.
+                $steps[$i] = $this->runAccount($user, (string) $project->getKey(), $campaign, $plan, $step, function (array $partial) use (&$steps, $i, $plan): void {
+                    $steps[$i] = $partial;
+                    $plan->forceFill(['steps' => $steps])->save();
+                });
+                $plan->forceFill(['steps' => $steps])->save();
+            }
+        } catch (Throwable $e) {
+            $steps = (array) $plan->steps;
+            $status = $this->anyProgress($steps) ? LaunchPlan::PARTIAL : LaunchPlan::FAILED;
+            $plan->forceFill(['status' => $status, 'last_error' => mb_substr($e->getMessage(), 0, 1000)])->save();
+            $this->audit->log(
+                action: 'campaign.launch_failed',
+                entityType: LaunchPlan::class,
+                entityId: (string) $plan->getKey(),
+                after: ['status' => $status, 'error' => mb_substr($e->getMessage(), 0, 300), 'exception' => $e::class],
+            );
+
+            throw $e;
         }
 
         $done = count(array_filter($steps, fn (array $s) => $this->accountDone($plan, $s)));
         $status = $done === count($steps) ? LaunchPlan::PUBLISHED : ($done === 0 && ! $this->anyProgress($steps) ? LaunchPlan::FAILED : LaunchPlan::PARTIAL);
-        $plan->forceFill(['status' => $status, 'published_at' => $plan->published_at ?? Carbon::now()])->save();
+        $plan->forceFill(['status' => $status, 'last_error' => null, 'published_at' => $plan->published_at ?? Carbon::now()])->save();
 
         $this->audit->log(
             action: 'campaign.launch_'.$status,
@@ -355,8 +378,10 @@ final class LaunchPlanService
         return $campaign;
     }
 
-    private function runAccount(User $user, string $projectId, UnifiedCampaign $campaign, LaunchPlan $plan, array $step): array
+    /** @param  (callable(array<string, mixed>): void)|null  $persist */
+    private function runAccount(User $user, string $projectId, UnifiedCampaign $campaign, LaunchPlan $plan, array $step, ?callable $persist = null): array
     {
+        $persist ??= static function (array $s): void {};
         $spec = $plan->spec;
         $provider = (string) $step['provider'];
         $adapter = $this->adapters->for($provider);
@@ -365,6 +390,7 @@ final class LaunchPlanService
             $budget = $this->budgetFor($spec, (string) $step['account_id']);
             $result = $this->writes->create($user, $projectId, $campaign, (string) $step['account_id'], self::objectiveFor($plan, $provider), $budget, false);
             $step['campaign'] = $this->outcome($result['body'], 'external_id', 'entity_id');
+            $persist($step);
             if ($step['campaign']['status'] !== 'done') {
                 return $step;
             }
@@ -380,6 +406,7 @@ final class LaunchPlanService
             }
             $result = $this->writes->perform($user, $projectId, $campaign, WriteLevel::Campaign, (string) $step['campaign']['entity_id'], WriteAction::CreateAdSet, $input);
             $step['ad_set'] = $this->outcome($result['body'], 'new_external_id', 'child_id');
+            $persist($step);
             if ($step['ad_set']['status'] !== 'done') {
                 return $step;
             }
@@ -395,6 +422,7 @@ final class LaunchPlanService
             }
             $result = $this->writes->perform($user, $projectId, $campaign, WriteLevel::AdSet, (string) $step['ad_set']['entity_id'], WriteAction::CreateAd, $input);
             $step['ad'] = $this->outcome($result['body'], 'new_external_id', 'child_id');
+            $persist($step);
             if ($step['ad']['status'] !== 'done') {
                 return $step;
             }

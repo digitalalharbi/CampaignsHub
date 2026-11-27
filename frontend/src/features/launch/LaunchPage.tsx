@@ -109,6 +109,8 @@ export function LaunchPage() {
   const publish = useMutation({
     mutationFn: () => publishPlan(currentProjectId!, plan!.id, plan!.spend?.ack_token),
     onSuccess: (p) => { setPlan(p); setConfirming(false); setStep(6); void qc.invalidateQueries({ queryKey: ['launch', 'plans'] }); void qc.invalidateQueries({ queryKey: ['project', currentProjectId, 'campaigns'] }) },
+    // LAUNCH-CLAIM-RELEASE-001 — a refused or failed publish changes the plan's state on the server; the history must show it.
+    onError: () => { void qc.invalidateQueries({ queryKey: ['launch', 'plans'] }) },
   })
 
   if (!currentProjectId) {
@@ -422,7 +424,7 @@ export function LaunchPage() {
                 <label className="flex items-start gap-2 text-xs"><input type="checkbox" className="mt-0.5 accent-brand-600" checked={spendOk} onChange={(e) => setSpendOk(e.target.checked)} data-testid="launch-spend-ack" />{ar ? 'أوافق على حدود الإنفاق هذه وأفوّض تشغيل الحملات.' : 'I approve these spend limits and authorise the campaigns to run.'}</label>
               </div>
             )}
-            {publish.isError && <p className="text-danger">{toApiError(publish.error).message}</p>}
+            {publish.isError && <p className="text-danger" data-testid="launch-publish-error">{publishErrorMessage(toApiError(publish.error).message, ar)}</p>}
           </div>
         </Modal>
       )}
@@ -453,6 +455,21 @@ function composed(spec: LaunchSpec): string | null {
   const params = [['utm_source', t.utm_source], ['utm_medium', t.utm_medium], ['utm_campaign', t.utm_campaign]].filter((p): p is [string, string] => Boolean(p[1]))
   if (params.length === 0) return t.url
   return t.url + (t.url.includes('?') ? '&' : '?') + params.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
+}
+
+/**
+ * LAUNCH-CLAIM-RELEASE-001 — the server answers some refusals with a code; the person reads a sentence, never the raw code.
+ */
+const PUBLISH_ERRORS: Record<string, { ar: string; en: string }> = {
+  launch_in_progress: { ar: 'هناك محاولة نشر سابقة لهذه الحملة لم تكتمل بعد. حدّث الصفحة بعد قليل ثم أعد المحاولة.', en: 'An earlier publish of this campaign has not finished yet. Refresh the page shortly, then try again.' },
+  spend_ack_required: { ar: 'وافق على حدود الإنفاق المعروضة قبل النشر.', en: 'Approve the spend limits shown before publishing.' },
+  automation_requires_authorisation: { ar: 'وضع الميزانية التلقائي يحتاج تفويضًا قبل النشر. اختر الميزانية اليدوية.', en: 'Automated budget mode needs an authorisation before publishing. Choose a manual budget.' },
+}
+
+function publishErrorMessage(message: string, ar: boolean): string {
+  const known = PUBLISH_ERRORS[message.trim()]
+  if (known) return ar ? known.ar : known.en
+  return message
 }
 
 function StatusBadge({ status, ar }: { status: LaunchPlan['status']; ar: boolean }) {
@@ -500,6 +517,7 @@ function Results({ plan, ar, projectId, accounts, onRetry, retrying }: { plan: L
         <StatusBadge status={plan.status} ar={ar} />
         {plan.unified_campaign_id && <Link to={portal(`/campaigns/${projectId}/${plan.unified_campaign_id}`)} className="text-sm font-bold text-brand-600 hover:underline" data-testid="launch-open-campaign">{ar ? 'فتح الحملة في كامبينز هب' : 'Open the campaign in CampaignsHub'}</Link>}
       </div>
+      {plan.status !== 'published' && plan.last_error && <p className="text-sm text-danger" data-testid="launch-last-error">{ar ? 'سبب التوقف: ' : 'Why it stopped: '}{plan.last_error}</p>}
       <ul className="space-y-2">
         {plan.steps.map((s) => (
           <li key={s.account_id} className="flex flex-wrap items-center gap-2 rounded-xl border border-border p-3" data-testid={`launch-result-${s.account_id}`}>

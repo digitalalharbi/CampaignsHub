@@ -158,6 +158,7 @@ final class LaunchPlanController extends Controller
             'spec' => $p->spec,
             'steps' => $p->steps,
             'published_at' => $p->published_at?->toIso8601String(),
+            'last_error' => $p->last_error,
             'created_at' => $p->created_at?->toIso8601String(),
         ];
     }

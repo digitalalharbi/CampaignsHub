@@ -27,6 +27,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $created_by
  * @property int|null $published_by
  * @property Carbon|null $published_at
+ * @property string|null $last_error
  */
 final class LaunchPlan extends Model
 {
@@ -45,7 +46,7 @@ final class LaunchPlan extends Model
 
     protected $fillable = [
         'tenant_id', 'project_id', 'client_workspace_id', 'unified_campaign_id', 'name', 'objective', 'status',
-        'idempotency_key', 'spec', 'steps', 'launch', 'created_by', 'published_by', 'published_at',
+        'idempotency_key', 'spec', 'steps', 'launch', 'created_by', 'published_by', 'published_at', 'last_error',
     ];
 
     protected $casts = [
