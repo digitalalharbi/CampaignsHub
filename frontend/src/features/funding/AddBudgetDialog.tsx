@@ -13,6 +13,7 @@ import { toApiError } from '@/lib/api/client'
 import { useUi } from '@/stores/ui'
 import { useAddBudget } from './fundingApi'
 import { L, sar } from './labels'
+import { carryTarget } from './carry'
 
 const QUICK = [5_000, 10_000, 20_000, 50_000]
 
@@ -40,7 +41,7 @@ export function AddBudgetDialog({
 }: {
   open: boolean
   onClose: () => void
-  fixed?: { clientId: string; clientName: string; projectId: string; projectName: string }
+  fixed?: { clientId: string; clientName: string; projectId: string; projectName: string; remaining?: number | null; periodEnd?: string | null; mode?: PaymentMode }
   /** Smart defaults: the project the reader is looking at is already chosen. */
   defaults?: { clientName: string; projectName: string }
   onAdded?: (projectId: string, entryId?: string) => void
@@ -65,6 +66,7 @@ export function AddBudgetDialog({
   const [planned, setPlanned] = useState(false)
   const [planRows, setPlanRows] = useState<PlanDraftRow[]>(emptyPlan)
   const [ceilingOpen, setCeilingOpen] = useState(false)
+  const [extendTo, setExtendTo] = useState('')
   const [key, setKey] = useState(newKey)
   const [error, setError] = useState<string | null>(null)
 
@@ -86,6 +88,7 @@ export function AddBudgetDialog({
     setAmount('')
     setDate(today())
     setReference('')
+    setExtendTo(carryTarget(fixed?.periodEnd) ?? '')
     setKey(newKey())
     setError(null)
   }, [open, fixed, defaults])
@@ -115,13 +118,17 @@ export function AddBudgetDialog({
     ...(planned ? { platform_plan: planPayload(planRows) } : {}),
   }
 
-  const ready = client.trim() !== '' && project.trim() !== '' && (!needsAmount || value > 0) && date !== '' && periodOk && (!planned || fixed || planState(planRows).ok)
+  // BUDGET-CARRY-001 — the carry preview: what is left now, plus the new amount, is the new month's budget.
+  const carry = fixed && fixed.mode !== 'credit' && typeof fixed.remaining === 'number' ? fixed.remaining : null
+  const extendOk = !extendTo || !fixed?.periodEnd || extendTo > fixed.periodEnd
+
+  const ready = extendOk && client.trim() !== '' && project.trim() !== '' && (!needsAmount || value > 0) && date !== '' && periodOk && (!planned || fixed || planState(planRows).ok)
 
   const submit = () => {
     setError(null)
     add.mutate(
       fixed
-        ? { client_workspace_id: fixed.clientId, project_id: fixed.projectId, amount: value, paid_on: date, reference: reference || undefined, idempotency_key: key }
+        ? { client_workspace_id: fixed.clientId, project_id: fixed.projectId, amount: value, paid_on: date, reference: reference || undefined, idempotency_key: key, ...(fixed.periodEnd && extendTo ? { extend_to: extendTo } : {}) }
         : { client_name: client.trim(), project_name: project.trim(), paid_on: date, reference: reference || undefined, idempotency_key: key, ...body, ...period },
       {
         onSuccess: (res) => { onAdded?.(res.project_id, res.payment_id); onClose() },
@@ -195,6 +202,23 @@ export function AddBudgetDialog({
         )}
         {!fixed && planned && (
           <div className="sm:col-span-2"><PlanEditor rows={planRows} onRows={setPlanRows} ar={ar} /></div>
+        )}
+        {fixed && fixed.periodEnd && (
+          <Field label={t('periodTo')} htmlFor="budget-extend-to">
+            <DateField id="budget-extend-to" value={extendTo} onChange={setExtendTo} />
+          </Field>
+        )}
+        {carry !== null && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[10px] bg-surface-secondary px-3 py-2 text-sm sm:col-span-2" data-testid="budget-carry-preview">
+            <span className="text-text-secondary">{t(carry < 0 ? 'overCarried' : 'carried')}</span>
+            <b className="tnum" dir="ltr">{sar(carry)}</b>
+            <span aria-hidden>+</span>
+            <span className="text-text-secondary">{t('newAmount')}</span>
+            <b className="tnum" dir="ltr">{sar(value > 0 ? value : 0)}</b>
+            <span aria-hidden>=</span>
+            <span className="text-text-secondary">{t('newMonthBudget')}</span>
+            <b className="tnum text-success" dir="ltr" data-testid="budget-carry-total">{sar(carry + (value > 0 ? value : 0))}</b>
+          </div>
         )}
         <Field label={t('date')} htmlFor="budget-date" required>
           <DateField id="budget-date" value={date} onChange={setDate} />

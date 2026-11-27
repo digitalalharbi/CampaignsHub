@@ -1,6 +1,7 @@
 import { FreshnessChip } from './FreshnessChip'
 import { useEffect, useState } from 'react'
-import { Pencil, RefreshCw, Trash2, Undo2 } from 'lucide-react'
+import { Archive, ArrowLeftRight, Pencil, Undo2 } from 'lucide-react'
+import { fmtDateTime } from '@/lib/datetime'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { MetricLineChart, CHART_SERIES } from '@/features/analytics/charts'
@@ -11,14 +12,14 @@ import { FinancialDisclaimer } from './FinancialDisclaimer'
 import { downloadBudgets, useBudget, useBudgetMonth, useReallocateBudget, type BudgetDetail } from './fundingApi'
 import { BudgetLimits } from './BudgetLimits'
 import { KIND, L, PLAN_DIFF, STATUS, TONE_BAR } from './labels'
-import { Money } from './money'
+import { Money, formatMoney } from './money'
 import { FxSpendNote } from '@/components/money/FxAmount'
 
 type Lang = { ar: string; en: string }
 
 /**
  * One project, opened over the board: its figures and period, what each platform spent, the month, and the
- * ledger — every entry with who/when/why, «تراجع» on the latest only. Edit, renew and delete live here.
+ * ledger — every entry with who/when/why, «تراجع» on the latest only. «تعديل المبلغ», «ترحيل للشهر الجديد» and «أرشفة» live here.
  */
 export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRenew, onDelete, onUndo, undoPending }: {
   projectId: string | null
@@ -115,8 +116,8 @@ export function BudgetDrawer({ projectId, onClose, ar, canManage, onEdit, onRene
           {canManage && data.status !== 'void' && (
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="secondary" onClick={() => onEdit(data)} data-testid="budget-edit"><Pencil className="h-4 w-4" aria-hidden /> {tx(L.edit)}</Button>
-              <Button size="sm" onClick={() => onRenew(data)} data-testid="budget-renew"><RefreshCw className="h-4 w-4" aria-hidden /> {tx(L.renew)}</Button>
-              <Button size="sm" variant="ghost" onClick={() => onDelete(data)} data-testid="budget-delete" className="text-danger"><Trash2 className="h-4 w-4" aria-hidden /> {tx(L.del)}</Button>
+              <Button size="sm" onClick={() => onRenew(data)} data-testid="budget-renew"><ArrowLeftRight className="h-4 w-4" aria-hidden /> {tx(L.renew)}</Button>
+              <Button size="sm" variant="ghost" onClick={() => onDelete(data)} data-testid="budget-delete" className="text-danger"><Archive className="h-4 w-4" aria-hidden /> {tx(L.del)}</Button>
             </div>
           )}
 
@@ -190,7 +191,8 @@ function History({ data, ar, canManage, onUndo, pending }: { data: BudgetDetail;
 
           return (
             <li key={p.id} data-testid={`history-${p.kind}`} className={`flex min-w-0 items-center gap-2 text-xs ${p.reversed ? 'opacity-50' : ''}`}>
-              <span className="tnum shrink-0 text-text-muted">{p.paid_on}</span>
+              {/* BUDGET-CARRY-001 — when it was written and by whom, to the minute: the record the Owner relies on. */}
+              <span className="tnum shrink-0 text-text-muted" title={`${tx(L.date)}: ${p.paid_on}`} data-testid="history-at"><bdi dir="ltr">{fmtDateTime(p.added_at)}</bdi></span>
               <span className="shrink-0 rounded-md bg-surface-secondary px-1.5 py-0.5 font-bold text-text-secondary">{tx(kind)}</span>
               {/* FIN-WALLET-001 — every deposit names its source. */}
               {p.source && (
@@ -199,7 +201,13 @@ function History({ data, ar, canManage, onUndo, pending }: { data: BudgetDetail;
                 </span>
               )}
               <span className="min-w-0 flex-1 truncate text-text-secondary" title={p.reason ?? p.note ?? ''}>
-                {[p.reference, p.reason ?? p.note, p.added_by].filter(Boolean).join(' · ')}
+                {[
+                  p.added_by,
+                  p.carried != null ? `${tx(p.carried < 0 ? L.overCarried : L.carried)} ${formatMoney(Math.abs(p.carried), 'SAR')}` : null,
+                  p.period_after ? `${tx(L.periodTo)} ${p.period_after}` : null,
+                  p.reference,
+                  p.reason ?? p.note,
+                ].filter(Boolean).join(' · ')}
               </span>
               {p.amount_sar !== 0 && <span className={`shrink-0 font-bold ${p.amount_sar < 0 ? 'text-danger' : 'text-success'} ${p.reversed ? 'line-through' : ''}`}><bdi dir="ltr">{sign}</bdi><Money n={Math.abs(p.amount_sar)} currency="SAR" /></span>}
               {canManage && p.can_undo && (

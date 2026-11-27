@@ -167,7 +167,8 @@ export function BudgetsPage() {
         <AddBudgetDialog
           open
           onClose={() => setRenewing(null)}
-          fixed={{ clientId: renewing.client_workspace_id, clientName: renewing.client_name ?? '', projectId: renewing.project_id, projectName: renewing.project_name ?? '' }}
+          fixed={{ clientId: renewing.client_workspace_id, clientName: renewing.client_name ?? '', projectId: renewing.project_id, projectName: renewing.project_name ?? '',
+            remaining: renewing.remaining, periodEnd: renewing.period_end, mode: renewing.payment_mode }}
           onAdded={(projectId, entryId) => { if (entryId) announce(projectId, entryId, L.addDone) }}
         />
       )}

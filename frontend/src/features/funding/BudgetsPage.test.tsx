@@ -166,13 +166,13 @@ describe('the budgets board', () => {
     fireEvent.click(await within(drawer).findByTestId('budget-delete'))
     const submit = screen.getByTestId('budget-delete-submit')
     expect(submit).toBeDisabled()
-    fireEvent.change(screen.getByLabelText(/السبب/), { target: { value: 'أُضيفت بالخطأ' } })
+    fireEvent.change(screen.getByLabelText(/الملاحظة/), { target: { value: 'أُضيفت بالخطأ' } })
     expect(submit).toBeEnabled()
     fireEvent.click(submit)
 
     await waitFor(() => expect(postData).toHaveBeenCalledTimes(1))
     expect(vi.mocked(postData).mock.calls[0]).toEqual(['/funding/projects/p1/void', { reason: 'أُضيفت بالخطأ' }])
-    expect(await screen.findByTestId('undo-toast')).toHaveTextContent('حُذفت الميزانية')
+    expect(await screen.findByTestId('undo-toast')).toHaveTextContent('أُرشفت الميزانية')
     await waitFor(() => expect(screen.queryByTestId('budget-drawer')).toBeNull())
   })
 
