@@ -71,10 +71,10 @@ describe('approved disclaimer copy (system default + report footer)', () => {
       expect(text).not.toMatch(/GA4|Google Analytics|جوجل أناليتكس|قوقل أناليتكس/i)
     }
     const ar = REPORT_NOTE_MORE.ar
-    for (const w of ['العروض والخصومات', 'جودة المحتوى', 'سلوك العملاء', 'مستوى المنافسة', 'تكاليف المنصات', 'طبيعة المنتج والتسعير', 'المؤثرون', 'المتجر أو الموقع']) expect(ar).toContain(w)
-    // ONE compact paragraph (~55 words), not a block.
-    expect(ar.split(/\s+/).length).toBeLessThanOrEqual(65)
+    for (const w of ['نموذج إسناد', 'أكثر من قناة تسويقية', 'بيانات المتجر الإلكتروني والسجلات المحاسبية', 'طبيعة المنتج والتسعير', 'العروض والخصومات', 'جودة المحتوى', 'سلوك العملاء', 'المنافسة', 'تكاليف الإعلان', 'مرحلة تعلّم الحملات']) expect(ar).toContain(w)
+    // REPORT-DISCLAIMER-COPY-002 — the Owner's 2026-11-27 wording: ONE paragraph (~115 words), not a block.
+    expect(ar.split(/\s+/).length).toBeLessThanOrEqual(130)
     const en = REPORT_NOTE_MORE.en
-    for (const w of ['offers and discounts', 'content quality', 'customer behaviour', 'level of competition', 'platform costs', 'nature of the product and its pricing', 'influencers', 'store or website']) expect(en).toContain(w)
+    for (const w of ['attribution model', 'more than one marketing channel', 'accounting records', 'nature of the product', 'offers and discounts', 'content quality', 'customer behaviour', 'competition', 'advertising costs', 'learning phase']) expect(en).toContain(w)
   })
 })
