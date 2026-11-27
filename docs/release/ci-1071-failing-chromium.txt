@@ -1,0 +1,32 @@
+e2e/campaigns.spec.ts:202:1 › the campaigns overview paces the portfolio budget
+e2e/client-analytics-drawn.spec.ts:24:1 › the daily series is drawn, and the money chart agrees with the money cards
+e2e/client-analytics-drawn.spec.ts:45:1 › the count trend puts impressions on their own scale
+e2e/client-analytics-drawn.spec.ts:57:1 › the objective mix is a divided bar with translated labels, not the stored keys
+e2e/client-analytics-drawn.spec.ts:71:3 › the drawn analytics tab never scrolls the page sideways at 1440px
+e2e/client-analytics-drawn.spec.ts:71:3 › the drawn analytics tab never scrolls the page sideways at 390px
+e2e/entity-workspace.spec.ts:78:5 › the ads and ad-groups tables (advertiser portal) › /app/ad-groups is the advertiser's own page, with its filters, and no agency link
+e2e/entity-workspace.spec.ts:78:5 › the ads and ad-groups tables (advertiser portal) › /app/ads is the advertiser's own page, with its filters, and no agency link
+e2e/first-viewport-detail.spec.ts:85:11 › the first viewport, on the detail pages › /agency/campaigns/:projectId/:campaignId · 390×844 · en · dark
+e2e/first-viewport-detail.spec.ts:85:11 › the first viewport, on the detail pages › /agency/campaigns/:projectId/:campaignId · 390×844 · en · light
+e2e/notification-channels.spec.ts:24:1 › the matrix has the three columns, locks an account message and says «Soon» for WhatsApp
+e2e/notification-channels.spec.ts:49:1 › a chip round-trips through the server and survives a reload
+e2e/notification-channels.spec.ts:69:1 › the test buttons answer: in-app creates a bell item, email says what the transport did
+e2e/notification-channels.spec.ts:84:5 › the matrix fits without sideways page scroll — dark, 375
+e2e/notification-channels.spec.ts:84:5 › the matrix fits without sideways page scroll — dark, desktop
+e2e/notification-channels.spec.ts:84:5 › the matrix fits without sideways page scroll — light, 375
+e2e/notification-channels.spec.ts:84:5 › the matrix fits without sideways page scroll — light, desktop
+e2e/notification-depth.spec.ts:26:1 › the notification settings carry the log, the recipients and the recommendations choice
+e2e/notification-depth.spec.ts:59:1 › a settings tab is an address a person can send
+e2e/notification-depth.spec.ts:87:1 › the delivery log is able to show a failure and its reason
+e2e/notification-enrolment.spec.ts:26:3 › settings chips › each digest row has a send-now chip and a press answers in one honest word
+e2e/notification-enrolment.spec.ts:44:3 › settings chips › the sample-alert chip answers in one honest word
+e2e/notification-enrolment.spec.ts:55:7 › settings chips › the chips fit without sideways page scroll — dark, 375
+e2e/notification-enrolment.spec.ts:55:7 › settings chips › the chips fit without sideways page scroll — dark, desktop
+e2e/notification-enrolment.spec.ts:55:7 › settings chips › the chips fit without sideways page scroll — light, 375
+e2e/notification-enrolment.spec.ts:55:7 › settings chips › the chips fit without sideways page scroll — light, desktop
+e2e/owner-acceptance-content.spec.ts:145:3 › the content surfaces the owner checked › the Analytics content table and its popup agree about units
+e2e/registration-onboarding.spec.ts:455:1 › personal (agency) account: register → onboard → full menu
+e2e/report-pdf-download.spec.ts:23:1 › export button → queue → download → the downloaded Arabic PDF is a valid Chromium file
+e2e/report-tabular-download.spec.ts:23:1 › export → download → the XLSX and CSV a person receives are real files carrying the real figures
+e2e/settings-ia.spec.ts:45:1 › a settings tab can be linked to, and survives a reload
+e2e/workspace-invitation.spec.ts:11:1 › owner invites a member → invitee accepts → joins the workspace
