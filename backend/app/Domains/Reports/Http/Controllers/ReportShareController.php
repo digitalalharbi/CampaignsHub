@@ -401,9 +401,11 @@ final class ReportShareController extends Controller
             'columns' => ['array'],
             'columns.*' => ['array'],
             'columns.*.*' => ['string', 'max:40'],
+            // REPORT-LINK-FOLLOW-ACCOUNTS-001 — turn a frozen live link into one that follows its ad accounts.
+            'follow_accounts' => ['sometimes', 'boolean'],
         ]);
 
-        $before = $link->only(['allow_download', 'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'form', 'expires_at']);
+        $before = $link->only(['allow_download', 'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark', 'form', 'expires_at', 'scope']);
         $fill = array_intersect_key($opts, array_flip(['allow_download', 'hide_spend', 'hide_revenue', 'hide_campaign_names', 'watermark']));
 
         if (array_key_exists('form', $opts)) {
@@ -444,7 +446,28 @@ final class ReportShareController extends Controller
             $existing = (array) ($link->scope ?? []);
             $merged = $opts + array_intersect_key($existing, array_flip($ceilingKeys));
             $merged['mode'] = $link->mode;
-            $fill['scope'] = $this->scopeFor($model, $merged);
+            $fill['scope'] = $this->keepAccountCeiling($existing, $this->scopeFor($model, $merged), array_key_exists('campaign_ids', $opts));
+        }
+
+        /*
+         * REPORT-LINK-FOLLOW-ACCOUNTS-001 — a live link whose campaign list was frozen (an older creation path, or an edit made before
+         * the ceiling was kept) never shows a campaign launched afterwards: the Karam Alnakhil link read 9,580 USD while the project spent
+         * 12,061, five new campaigns missing. `follow_accounts` turns it into a link over ACCOUNTS. The accounts are the ones that already
+         * feed the link's own campaigns inside its own project — never every account the project binds, because one project can hold
+         * several advertisers' accounts (REPORT-SOURCE-ISOLATION-001).
+         */
+        if (($opts['follow_accounts'] ?? false) === true) {
+            abort_unless($link->mode === 'live', 422, 'Only a live link can follow its ad accounts.');
+            $scope = (array) ($fill['scope'] ?? $link->scope ?? []);
+            $accounts = (array) ($scope['account_ids'] ?? []);
+            if ($accounts === []) {
+                $accounts = $this->accountsFeeding((string) $model->project_id, array_values(array_filter((array) ($scope['campaign_ids'] ?? []))));
+            }
+            abort_if($accounts === [], 422, 'This link has no ad account to follow.');
+            $scope['account_ids'] = $accounts;
+            $scope['campaign_ids'] = [];
+            $scope['dynamic_campaigns'] = true;
+            $fill['scope'] = $scope;
         }
 
         $link->fill($fill)->save();
@@ -533,6 +556,63 @@ final class ReportShareController extends Controller
      * @param  array<string, mixed>  $opts
      * @return array<string, mixed>
      */
+    /**
+     * REPORT-LINK-FOLLOW-ACCOUNTS-001 — an edit keeps the link's account ceiling.
+     *
+     * `scopeFor` builds a ceiling from campaigns, providers and dates only. Applied to a link made over accounts it dropped
+     * `account_ids` and `dynamic_campaigns` and froze the campaign list to whatever had spent so far, so editing one switch stopped the
+     * link from following its accounts. What the edit did not name is carried over; naming campaigns explicitly narrows the link and
+     * ends «follow», exactly as choosing campaigns does at creation.
+     *
+     * @param  array<string, mixed>  $existing
+     * @param  array<string, mixed>  $rebuilt
+     * @return array<string, mixed>
+     */
+    private function keepAccountCeiling(array $existing, array $rebuilt, bool $campaignsNamed): array
+    {
+        foreach (['account_ids', 'ad_ids', 'metrics'] as $key) {
+            if (array_key_exists($key, $existing)) {
+                $rebuilt[$key] = $existing[$key];
+            }
+        }
+        if (($existing['dynamic_campaigns'] ?? false) === true && ! $campaignsNamed) {
+            $rebuilt['campaign_ids'] = [];
+            $rebuilt['dynamic_campaigns'] = true;
+        } elseif (array_key_exists('dynamic_campaigns', $existing)) {
+            $rebuilt['dynamic_campaigns'] = false;
+        }
+
+        return $rebuilt;
+    }
+
+    /**
+     * The ad accounts that feed these campaigns inside this project — figures first, then synced structure.
+     *
+     * Same identifier space as `ReportScopeHierarchy::campaignsByAccount` (the builder's), so the result is a valid `account_ids`.
+     *
+     * @param  list<string>  $campaignIds
+     * @return list<string>
+     */
+    private function accountsFeeding(string $projectId, array $campaignIds): array
+    {
+        $campaignIds = array_values(array_diff($campaignIds, [ReportScope::IMPOSSIBLE]));
+        if ($projectId === '' || $campaignIds === []) {
+            return [];
+        }
+
+        $ids = DB::table('daily_metrics')
+            ->where('project_id', $projectId)
+            ->tap(fn ($q) => BoundAccountVisibility::apply($q, 'daily_metrics'))
+            ->whereIn('unified_campaign_id', $campaignIds)
+            ->whereNotNull('external_account_id')
+            ->distinct()
+            ->pluck('external_account_id')
+            ->map(strval(...))
+            ->all();
+
+        return array_values(array_unique($ids));
+    }
+
     private function scopeFor(Report $model, array $opts): array
     {
         $campaigns = array_values(array_filter((array) ($opts['campaign_ids'] ?? [])));
