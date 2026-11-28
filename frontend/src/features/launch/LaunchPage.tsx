@@ -123,6 +123,9 @@ export function LaunchPage() {
   const chosen = (id: string) => spec.accounts.some((a) => a.external_account_id === id)
   const toggleAccount = (id: string) => setSpec((s) => ({ ...s, accounts: chosen(id) ? s.accounts.filter((a) => a.external_account_id !== id) : [...s.accounts, { external_account_id: id, daily_budget: null }] }))
   const setBudget = (id: string, v: string) => setSpec((s) => ({ ...s, accounts: s.accounts.map((a) => (a.external_account_id === id ? { ...a, daily_budget: v === '' ? null : Number(v) } : a)) }))
+  // LAUNCH-CREATIVES-PER-ACCOUNT-001 — only content the chosen accounts ran; another account's (or client's) content is not offered.
+  const ownCreatives = (provider: string) => (options.data?.creatives[provider] ?? [])
+    .filter((c) => c.account_id == null || spec.accounts.some((a) => a.external_account_id === c.account_id))
   const canNext = [
     spec.accounts.length > 0,
     spec.name.trim() !== '' && providers.every((p) => (spec.objectives?.[p.provider] ?? spec.objective) !== ''),
@@ -314,9 +317,9 @@ export function LaunchPage() {
                             </div>
                           ) : (
                             <>
-                            {p.ad_fields === 'meta_ad' && (options.data?.creatives.meta ?? []).length > 0 && <p className="text-xs font-semibold text-text-secondary">{ar ? 'اختياري: استخدم محتوى سبق نشره' : 'Optional: reuse an existing creative'}</p>}
+                            {p.ad_fields === 'meta_ad' && ownCreatives('meta').length > 0 && <p className="text-xs font-semibold text-text-secondary">{ar ? 'اختياري: استخدم محتوى سبق نشره' : 'Optional: reuse an existing creative'}</p>}
                             <ul className="grid grid-cols-2 gap-2 md:grid-cols-4 [&>*]:min-w-0">
-                              {(options.data?.creatives[p.provider] ?? []).map((c) => (
+                              {ownCreatives(p.provider).map((c) => (
                                 <li key={c.id}>
                                   <button type="button" onClick={() => setSpec((s) => ({ ...s, ad: { ...s.ad!, creative_id: { ...(s.ad!.creative_id ?? {}), [p.provider]: c.id } } }))}
                                     className={`flex w-full flex-col gap-1 rounded-xl border p-2 text-start ${spec.ad!.creative_id?.[p.provider] === c.id ? 'border-brand-500 bg-brand-500/10' : 'border-border hover:border-brand-400'}`}
@@ -326,7 +329,7 @@ export function LaunchPage() {
                                   </button>
                                 </li>
                               ))}
-                              {(options.data?.creatives[p.provider] ?? []).length === 0 && p.ad_fields !== 'meta_ad' && <li className="col-span-full text-xs text-text-muted">{ar ? 'لا محتويات محدّثة لهذه المنصة — الإعلان يُنشأ من محتوى سبق تحديثه.' : 'No synced creatives on this platform — ads are made from an already-synced creative.'}</li>}
+                              {ownCreatives(p.provider).length === 0 && p.ad_fields !== 'meta_ad' && <li className="col-span-full text-xs text-text-muted">{ar ? 'لا محتويات محدّثة لهذه المنصة — الإعلان يُنشأ من محتوى سبق تحديثه.' : 'No synced creatives on this platform — ads are made from an already-synced creative.'}</li>}
                             </ul>
                             </>
                           )}

@@ -43,6 +43,8 @@ export interface CreativeOption {
   name: string | null
   format: string | null
   thumbnail_url: string | null
+  /** LAUNCH-CREATIVES-PER-ACCOUNT-001 — the account that ran it; null for a creative synced before accounts were named. */
+  account_id?: string | null
 }
 
 export interface CreateAccountOption {
