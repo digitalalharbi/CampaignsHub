@@ -502,9 +502,10 @@ final class CampaignWriteService
                 ->whereNotNull('external_creative_id')
                 ->orderByDesc('last_active_at')
                 ->limit(60)
-                ->get(['id', 'name', 'format', 'thumbnail_url', 'external_creative_id', 'cover_path'])
+                ->get(['id', 'name', 'format', 'thumbnail_url', 'external_creative_id', 'cover_path', 'external_account_id'])
                 // CREATIVE-PREVIEWS-001 — our copy of the cover; never a Meta/TikTok signed grant.
-                ->map(fn (ExternalCreative $c) => ['id' => (string) $c->id, 'name' => $c->name, 'format' => $c->format, 'thumbnail_url' => CoverCache::displayUrlFor($c->cover_path, $c->thumbnail_url)])
+                // LAUNCH-CREATIVES-PER-ACCOUNT-001 — the account that ran it, so the launcher offers an account only its own content.
+                ->map(fn (ExternalCreative $c) => ['id' => (string) $c->id, 'name' => $c->name, 'format' => $c->format, 'thumbnail_url' => CoverCache::displayUrlFor($c->cover_path, $c->thumbnail_url), 'account_id' => $c->external_account_id !== null ? (string) $c->external_account_id : null])
                 ->values()->all();
         }
 

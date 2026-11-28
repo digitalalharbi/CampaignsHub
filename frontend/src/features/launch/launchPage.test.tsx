@@ -82,6 +82,30 @@ describe('the launch page', () => {
     }
   })
 
+  it('offers an account only the content it ran (LAUNCH-CREATIVES-PER-ACCOUNT-001)', async () => {
+    const o = options()
+    o.creatives = { meta: [
+      { id: 'mine', name: 'Razzah ring', format: 'image', thumbnail_url: null, account_id: 'acc1' },
+      { id: 'other', name: 'Another client', format: 'image', thumbnail_url: null, account_id: 'acc2' },
+      { id: 'old', name: 'Unnamed account', format: 'image', thumbnail_url: null, account_id: null },
+    ] } as never
+    vi.mocked(useLaunchOptions).mockReturnValue(ok(o) as never)
+    renderWithProviders(<LaunchPage />, { locale: 'ar', route: '/agency/launch' })
+    await chooseObjective()
+
+    fireEvent.click(await screen.findByTestId('launch-account-acc1'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.change(screen.getByTestId('launch-name'), { target: { value: 'Ramadan' } })
+    fireEvent.click(screen.getByRole('combobox', { name: /الهدف/ }))
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /OUTCOME_SALES|المبيعات/ }))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+
+    expect(await screen.findByTestId('launch-creative-mine')).toBeInTheDocument()
+    expect(screen.getByTestId('launch-creative-old')).toBeInTheDocument()
+    expect(screen.queryByTestId('launch-creative-other')).not.toBeInTheDocument()
+  })
+
   it('keeps an account awaiting credentials unselectable and says so, and blocks publishing on review problems', async () => {
     vi.mocked(useLaunchOptions).mockReturnValue(ok(options('awaiting_credentials')) as never)
     vi.mocked(useLaunchPlans).mockReturnValue(ok([plan({ review: [{ account_id: 'acc1', provider: 'meta', account_name: 'Razzah Meta', currency: 'SAR', problems: ['awaiting_credentials'], step: plan().steps[0] }] })]) as never)

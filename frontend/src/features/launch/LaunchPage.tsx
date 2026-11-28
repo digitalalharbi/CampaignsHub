@@ -123,6 +123,9 @@ export function LaunchPage() {
   const chosen = (id: string) => spec.accounts.some((a) => a.external_account_id === id)
   const toggleAccount = (id: string) => setSpec((s) => ({ ...s, accounts: chosen(id) ? s.accounts.filter((a) => a.external_account_id !== id) : [...s.accounts, { external_account_id: id, daily_budget: null }] }))
   const setBudget = (id: string, v: string) => setSpec((s) => ({ ...s, accounts: s.accounts.map((a) => (a.external_account_id === id ? { ...a, daily_budget: v === '' ? null : Number(v) } : a)) }))
+  // LAUNCH-CREATIVES-PER-ACCOUNT-001 — only content the chosen accounts ran; another account's (or client's) content is not offered.
+  const ownCreatives = (provider: string) => (options.data?.creatives[provider] ?? [])
+    .filter((c) => c.account_id == null || spec.accounts.some((a) => a.external_account_id === c.account_id))
   const canNext = [
     spec.accounts.length > 0,
     spec.name.trim() !== '' && providers.every((p) => (spec.objectives?.[p.provider] ?? spec.objective) !== ''),
@@ -165,9 +168,9 @@ export function LaunchPage() {
           onCancel={() => navigate(portal('/campaigns'))}
           onNext={() => { setGoal(picked); setSpec((st) => ({ ...st, business_goal: picked })); setAsking(false) }} />
       )}
-      <div className="lg:hidden"><FormStepper steps={STEPS(ar)} current={step} onStepClick={go} /></div>
+      <div className="xl:hidden"><FormStepper steps={STEPS(ar)} current={step} onStepClick={go} /></div>
       <ErrorSummary errors={errors} title={ar ? 'لم تُحفظ الخطة' : 'The plan was not saved'} />
-      <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_260px] lg:items-start">
+      <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_260px] xl:items-start">
       <BuildTree ar={ar} step={step} canNext={canNext} goal={goal} onGo={go} />
       <div className="min-w-0 space-y-4">
 
@@ -215,7 +218,7 @@ export function LaunchPage() {
                 <div key={x.account_id} className="space-y-1">
                   <p className="flex items-center gap-2 text-xs font-semibold text-text-secondary"><ProviderMark provider={x.provider} size={16} className="shrink-0" />{x.name ?? providerLabel(x.provider, ar ? 'ar' : 'en')}</p>
                   <ProposalLine proposal={x} ar={ar} applied={spec.objectives?.[x.provider] === x.objective}
-                    onApply={() => x.objective && setSpec((st) => ({ ...st, objectives: { ...(st.objectives ?? {}), [x.provider]: x.objective! } }))} />
+                    onApply={() => x.objective && setSpec((st) => ({ ...st, objective: st.objective || x.objective!, objectives: { ...(st.objectives ?? {}), [x.provider]: x.objective! } }))} />
                 </div>
               ))}
               <Field label={ar ? 'اسم الحملة' : 'Campaign name'}>
@@ -314,9 +317,9 @@ export function LaunchPage() {
                             </div>
                           ) : (
                             <>
-                            {p.ad_fields === 'meta_ad' && (options.data?.creatives.meta ?? []).length > 0 && <p className="text-xs font-semibold text-text-secondary">{ar ? 'اختياري: استخدم محتوى سبق نشره' : 'Optional: reuse an existing creative'}</p>}
+                            {p.ad_fields === 'meta_ad' && ownCreatives('meta').length > 0 && <p className="text-xs font-semibold text-text-secondary">{ar ? 'اختياري: استخدم محتوى سبق نشره' : 'Optional: reuse an existing creative'}</p>}
                             <ul className="grid grid-cols-2 gap-2 md:grid-cols-4 [&>*]:min-w-0">
-                              {(options.data?.creatives[p.provider] ?? []).map((c) => (
+                              {ownCreatives(p.provider).map((c) => (
                                 <li key={c.id}>
                                   <button type="button" onClick={() => setSpec((s) => ({ ...s, ad: { ...s.ad!, creative_id: { ...(s.ad!.creative_id ?? {}), [p.provider]: c.id } } }))}
                                     className={`flex w-full flex-col gap-1 rounded-xl border p-2 text-start ${spec.ad!.creative_id?.[p.provider] === c.id ? 'border-brand-500 bg-brand-500/10' : 'border-border hover:border-brand-400'}`}
@@ -326,7 +329,7 @@ export function LaunchPage() {
                                   </button>
                                 </li>
                               ))}
-                              {(options.data?.creatives[p.provider] ?? []).length === 0 && p.ad_fields !== 'meta_ad' && <li className="col-span-full text-xs text-text-muted">{ar ? 'لا محتويات محدّثة لهذه المنصة — الإعلان يُنشأ من محتوى سبق تحديثه.' : 'No synced creatives on this platform — ads are made from an already-synced creative.'}</li>}
+                              {ownCreatives(p.provider).length === 0 && p.ad_fields !== 'meta_ad' && <li className="col-span-full text-xs text-text-muted">{ar ? 'لا محتويات محدّثة لهذه المنصة — الإعلان يُنشأ من محتوى سبق تحديثه.' : 'No synced creatives on this platform — ads are made from an already-synced creative.'}</li>}
                             </ul>
                             </>
                           )}
@@ -937,7 +940,7 @@ function BuildTree({ ar, step, canNext, goal, onGo }: { ar: boolean; step: numbe
     { label: ar ? 'المراجعة والنشر' : 'Review & publish', Icon: ClipboardList, steps: [{ i: 5, label: ar ? 'المراجعة' : 'Review' }] },
   ]
   return (
-    <nav aria-label={ar ? 'أجزاء الحملة' : 'Campaign parts'} className="hidden rounded-2xl border border-border bg-surface p-2 lg:block" data-testid="launch-tree">
+    <nav aria-label={ar ? 'أجزاء الحملة' : 'Campaign parts'} className="hidden rounded-2xl border border-border bg-surface p-2 xl:block" data-testid="launch-tree">
       {groups.map((g) => (
         <div key={g.label} className="border-b border-border py-2 last:border-0">
           <p className="flex items-center gap-2 px-2 pb-1 text-sm font-bold text-text-primary"><g.Icon size={15} aria-hidden /> {g.label}</p>
@@ -976,7 +979,7 @@ function BuildSummary({ ar, goal, name, accounts, budgets, canNext, plan }: {
   ].filter((x): x is string => Boolean(x))
   const goalName = goal ? GOALS.find((g) => g.id === goal)?.[ar ? 'ar' : 'en'] : null
   return (
-    <aside className="hidden space-y-3 lg:block" data-testid="launch-summary">
+    <aside className="hidden space-y-3 xl:block" data-testid="launch-summary">
       <div className="rounded-2xl border border-border bg-surface p-4">
         {missing.length === 0 ? (
           <p className="flex items-center justify-between gap-2 text-sm font-bold text-text-primary" data-testid="launch-summary-ready">{ar ? 'حملتك جاهزة للمراجعة' : 'Your campaign looks ready'} <CheckCircle2 size={18} className="text-success" aria-hidden /></p>
