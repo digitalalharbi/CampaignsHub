@@ -552,7 +552,7 @@ final class FundingNotifier
     /**
      * The people who act on this budget, each checked against the client they would read about.
      *
-     * @param  list<'manager'|'team'|'finance'>  $who
+     * @param  list<'manager'|'team'|'admin'|'finance'>  $who
      * @return list<User>
      */
     private function audience(ProjectFunding $funding, array $who, ?int $exclude): array

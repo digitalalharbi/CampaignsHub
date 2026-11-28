@@ -1106,8 +1106,12 @@ final class OperationalDigestModel
         $seen = [];
         $weak = array_values(array_filter($weak, static function (array $c) use (&$seen): bool {
             $k = mb_strtolower(trim((string) ($c['name'] ?? '')));
+            if ($k === '' || isset($seen[$k])) {
+                return false;
+            }
+            $seen[$k] = true;
 
-            return $k !== '' && ! isset($seen[$k]) && ($seen[$k] = true);
+            return true;
         }));
 
         return $top === [] && $weak === [] ? null : ['top' => array_slice($top, 0, 3), 'weak' => array_slice($weak, 0, 3)];
