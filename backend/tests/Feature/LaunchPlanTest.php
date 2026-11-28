@@ -238,6 +238,30 @@ final class LaunchPlanTest extends TestCase
         $this->assertTrue($out['launch_permitted']);
     }
 
+    public function test_a_meta_ad_set_with_its_own_budget_carries_its_own_bid_strategy(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta', 'act_9');
+        Http::fake(function (Request $r) {
+            $path = (string) parse_url($r->url(), PHP_URL_PATH);
+
+            return match (true) {
+                str_ends_with($path, '/act_9/campaigns') => Http::response(['id' => '5001']),
+                str_ends_with($path, '/act_9/adsets') => Http::response(['id' => '6001']),
+                default => Http::response(['success' => true]),
+            };
+        });
+
+        $spec = $this->spec($account, null);
+        $spec['accounts'] = [['external_account_id' => (string) $account->id, 'daily_budget' => null]];
+        $spec['ad'] = null;
+        $plan = $this->actingAs($this->owner, 'sanctum')->postJson($this->url('plans'), $spec)->assertCreated()->json('data');
+        $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true])->assertOk();
+
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/act_9/adsets')
+            && $r['bid_strategy'] === 'LOWEST_COST_WITHOUT_CAP' && ! isset($r['bid_amount']));
+    }
+
     private function spec(ExternalAccount $account, ?ExternalCreative $creative, bool $adSet = true, bool $launch = false): array
     {
         return [

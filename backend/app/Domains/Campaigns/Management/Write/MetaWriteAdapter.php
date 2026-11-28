@@ -109,6 +109,12 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
                 'billing_event' => 'IMPRESSIONS',
                 'optimization_goal' => (string) $input['optimization_goal'],
                 'daily_budget' => isset($input['daily_budget']) ? $this->minorUnits((float) $input['daily_budget'], $target->currency) : null,
+                // META-ADSET-BID-STRATEGY-001 — an ad set that carries its own budget needs its own bid strategy, or Meta
+                // assumes a bid cap and refuses (code 100, subcode 2490487). Lowest cost unless a bid amount was given.
+                'bid_strategy' => isset($input['daily_budget'])
+                    ? (isset($input['bid_amount']) ? 'LOWEST_COST_WITH_BID_CAP' : 'LOWEST_COST_WITHOUT_CAP')
+                    : null,
+                'bid_amount' => isset($input['daily_budget'], $input['bid_amount']) ? $this->minorUnits((float) $input['bid_amount'], $target->currency) : null,
                 'targeting' => ['geo_locations' => ['countries' => array_values((array) $input['countries'])]],
                 'start_time' => isset($input['starts_at']) ? Carbon::parse((string) $input['starts_at'])->toIso8601String() : null,
                 'promoted_object' => $leads ? ['page_id' => (string) $input['page_id']] : null,
