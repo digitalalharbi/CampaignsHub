@@ -310,6 +310,7 @@ Route::middleware(['auth:sanctum', 'platform'])
             Route::post('/test-workspace', [MetaSaasAppController::class, 'createTestWorkspace'])->middleware('throttle:5,1')->name('test-workspace.create');
             Route::delete('/test-workspace', [MetaSaasAppController::class, 'closeTestWorkspace'])->middleware('throttle:10,1')->name('test-workspace.close');
             Route::put('/test-workspace', [MetaSaasAppController::class, 'reopenTestWorkspace'])->middleware('throttle:10,1')->name('test-workspace.reopen');
+            Route::post('/test-workspace/login', [MetaSaasAppController::class, 'handOverTestWorkspace'])->middleware('throttle:5,1')->name('test-workspace.login');
         });
 
         Route::prefix('/settings/integrations/providers')->name('providers.')->group(function (): void {

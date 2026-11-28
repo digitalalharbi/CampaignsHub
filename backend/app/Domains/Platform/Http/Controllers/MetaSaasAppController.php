@@ -252,6 +252,23 @@ final class MetaSaasAppController extends Controller
         return ApiResponse::success($this->payload(), 'Test workspace closed.');
     }
 
+    /**
+     * META-SAAS-LOGIN-HANDOVER-001 — a new login the Owner holds replaces whoever held the test workspace. The set-password link is
+     * in THIS response only, as at creation.
+     */
+    public function handOverTestWorkspace(Request $request): JsonResponse
+    {
+        $data = $request->validate(['email' => ['required', 'email:rfc', 'max:190']]);
+        try {
+            $done = $this->testWorkspace->handOver($data['email'], $request->user()?->getKey());
+        } catch (\InvalidArgumentException $e) {
+            return ApiResponse::error(message: 'The test workspace login could not be changed.', errors: ['email' => [$e->getMessage()]], status: $e->getMessage() === 'no_test_workspace' ? 404 : 409);
+        }
+        $this->audit->log(action: 'platform.integration.meta_saas.test_workspace_handed_over', entityType: ProviderConfiguration::class, entityId: 'meta.saas', after: ['new_user_id' => $done['user']->getKey(), 'suspended_memberships' => $done['suspended']]);
+
+        return ApiResponse::success([...$this->payload(), 'set_password_link' => $done['set_password_link'], 'mail_delivery' => $done['delivery']], 'Test workspace login changed.');
+    }
+
     /** META-SAAS-REOPEN-001 — open the closed test workspace to the SaaS app again. Its data and login are the ones it had. */
     public function reopenTestWorkspace(Request $request): JsonResponse
     {

@@ -6,10 +6,10 @@ import { renderWithProviders } from '@/test/utils'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, createMetaSaasTestWorkspace: vi.fn(), closeMetaSaasTestWorkspace: vi.fn(), reopenMetaSaasTestWorkspace: vi.fn() }
+  return { ...actual, createMetaSaasTestWorkspace: vi.fn(), closeMetaSaasTestWorkspace: vi.fn(), reopenMetaSaasTestWorkspace: vi.fn(), handOverMetaSaasTestWorkspace: vi.fn() }
 })
 
-import { closeMetaSaasTestWorkspace, createMetaSaasTestWorkspace, reopenMetaSaasTestWorkspace } from './api'
+import { closeMetaSaasTestWorkspace, createMetaSaasTestWorkspace, handOverMetaSaasTestWorkspace, reopenMetaSaasTestWorkspace } from './api'
 
 const EMAIL = 'owner-test@example.test'
 const none: MetaSaasTestWorkspaceState = { exists: false, active: false, tenant_id: null, login_email: null, steps: {} }
@@ -62,5 +62,15 @@ describe('SaaS test workspace', () => {
     expect(screen.queryByTestId('meta-saas-test-workspace-close')).toBeNull()
     fireEvent.click(screen.getByTestId('meta-saas-test-workspace-reopen'))
     await waitFor(() => expect(reopenMetaSaasTestWorkspace).toHaveBeenCalledTimes(1))
+  })
+
+  /** META-SAAS-LOGIN-HANDOVER-001 — the Owner gives the workspace a login he holds; the one-time link is shown. */
+  it('hands the login over to a new address and shows the one-time link', async () => {
+    vi.mocked(handOverMetaSaasTestWorkspace).mockResolvedValue({ set_password_link: 'https://campaignshub.io/reset/xyz' } as never)
+    renderWithProviders(<MetaSaasTestWorkspace state={{ exists: true, active: true, tenant_id: 't', login_email: EMAIL, steps: {} }} ar={false} />, { locale: 'en' })
+    fireEvent.change(screen.getByTestId('meta-saas-test-workspace-handover-email'), { target: { value: 'owner@campaignshub.io' } })
+    fireEvent.click(screen.getByTestId('meta-saas-test-workspace-handover-submit'))
+    await waitFor(() => expect(handOverMetaSaasTestWorkspace).toHaveBeenCalledWith('owner@campaignshub.io'))
+    expect(await screen.findByTestId('meta-saas-test-workspace-link')).toHaveTextContent('https://campaignshub.io/reset/xyz')
   })
 })
