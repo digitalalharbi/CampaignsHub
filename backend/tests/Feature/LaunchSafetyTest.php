@@ -165,6 +165,26 @@ final class LaunchSafetyTest extends TestCase
         $this->publish($plan)->assertOk()->assertJsonPath('data.status', LaunchPlan::PUBLISHED)->assertJsonPath('data.last_error', null);
     }
 
+    /**
+     * AUDIT-REASON-LENGTH-001 — fail-first: Meta refused the campaign with a message longer than 255 characters; writing it whole
+     * into audit_logs.reason threw «value too long», so the platform's own refusal became a 500 and was lost (Owner, 2026-11-28).
+     */
+    public function test_a_long_platform_refusal_is_shown_as_the_steps_error_not_a_server_error(): void
+    {
+        $this->configure('meta');
+        $message = "Unsupported post request. Object with ID 'act_9' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api and make sure the token holds ads_management for this ad account.";
+        $this->assertGreaterThan(255, mb_strlen($message));
+        Http::fake(['graph.facebook.com/*' => Http::response(['error' => ['message' => $message, 'type' => 'GraphMethodException', 'code' => 100, 'error_subcode' => 33]], 400)]);
+        $plan = $this->draft(launch: false);
+
+        $response = $this->publish($plan);
+
+        $this->assertNotSame(500, $response->status());
+        $stored = LaunchPlan::query()->findOrFail($plan['id']);
+        $this->assertSame(LaunchPlan::FAILED, $stored->status);
+        $this->assertSame('failed', $stored->steps[0]['campaign']['status']);
+    }
+
     public function test_automated_mode_is_named_in_the_review_and_refused_at_publish_before_any_call(): void
     {
         $this->configure('meta');
