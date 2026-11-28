@@ -133,7 +133,7 @@ export function ReviewList({ items, className = '' }: { items: ReviewItem[]; cla
       {items.map((item, i) => (
         <div key={i} className="flex items-start justify-between gap-4 px-3 py-2.5">
           <dt className="text-sm text-text-muted">{item.label}</dt>
-          <dd className="text-sm font-medium text-text text-end">
+          <dd className="min-w-0 text-sm font-medium text-text text-end [overflow-wrap:anywhere]">
             {item.value === null || item.value === undefined || item.value === '' ? '—' : item.value}
           </dd>
         </div>

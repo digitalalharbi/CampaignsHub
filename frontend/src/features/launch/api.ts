@@ -209,7 +209,10 @@ export const useLaunchPlans = (projectId: string | null) => useQuery({
 
 export async function savePlan(projectId: string, spec: LaunchSpec, planId?: string | null): Promise<LaunchPlan> {
   await ensureCsrfCookie()
-  return planId ? putData<LaunchPlan>(`${base(projectId)}/plans/${planId}`, spec) : postData<LaunchPlan>(`${base(projectId)}/plans`, spec)
+  // LAUNCH-OBJECTIVE-PROPOSAL-001 — an objective applied from a proposal is per platform only; the plan's own objective
+  // is required by the server, so it falls back to the first platform objective chosen rather than being sent empty.
+  const body: LaunchSpec = spec.objective !== '' ? spec : { ...spec, objective: Object.values(spec.objectives ?? {}).find((o) => o !== '') ?? '' }
+  return planId ? putData<LaunchPlan>(`${base(projectId)}/plans/${planId}`, body) : postData<LaunchPlan>(`${base(projectId)}/plans`, body)
 }
 
 /** 200 published, 207 partial, 422 failed — all three carry the plan, so none of them is thrown away. */
