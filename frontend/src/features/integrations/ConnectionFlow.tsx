@@ -560,10 +560,10 @@ function Login({ ar, label, providerKey, destination, onDestination, reauthorise
           <li>· {ar ? 'قائمة حساباتك الإعلانية وأسماؤها وعملاتها.' : 'Your ad accounts, their names and their currencies.'}</li>
           <li>· {ar ? 'حملاتك وأرقام أدائها للفترات التي تختارها.' : 'Your campaigns and their performance figures.'}</li>
           <li>
-            {/* The negative matters more than the positives: it is the fear that stops people. */}
+            {/* META-REVIEW-COPY-001 — the promise must match what the product does: it creates campaigns, only when asked, paused. */}
             · {ar
-              ? 'قراءة فقط — لا يُنشئ كامبينز هب حملة ولا يعدّل ميزانية ولا ينفق شيئًا.'
-              : 'Read only — CampaignsHub never creates a campaign, changes a budget or spends anything.'}
+              ? 'لا يُنشئ كامبينز هب حملة إلا بطلب صريح منك من صفحة «حملة جديدة»، وتُنشأ موقوفة (PAUSED) فلا يُنفق شيء قبل أن تشغّلها بنفسك.'
+              : 'CampaignsHub creates a campaign only when you ask for it on «New campaign», and creates it PAUSED, so nothing is spent until you run it yourself.'}
           </li>
           <li>
             · {reauthorise
