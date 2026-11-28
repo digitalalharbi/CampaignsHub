@@ -33,6 +33,14 @@ final class AuditLogger
         ?int $userId = null,
         ?string $tenantId = null,
     ): AuditLog {
+        // AUDIT-REASON-LENGTH-001 — `reason` is varchar(255). A provider's refusal text is often longer (Meta's «Unsupported post
+        // request …» is), and writing it whole threw a database error that turned a clear platform refusal into a 500 and lost
+        // it. The column keeps a short form; the whole text is kept in `after`.
+        if ($reason !== null && mb_strlen($reason) > 255) {
+            $after = ($after ?? []) + ['reason_full' => $reason];
+            $reason = mb_substr($reason, 0, 254).'…';
+        }
+
         return AuditLog::create([
             'tenant_id' => $tenantId ?? ($this->context->hasTenant() ? $this->context->tenantId() : null),
             'user_id' => $userId ?? optional($this->request->user())->id,
