@@ -186,5 +186,19 @@ final class MetaSaasTestWorkspaceTest extends TestCase
         // Closing the workspace closes the app to it as well; nothing is deleted.
         $this->actingAs($this->admin, 'sanctum')->deleteJson(self::BASE.'/test-workspace')->assertOk()->assertJsonPath('data.test_workspace.active', false);
         $this->assertSame('test_workspace_only', MetaAppRouting::saasEligibilityFor((string) Tenant::query()->where('slug', MetaSaasTestWorkspace::SLUG)->value('id'))['reason']);
+
+        // META-SAAS-REOPEN-001 — the same workspace opens again, with its login; the customer stays out and its connection untouched.
+        $this->actingAs($this->admin, 'sanctum')->putJson(self::BASE.'/test-workspace')->assertOk()
+            ->assertJsonPath('data.test_workspace.active', true)
+            ->assertJsonPath('data.test_workspace.login_email', self::EMAIL);
+        $this->assertSame(1, Tenant::query()->where('slug', MetaSaasTestWorkspace::SLUG)->count());
+        $this->assertSame('test_workspace_only', MetaAppRouting::saasEligibilityFor((string) $customer->id)['reason']);
+        $this->assertSame($before, $live->fresh()->toArray());
+    }
+
+    public function test_reopening_with_no_test_workspace_says_so_and_creates_nothing(): void
+    {
+        $this->actingAs($this->admin, 'sanctum')->putJson(self::BASE.'/test-workspace')->assertNotFound();
+        $this->assertSame(0, Tenant::query()->where('slug', MetaSaasTestWorkspace::SLUG)->count());
     }
 }

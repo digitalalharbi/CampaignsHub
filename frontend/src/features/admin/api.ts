@@ -1147,6 +1147,7 @@ export const confirmMetaSaasReview = (): Promise<MetaCandidateState> => putData(
 /** The set-password link is in this response only, to be shown once to the admin who created the workspace. */
 export const createMetaSaasTestWorkspace = (email: string): Promise<MetaCandidateState & { set_password_link?: string | null; mail_delivery?: string | null }> => postData(`${META_SAAS}/test-workspace`, { email })
 export const closeMetaSaasTestWorkspace = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/test-workspace`)
+export const reopenMetaSaasTestWorkspace = (): Promise<MetaCandidateState> => putData(`${META_SAAS}/test-workspace`, {})
 export const withdrawMetaSaasReview = (): Promise<MetaCandidateState> => deleteData(`${META_SAAS}/review`)
 
 export function fetchMetaCandidate(): Promise<MetaCandidateState> {
