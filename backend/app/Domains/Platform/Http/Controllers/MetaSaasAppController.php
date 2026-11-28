@@ -252,6 +252,17 @@ final class MetaSaasAppController extends Controller
         return ApiResponse::success($this->payload(), 'Test workspace closed.');
     }
 
+    /** META-SAAS-REOPEN-001 — open the closed test workspace to the SaaS app again. Its data and login are the ones it had. */
+    public function reopenTestWorkspace(Request $request): JsonResponse
+    {
+        if (! $this->testWorkspace->reactivate($request->user()?->getKey())) {
+            return ApiResponse::error(message: 'There is no test workspace to reopen — create one first.', status: 404);
+        }
+        $this->audit->log(action: 'platform.integration.meta_saas.test_workspace_reopened', entityType: ProviderConfiguration::class, entityId: 'meta.saas');
+
+        return ApiResponse::success($this->payload(), 'Test workspace reopened.');
+    }
+
     /** META-APP-SWITCH-GUARD-001 — the SaaS app's App ID may not move away from the app that issued its live connections' tokens. */
     private function refuseIfStrandingSaas(mixed $newClientId): ?JsonResponse
     {

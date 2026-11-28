@@ -6,10 +6,10 @@ import { renderWithProviders } from '@/test/utils'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, createMetaSaasTestWorkspace: vi.fn(), closeMetaSaasTestWorkspace: vi.fn() }
+  return { ...actual, createMetaSaasTestWorkspace: vi.fn(), closeMetaSaasTestWorkspace: vi.fn(), reopenMetaSaasTestWorkspace: vi.fn() }
 })
 
-import { closeMetaSaasTestWorkspace, createMetaSaasTestWorkspace } from './api'
+import { closeMetaSaasTestWorkspace, createMetaSaasTestWorkspace, reopenMetaSaasTestWorkspace } from './api'
 
 const EMAIL = 'owner-test@example.test'
 const none: MetaSaasTestWorkspaceState = { exists: false, active: false, tenant_id: null, login_email: null, steps: {} }
@@ -53,5 +53,14 @@ describe('SaaS test workspace', () => {
     renderWithProviders(<MetaSaasTestWorkspace state={{ exists: true, active: true, tenant_id: 't', login_email: EMAIL, steps: {} }} ar={false} />, { locale: 'en' })
     fireEvent.click(screen.getByTestId('meta-saas-test-workspace-close'))
     await waitFor(() => expect(closeMetaSaasTestWorkspace).toHaveBeenCalledTimes(1))
+  })
+
+  /** META-SAAS-REOPEN-001 — a closed workspace offers to open again, and only then. */
+  it('reopens a closed workspace to the app when asked', async () => {
+    vi.mocked(reopenMetaSaasTestWorkspace).mockResolvedValue({} as never)
+    renderWithProviders(<MetaSaasTestWorkspace state={{ exists: true, active: false, tenant_id: 't', login_email: EMAIL, steps: {} }} ar={false} />, { locale: 'en' })
+    expect(screen.queryByTestId('meta-saas-test-workspace-close')).toBeNull()
+    fireEvent.click(screen.getByTestId('meta-saas-test-workspace-reopen'))
+    await waitFor(() => expect(reopenMetaSaasTestWorkspace).toHaveBeenCalledTimes(1))
   })
 })

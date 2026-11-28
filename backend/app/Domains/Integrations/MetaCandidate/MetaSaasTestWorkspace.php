@@ -140,6 +140,23 @@ final class MetaSaasTestWorkspace
     }
 
     /**
+     * META-SAAS-REOPEN-001 — open a closed test workspace to the SaaS app again. Closing kept its data; reopening restores the same
+     * workspace, login and journey. Nothing else changes and no other workspace is touched.
+     */
+    public function reactivate(?int $actorId): bool
+    {
+        $tenant = $this->tenant();
+        if ($tenant === null) {
+            return false;
+        }
+        $settings = (array) ($tenant->settings ?? []);
+        $settings[self::SETTINGS_KEY] = [...(array) ($settings[self::SETTINGS_KEY] ?? []), 'active' => true, 'reopened_at' => now()->toIso8601String(), 'reopened_by' => $actorId];
+        $tenant->forceFill(['settings' => $settings])->save();
+
+        return true;
+    }
+
+    /**
      * The journey as it really happened in the test workspace — each step read from rows, never from a flag.
      *
      * @return array{exists: bool, active: bool, tenant_id: string|null, login_email: string|null, steps: array<string, bool>}

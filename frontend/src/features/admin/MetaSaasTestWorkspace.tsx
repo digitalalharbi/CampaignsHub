@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Circle } from 'lucide-react'
-import { closeMetaSaasTestWorkspace, createMetaSaasTestWorkspace, type MetaCandidateState, type MetaSaasJourneyStep, type MetaSaasTestWorkspaceState } from './api'
+import { closeMetaSaasTestWorkspace, createMetaSaasTestWorkspace, reopenMetaSaasTestWorkspace, type MetaCandidateState, type MetaSaasJourneyStep, type MetaSaasTestWorkspaceState } from './api'
 import { Button } from '@/components/ui/Button'
 import { toApiError } from '@/lib/api/client'
 
@@ -17,7 +17,7 @@ const COPY = {
     title: 'مساحة اختبار التطبيق الجديد',
     note: 'مساحة عمل جديدة ومعزولة عن كل العملاء، تربط عبر تطبيق المنصة الجديد فقط. لا يُنسخ إليها أي اتصال أو رمز أو حساب، ولا يُستخدم التطبيق الجديد في أي مساحة أخرى قبل اعتماد ميتا.',
     email: 'بريد دخول جديد لمساحة الاختبار (يصلك عليه رابط تعيين كلمة المرور)',
-    create: 'إنشاء مساحة الاختبار', close: 'إغلاق مساحة الاختبار أمام التطبيق',
+    create: 'إنشاء مساحة الاختبار', close: 'إغلاق مساحة الاختبار أمام التطبيق', reopen: 'إعادة فتح مساحة الاختبار للتطبيق',
     active: 'مفعّلة', inactive: 'مغلقة', login: 'الدخول', signIn: 'تسجيل الدخول إلى مساحة الاختبار',
     journey: 'رحلة الاختبار الفعلية',
     steps: {
@@ -32,7 +32,7 @@ const COPY = {
     title: 'New app test workspace',
     note: 'A new workspace, isolated from every customer, that connects through the new platform app only. No connection, token or account is copied into it, and the new app is used nowhere else before Meta approves it.',
     email: 'New login address for the test workspace (a password link is emailed to it)',
-    create: 'Create the test workspace', close: 'Close the test workspace to the app',
+    create: 'Create the test workspace', close: 'Close the test workspace to the app', reopen: 'Reopen the test workspace to the app',
     active: 'Active', inactive: 'Closed', login: 'Login', signIn: 'Sign in to the test workspace',
     journey: 'Real test journey',
     steps: {
@@ -59,7 +59,9 @@ export function MetaSaasTestWorkspace({ state, ar }: { state: MetaSaasTestWorksp
     onSuccess: (data) => { setLink(data.set_password_link ?? null); onSuccess(data) },
   })
   const close = useMutation({ meta: { feedback: 'none' }, mutationFn: closeMetaSaasTestWorkspace, onSuccess })
-  const error = create.error ?? close.error
+  // META-SAAS-REOPEN-001 — a closed workspace can be opened again; closing never deleted its data.
+  const reopen = useMutation({ meta: { feedback: 'none' }, mutationFn: reopenMetaSaasTestWorkspace, onSuccess })
+  const error = create.error ?? close.error ?? reopen.error
   const code = error ? (toApiError(error).errors?.email?.[0] ?? null) : null
 
   return (
@@ -111,6 +113,7 @@ export function MetaSaasTestWorkspace({ state, ar }: { state: MetaSaasTestWorksp
           <div className="flex flex-wrap gap-2">
             <a href="/login" target="_blank" rel="noreferrer" className="inline-flex items-center rounded-lg border border-border px-3 py-2 text-sm font-semibold text-brand-700">{c.signIn}</a>
             {state.active && <Button data-testid="meta-saas-test-workspace-close" variant="secondary" loading={close.isPending} onClick={() => close.mutate()}>{c.close}</Button>}
+            {!state.active && <Button data-testid="meta-saas-test-workspace-reopen" loading={reopen.isPending} onClick={() => reopen.mutate()}>{c.reopen}</Button>}
           </div>
         </div>
       )}
