@@ -130,6 +130,20 @@ describe('the launch page', () => {
     expect(screen.queryByTestId('launch-objective')).not.toBeInTheDocument()
     expect(await screen.findByTestId('launch-review')).toBeInTheDocument()
   })
+  /** LAUNCH-NEW-001 — after opening a saved draft, a new campaign is one click away and starts from the objective dialog. */
+  it('starts a new campaign after a saved draft was opened', async () => {
+    vi.mocked(useLaunchPlans).mockReturnValue(ok([plan()]) as never)
+    renderWithProviders(<LaunchPage />, { locale: 'ar', route: '/agency/launch' })
+
+    fireEvent.click(await screen.findByTestId('launch-resume-pl1'))
+    expect(await screen.findByTestId('launch-review')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('launch-new'))
+
+    expect(await screen.findByTestId('launch-objective')).toBeInTheDocument()
+    expect(screen.queryByTestId('launch-review')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('launch-objective-next'))
+    expect(await screen.findByTestId('launch-account-acc1')).toBeInTheDocument()
+  })
   it('shows a partial launch as partial with the provider error and a retry', async () => {
     const partial = plan({ status: 'partial', unified_campaign_id: 'uc1', steps: [{ account_id: 'acc1', provider: 'meta', campaign: { status: 'done', external_id: '5001' }, ad_set: { status: 'failed', error: '(#100) Bad targeting' }, ad: { status: 'pending' }, launched: null }] })
     vi.mocked(useLaunchPlans).mockReturnValue(ok([partial]) as never)
