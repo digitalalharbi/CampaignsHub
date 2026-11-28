@@ -142,12 +142,19 @@ export function LaunchPage() {
   const go = (i: number) => { if (i < step || canNext.slice(0, i).every(Boolean)) { if (i >= 2) setSpec(named); setStep(i) } }
   const problemsTotal = (plan?.review ?? []).reduce((n, r) => n + r.problems.length, 0)
   const publishable = plan !== null && plan.status === 'draft' && problemsTotal === 0
+  // LAUNCH-RESUME-001 — a saved plan is reachable from the objective dialog as well as the history below it; opening one
+  // closes the dialog, restores its goal and lands on review (draft) or results (anything already sent).
+  const openPlan = (p: LaunchPlan) => {
+    setPlan(p); setSpec({ ...p.spec, launch: p.launch }); setGoal(p.spec.business_goal ?? null); setAsking(false)
+    setStep(p.status === 'draft' ? 5 : 6)
+  }
+  const unfinished = (plans.data ?? []).filter((p) => p.status !== 'published')
 
   return (
     <div className="space-y-4" data-testid="launch-page">
       <PageIntro title={title} purpose={purpose} />
       {asking && plan === null && (
-        <ObjectivePicker ar={ar} picked={picked} onPick={setPicked}
+        <ObjectivePicker ar={ar} picked={picked} onPick={setPicked} unfinished={unfinished} onOpenPlan={openPlan}
           onCancel={() => navigate(portal('/campaigns'))}
           onNext={() => { setGoal(picked); setSpec((st) => ({ ...st, business_goal: picked })); setAsking(false) }} />
       )}
@@ -439,7 +446,7 @@ export function LaunchPage() {
                 <StatusBadge status={p.status} ar={ar} />
                 <span className="text-xs text-text-muted">{countedAccounts(p.steps.length, ar ? 'ar' : 'en')}</span>
                 {p.unified_campaign_id && <Link to={portal(`/campaigns/${currentProjectId}/${p.unified_campaign_id}`)} className="text-xs font-bold text-brand-600 hover:underline">{ar ? 'فتح الحملة' : 'Open campaign'}</Link>}
-                {p.status !== 'published' && <button type="button" className="text-xs font-bold text-brand-600 hover:underline" onClick={() => { setPlan(p); setSpec({ ...p.spec, launch: p.launch }); setStep(p.status === 'draft' ? 5 : 6) }}>{ar ? 'فتح' : 'Open'}</button>}
+                {p.status !== 'published' && <button type="button" className="text-xs font-bold text-brand-600 hover:underline" onClick={() => openPlan(p)} data-testid={`launch-history-open-${p.id}`}>{ar ? 'فتح' : 'Open'}</button>}
               </li>
             ))}
           </ul>
@@ -793,11 +800,25 @@ const GOAL_INFO: Record<BusinessGoal, { Icon: typeof Megaphone; ar: string; en: 
   sales: { Icon: ShoppingCart, ar: 'حقّق طلبات ومبيعات من متجرك.', en: 'Drive orders and sales from your store.', outcomesAr: ['الشراء', 'الإضافة للسلة', 'إتمام الطلب'], outcomesEn: ['Purchases', 'Add to cart', 'Checkout'] },
 }
 
-function ObjectivePicker({ ar, picked, onPick, onCancel, onNext }: { ar: boolean; picked: BusinessGoal; onPick: (g: BusinessGoal) => void; onCancel: () => void; onNext: () => void }) {
+function ObjectivePicker({ ar, picked, onPick, onCancel, onNext, unfinished = [], onOpenPlan }: { ar: boolean; picked: BusinessGoal; onPick: (g: BusinessGoal) => void; onCancel: () => void; onNext: () => void; unfinished?: LaunchPlan[]; onOpenPlan?: (p: LaunchPlan) => void }) {
   const info = GOAL_INFO[picked]
   return (
     <Modal open onClose={onCancel} title={ar ? 'اختر هدف الحملة' : 'Choose an objective'} size="lg"
       footer={<><Button variant="secondary" onClick={onCancel} data-testid="launch-objective-cancel">{ar ? 'إلغاء' : 'Cancel'}</Button><Button onClick={onNext} data-testid="launch-objective-next">{ar ? 'التالي' : 'Next'}</Button></>}>
+      {unfinished.length > 0 && onOpenPlan && (
+        <div className="mb-4 space-y-2 rounded-xl border border-border p-3" data-testid="launch-resume">
+          <p className="text-xs font-semibold text-text-secondary">{ar ? 'أكمل حملة محفوظة' : 'Continue a saved campaign'}</p>
+          <ul className="space-y-1.5">
+            {unfinished.slice(0, 5).map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-semibold text-text-primary">{p.name}</span>
+                <StatusBadge status={p.status} ar={ar} />
+                <Button size="sm" variant="secondary" className="ms-auto" onClick={() => onOpenPlan(p)} data-testid={`launch-resume-${p.id}`}>{ar ? 'متابعة' : 'Continue'}</Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]" data-testid="launch-objective">
         <div role="radiogroup" aria-label={ar ? 'الهدف' : 'Objective'} className="space-y-1.5">
           {GOALS.map((g) => {
