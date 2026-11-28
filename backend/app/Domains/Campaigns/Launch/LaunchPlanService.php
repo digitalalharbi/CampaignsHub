@@ -11,6 +11,7 @@ use App\Domains\Campaigns\Management\Write\WriteAction;
 use App\Domains\Campaigns\Management\Write\WriteAdapterRegistry;
 use App\Domains\Campaigns\Management\Write\WriteLevel;
 use App\Domains\Campaigns\Management\WriteCapabilityRegistry;
+use App\Domains\Campaigns\Models\ExternalCampaign;
 use App\Domains\Campaigns\Models\UnifiedCampaign;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Projects\Models\Project;
@@ -315,6 +316,9 @@ final class LaunchPlanService
             $steps = (array) $plan->steps;
             $status = $this->anyProgress($steps) ? LaunchPlan::PARTIAL : LaunchPlan::FAILED;
             $plan->forceFill(['status' => $status, 'last_error' => mb_substr($e->getMessage(), 0, 1000)])->save();
+            if ($status === LaunchPlan::FAILED) {
+                $this->releaseEmptyCampaign($plan);
+            }
             $this->audit->log(
                 action: 'campaign.launch_failed',
                 entityType: LaunchPlan::class,
@@ -328,6 +332,9 @@ final class LaunchPlanService
         $done = count(array_filter($steps, fn (array $s) => $this->accountDone($plan, $s)));
         $status = $done === count($steps) ? LaunchPlan::PUBLISHED : ($done === 0 && ! $this->anyProgress($steps) ? LaunchPlan::FAILED : LaunchPlan::PARTIAL);
         $plan->forceFill(['status' => $status, 'last_error' => null, 'published_at' => $plan->published_at ?? Carbon::now()])->save();
+        if ($status === LaunchPlan::FAILED) {
+            $this->releaseEmptyCampaign($plan);
+        }
 
         $this->audit->log(
             action: 'campaign.launch_'.$status,
@@ -358,6 +365,24 @@ final class LaunchPlanService
         $spec = (array) $plan->spec;
         $spec['journey'] = ['goal' => $goal, 'recorded_at' => Carbon::now()->toIso8601String(), 'stages' => $stages];
         $plan->forceFill(['spec' => $spec])->save();
+    }
+
+    /**
+     * LAUNCH-NO-ORPHAN-001 — a launch that created nothing on any platform leaves no campaign behind. The campaign record is made
+     * before the first provider call; when every platform refused, it stood in the campaigns list as an empty «Draft» that exists
+     * nowhere else and held its name. It is removed (soft-deleted, recoverable) only while no platform campaign is linked to it;
+     * the plan keeps its record and a retry makes a fresh one.
+     */
+    private function releaseEmptyCampaign(LaunchPlan $plan): void
+    {
+        if ($plan->unified_campaign_id === null) {
+            return;
+        }
+        if (ExternalCampaign::query()->where('unified_campaign_id', $plan->unified_campaign_id)->exists()) {
+            return;
+        }
+        UnifiedCampaign::query()->find($plan->unified_campaign_id)?->delete();
+        $plan->forceFill(['unified_campaign_id' => null])->save();
     }
 
     private function campaignFor(User $user, Project $project, LaunchPlan $plan): UnifiedCampaign
