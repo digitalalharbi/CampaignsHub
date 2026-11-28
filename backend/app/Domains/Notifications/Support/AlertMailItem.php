@@ -206,13 +206,13 @@ final class AlertMailItem
         $p = $projectId === null ? '' : '?project='.rawurlencode($projectId);
 
         return match (true) {
-            in_array($type, ['lead_unassigned'], true) => [MailLinks::to('/app/leads'.$p), $ar ? 'افتح المهتمين' : 'Open the leads'],
-            in_array($type, ['lead_no_contact', 'lead_follow_up_overdue'], true) => [MailLinks::to('/app/leads/workspace'.$p), $ar ? 'افتح المتابعات' : 'Open follow-ups'],
-            in_array($type, ['tracking_health', 'ga4_tracking_loss', 'ga4_unmatched_spend'], true) => [MailLinks::to('/app/forms'.$p), $ar ? 'افتح التتبع' : 'Open tracking health'],
-            $type === 'launch_advance' => [MailLinks::to('/app/launch'.$p), $ar ? 'افتح الإطلاق' : 'Open the launch page'],
+            in_array($type, ['lead_unassigned'], true) => [MailLinks::to(MailLinkContext::path('/leads'.$p)), $ar ? 'افتح المهتمين' : 'Open the leads'],
+            in_array($type, ['lead_no_contact', 'lead_follow_up_overdue'], true) => [MailLinks::to(MailLinkContext::path('/leads/workspace'.$p)), $ar ? 'افتح المتابعات' : 'Open follow-ups'],
+            in_array($type, ['tracking_health', 'ga4_tracking_loss', 'ga4_unmatched_spend'], true) => [MailLinks::to(MailLinkContext::path('/forms'.$p)), $ar ? 'افتح التتبع' : 'Open tracking health'],
+            $type === 'launch_advance' => [MailLinks::to(MailLinkContext::path('/launch'.$p)), $ar ? 'افتح الإطلاق' : 'Open the launch page'],
             str_starts_with($type, 'ga4_') && $projectId !== null => [MailDeepLinks::analytics($projectId, 'performance'), $ar ? 'افتح الأداء' : 'Open performance'],
-            $type === 'report_failed' => [MailLinks::to('/app/reports'), $ar ? 'افتح التقارير' : 'Open reports'],
-            in_array($type, ['security', 'sample_alert'], true) => [MailLinks::to($type === 'security' ? '/app/account/security' : '/app/account/notifications'), $type === 'security' ? ($ar ? 'افتح الأمان' : 'Open security') : ($ar ? 'افتح الإشعارات' : 'Open notifications')],
+            $type === 'report_failed' => [MailLinks::to(MailLinkContext::path('/reports')), $ar ? 'افتح التقارير' : 'Open reports'],
+            in_array($type, ['security', 'sample_alert'], true) => [MailLinks::to(MailLinkContext::path($type === 'security' ? '/account/security' : '/account/notifications')), $type === 'security' ? ($ar ? 'افتح الأمان' : 'Open security') : ($ar ? 'افتح الإشعارات' : 'Open notifications')],
             // DIGESTS-CADENCE-BUDGETS-001 — an alert about no single campaign still lands on its exact screen, never the generic alert page.
             in_array($type, ['budget_risk'], true) && $projectId !== null => [MailDeepLinks::analytics($projectId, 'budget'), $ar ? 'افتح الميزانية' : 'Open the budget'],
             in_array($type, ['cpa_increase', 'cpl_increase', 'roas_drop', 'no_results'], true) && $projectId !== null => [MailDeepLinks::platforms($projectId), $ar ? 'افتح المنصات' : 'Open the platforms'],

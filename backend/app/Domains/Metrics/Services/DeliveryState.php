@@ -182,10 +182,12 @@ final class DeliveryState
      * setup notices (no budget, no account) keep arriving. By default the window is the rule's own (DAYS); a report over its own
      * period passes that period, so a monthly summary still covers a project that spent earlier in it.
      *
+     * `$strict` (NOTIFY-STOPPED-001) drops the «nothing on record yet» exception: only a project that moved in the window is kept.
+     *
      * @param  list<string>  $projectIds
      * @return list<string> the ones still watched (not quiet), in the order given
      */
-    public function watched(array $projectIds, ?string $from = null, ?string $to = null): array
+    public function watched(array $projectIds, ?string $from = null, ?string $to = null, bool $strict = false): array
     {
         $projectIds = array_values(array_unique(array_filter(array_map('strval', $projectIds))));
         if ($projectIds === []) {
@@ -205,7 +207,35 @@ final class DeliveryState
         $before = $rest === [] ? [] : array_flip($delivered()->whereIn('daily_metrics.project_id', $rest)->where('daily_metrics.metric_date', '<', $from)
             ->distinct()->pluck('daily_metrics.project_id')->map(static fn ($id): string => (string) $id)->all());
 
-        return array_values(array_filter($projectIds, static fn (string $id): bool => isset($moved[$id]) || ! isset($before[$id])));
+        return array_values(array_filter($projectIds, static fn (string $id): bool => isset($moved[$id]) || (! $strict && ! isset($before[$id]))));
+    }
+
+    /**
+     * NOTIFY-STOPPED-001 — Owner 2026-11-28: «حملات واقفة لأكثر من 7 أيام لا يوجد إنفاق — المفروض ما يوصل إشعارات لها».
+     *
+     * The projects that SPENT (one riyal is enough) between `$from` and `$to`, through the accounts each still selects. Unlike
+     * {@see self::watched()} a project with no spend on record is NOT kept «because it may be setting up»: a notice about money,
+     * a digest or an alert is about a project that is moving money, and a project that never spent, or stopped more than the
+     * window ago, is told nothing until it spends again.
+     *
+     * @param  list<string>  $projectIds
+     * @return list<string> in the order given
+     */
+    public function spent(array $projectIds, string $from, string $to): array
+    {
+        $projectIds = array_values(array_unique(array_filter(array_map('strval', $projectIds))));
+        if ($projectIds === []) {
+            return [];
+        }
+        $moved = array_flip(BoundAccountVisibility::apply(DailyMetric::withoutGlobalScopes(), 'daily_metrics')
+            ->whereIn('daily_metrics.project_id', $projectIds)
+            ->where('daily_metrics.metric_key', 'spend')
+            ->where('daily_metrics.value', '>', 0)
+            ->where('daily_metrics.metric_date', '>=', $from)
+            ->where('daily_metrics.metric_date', '<=', $to)
+            ->distinct()->pluck('daily_metrics.project_id')->map(static fn ($id): string => (string) $id)->all());
+
+        return array_values(array_filter($projectIds, static fn (string $id): bool => isset($moved[$id])));
     }
 
     /** The first day of the window: today and the DAYS-1 before. */

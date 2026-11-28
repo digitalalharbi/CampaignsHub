@@ -8,6 +8,7 @@ use App\Domains\Notifications\Mail\AlertBundleMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\MailDeepLinks;
 use App\Domains\Notifications\Support\MailFailure;
+use App\Domains\Notifications\Support\MailLinkContext;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Notifications\Support\OperationalDigestModel;
 use App\Domains\Notifications\Support\PlainFindings;
@@ -110,6 +111,8 @@ final class AlertDispatcher
 
         try {
             $this->tenants->setTenantId($tenantId);
+            // MAIL-LINK-RECIPIENT-001 — the alert's buttons are this reader's: their portal and this workspace.
+            MailLinkContext::enter($user, $tenantId);
 
             $projectIds = $this->scope->projectIdsFor($user, $tenantId);
 
@@ -242,6 +245,7 @@ final class AlertDispatcher
 
             return $counts;
         } finally {
+            MailLinkContext::forget();
             $this->tenants->forget();
         }
     }

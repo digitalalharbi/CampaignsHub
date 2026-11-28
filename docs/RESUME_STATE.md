@@ -1,3 +1,9 @@
+# CURRENT STATE — 2026-11-28 — notifications review (Owner, 10 points) on `fix/notifications-roles-links-budgets-sar`
+
+- **Built, not merged:** MAIL-LINK-RECIPIENT-001, NOTIFY-STOPPED-001, BUDGETS-ONE-SOURCE-001, ENGINE-MAIL-VISUAL-001, NOTIFY-ROLE-DEFAULTS-001, TEAM-MAIL-LOG-001, DIGEST-STRIP-RESTORED-001 (matrix rows at the end). All IMPLEMENTED_NOT_VERIFIED.
+- **Local evidence:** the touched backend suites pass on PHP 8.3 except the render tests that need PHP 8.4's `Dom\HTMLDocument` (CI); frontend `tsc -b`, vitest for auth and settings, oxlint clean.
+- **Owner after deploy:** `notifications:enrol-members --role-defaults` (dry run), then approve `--apply`; compare the next «ملخص المشاريع» with /agency/budgets; check no mail arrives about الهاجري.
+
 # CURRENT STATE — 2026-11-08 — main at 1769c5307 (#989), deployed; covers and viewer formats read on one real link
 
 - **Landed since 2026-11-05:** #973, #975, #976, #978, #979, #980, #981, #982, #983, #984, #985, #986, #989 (list and evidence in `docs/PROJECT_STATE.md`). Deploy Production run 42456226278 succeeded on `1769c5307`.

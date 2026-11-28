@@ -27,7 +27,7 @@
             </td>
             <td width="50%" valign="top" style="padding-{{ $startSide }}:4px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="#faf8f3" style="background-color:#faf8f3; border:1px solid #e4e0d6; border-radius:12px; padding:10px 12px;">
-                    <div style="font-size:11px; font-weight:700; color:#5b6b68;">{{ $ar ? 'المتبقي من حدود الإنفاق' : 'Left of the spend limits' }}</div>
+                    <div style="font-size:11px; font-weight:700; color:#5b6b68;">{{ $ar ? 'المتبقي من الميزانيات' : 'Left of the budgets' }}</div>
                     <div data-tile="remaining" style="font-size:22px; font-weight:800; color:#0b1a16;" dir="ltr">{{ $fmt['total_remaining'] }}</div>
                     @if (($tot['cap_left_out'] ?? 0) > 0)<div style="font-size:11px; color:{{ $S::INK['watch'] }};">{{ $ar ? 'بعض الحدود غير محوّلة، خارج المجموع' : 'Some limits are not converted, outside the total' }}</div>@endif
                     @if ($tot['near'] > 0)<div style="font-size:11px; font-weight:700; color:{{ $external ? $S::INK['watch'] : $S::INK['bad'] }};">{{ $ar ? $tot['near'].' قرّبت تخلص' : $tot['near'].' close to the limit' }}</div>@endif
@@ -49,7 +49,7 @@
         </tr></table>
     @endif
     @foreach ($client['projects'] as $p)
-        @php($tone = ['over' => ($external ? 'watch' : 'bad'), 'near' => 'watch', 'ok' => 'ok', 'unconverted' => 'none', 'none' => 'none'][$p['state']])
+        @php($tone = ['over' => ($external ? 'watch' : 'bad'), 'near' => 'watch', 'ok' => 'ok', 'credit' => 'ok', 'unconverted' => 'none', 'none' => 'none'][$p['state']])
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="spend-project" data-state="{{ $p['state'] }}" style="border:1px solid #e4e0d6; border-{{ $startSide }}:4px solid {{ $S::INK[$tone] }}; border-radius:12px; margin-bottom:8px; background-color:{{ $S::SOFT[$tone] }};">
             <tr><td style="padding:10px 12px;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
@@ -58,7 +58,10 @@
                 </tr></table>
                 <div style="font-size:12px; color:#3d4742; padding-top:4px;">{{ $ar ? 'الإنفاق في الفترة' : 'Spend in the period' }}: <span dir="ltr">{{ $p['spend_text'] }}</span></div>
                 @if ($p['state'] === 'none')
-                    <div style="font-size:12px; color:#5b6b68; padding-top:4px;">{{ $ar ? 'ما فيه حد إنفاق مضبوط لهذا المشروع' : 'No spend limit is set for this project' }}</div>
+                    {{-- BUDGETS-ONE-SOURCE-001 — a project that spends with no budget is shown, never hidden: finance must see it. --}}
+                    <div style="font-size:12px; color:#5b6b68; padding-top:4px;">{{ $ar ? 'ما فيه حد إنفاق مضبوط لهذا المشروع ولا ميزانية مسجّلة' : 'No spend limit and no budget recorded for this project' }}</div>
+                @elseif ($p['state'] === 'credit')
+                    <div style="font-size:12px; color:#3d4742; padding-top:4px;">{{ $ar ? 'ميزانية بالأجل — تُفوتر لاحقًا بالإنفاق' : 'Credit budget — invoiced later by spend' }} · {{ $ar ? 'الإنفاق' : 'Spent' }} <span dir="ltr">{{ $p['consumed_text'] }}</span></div>
                 @elseif ($p['state'] === 'unconverted')
                     <div style="font-size:12px; color:{{ $S::INK['watch'] }}; padding-top:4px;">{{ $ar ? 'الحد' : 'Limit' }} <span dir="ltr">{{ $p['cap_text'] }}</span> · {{ $ar ? 'الإنفاق غير محوّل لعملة الحد، فما نحسب المتبقي' : 'Spend is not converted to the limit’s currency, so the remainder is not computed' }}</div>
                 @else
@@ -68,7 +71,7 @@
                         @if ($p['bar'] < 100)<td height="8" style="font-size:1px; line-height:8px;">&nbsp;</td>@endif
                     </tr></table>
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="table-layout:fixed;"><tr>
-                        <td valign="top" style="font-size:11px; color:#5b6b68;">{{ $ar ? 'الحد' : 'Limit' }}<div style="font-size:13px; font-weight:800; color:#0b1a16;" dir="ltr">{{ $p['cap_text'] }}</div></td>
+                        <td valign="top" style="font-size:11px; color:#5b6b68;">{{ $p['cap_label'] }}<div style="font-size:13px; font-weight:800; color:#0b1a16;" dir="ltr">{{ $p['cap_text'] }}</div></td>
                         <td valign="top" style="font-size:11px; color:#5b6b68;">{{ $ar ? 'الإنفاق' : 'Spent' }}<div style="font-size:13px; font-weight:800; color:#0b1a16;" dir="ltr">{{ $p['consumed_text'] }}</div></td>
                         <td valign="top" style="font-size:11px; color:#5b6b68;">{{ $ar ? 'المتبقي' : 'Remaining' }}<div data-remaining="1" style="font-size:13px; font-weight:800; color:{{ $S::INK[$tone] }};" dir="ltr">{{ $p['remaining_text'] }}</div></td>
                     </tr></table>
@@ -84,7 +87,10 @@
     @endif
 
     @if (! $external)
-        @include('mail.partials.button', ['href' => $budgetsUrl, 'label' => $ar ? 'افتح الميزانيات' : 'Open budgets'])
+        {{-- MAIL-LINK-RECIPIENT-001 — the button only for a reader who may open the budgets, in their own portal and workspace. --}}
+        @if (! empty($budgetsUrl))
+            @include('mail.partials.button', ['href' => $budgetsUrl, 'label' => $ar ? 'افتح الميزانيات' : 'Open budgets'])
+        @endif
     @else
         <div style="font-size:12px; color:#5b6b68; line-height:1.7; margin-top:14px;">{{ $ar ? 'وصلتك هذه الرسالة لمتابعة ميزانية المشاريع المذكورة وتجديدها مع العميل.' : 'You receive this to follow the budgets of the projects above and renew them with the client.' }}</div>
     @endif

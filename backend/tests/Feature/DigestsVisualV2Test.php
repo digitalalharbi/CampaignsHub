@@ -164,8 +164,11 @@ final class DigestsVisualV2Test extends TestCase
         $pw = (new OperationalDigestMail($project, 'ar', 'م', 'weekly', 'project'))->render();
         $pd = (new OperationalDigestMail($project, 'ar', 'م', 'daily', 'project'))->render();
         $this->assertGreaterThan(substr_count($pd, 'font-size:9px'), substr_count($pw, 'font-size:9px'), 'the weekly labels its 7 bars with weekday letters');
-        // DIGEST-FIGURES-ONLY-001 — no ✓ ! ✕ platform strip and no state chip in the project mail.
-        $this->assertStringNotContainsString('data-block="platform-strip"', $pd);
+        // DIGEST-STRIP-RESTORED-001 — Owner 2026-11-28: the ✓ ! ✕ platform strip is back under the month's budget, one tile per platform.
+        if ($project['cells'] !== []) {
+            $this->assertStringContainsString('data-block="platform-strip"', $pd);
+            $this->assertSame(min(6, count($project['cells'])), substr_count($pd, 'data-platform='));
+        }
     }
 
     public function test_a_per_project_ledger_key_fits_the_column(): void

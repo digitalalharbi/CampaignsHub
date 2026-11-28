@@ -121,4 +121,28 @@ describe('the delivery log', () => {
 
     expect(await screen.findByTestId('delivery-reason-0')).toHaveTextContent('لا يوجد مستلمون مشتركون في هذا النوع.')
   })
+
+  // TEAM-MAIL-LOG-001 — who received what, inside or outside the platform, with the quiet rows folded away by default.
+  it('names each mail, marks internal and external recipients and filters by them', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    log([
+      row({ label: 'ملخص المشاريع : أمس', audience: 'internal', recipient: 'pm@agency.test' }),
+      row({ source: 'external', kind: 'spend_summary_external', label: 'متابعة الميزانية (خارج المنصة)', audience: 'external', recipient: 'client@brand.test' }),
+      row({ status: 'skipped', reason: 'no_delivery', audience: 'internal', recipient: 'quiet@agency.test' }),
+    ])
+    renderWithProviders(<DeliveryLog />, { locale: 'ar' })
+
+    expect(screen.getByText('ملخص المشاريع : أمس')).toBeInTheDocument()
+    expect(screen.getByText('داخلي')).toBeInTheDocument()
+    expect(screen.getByText('خارجي')).toBeInTheDocument()
+    expect(screen.queryByText('quiet@agency.test')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('delivery-audience-external'))
+    expect(screen.getByText('client@brand.test')).toBeInTheDocument()
+    expect(screen.queryByText('pm@agency.test')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('delivery-audience-all'))
+    fireEvent.click(screen.getByTestId('delivery-hide-quiet'))
+    expect(screen.getByText('quiet@agency.test')).toBeInTheDocument()
+  })
 })

@@ -23,6 +23,9 @@ declare(strict_types=1);
 $ops = ['agency' => ['admin', 'project_manager'], 'business' => ['owner', 'marketing'], 'client_portal' => []];
 $money = ['agency' => ['admin', 'project_manager', 'finance'], 'business' => ['owner', 'marketing', 'finance'], 'client_portal' => []];
 $owner = ['agency' => ['admin'], 'business' => ['owner'], 'client_portal' => []];
+// ENGINE-MAIL-VISUAL-001 — Owner 2026-11-28: a project spending with no budget is the workspace management's and finance's to fix
+// (record the budget), never the project manager's.
+$budgetSetup = ['agency' => ['admin', 'finance'], 'business' => ['owner', 'finance'], 'client_portal' => []];
 $everyone = ['agency' => ['admin', 'project_manager', 'finance'], 'business' => ['owner', 'marketing', 'finance'], 'client_portal' => ['account_owner', 'team']];
 $ext = ['agency' => ['finance', 'project_manager', 'admin', 'client', 'other'], 'business' => ['owner', 'marketing', 'finance', 'other'], 'client_portal' => ['account_owner', 'team']];
 $quiet = ['in_app', 'email'];
@@ -83,7 +86,7 @@ return [
         // ── §5 projects ──
         'project.created' => $i('info', $everyone, ['channels' => ['in_app']]),
         'project.archived' => $i('info', $everyone, ['channels' => ['in_app']]),
-        'project.no_budget_for_period' => $i('important', $money, ['required_capability' => 'money.view', 'creates_task' => true, 'internal_only' => true]),
+        'project.no_budget_for_period' => $i('important', $budgetSetup, ['required_capability' => 'money.view', 'creates_task' => true, 'internal_only' => true]),
 
         // ── §1/§5 plan ──
         'plan.limit_nearing' => $i('important', $owner, ['internal_only' => true, 'channels' => $quiet]),

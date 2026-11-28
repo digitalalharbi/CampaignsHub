@@ -533,6 +533,17 @@ final class DailyDigest
         if ($projectId !== null && ($approved = $this->approvedBudget($projectId, $to)) !== null) {
             return $approved;
         }
+        /*
+         * BUDGETS-ONE-SOURCE-001 — Owner 2026-11-28: «الهاجري … المتبقي بالدولار بينما الميزانيات بالريال، ولا يوجد له ميزانيات
+         * ولا حدود إنفاق». The fallback below rolled the platforms' OWN campaign budgets up, in the ad account's currency, and the
+         * mail printed it as the project's budget — a figure the budgets board never shows. A project with no approved budget has
+         * NO budget in any mail: «ما فيه ميزانية مسجّلة», never a platform number (ONE-BUDGET-001).
+         */
+        if ($projectId !== null) {
+            return ['budget' => null, 'spent' => null, 'remaining' => null, 'projected' => null, 'pace' => null, 'currency' => null, 'currencies' => 0,
+                'excluded' => 0, 'unmeasured' => 0, 'campaigns' => 0, 'from' => $to->copy()->startOfMonth()->toDateString(),
+                'to' => $to->copy()->endOfMonth()->toDateString(), 'through' => $to->toDateString(), 'elapsed' => 0.0, 'outside' => 0, 'outside_reasons' => []];
+        }
 
         $from = $to->copy()->startOfMonth()->startOfDay();
         $roll = app(ClientBudgetRollup::class)->of($rows);
@@ -557,6 +568,33 @@ final class DailyDigest
             'outside' => count($outside),
             'outside_reasons' => array_count_values(array_map(static fn (array $r): string => (string) ($r['pacing_basis'] ?? 'unknown'), $outside)),
         ];
+    }
+
+    /**
+     * BUDGETS-ONE-SOURCE-001 — the «الميزانيات هذا الشهر» block of «ملخص المشاريع» covers EVERY live project of the reader's scope
+     * that has an approved budget, quiet ones included: a project that stopped spending but still has money left is exactly the one
+     * to renew or close with the client. Read from the budgets board's one source, in SAR. Projects with no approved budget are
+     * not listed (they have no budget to show).
+     *
+     * @param  list<string>  $projectIds
+     * @return list<array{project_id: string, project_name: string, budget_month: array<string,mixed>}>
+     */
+    public function budgetsFor(string $tenantId, array $projectIds, Carbon $to): array
+    {
+        if ($projectIds === []) {
+            return [];
+        }
+        $out = [];
+        $projects = Project::query()->live()->where('tenant_id', $tenantId)->whereIn('id', $projectIds)->orderBy('name')->get(['id', 'name']);
+        foreach ($projects as $project) {
+            $approved = $this->approvedBudget((string) $project->id, $to);
+            if ($approved === null) {
+                continue;
+            }
+            $out[] = ['project_id' => (string) $project->id, 'project_name' => (string) $project->name, 'budget_month' => $approved];
+        }
+
+        return $out;
     }
 
     /**

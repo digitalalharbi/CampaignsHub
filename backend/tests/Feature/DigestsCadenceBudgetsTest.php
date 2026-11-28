@@ -400,33 +400,13 @@ final class DigestsCadenceBudgetsTest extends TestCase
         return OperationalDigestModel::project($digest['projects'][0], 'ar')['budget'];
     }
 
-    public function test_a_budget_whose_spend_is_in_another_currency_is_no_figure_with_its_reason_not_no_budget(): void
-    {
-        app(TenantContext::class)->setTenantId($this->tenant->id);
-        $this->spend($this->campaign('USD account', 5000.0, 'USD'), ['value' => 3000.0]);   // budget USD, spend SAR
-
-        $b = $this->budgetBlock();
-
-        $this->assertSame('unpriced', $b['state'], 'the project HAS a budget');
-        $this->assertSame('لا بيانات', $b['remaining']);
-        $this->assertStringContainsString('عملة الإنفاق غير عملة الميزانية', $b['line']);
-        $this->assertStringNotContainsString('ما فيه ميزانية', $b['line']);
-    }
-
-    public function test_spend_with_no_exchange_rate_names_that_reason(): void
-    {
-        app(TenantContext::class)->setTenantId($this->tenant->id);
-        $c = $this->campaign('EUR spend', 5000.0, 'SAR');
-        $this->spend($c, ['value' => 1000.0]);
-        $this->spend($c, ['value' => null, 'original_amount' => 400.0, 'original_currency' => 'EUR', 'metric_date' => '2026-11-06']);   // partial: no rate
-
-        $b = $this->budgetBlock();
-
-        $this->assertSame('unpriced', $b['state']);
-        $this->assertStringContainsString('بدون سعر صرف', $b['line']);
-    }
-
-    public function test_a_campaign_left_out_of_the_figure_is_counted_on_the_row(): void
+    /**
+     * BUDGETS-ONE-SOURCE-001 — Owner 2026-11-28: «الهاجري … المتبقي بالدولار بينما الميزانيات بالريال، ولا يوجد له ميزانيات». The
+     * platforms' OWN campaign budgets (in the ad account's currency) are never a project's budget in a mail: with no approved
+     * budget on the budgets board the block says «no budget recorded», whatever the platforms carry. This replaces the three
+     * tests that pinned the campaign roll-up (another currency, no rate, a campaign left out): that roll-up is no longer read.
+     */
+    public function test_platform_campaign_budgets_are_never_the_projects_budget_in_a_mail(): void
     {
         app(TenantContext::class)->setTenantId($this->tenant->id);
         $this->spend($this->campaign('Priced', 10000.0, 'SAR'), ['value' => 4000.0]);
@@ -434,11 +414,11 @@ final class DigestsCadenceBudgetsTest extends TestCase
 
         $b = $this->budgetBlock();
 
-        $this->assertSame('ok', $b['state']);
-        $this->assertSame(10000.0, $b['budget_value'], 'only the priced campaign is in the figure');
-        $this->assertSame(1, $b['outside']);
-        $this->assertStringContainsString('حملة وحدة خارج الرقم', $b['outside_line']);
-        $this->assertStringContainsString('عملة الإنفاق غير عملة الميزانية', $b['outside_line']);
+        $this->assertSame('none', $b['state'], 'no approved budget → no budget, never a platform figure');
+        $this->assertNull($b['budget_value']);
+        $this->assertNull($b['remaining_value']);
+        $this->assertSame('', $b['remaining']);
+        $this->assertStringContainsString('ما فيه ميزانية مسجّلة', $b['line']);
     }
 
     public function test_the_projects_summary_leads_with_budgets_and_its_total_adds_up(): void

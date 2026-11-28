@@ -7,10 +7,10 @@ namespace App\Domains\Notifications\Mail;
 use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Support\AlertMailItem;
 use App\Domains\Notifications\Support\AlertVisual;
+use App\Domains\Notifications\Support\MailDeepLinks;
 use App\Domains\Notifications\Support\MailDisclaimer;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
-use App\Support\Frontend;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -99,7 +99,7 @@ final class AlertBundleMail extends Mailable
                 : 'These came up in the last sweep, and each needs a decision today.',
             // EMAIL-DIGESTS-OPERATIONAL-001 — the one button below the cards lands on the alerts page inside the system.
             'actionLabel' => $ar ? 'عرض كل التنبيهات داخل النظام' : 'See all alerts in the system',
-            'actionUrl' => Frontend::origin().'/app/alerts',
+            'actionUrl' => MailDeepLinks::alerts(),
         ];
 
         return new Content(view: 'mail.layout', with: $body + [

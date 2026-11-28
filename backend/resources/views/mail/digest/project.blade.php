@@ -2,7 +2,8 @@
   The project summary «ملخص المشروع» — DIGESTS-VISUAL-V2-001, reordered by DIGESTS-YESTERDAY-BY-OBJECTIVE-001: the verdict,
   the project's total, the breakdown per objective × platform, the budget (the decision list was removed by the Owner on 2026-11-21), «ملخص الربط» last.
 
-  DIGEST-FIGURES-ONLY-001 (Owner 2026-11-21): figures only — no verdict chip, platform strip, best/weak or content notes.
+  DIGEST-FIGURES-ONLY-001 (Owner 2026-11-21): figures only — no verdict chip or best/weak notes. The platform strip and «المحتوى»
+  came back on 2026-11-28 (DIGEST-STRIP-RESTORED-001, DIGEST-CONTENT-RESTORED-001).
   The project's total, then each objective and its platforms, then the budget. Every figure is
   `OperationalDigestModel`'s string; no `?? 0` exists in this file, so «لا بيانات» can never turn into a zero here.
 --}}
@@ -97,9 +98,59 @@
         @include('mail.digest._budget', ['b' => $m['budget']])
     @endif
 
-    {{-- DIGEST-FIGURES-ONLY-001 — the platform glyph strip (✓ ! ✕ per platform) is removed: a verdict, not a figure. --}}
+    {{--
+      DIGEST-STRIP-RESTORED-001 — Owner 2026-11-28 brought the platform strip back under «ميزانية الشهر»: every platform of the project
+      as a tile, its short name over its state glyph (✓ ضمن الخطة · ! مراقبة · ✕ يحتاج قرار · – بلا حركة), from the SAME cell states the
+      objective breakdown above reads — one rule, never a second verdict.
+    --}}
+    @if (! empty($m['cells']))
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="platform-strip" style="table-layout:fixed; margin:4px 0 10px;">
+            <tr>
+                @foreach (array_slice($m['cells'], 0, 6) as $cell)
+                    @php($tone = in_array($cell['state'], ['ok', 'watch', 'bad', 'none'], true) ? $cell['state'] : 'none')
+                    <td align="center" data-platform="{{ $cell['provider'] }}" data-state="{{ $tone }}" style="padding:0 2px;">
+                        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="{{ $S::CELL[$tone] }}" style="background-color:{{ $S::CELL[$tone] }}; border-radius:8px; padding:5px 2px;">
+                            <div style="font-size:11px; font-weight:700; color:#3d4742; white-space:nowrap;">{{ $cell['short'] }}</div>
+                            <div style="font-size:15px; font-weight:800; line-height:18px; color:{{ $S::INK[$tone] }};">{{ $S::GLYPH[$tone] }}</div>
+                        </td></tr></table>
+                    </td>
+                @endforeach
+            </tr>
+        </table>
+    @endif
 
-    {{-- DIGEST-FIGURES-ONLY-001 — the content best/weak cards are removed: they ranked on ROAS 0.00× and listed one ad as both. --}}
+    {{--
+      DIGEST-CONTENT-RESTORED-001 — Owner 2026-11-28 brought «المحتوى» back: the best content (the ranking's own reason, e.g. «أعلى معدل
+      العائد (54.21×)») and the content that needs a refresh, as small cards with the cover from our own domain when there is one. The two
+      defects that removed it are closed in the model: no «best» at a zero figure, and no ad listed as both.
+    --}}
+    @if (! empty($m['content']) && (! empty($m['content']['top']) || ! empty($m['content']['weak'])))
+        @php($cards = array_merge(
+            array_map(static fn (array $c): array => $c + ['tag' => $ar ? 'الأفضل أداءً' : 'Best performing', 'tone' => 'ok', 'line' => (string) ($c['reason'] ?? '')], $m['content']['top']),
+            array_map(static fn (array $c): array => $c + ['tag' => $ar ? 'يحتاج تجديدًا' : 'Needs a refresh', 'tone' => 'watch', 'line' => (string) ($c['why'] ?? '')], $m['content']['weak']),
+        ))
+        <div style="font-size:13px; font-weight:800; color:#0b1a16; margin:6px 0 6px;">{{ $ar ? 'المحتوى' : 'Content' }}</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-block="content" style="table-layout:fixed; margin-bottom:6px;">
+            @foreach (array_chunk($cards, 3) as $row)
+                <tr>
+                    @foreach ($row as $c)
+                        <td width="33%" valign="top" style="padding:0 2px 4px;">
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" data-content="{{ $c['tone'] }}" style="border:1px solid #e4e0d6; border-top:3px solid {{ $S::INK[$c['tone']] }}; border-radius:10px;"><tr><td style="padding:6px 8px;">
+                                @if (! empty($c['cover']))<img src="{{ $c['cover'] }}" alt="" width="100%" style="display:block; width:100%; max-height:120px; object-fit:cover; border-radius:6px; margin-bottom:4px;">@endif
+                                <div style="font-size:11px; font-weight:800; color:{{ $S::INK[$c['tone']] }};">{{ $c['tag'] }}</div>
+                                @if ($c['line'] !== '')<div style="font-size:11px; color:#3d4742;">{{ $c['line'] }}</div>@endif
+                                <div style="font-size:11px; color:#5b6b68; word-break:break-word;">{{ \Illuminate\Support\Str::limit((string) $c['name'], 60, '…') }}</div>
+                            </td></tr></table>
+                        </td>
+                    @endforeach
+                    @for ($i = count($row); $i < 3; $i++)<td width="33%">&nbsp;</td>@endfor
+                </tr>
+            @endforeach
+        </table>
+        @if (! $lean && ! empty($m['links']['content']))
+            <div style="text-align:{{ $startSide }}; margin-bottom:8px;"><a href="{{ $m['links']['content'] }}" style="font-size:12px; font-weight:700; color:#0b7a62; text-decoration:underline;">{{ $ar ? 'افتح أداء المحتوى' : 'Open content performance' }}</a></div>
+        @endif
+    @endif
 
 @unless ($lean)
     @if (! empty($m['follow_up']))
@@ -125,7 +176,10 @@
         </div>
     @endif
 
-    @include('mail.partials.button', ['href' => $m['links']['report'], 'label' => $t['open_report']])
+    {{-- MAIL-LINK-RECIPIENT-001 — only for a reader who may open the project's reports, in their own portal and workspace. --}}
+    @if (! empty($m['links']['report']))
+        @include('mail.partials.button', ['href' => $m['links']['report'], 'label' => $t['open_report']])
+    @endif
 @endunless
 
     @include('mail.digest._notes', ['ar' => $ar, 'sources' => $m['source_names'] ?? []])

@@ -7,12 +7,15 @@ namespace Tests\Feature\NotificationsV2\Concerns;
 use App\Domains\Access\Models\Permission;
 use App\Domains\Access\Models\Role;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Metrics\Models\DailyMetric;
 use App\Domains\Projects\Models\Project;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /** Workspaces, members and projects for the notifications-v2 engine tests. Call `seedPermissions()` in setUp. */
 trait BuildsWorkspaces
@@ -56,5 +59,22 @@ trait BuildsWorkspaces
         $ws = ClientWorkspace::create(['tenant_id' => $tenant->id, 'name' => 'C '.$name, 'slug' => 'c-'.uniqid(), 'mode' => 'managed', 'status' => 'active']);
 
         return Project::create(['tenant_id' => $tenant->id, 'client_workspace_id' => $ws->id, 'name' => $name, 'status' => $status]);
+    }
+
+    /**
+     * NOTIFY-STOPPED-001 — a project that SPENT yesterday: the only kind the budget scan asks about (a quiet or never-spent project
+     * is told nothing).
+     */
+    protected function spendingProject(Tenant $tenant, string $name = 'Project', float $spend = 100.0): Project
+    {
+        $project = $this->project($tenant, $name);
+        DailyMetric::query()->create([
+            'tenant_id' => $tenant->id, 'project_id' => $project->id, 'external_account_id' => (string) Str::uuid(),
+            'external_campaign_id' => (string) Str::uuid(), 'provider' => 'snapchat', 'metric_key' => 'spend',
+            'metric_date' => Carbon::today('Asia/Riyadh')->subDay()->toDateString(), 'attribution_window' => 'default',
+            'value' => $spend, 'original_amount' => $spend, 'original_currency' => 'SAR', 'project_currency' => 'SAR',
+        ]);
+
+        return $project;
     }
 }

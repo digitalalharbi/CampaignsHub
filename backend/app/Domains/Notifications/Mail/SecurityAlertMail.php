@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Mail;
 
 use App\Domains\Notifications\Support\MailDesign;
+use App\Domains\Notifications\Support\MailLinkContext;
 use App\Domains\Notifications\Support\MailLinks;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
@@ -89,7 +90,7 @@ final class SecurityAlertMail extends Mailable
             'greeting' => $this->recipientName !== ''
                 ? ($ar ? "مرحبًا، {$this->recipientName}" : "Hello, {$this->recipientName}")
                 : ($ar ? 'مرحبًا' : 'Hello'),
-            'actionUrl' => MailLinks::to('/app/account/security'),
+            'actionUrl' => MailLinks::to(MailLinkContext::path('/account/security')),
             'actionLabel' => $ar ? 'مراجعة أمان الحساب' : 'Review account security',
             'reassurance' => $words['reassurance'],
         ];
