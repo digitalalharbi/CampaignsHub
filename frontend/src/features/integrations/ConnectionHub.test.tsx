@@ -490,14 +490,17 @@ describe('the connection flow', () => {
   })
 
   /** What the product will read, said in our words before the consent screen says it in theirs. */
-  it('states what will be read, and that nothing is written', async () => {
+  /** META-REVIEW-COPY-001 — the promise matches the product: campaigns are created only on request, and PAUSED. */
+  it('states what will be read, and that a campaign is created only on request and paused', async () => {
     renderWithProviders(<IntegrationsPage />)
 
     fireEvent.click(await screen.findByTestId('hub-connect-empty'))
     await pickPlatform('meta')
 
     const login = await screen.findByTestId('flow-step-login')
-    expect(login).toHaveTextContent('Read only')
+    expect(login).toHaveTextContent('creates a campaign only when you ask for it')
+    expect(login).toHaveTextContent('PAUSED')
+    expect(login).not.toHaveTextContent('never creates a campaign')
     expect(login).toHaveTextContent('No account is ever synced unless you choose it')
   })
 
