@@ -149,10 +149,16 @@ export function LaunchPage() {
     setStep(p.status === 'draft' ? 5 : 6)
   }
   const unfinished = (plans.data ?? []).filter((p) => p.status !== 'published')
+  // LAUNCH-NEW-001 — opening a saved plan never takes away creating a new one: this clears the open plan and asks the objective again.
+  const startNew = () => {
+    setPlan(null); setSpec(empty()); setGoal(null); setStep(0); setErrors([]); setConfirming(false); setSpendOk(false); publish.reset(); save.reset()
+    setAsking(true)
+  }
 
   return (
     <div className="space-y-4" data-testid="launch-page">
-      <PageIntro title={title} purpose={purpose} />
+      <PageIntro title={title} purpose={purpose}
+        actions={(plan !== null || !asking) ? <Button onClick={startNew} data-testid="launch-new"><Rocket size={16} aria-hidden />{ar ? 'حملة جديدة' : 'New campaign'}</Button> : undefined} />
       {asking && plan === null && (
         <ObjectivePicker ar={ar} picked={picked} onPick={setPicked} unfinished={unfinished} onOpenPlan={openPlan}
           onCancel={() => navigate(portal('/campaigns'))}
