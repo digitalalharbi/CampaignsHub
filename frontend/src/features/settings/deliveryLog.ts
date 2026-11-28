@@ -11,9 +11,15 @@
  *     is the strongest signal on the page — and «0 failures» hides it behind a reassuring number.
  */
 export interface DeliveryRow {
-  source: 'digest' | 'transactional'
+  source: 'digest' | 'transactional' | 'engine' | 'external'
   kind: string
+  /** TEAM-MAIL-LOG-001 — the message in words («ملخص المشاريع : أمس»); absent on a row from an older server. */
+  label?: string
+  /** The project a per-project mail is about, when it names one. */
+  project?: string | null
   recipient: string | null
+  /** TEAM-MAIL-LOG-001 — a member of the workspace (`internal`) or somebody outside it (`external`). */
+  audience?: 'internal' | 'external'
   status: string
   /** The stage as a reader should hear it. Absent only on a row from an older server. */
   state?: string
@@ -33,7 +39,9 @@ export interface DeliverySummary {
   latest: DeliveryRow | null
 }
 
-const BLOCKED = new Set(['awaiting_provider_credentials', 'awaiting_credentials', 'suppressed', 'sandbox', 'unsubscribed', 'limit_reached', 'repeat_limit', 'refused_scope'])
+const BLOCKED = new Set(['awaiting_provider_credentials', 'awaiting_credentials', 'suppressed', 'sandbox', 'unsubscribed', 'limit_reached', 'repeat_limit', 'refused_scope',
+  // TEAM-MAIL-LOG-001 — nothing to say (no data, a quiet project) or held on purpose: not a failure, not a send.
+  'skipped', 'already_sent', 'deferred', 'held_for_review', 'held_for_privacy', 'blocked_by_plan', 'moved_to_shared_engine'])
 
 export function summariseDeliveries(rows: DeliveryRow[]): DeliverySummary {
   const sent = rows.filter((r) => r.status === 'sent').length

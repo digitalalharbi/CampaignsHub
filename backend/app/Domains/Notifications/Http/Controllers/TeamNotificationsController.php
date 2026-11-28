@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Http\Controllers;
 
+use App\Domains\Notifications\Internal\EngineKinds;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Services\DigestScope;
 use App\Domains\Notifications\Services\NotificationChoices;
@@ -198,23 +199,51 @@ final class TeamNotificationsController extends Controller
 
         $tenantId = (string) $this->tenants->tenantId();
 
+        /*
+         * TEAM-MAIL-LOG-001 — Owner 2026-11-28: «احتاج كنترول وسجل وش الإيميلات التي تصل للفريق، وهل هم مستخدمين داخلي أو خارجي».
+         * Every mail this workspace sends is one row here, from whichever ledger records it — digests and summaries
+         * (`digest_sends`), the bell's and the alerts' mails (`mail_deliveries`), the engine's notices (`notification_delivery_log`,
+         * email only) and the budget follow-ups to people outside the platform (`external_digest_sends`) — each with WHO received it,
+         * WHAT it was in words, and whether that person is a member of the workspace (`internal`) or not (`external`).
+         */
+        $members = DB::table('memberships as m')->join('users as u', 'u.id', '=', 'm.user_id')
+            ->where('m.tenant_id', $tenantId)->where('m.status', 'active')
+            ->pluck('u.email', 'u.id')->map(static fn ($e): string => mb_strtolower((string) $e))->all();
+        $memberAddresses = array_flip(array_values($members));
+        $audience = static fn (?string $address): string => $address !== null && isset($memberAddresses[mb_strtolower($address)]) ? 'internal' : 'external';
+        $userEmails = DB::table('users')->whereIn('id', DB::table('digest_sends')->where('tenant_id', $tenantId)->orderByDesc('created_at')->limit(self::LOG_LIMIT)->pluck('user_id')->all())
+            ->pluck('email', 'id')->all();
+        $projectNames = DB::table('projects')->where('tenant_id', $tenantId)->pluck('name', 'id')->all();
+        $projectByKey = [];
+        foreach ($projectNames as $id => $name) {
+            $projectByKey[substr(str_replace('-', '', (string) $id), 0, 12)] = (string) $name;
+        }
+
         $digests = DB::table('digest_sends')
             ->where('tenant_id', $tenantId)
             ->orderByDesc('created_at')
             ->limit(self::LOG_LIMIT)
             ->get()
-            ->map(fn ($r): array => [
-                'source' => 'digest',
-                'kind' => (string) $r->kind,
-                'recipient' => null,
-                'status' => (string) $r->status,
-                'state' => MailDeliveryState::of((string) $r->status, $r->delivered_at ?? null),
-                'failure_code' => $r->failure_code ?? null,
-                'reason' => $r->reason === null ? null : (string) $r->reason,
-                'attempts' => (int) ($r->attempts ?? 0),
-                'at' => (string) ($r->sent_at ?? $r->created_at),
-                'sort' => (string) $r->created_at,
-            ]);
+            ->map(function ($r) use ($userEmails, $projectByKey): array {
+                $key = (string) $r->period_key;
+                $project = str_contains($key, '~') ? ($projectByKey[substr($key, (int) strpos($key, '~') + 1)] ?? null) : null;
+
+                return [
+                    'source' => 'digest',
+                    'kind' => (string) $r->kind,
+                    'label' => self::digestLabel((string) $r->kind, $project !== null || str_contains($key, '~')),
+                    'project' => $project,
+                    'recipient' => isset($userEmails[$r->user_id]) ? (string) $userEmails[$r->user_id] : null,
+                    'audience' => 'internal',
+                    'status' => (string) $r->status,
+                    'state' => MailDeliveryState::of((string) $r->status, $r->delivered_at ?? null),
+                    'failure_code' => $r->failure_code ?? null,
+                    'reason' => $r->reason === null ? null : (string) $r->reason,
+                    'attempts' => (int) ($r->attempts ?? 0),
+                    'at' => (string) ($r->sent_at ?? $r->created_at),
+                    'sort' => (string) $r->created_at,
+                ];
+            });
 
         /*
          * `tenant_id` is nullable here ON PURPOSE — a password reset is requested with no session and
@@ -230,7 +259,10 @@ final class TeamNotificationsController extends Controller
             ->map(fn ($r): array => [
                 'source' => 'transactional',
                 'kind' => (string) $r->kind,
+                'label' => self::kindLabel((string) $r->kind),
+                'project' => null,
                 'recipient' => (string) $r->recipient,
+                'audience' => $audience((string) $r->recipient),
                 'status' => (string) $r->status,
                 'state' => MailDeliveryState::of((string) $r->status, $r->delivered_at ?? null),
                 'failure_code' => $r->failure_code ?? null,
@@ -241,7 +273,48 @@ final class TeamNotificationsController extends Controller
                 'sort' => (string) $r->created_at,
             ]);
 
-        $rows = $digests->concat($transactional)
+        $engine = DB::table('notification_delivery_log')
+            ->where('tenant_id', $tenantId)->where('channel', 'email')
+            ->orderByDesc('seq')->limit(self::LOG_LIMIT)
+            ->get()
+            ->map(fn ($r): array => [
+                'source' => 'engine',
+                'kind' => (string) $r->event_key,
+                'label' => EngineKinds::label((string) $r->event_key, app()->getLocale() !== 'en') ?? (string) $r->event_key,
+                'project' => $r->project_name === null ? null : (string) $r->project_name,
+                'recipient' => $r->recipient_address === null ? null : (string) $r->recipient_address,
+                'audience' => (string) $r->scope === 'external' || (string) $r->recipient_kind === 'external' ? 'external' : 'internal',
+                'status' => (string) $r->status,
+                'state' => MailDeliveryState::of((string) $r->status, null),
+                'failure_code' => null,
+                'reason' => $r->reason === null ? null : (string) $r->reason,
+                'attempts' => (int) ($r->attempt ?? 1),
+                'at' => (string) ($r->provider_accepted_at ?? $r->created_at),
+                'sort' => (string) $r->created_at,
+            ]);
+
+        $external = DB::table('external_digest_sends as s')
+            ->leftJoin('external_digest_recipients as x', 'x.id', '=', 's.recipient_id')
+            ->where('s.tenant_id', $tenantId)
+            ->orderByDesc('s.created_at')->limit(self::LOG_LIMIT)
+            ->get(['s.*', 'x.email as recipient_email'])
+            ->map(fn ($r): array => [
+                'source' => 'external',
+                'kind' => 'spend_summary_external',
+                'label' => app()->getLocale() === 'en' ? 'Budget follow-up (outside the platform)' : 'متابعة الميزانية (خارج المنصة)',
+                'project' => null,
+                'recipient' => $r->recipient_email === null ? null : (string) $r->recipient_email,
+                'audience' => 'external',
+                'status' => (string) $r->status,
+                'state' => MailDeliveryState::of((string) $r->status, null),
+                'failure_code' => null,
+                'reason' => $r->reason === null ? null : (string) $r->reason,
+                'attempts' => 1,
+                'at' => (string) ($r->sent_at ?? $r->created_at),
+                'sort' => (string) $r->created_at,
+            ]);
+
+        $rows = $digests->concat($transactional)->concat($engine)->concat($external)
             ->sortByDesc('sort')
             ->take(self::LOG_LIMIT)
             ->map(function (array $row): array {
@@ -253,6 +326,47 @@ final class TeamNotificationsController extends Controller
             ->all();
 
         return ApiResponse::success($rows, 'Delivery log.');
+    }
+
+    /** TEAM-MAIL-LOG-001 — a digest ledger kind in words («ملخص المشاريع : أمس», «ملخص المشروع : الأسبوع الماضي», …). */
+    private static function digestLabel(string $kind, bool $perProject): string
+    {
+        $ar = app()->getLocale() !== 'en';
+        $manual = str_starts_with($kind, 'now_');
+        $base = $manual ? substr($kind, 4) : $kind;
+        $period = match ($base) {
+            'daily' => $ar ? 'أمس' : 'yesterday',
+            'weekly' => $ar ? 'الأسبوع الماضي' : 'last week',
+            'monthly' => $ar ? 'الشهر الماضي' : 'last month',
+            default => null,
+        };
+        if ($period === null) {
+            return self::kindLabel($kind);
+        }
+        $what = $perProject ? ($ar ? 'ملخص المشروع' : 'Project summary') : ($ar ? 'ملخص المشاريع' : 'Projects summary');
+
+        return $what.' : '.$period.($manual ? ($ar ? ' (أرسل الآن)' : ' (sent now)') : '');
+    }
+
+    /** A transactional / alert kind in words, from the catalogue; the raw key when the catalogue has none. */
+    private static function kindLabel(string $kind): string
+    {
+        $ar = app()->getLocale() !== 'en';
+        $known = [
+            'project_budget' => ['تنبيه ميزانية المشروع', 'Project budget notice'],
+            'budget_risk' => ['تنبيه أداء', 'Performance alert'],
+            'alerts' => ['تنبيهات الأداء', 'Performance alerts'],
+            'sync_failed' => ['تنبيه الربط', 'Connection notice'],
+            'token_expiring' => ['تنبيه الربط', 'Connection notice'],
+            'report_ready' => ['التقرير جاهز', 'Report ready'],
+            'security' => ['تنبيه أمان', 'Security notice'],
+            'invitation' => ['دعوة', 'Invitation'],
+        ];
+        if (isset($known[$kind])) {
+            return $known[$kind][$ar ? 0 : 1];
+        }
+
+        return EngineKinds::label(EngineKinds::eventFor($kind), $ar) ?? $kind;
     }
 
     /**

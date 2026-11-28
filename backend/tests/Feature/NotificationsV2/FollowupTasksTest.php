@@ -13,6 +13,7 @@ use App\Domains\Notifications\Followup\Models\FollowupTaskEvent;
 use App\Domains\Notifications\Services\NotificationDispatcher;
 use App\Domains\Projects\Lifecycle\ProjectLifecycle;
 use App\Domains\Projects\Lifecycle\ProjectStatus;
+use App\Domains\Projects\Models\Project;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -57,9 +58,18 @@ final class FollowupTasksTest extends TestCase
         Artisan::call('notifications:v2-internal-scan');
     }
 
+    /** NOTIFY-STOPPED-001 — a project that spent yesterday: the only kind the budget scan asks about. */
+    private function spendingProject(string $name = 'Launch'): Project
+    {
+        $project = $this->newProject($name);
+        $this->spendRow($project, (string) Str::uuid(), 1, 100);
+
+        return $project;
+    }
+
     public function test_a_project_without_a_budget_opens_a_set_budget_task_and_adding_a_budget_closes_it_by_itself(): void
     {
-        $project = $this->newProject('Launch');
+        $project = $this->spendingProject('Launch');
         $this->scan();
 
         $open = $this->tasks($this->finance);
@@ -120,7 +130,7 @@ final class FollowupTasksTest extends TestCase
 
     public function test_snooze_hides_a_task_until_its_time_then_it_is_open_again_and_the_history_says_so(): void
     {
-        $project = $this->newProject();
+        $project = $this->spendingProject();
         $this->scan();
         $id = $this->tasks($this->finance)[0]['id'];
 
@@ -136,7 +146,7 @@ final class FollowupTasksTest extends TestCase
 
     public function test_assigning_to_a_colleague_moves_the_task_to_them_and_only_eligible_people_qualify(): void
     {
-        $project = $this->newProject();
+        $project = $this->spendingProject();
         $this->scan();
         $id = $this->tasks($this->finance)[0]['id'];
         $colleague = $this->userWith(['projects.view', 'projects.view.all', 'clients.view_all']);
@@ -155,7 +165,7 @@ final class FollowupTasksTest extends TestCase
 
     public function test_a_person_who_does_not_reach_the_project_does_not_see_its_tasks(): void
     {
-        $this->newProject('Mine');
+        $this->spendingProject('Mine');
         $this->scan();
         $outsider = $this->userWith(['projects.view']); // no «all projects», no project membership
         $this->assertSame([], $this->tasks($outsider));
@@ -167,7 +177,7 @@ final class FollowupTasksTest extends TestCase
 
     public function test_no_task_is_opened_for_an_archived_project_and_one_closes_when_its_project_is_archived(): void
     {
-        $project = $this->newProject();
+        $project = $this->spendingProject();
         $this->scan();
         $this->assertCount(1, $this->tasks($this->finance));
 
@@ -180,7 +190,7 @@ final class FollowupTasksTest extends TestCase
 
     public function test_with_the_follow_up_key_off_the_api_and_the_scan_refuse_and_the_data_is_kept_then_restored(): void
     {
-        $project = $this->newProject();
+        $project = $this->spendingProject();
         $this->scan();
         $this->assertCount(1, $this->tasks($this->finance));
 
@@ -190,7 +200,7 @@ final class FollowupTasksTest extends TestCase
         $this->assertFalse(app(EntitlementGate::class)->allows($this->tenant->id, EntitlementKey::Tasks));
 
         $this->actingAs($this->finance, 'sanctum')->getJson('/api/v1/followup/tasks')->assertForbidden()->assertJsonPath('meta.upgrade', true);
-        $second = $this->newProject('Second');
+        $second = $this->spendingProject('Second');
         $this->scan();
         $this->assertSame(1, FollowupTask::query()->withoutGlobalScopes()->count(), 'the scheduled job opened nothing');
 
@@ -203,7 +213,7 @@ final class FollowupTasksTest extends TestCase
 
     public function test_a_client_portal_member_has_no_follow_up_list(): void
     {
-        $this->newProject();
+        $this->spendingProject();
         $this->scan();
         $portal = $this->userWith(['projects.view']);
         DB::table('memberships')->where('user_id', $portal->id)->update(['portal' => 'portal']);
@@ -214,7 +224,7 @@ final class FollowupTasksTest extends TestCase
 
     public function test_the_history_table_is_append_only(): void
     {
-        $this->newProject();
+        $this->spendingProject();
         $this->scan();
         $event = FollowupTaskEvent::query()->withoutGlobalScopes()->firstOrFail();
 

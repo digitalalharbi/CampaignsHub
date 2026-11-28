@@ -8,9 +8,10 @@ use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Services\DigestPresenter;
 use App\Domains\Notifications\Support\AlertEventText;
 use App\Domains\Notifications\Support\DigestSchedule;
+use App\Domains\Notifications\Support\MailDeepLinks;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailDisclaimer;
-use App\Domains\Notifications\Support\MailLinks;
+use App\Domains\Notifications\Support\MailLinkContext;
 use App\Domains\Notifications\Support\MailShell;
 use App\Domains\Notifications\Support\MailSubject;
 use App\Support\AdPlatforms;
@@ -50,7 +51,17 @@ final class SpendSummaryMail extends Mailable
         /** The click-counted footprint link (UTM) of the © line, or the removal of the footprint (branding.remove_platform_footprint). */
         public readonly ?string $footprintUrl = null,
         public readonly bool $hideFootprint = false,
-    ) {}
+        /**
+         * MAIL-LINK-RECIPIENT-001 — the budgets button, resolved for THIS recipient when the mail is built (their portal and the
+         * workspace, {@see MailLinkContext}); null when they may not open budgets — no button then. Left unset, it is resolved
+         * now from the context in force (a preview keeps its button).
+         */
+        public ?string $budgetsUrl = '',
+    ) {
+        if ($this->budgetsUrl === '') {
+            $this->budgetsUrl = MailLinkContext::external() ? null : MailDeepLinks::budgets();
+        }
+    }
 
     public function title(bool $ar): string
     {
@@ -76,12 +87,15 @@ final class SpendSummaryMail extends Mailable
         $notConverted = $ar ? 'غير محوّل' : 'Not converted';
 
         $projects = array_map(function (array $r) use ($ar, $p, $notConverted): array {
+            // BUDGETS-ONE-SOURCE-001 — a project read from its approved budget speaks of «الميزانية», as the budgets board does.
+            $budget = ($r['source'] ?? 'limit') === 'budget';
             $stateLabel = match ($r['state']) {
-                'over' => $this->external ? ($ar ? 'يحتاج متابعة' : 'Being followed') : ($ar ? 'تجاوزت الحد' : 'Over the limit'), // spec §7: no alarm wording outside the platform
+                'over' => $this->external ? ($ar ? 'يحتاج متابعة' : 'Being followed') : ($budget ? ($ar ? 'تجاوزت الميزانية' : 'Over budget') : ($ar ? 'تجاوزت الحد' : 'Over the limit')), // spec §7: no alarm wording outside the platform
                 'near' => $ar ? 'قرّبت تخلص' : 'Close to the limit',
-                'ok' => $ar ? 'ضمن الحد' : 'Within the limit',
+                'ok' => $budget ? ($ar ? 'ضمن الميزانية' : 'Within budget') : ($ar ? 'ضمن الحد' : 'Within the limit'),
+                'credit' => $ar ? 'بالأجل' : 'On credit',
                 'unconverted' => $notConverted,
-                default => $ar ? 'بدون حد' : 'No limit',
+                default => $ar ? 'بدون ميزانية' : 'No budget',
             };
             $cap = $p($r['cap_currency']);
             $used = $r['used'] !== null ? (int) round((float) $r['used'] * 100) : null;
@@ -89,6 +103,7 @@ final class SpendSummaryMail extends Mailable
 
             return $r + [
                 'state_label' => $stateLabel,
+                'cap_label' => $budget ? ($ar ? 'الميزانية' : 'Budget') : ($ar ? 'الحد' : 'Limit'),
                 'spend_text' => $r['spend_withheld'] ? $notConverted : $p($r['spend_currency'])->money($r['spend']),
                 'cap_text' => $r['cap'] !== null ? $cap->money($r['cap']) : '',
                 'consumed_text' => $r['consumed'] !== null ? $cap->money($r['consumed']) : '',
@@ -146,7 +161,7 @@ final class SpendSummaryMail extends Mailable
                 'periodLabel' => $periodLabel,
                 'recipientLine' => trim(($this->external && $this->recipientName !== '' ? ($ar ? "مرحبًا، {$this->recipientName}" : "Hello, {$this->recipientName}") : '').($this->privacyLine !== null ? ' '.$this->privacyLine : '')),
                 'external' => $this->external,
-                'budgetsUrl' => MailLinks::to('/app/budgets'),
+                'budgetsUrl' => $this->budgetsUrl,
                 'dir' => $ar ? 'rtl' : 'ltr',
                 'startSide' => $ar ? 'right' : 'left',
                 'endSide' => $ar ? 'left' : 'right',

@@ -78,8 +78,12 @@ final class InternalScan
 
     private function budgets(string $tenantId, Carbon $now): int
     {
-        // DELIVERY-QUIET-001 — a project that neither spent nor showed one impression in 3 days raises no budget notice.
-        $ids = app(DeliveryState::class)->watched(ActiveProjects::liveIds($tenantId), $now->copy()->subDays(DeliveryState::DAYS - 1)->toDateString(), $now->toDateString());
+        /*
+         * NOTIFY-STOPPED-001 — Owner 2026-11-28: «الهاجري نشط ولا توجد له ميزانية» arrived every morning for a project whose
+         * campaigns had stopped long ago. A budget notice is about money moving: only a project that SPENT in the last 7 days
+         * (DeliveryState::DAYS) is asked about its budget — not one that is quiet, and not one that never spent.
+         */
+        $ids = app(DeliveryState::class)->spent(ActiveProjects::liveIds($tenantId), $now->copy()->subDays(DeliveryState::DAYS - 1)->toDateString(), $now->toDateString());
         $n = 0;
         foreach ($this->budgets->forProjects($ids, $now) as $projectId => $r) {
             if (($r['has_budget'] ?? false) !== true) {

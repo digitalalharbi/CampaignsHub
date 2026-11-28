@@ -191,8 +191,17 @@ final class DigestDeliveryTest extends TestCase
         Mail::assertNotSent(OperationalDigestMail::class);
 
         config()->set('mail.operational_digests', true);
+        // NOTIFY-STOPPED-001 — a day with no movement sends nothing, so the second day carries its own spend too.
+        app(TenantContext::class)->setTenantId((string) $this->tenant->id);
+        app(UpsertDailyMetrics::class)->handle([new NormalizedMetric(
+            tenantId: (string) $this->tenant->id, projectId: (string) $this->project->id,
+            externalAccountId: Uuid::uuid5(Uuid::NAMESPACE_URL, 'acc')->toString(), externalCampaignId: Uuid::uuid5(Uuid::NAMESPACE_URL, 'camp')->toString(),
+            provider: 'meta', metricKey: 'spend', metricDate: Carbon::today()->subDay(), value: 200.0,
+        )]);
+        app(TenantContext::class)->forget();
         $this->assertSame('sent', $dispatcher->sendDaily($this->user, (string) $this->tenant->id, Carbon::today()->subDay()));
-        Mail::assertSent(OperationalDigestMail::class, fn ($m): bool => $m->scope === 'project' && str_contains($m->render(), '/app/reports?project='.$this->project->id));
+        // MAIL-LINK-RECIPIENT-001 — this reader holds campaigns, not reports: the mail offers no «افتح التقرير» it would refuse.
+        Mail::assertSent(OperationalDigestMail::class, fn ($m): bool => $m->scope === 'project' && ! str_contains($m->render(), '/reports?project='.$this->project->id));
         Mail::assertSent(DailyDigestMail::class, 1);
     }
 
@@ -388,8 +397,9 @@ final class DigestDeliveryTest extends TestCase
         $this->assertSame('skipped', $state);
         Mail::assertNothingSent();
 
+        // NOTIFY-STOPPED-001 — a project with nothing on record in the period is not reported at all: the reason is the quiet filter's.
         $row = DB::table('digest_sends')->where('user_id', $this->user->id)->first();
-        $this->assertSame('no_activity', $row->reason);
+        $this->assertSame('no_delivery', $row->reason);
     }
 
     /**

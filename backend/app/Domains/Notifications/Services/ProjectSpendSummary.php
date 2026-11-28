@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
+use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Metrics\Enums\SpendLimitScope;
 use App\Domains\Metrics\Models\SpendLimit;
 use App\Domains\Metrics\Services\MetricsAggregator;
 use App\Domains\Metrics\Services\SpendLimitGovernor;
+use App\Domains\Metrics\Spend\SpendLedger;
 use App\Domains\Projects\Models\Project;
 use Illuminate\Support\Carbon;
 
@@ -33,6 +35,8 @@ final class ProjectSpendSummary
     public function __construct(
         private readonly MetricsAggregator $metrics,
         private readonly SpendLimitGovernor $limits,
+        private readonly ProjectBudgetReader $budgets,
+        private readonly SpendLedger $ledger,
     ) {}
 
     /**
@@ -50,16 +54,27 @@ final class ProjectSpendSummary
         $clientNames = $clientIds === [] ? [] : ClientWorkspace::query()->withoutGlobalScopes()
             ->where('tenant_id', $tenantId)->whereIn('id', $clientIds)->pluck('name', 'id')->all();
 
+        /*
+         * BUDGETS-ONE-SOURCE-001 — Owner 2026-11-28: «الميزانيات … بالريال مطابق 100% لتصنيف الميزانيات». A project with an approved
+         * budget on the budgets board («الميزانيات», ONE-BUDGET-001) is read from it — approved, spent and remaining of the budget's
+         * own period, in SAR, exactly what /agency/budgets shows — and its period spend in SAR through the one FX engine. The spend
+         * limit below is only for a project that has no approved budget.
+         */
+        $approved = $this->budgets->forProjects($projects->map(static fn (Project $p): string => (string) $p->id)->all(), $today->copy()->startOfDay());
+
         $rows = [];
         foreach ($projects as $project) {
-            $row = $this->project($tenantId, (string) $project->id, (string) $project->name, $from, $to, $today, $days);
+            $budget = $approved[(string) $project->id] ?? ProjectBudgetReader::none();
+            $row = ($budget['has_budget'] ?? false) === true
+                ? $this->approved((string) $project->id, (string) $project->name, $budget, $from, $to, $days)
+                : $this->project($tenantId, (string) $project->id, (string) $project->name, $from, $to, $today, $days);
             $row['client_id'] = $project->client_workspace_id !== null ? (string) $project->client_workspace_id : null;
             $row['client_name'] = $row['client_id'] !== null ? (string) ($clientNames[$row['client_id']] ?? '') : '';
             $rows[] = $row;
         }
 
         // Closest to running out first; a project whose limit cannot be stated comes before the healthy ones.
-        $rank = ['over' => 0, 'near' => 1, 'unconverted' => 2, 'ok' => 3, 'none' => 4];
+        $rank = ['over' => 0, 'near' => 1, 'unconverted' => 2, 'ok' => 3, 'credit' => 4, 'none' => 5];
         usort($rows, static fn (array $a, array $b): int => ($rank[$a['state']] <=> $rank[$b['state']])
             ?: (($b['used'] ?? -1) <=> ($a['used'] ?? -1)) ?: strcmp($a['name'], $b['name']));
 
@@ -72,6 +87,45 @@ final class ProjectSpendSummary
             // Where the spend figures come from, named in the mail's notes (every platform that reported spend in the period).
             'sources' => array_values(array_unique(array_merge(...array_map(static fn (array $r): array => (array) ($r['sources'] ?? []), $rows ?: [[]])))),
             'total' => $this->total($rows),
+        ];
+    }
+
+    /**
+     * A project read from its approved budget (SAR): the budget, its spend and remaining (`ProjectBudgetReader`, the budgets
+     * board's own reading), the period's spend converted to SAR by `SpendLedger`, the days the remainder covers at the budget's
+     * own pace. A credit budget has no balance: its state is `credit` and only its spend is stated.
+     *
+     * @param  array<string,mixed>  $b  `ProjectBudgetReader::forProject()`
+     * @return array<string,mixed>
+     */
+    private function approved(string $projectId, string $name, array $b, Carbon $from, Carbon $to, int $days): array
+    {
+        $reading = $this->ledger->read([$projectId], $from->copy()->startOfDay(), $to->copy()->startOfDay(), 'SAR', liveOnly: false);
+        $spend = $reading['amount'] === null ? null : round((float) $reading['amount'], 2);
+        $sources = [];
+        foreach ($this->metrics->acrossProjects()->forProjects([$projectId])->byProvider($from, $to) as $pr) {
+            if (is_numeric($pr['spend'] ?? null) && (float) $pr['spend'] > 0) {
+                $sources[] = (string) $pr['provider'];
+            }
+        }
+        $remaining = is_numeric($b['remaining'] ?? null) ? round((float) $b['remaining'], 2) : null;
+        $used = is_numeric($b['used_ratio'] ?? null) ? (float) $b['used_ratio'] : null;
+
+        return [
+            'id' => $projectId, 'name' => $name,
+            'spend' => $spend, 'spend_currency' => 'SAR', 'spend_withheld' => $spend === null,
+            'cap' => round((float) ($b['approved'] ?? 0), 2), 'cap_currency' => 'SAR',
+            'consumed' => round((float) ($b['spent'] ?? 0), 2), 'remaining' => $remaining, 'used' => $used,
+            'limit_from' => $b['period_start'] ?? null, 'limit_to' => $b['period_end'] ?? null,
+            'days_left' => $remaining !== null && $remaining > 0 && is_numeric($b['cover_days'] ?? null) ? (int) $b['cover_days'] : null,
+            'state' => match (true) {
+                $remaining === null => 'credit',
+                $remaining < 0 || ($used !== null && $used >= 1.0) => 'over',
+                $used !== null && $used >= self::NEAR => 'near',
+                default => 'ok',
+            },
+            'source' => 'budget',
+            'sources' => $sources,
         ];
     }
 
@@ -97,6 +151,7 @@ final class ProjectSpendSummary
             'spend' => $spend, 'spend_currency' => $spendCurrency, 'spend_withheld' => $withheld,
             'cap' => null, 'cap_currency' => null, 'consumed' => null, 'remaining' => null, 'used' => null,
             'limit_from' => null, 'limit_to' => null, 'days_left' => null, 'state' => 'none',
+            'source' => 'limit',
             'sources' => $sources,
         ];
 

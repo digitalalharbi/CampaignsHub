@@ -572,7 +572,9 @@ final class DigestsYesterdayByObjectiveTest extends TestCase
         }
 
         $project = (new OperationalDigestMail(OperationalDigestModel::project($d['projects'][0], 'ar', 1), 'ar', 'م', 'daily', 'project'))->render();
-        foreach (['data-block="platform-strip"', 'data-block="content-top"', 'data-block="content-weak"', 'data-block="best-worst"'] as $gone) {
+        // DIGEST-STRIP-RESTORED-001 / DIGEST-CONTENT-RESTORED-001 — Owner 2026-11-28: the platform strip and «المحتوى» are back;
+        // the best/weakest notes stay removed.
+        foreach (['data-block="content-top"', 'data-block="content-weak"', 'data-block="best-worst"'] as $gone) {
             $this->assertStringNotContainsString($gone, $project, $gone);
         }
     }

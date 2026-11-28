@@ -19,7 +19,7 @@
             @forelse ($shown as $r)
                 @php($fill = match ($r['tone']) { 'bad' => '#c0392b', 'watch' => '#e0a23a', 'ok' => '#0d8a6f', default => '#9ccfc0' })
                 <tr data-block="budget-row" data-project="{{ $r['id'] }}" data-band="{{ $r['band'] ?? 'none' }}" style="font-size:12px; line-height:20px;">
-                    <td width="34%" style="padding:3px 0; font-weight:700; color:#0b1a16; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><a href="{{ $r['url'] }}" style="color:#0b1a16; text-decoration:none;">{{ \Illuminate\Support\Str::limit($r['name'], 16, '…') }}</a></td>
+                    <td width="34%" style="padding:3px 0; font-weight:700; color:#0b1a16; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">@if (! empty($r['url']))<a href="{{ $r['url'] }}" style="color:#0b1a16; text-decoration:none;">{{ \Illuminate\Support\Str::limit($r['name'], 16, '…') }}</a>@else{{ \Illuminate\Support\Str::limit($r['name'], 16, '…') }}@endif</td>
                     <td dir="ltr" style="padding:3px 4px;">
                         @if ($r['state'] === 'ok')
                             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#e6e2d6; border-radius:4px;"><tr>

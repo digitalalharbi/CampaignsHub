@@ -12,6 +12,7 @@ use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Push\PushDispatcher;
 use App\Domains\Notifications\Push\SendPushNotification;
 use App\Domains\Notifications\Support\BellKind;
+use App\Domains\Notifications\Support\MailLinkContext;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Notifications\Support\NotificationChannelPolicy;
 use App\Models\User;
@@ -276,7 +277,9 @@ final class NotificationDispatcher
                 context: 'CampaignsHub',
                 lang: $locale,
                 recipientName: (string) $user->name,
-                path: is_string($path) && $path !== '' ? $path.(is_string($query) ? '?'.$query : '') : '/app/notifications',
+                // MAIL-LINK-RECIPIENT-001 — the producer's portal-relative page (`/budgets?project=…`), in THIS reader's portal and
+                // with the workspace, fixed now because the mail is rendered later by a worker.
+                path: MailLinkContext::pathFor((int) $userId, $tenantId, is_string($path) && $path !== '' ? $path.(is_string($query) ? '?'.$query : '') : '/account/notifications'),
                 // FIN-LOOP-001 — a producer that can draw its problem passes the shape; the shell draws it.
                 viz: isset($p['viz']) && is_array($p['viz']) ? $p['viz'] : null,
             ),

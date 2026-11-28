@@ -12,7 +12,9 @@ use App\Domains\Notifications\Mail\OperationalDigestMail;
 use App\Domains\Notifications\Mail\SpendSummaryMail;
 use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\DigestSchedule;
+use App\Domains\Notifications\Support\MailDeepLinks;
 use App\Domains\Notifications\Support\MailFailure;
+use App\Domains\Notifications\Support\MailLinkContext;
 use App\Domains\Notifications\Support\MessageCatalogue;
 use App\Domains\Notifications\Support\OperationalDigestModel;
 use App\Domains\Projects\Access\ProjectAbilities;
@@ -300,6 +302,8 @@ final class DigestDispatcher
              * which is the safe direction but still a silently broken feature.
              */
             $this->tenants->setTenantId($tenantId);
+            // MAIL-LINK-RECIPIENT-001 — every link built below is this reader's: their portal, this workspace, their access.
+            MailLinkContext::enter($user, $tenantId, fn (string $projectId, string $capability): bool => $this->abilities->allows($user, $projectId, $capability));
 
             $projectIds = $this->scope->projectIdsFor($user, $tenantId);
             // DIGESTS-VISUAL-V2-001 — a per-project digest narrows to ONE project of the reader's own scope; it can never widen it.
@@ -329,8 +333,12 @@ final class DigestDispatcher
             if ($projectIds === []) {
                 return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', 'no_scope');
             }
+            // BUDGETS-ONE-SOURCE-001 — the budgets block of the projects summary covers the reader's whole scope (quiet projects with
+            // money left included), as far as they may see budgets; kept BEFORE the quiet filter narrows the performance part.
+            $budgetScope = array_values(array_filter($projectIds, fn ($id): bool => $this->abilities->allows($user, (string) $id, ProjectCapability::BUDGET_VIEW)
+                || $this->abilities->allows($user, (string) $id, ProjectCapability::MONEY_VIEW)));
             // DELIVERY-QUIET-001 — a project with no spend and no impression in this period is not reported; none moved, nothing is sent.
-            $projectIds = app(DeliveryState::class)->watched($projectIds, Carbon::parse($from)->toDateString(), Carbon::parse($to)->toDateString());
+            $projectIds = app(DeliveryState::class)->watched($projectIds, Carbon::parse($from)->toDateString(), Carbon::parse($to)->toDateString(), strict: true);
             if ($projectIds === []) {
                 return $this->finish($user, $ledgerKind, $ledgerKey, 'skipped', 'no_delivery');
             }
@@ -345,6 +353,9 @@ final class DigestDispatcher
                 }
             }
             $digest = $this->daily->buildRange($user, $tenantId, $projectIds, $from, $to, $kind);
+            if ($onlyProject === null && $audience === 'agency') {
+                $digest['budget_projects'] = $this->daily->budgetsFor($tenantId, array_map('strval', $budgetScope), $to);
+            }
 
             /*
              * PROJECT-DIGEST-SCOPE-001 — say so when this is not everything.
@@ -434,6 +445,7 @@ final class DigestDispatcher
 
             return $this->finish($user, $ledgerKind, $ledgerKey, 'failed', 'exception', error: $failure['safe'], failureCode: $failure['code'], nextAttemptAt: $next);
         } finally {
+            MailLinkContext::forget();
             $this->tenants->forget();
         }
     }
@@ -507,7 +519,9 @@ final class DigestDispatcher
         // The daily window carries the day before for comparison; the spend summary reports the one day.
         $start = $kind === 'daily' ? $to->copy()->startOfDay() : $from;
         $data = app(ProjectSpendSummary::class)->build($tenantId, array_map('strval', $projectIds), $start, $to, Carbon::today('Asia/Riyadh'));
-        $mail = new SpendSummaryMail($data, $locale, $kind, recipientName: (string) $user->name);
+        // MAIL-LINK-RECIPIENT-001 — the budgets button only for a reader who may open the budgets of what the mail lists.
+        $canBudgets = array_filter(array_map('strval', $projectIds), fn (string $id): bool => $this->abilities->allows($user, $id, ProjectCapability::BUDGET_VIEW)) !== [];
+        $mail = new SpendSummaryMail($data, $locale, $kind, recipientName: (string) $user->name, budgetsUrl: $canBudgets ? MailDeepLinks::budgets() : null);
         $sent = Mail::to($user->email)->send($mail->offerUnsubscribe($this->unsubscribes->url($tenantId, (string) $user->email, $scope, (int) $user->getKey())));
 
         return $this->finish($user, $ledgerKind, $ledgerKey, 'sent', null, sentAt: Carbon::now(), messageId: TransactionalMailer::messageId($sent));

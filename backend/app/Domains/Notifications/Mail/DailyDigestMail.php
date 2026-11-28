@@ -10,6 +10,7 @@ use App\Domains\Metrics\Services\ReportingTimezone;
 use App\Domains\Notifications\Charts\MailChart;
 use App\Domains\Notifications\Mail\Concerns\OffersUnsubscribe;
 use App\Domains\Notifications\Services\DigestPresenter;
+use App\Domains\Notifications\Support\MailDeepLinks;
 use App\Domains\Notifications\Support\MailDesign;
 use App\Domains\Notifications\Support\MailDisclaimer;
 use App\Domains\Notifications\Support\MailLinks;
@@ -396,7 +397,7 @@ final class DailyDigestMail extends Mailable
                     // GA4-DIGEST-001 — one line, counts and USD; never spend, never a campaign name.
                     'ga4' => Ga4DigestBlock::parts($block['ga4'] ?? null, $ar),
                     'spend_amount' => null,
-                    'url' => $this->client() ? Frontend::origin().'/portal' : $app.'/app/dashboard',
+                    'url' => $this->client() ? Frontend::origin().'/portal' : MailDeepLinks::dashboard(),
                 ];
 
                 continue;
@@ -416,7 +417,7 @@ final class DailyDigestMail extends Mailable
                 'follow' => $followLine === '' ? null : $followLine,
                 'ga4' => Ga4DigestBlock::parts($block['ga4'] ?? null, $ar),
                 'spend_amount' => is_numeric($totals['spend'] ?? null) ? (float) $totals['spend'] : null,
-                'url' => $app.'/app/dashboard',
+                'url' => MailDeepLinks::dashboard(),
             ];
         }
         usort($rows, static fn (array $a, array $b): int => $a['rank'] <=> $b['rank']);
@@ -880,7 +881,7 @@ final class DailyDigestMail extends Mailable
                   never contacted» and the link says who.
                 */
                 'follow_up' => $this->followUp($bp, $ar, $block['follow_up'] ?? null),
-                'url' => $app.'/app/dashboard',
+                'url' => MailDeepLinks::dashboard(),
             ];
         }
 

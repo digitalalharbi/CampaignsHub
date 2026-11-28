@@ -49,7 +49,8 @@ final class MailLinks
     public static function footer(): array
     {
         return [
-            'preferences' => self::to('/app/account/notifications'),
+            // MAIL-LINK-RECIPIENT-001 — the reader's own portal (`/agency/account/notifications` for an agency member).
+            'preferences' => self::to(MailLinkContext::path('/account/notifications')),
             'privacy' => self::to('/privacy'),
             'terms' => self::to('/terms'),
             'security' => self::to('/security'),

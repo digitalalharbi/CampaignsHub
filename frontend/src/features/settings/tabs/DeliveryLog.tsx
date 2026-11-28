@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useDeliveryLog } from '../api'
 import { summariseDeliveries, type DeliveryRow } from '../deliveryLog'
 import { FAILURE_WORDS, stageWords } from '../deliveryWords'
@@ -23,6 +24,9 @@ import { Num } from '@/components/ui/Num'
  * empty log hides the strongest signal on the page behind a reassuring number — which is why
  * `everSent` is rendered as its own state rather than folded into zero.
  */
+/** TEAM-MAIL-LOG-001 — nothing left because there was nothing to say, or it was already sent: not an attempt worth a row by default. */
+const QUIET = new Set(['skipped', 'already_sent'])
+
 const STATUS: Record<string, { ar: string; en: string; tone: string }> = {
   // EMAIL-DELIVERY-LEDGER-001 — the transport took it; nobody yet knows it arrived.
   sent: { ar: 'قبلها خادم البريد', en: 'Accepted by the mail server', tone: 'text-success' },
@@ -31,6 +35,8 @@ const STATUS: Record<string, { ar: string; en: string; tone: string }> = {
   awaiting_credentials: { ar: 'بانتظار مزوّد البريد', en: 'Awaiting mail provider', tone: 'text-warning' },
   suppressed: { ar: 'مكبوتة', en: 'Suppressed', tone: 'text-warning' },
   sandbox: { ar: 'وضع التجربة', en: 'Sandbox', tone: 'text-warning' },
+  skipped: { ar: 'لم تُرسل — ما فيه ما يُرسل', en: 'Not sent — nothing to report', tone: 'text-text-muted' },
+  held_for_review: { ar: 'بانتظار المراجعة', en: 'Held for review', tone: 'text-warning' },
 }
 
 /**
@@ -50,11 +56,19 @@ const REASONS: Record<string, { ar: string; en: string }> = {
 export function DeliveryLog() {
   const ar = useUi((u) => u.locale) === 'ar'
   const { data, isLoading, isError, refetch } = useDeliveryLog()
+  /*
+   * TEAM-MAIL-LOG-001 — Owner 2026-11-28: «وش الإيميلات التي تصل للفريق، وهل هم داخلي أو خارجي». Who received what, filtered by
+   * internal / external; by default the rows where nothing was sent because there was nothing to say (a quiet day, a period
+   * already sent) are folded away — every real attempt, failures included, stays in view.
+   */
+  const [audience, setAudience] = useState<'all' | 'internal' | 'external'>('all')
+  const [hideQuiet, setHideQuiet] = useState(true)
 
   if (isLoading) return <div className="space-y-3"><Skeleton className="h-10" /><Skeleton className="h-40" /></div>
 
-  const rows: DeliveryRow[] = data ?? []
-  const summary = summariseDeliveries(rows)
+  const all: DeliveryRow[] = data ?? []
+  const summary = summariseDeliveries(all)
+  const rows = all.filter((r) => (audience === 'all' || (r.audience ?? 'internal') === audience) && (!hideQuiet || !QUIET.has(r.status)))
 
   const when = (iso: string): string => {
     const parsed = Date.parse(iso)
@@ -127,7 +141,30 @@ export function DeliveryLog() {
             ))}
           </ul>
 
-          <ul className="mt-4 grid gap-2">
+          <div data-testid="delivery-filters" className="mt-4 flex flex-wrap items-center gap-2">
+            {([
+              ['all', ar ? 'الكل' : 'All'],
+              ['internal', ar ? 'داخل المنصة' : 'Inside the platform'],
+              ['external', ar ? 'خارج المنصة' : 'Outside the platform'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                data-testid={`delivery-audience-${key}`}
+                aria-pressed={audience === key}
+                onClick={() => setAudience(key)}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${audience === key ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-border text-text-secondary'}`}
+              >
+                {label}
+              </button>
+            ))}
+            <label className="ms-auto inline-flex items-center gap-2 text-xs text-text-secondary">
+              <input type="checkbox" data-testid="delivery-hide-quiet" checked={hideQuiet} onChange={(e) => setHideQuiet(e.target.checked)} />
+              {ar ? 'إخفاء ما لم يُرسل لعدم وجود بيانات' : 'Hide what was not sent for lack of data'}
+            </label>
+          </div>
+
+          <ul className="mt-3 grid gap-2">
             {rows.map((r, i) => {
               const status = r.state === 'delivered' || r.state === 'queued' || r.state === 'attempted'
                 ? stageWords(r.state)
@@ -141,8 +178,21 @@ export function DeliveryLog() {
                   className="rounded-xl border border-border px-4 py-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-text-primary">{r.kind}</span>
-                    <span className={`text-xs font-semibold ${status.tone}`}>{ar ? status.ar : status.en}</span>
+                    <span className="text-xs font-semibold text-text-primary">
+                      {r.label ?? r.kind}
+                      {r.project ? <span className="font-normal text-text-secondary"> — {r.project}</span> : null}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      {r.audience !== undefined && (
+                        <span
+                          data-testid={`delivery-audience-chip-${i}`}
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${r.audience === 'external' ? 'bg-warning-soft text-warning' : 'bg-success-soft text-success'}`}
+                        >
+                          {r.audience === 'external' ? (ar ? 'خارجي' : 'External') : (ar ? 'داخلي' : 'Internal')}
+                        </span>
+                      )}
+                      <span className={`text-xs font-semibold ${status.tone}`}>{ar ? status.ar : status.en}</span>
+                    </span>
                   </div>
 
                   <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">

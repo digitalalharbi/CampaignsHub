@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Notifications\Services;
 
+use App\Domains\Access\Support\WorkspaceRolePresets;
 use App\Domains\Audit\AuditLogger;
 use App\Domains\Notifications\Support\MailAddress;
 use App\Domains\Notifications\Support\MessageCatalogue;
@@ -56,6 +57,25 @@ final class EnrolMemberNotifications
     /** Digests a new colleague starts with — see the decision on {@see MessageCatalogue}. */
     public const DEFAULT_DIGESTS = ['daily' => true, 'weekly' => true, 'monthly' => false, 'alerts' => true, 'recommendations' => true];
 
+    /**
+     * NOTIFY-ROLE-DEFAULTS-001 — Owner 2026-11-28: the default notifications follow each member's role, and nothing else.
+     *
+     *  - the workspace administrator (`tenant-owner`): «ملخص المشاريع» every morning about yesterday, AND one summary per project;
+     *  - the project manager (`project-manager`): the same two, which `DigestScope` narrows to HIS projects only — the summary of
+     *    projects is never «every project», it is every project he may open;
+     *  - finance (`finance`): the money only — the daily, weekly and month-end spend summary (yesterday, the last 7 days, the last
+     *    month). The digest path turns every rhythm into «ملخص الإنفاق» for this role (FINANCE-SPEND-ONLY-001), so a per-project
+     *    performance mail is never switched on for them;
+     *  - anyone else keeps the general default above.
+     *
+     * @var array<string, array<string, bool>>
+     */
+    public const ROLE_DIGESTS = [
+        WorkspaceRolePresets::OWNER => ['daily' => true, 'weekly' => true, 'monthly' => true, 'per_project' => true, 'alerts' => true, 'recommendations' => true],
+        WorkspaceRolePresets::PROJECT_MANAGER => ['daily' => true, 'weekly' => true, 'monthly' => true, 'per_project' => true, 'alerts' => true, 'recommendations' => true],
+        WorkspaceRolePresets::FINANCE => ['daily' => true, 'weekly' => true, 'monthly' => true, 'per_project' => false, 'alerts' => false, 'recommendations' => false],
+    ];
+
     public const DEFAULT_TIMEZONE = 'Asia/Riyadh';
 
     public const DEFAULT_HOUR = 8;
@@ -96,9 +116,10 @@ final class EnrolMemberNotifications
      *
      * @return array<string, mixed>
      */
-    public function defaultsFor(User $user): array
+    public function defaultsFor(User $user, ?string $tenantId = null): array
     {
         $timezone = (string) ($user->timezone ?? '');
+        $digests = $tenantId === null ? self::DEFAULT_DIGESTS : $this->digestsForRole($user, $tenantId);
 
         return [
             'channels' => ['in_app' => true, 'email' => true],
@@ -107,11 +128,38 @@ final class EnrolMemberNotifications
             'quiet_hours' => ['enabled' => false, 'start' => '22:00', 'end' => '08:00'],
             'frequency' => 'realtime',
             'project_ids' => null,
-            'digests' => self::DEFAULT_DIGESTS,
+            'digests' => $digests,
             'locale' => in_array($user->locale, ['ar', 'en'], true) ? (string) $user->locale : 'ar',
             'timezone' => in_array($timezone, timezone_identifiers_list(), true) ? $timezone : self::DEFAULT_TIMEZONE,
             'digest_hour' => self::DEFAULT_HOUR,
         ];
+    }
+
+    /**
+     * NOTIFY-ROLE-DEFAULTS-001 — the role's digests in this workspace: the first preset the member holds, in the presets' own order
+     * (owner, project manager, finance); the general default for any other role.
+     *
+     * @return array<string, bool>
+     */
+    public function digestsForRole(User $user, string $tenantId): array
+    {
+        return self::ROLE_DIGESTS[$this->roleKey($user, $tenantId)] ?? self::DEFAULT_DIGESTS;
+    }
+
+    /** The member's preset slug in the workspace that decides their defaults, or null. */
+    public function roleKey(User $user, string $tenantId): ?string
+    {
+        $slugs = DB::table('role_user as ru')->join('roles as r', 'r.id', '=', 'ru.role_id')
+            ->where('ru.user_id', $user->getKey())
+            ->where(fn ($q) => $q->where('r.tenant_id', $tenantId)->orWhereNull('r.tenant_id'))
+            ->pluck('r.slug')->map(static fn ($s): string => (string) $s)->all();
+        foreach (array_keys(self::ROLE_DIGESTS) as $slug) {
+            if (in_array($slug, $slugs, true)) {
+                return $slug;
+            }
+        }
+
+        return null;
     }
 
     /** Does this person already have a row here? A row — of any shape — is their recorded choice. */
@@ -140,7 +188,7 @@ final class EnrolMemberNotifications
             return 'already_enrolled';
         }
 
-        $d = $this->defaultsFor($user);
+        $d = $this->defaultsFor($user, $tenantId);
         $now = now();
 
         $inserted = DB::table('notification_preferences')->insertOrIgnore([

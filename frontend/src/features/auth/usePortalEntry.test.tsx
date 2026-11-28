@@ -191,4 +191,34 @@ describe('usePortalEntry', () => {
     await waitFor(() => expect(screen.getByTestId('agency-portal-denied')).toBeInTheDocument())
     expect(screen.queryByTestId('portal-entry-choice')).not.toBeInTheDocument()
   })
+
+  /*
+   * MAIL-LINK-RECIPIENT-001 — an email link names its workspace (`?ws=`). A person in two agency workspaces whose session is in
+   * the other one is asked to switch to the one the mail is about, and only that one is offered; the same link inside the right
+   * workspace simply opens.
+   */
+  it('a mail link to another workspace of the same portal asks to switch to that workspace only', async () => {
+    const own = { ...membership('agency', 'Own Agency'), id: 'm-own' }
+    const smart = { ...membership('agency', 'SMARTCODE'), id: 'm-smart' }
+    vi.mocked(fetchMemberships).mockResolvedValue({ ...inPortal('agency', [own, smart]), current: own })
+
+    open('/agency/reports?project=p1&ws=SMARTCODE')
+
+    await waitFor(() => expect(screen.getByTestId('portal-entry-choice')).toBeInTheDocument())
+    expect(screen.getByTestId('portal-entry-current')).toHaveTextContent('Own Agency')
+    expect(screen.getByTestId('portal-entry-switch-m-smart')).toHaveTextContent('SMARTCODE')
+    expect(screen.queryByTestId('portal-entry-switch-m-own')).not.toBeInTheDocument()
+    expect(screenAsked).not.toHaveBeenCalled()
+    expect(switchMembership).not.toHaveBeenCalled()
+  })
+
+  it('a mail link inside the workspace the session is already in opens the page', async () => {
+    const smart = { ...membership('agency', 'SMARTCODE'), id: 'm-smart' }
+    vi.mocked(fetchMemberships).mockResolvedValue({ ...inPortal('agency', [smart]), current: smart })
+
+    open('/agency/budgets?project=p1&ws=SMARTCODE')
+
+    await waitFor(() => expect(screen.getByText('Agency screen')).toBeInTheDocument())
+    expect(screen.queryByTestId('portal-entry-choice')).not.toBeInTheDocument()
+  })
 })

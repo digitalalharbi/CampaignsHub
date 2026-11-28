@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domains\Funding\Services;
 
+use App\Domains\Access\Support\WorkspaceRolePresets;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Funding\Models\FundingPayment;
 use App\Domains\Funding\Models\ProjectFunding;
@@ -27,7 +28,7 @@ use Throwable;
  *
  *  - «أُضيفت ميزانية» → the project manager and the project's team: the money is there, start or carry on.
  *  - «قرّبت تخلص» (remaining under the line, default 2,000 SAR, or under 7 days at the real pace)
- *    → the project manager (talks to the client) and finance (records the renewal).
+ *    → the project manager (talks to the client), the workspace administrators and finance (records the renewal).
  *  - «تجاوزت الميزانية» → the same two.
  *
  * Every notice names the client, the figure in SAR, the day the spend was last read, the next step and
@@ -142,7 +143,7 @@ final class FundingNotifier
         }
         [$state, $f, $cycle] = $decision;
 
-        return $this->send($funding, $this->audience($funding, ['manager', 'finance'], null), $state, $f, $cycle);
+        return $this->send($funding, $this->audience($funding, ['manager', 'admin', 'finance'], null), $state, $f, $cycle);
     }
 
     /**
@@ -181,7 +182,7 @@ final class FundingNotifier
         }
         [$state, $f, $cycle] = $decision;
 
-        return $this->send($funding, $this->audience($funding, ['manager', 'finance'], null), $state, $f, $cycle);
+        return $this->send($funding, $this->audience($funding, ['manager', 'admin', 'finance'], null), $state, $f, $cycle);
     }
 
     /**
@@ -214,7 +215,7 @@ final class FundingNotifier
         }
         [$state, $f, $cycle] = $decision;
 
-        return $this->send($funding, $this->audience($funding, ['manager', 'finance'], null), $state, $f, $cycle);
+        return $this->send($funding, $this->audience($funding, ['manager', 'admin', 'finance'], null), $state, $f, $cycle);
     }
 
     /**
@@ -251,7 +252,7 @@ final class FundingNotifier
             return 0;
         }
         [$rows, $f, $cycle] = $decision;
-        $users = $this->audience($funding, ['manager', 'finance'], null);
+        $users = $this->audience($funding, ['manager', 'admin', 'finance'], null);
         $sent = 0;
         foreach ($rows as $row) {
             $sent += $this->sendPlan($funding, $users, $row, $f, $cycle);
@@ -567,6 +568,19 @@ final class FundingNotifier
             array_push($ids, ...ProjectMembership::withoutGlobalScopes()->where('project_id', $funding->project_id)
                 ->where('status', 'active')->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
                 ->pluck('user_id')->all());
+        }
+        /*
+         * BUDGET-NOTICE-AUDIENCE-001 — Owner 2026-11-28: «تخص إدارة المشاريع أي كل مدير مشروع ومدير المساحة وكذلك المالية». The
+         * workspace's administrators (the owner preset, `tenant-owner`) are told too, so the renewal is followed at every level.
+         * They pass the same reach and money checks below as everyone else.
+         */
+        if (in_array('admin', $who, true)) {
+            array_push($ids, ...DB::table('role_user as ru')
+                ->join('roles as r', 'r.id', '=', 'ru.role_id')
+                ->join('memberships as m', static fn ($j) => $j->on('m.user_id', '=', 'ru.user_id')->where('m.tenant_id', '=', $funding->tenant_id)->where('m.status', '=', 'active'))
+                ->where('r.slug', WorkspaceRolePresets::OWNER)
+                ->where(fn ($q) => $q->where('r.tenant_id', $funding->tenant_id)->orWhereNull('r.tenant_id'))
+                ->pluck('ru.user_id')->map(fn ($i) => (int) $i)->all());
         }
         if (in_array('finance', $who, true)) {
             $finance = DB::table('role_user as ru')

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domains\Notifications\Services;
 
 use App\Domains\Audit\AuditLogger;
+use App\Domains\Funding\Services\ProjectBudgetReader;
 use App\Domains\Metrics\Services\DeliveryState;
 use App\Domains\Notifications\Engine\Migration\LegacyNotificationImporter;
 use App\Domains\Notifications\Mail\SpendSummaryMail;
@@ -13,6 +14,7 @@ use App\Domains\Notifications\Providers\ProviderRegistry;
 use App\Domains\Notifications\Support\DigestSchedule;
 use App\Domains\Notifications\Support\MailAddress;
 use App\Domains\Notifications\Support\MailFailure;
+use App\Domains\Notifications\Support\MailLinkContext;
 use App\Domains\Projects\Access\ProjectAbilities;
 use App\Domains\Projects\Access\ProjectCapability;
 use App\Domains\Projects\Models\Project;
@@ -84,6 +86,7 @@ final class SpendSummaryDispatcher
 
         try {
             $this->tenants->setTenantId($tenantId);
+            MailLinkContext::enter($user, $tenantId); // MAIL-LINK-RECIPIENT-001 — the budgets button in this reader's portal and workspace
             $projectIds = $this->scope->projectIdsFor($user, $tenantId);
             // Money is shown only to a reader who may see it on EVERY project in scope (MEMBER-VISIBILITY-001).
             if (ProjectCapability::exists('money.view')) {
@@ -96,8 +99,15 @@ final class SpendSummaryDispatcher
             if ($projectIds === []) {
                 return $this->finishInternal($user, $key, 'skipped', 'no_projects_in_scope');
             }
-            // DELIVERY-QUIET-001 — a project that did not move in this period (no spend, no impression) is left out; none moved, none sent.
-            $projectIds = app(DeliveryState::class)->watched($projectIds, $from->toDateString(), $to->toDateString());
+            /*
+             * DELIVERY-QUIET-001 — a project that did not move in this period (no spend, no impression) is left out; none moved, none sent.
+             * BUDGETS-ONE-SOURCE-001 — Owner 2026-11-28: a stopped project that still has money left on its approved budget stays in the
+             * summary («يظهر أن باقي لهم مبلغ إذا باقي»), so finance and project management still see it to follow up with the client.
+             */
+            $moved = app(DeliveryState::class)->watched($projectIds, $from->toDateString(), $to->toDateString(), strict: true);
+            $left = array_keys(array_filter(app(ProjectBudgetReader::class)->forProjects($projectIds, $localNow->copy()->startOfDay()),
+                static fn (array $b): bool => ($b['has_budget'] ?? false) === true && is_numeric($b['remaining'] ?? null) && (float) $b['remaining'] > 0));
+            $projectIds = array_values(array_filter(array_map('strval', $projectIds), static fn (string $id): bool => in_array($id, $moved, true) || in_array($id, array_map('strval', $left), true)));
             if ($projectIds === []) {
                 return $this->finishInternal($user, $key, 'skipped', 'no_delivery');
             }
@@ -116,6 +126,7 @@ final class SpendSummaryDispatcher
         } catch (Throwable $e) {
             return $this->finishInternal($user, $key, 'failed', MailFailure::from($e)['code'] ?? 'exception');
         } finally {
+            MailLinkContext::forget();
             $this->tenants->forget();
         }
     }

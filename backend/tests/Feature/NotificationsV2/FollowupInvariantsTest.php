@@ -64,7 +64,7 @@ final class FollowupInvariantsTest extends TestCase
     public function test_the_assistant_never_edits_a_budget_a_limit_a_campaign_or_a_platform_link(): void
     {
         $tenant = $this->tenant('Alpha', 'agency');
-        $project = $this->project($tenant, 'Launch');
+        $project = $this->spendingProject($tenant, 'Launch');
         $owner = $this->member($tenant, 'tenant-owner');
         $before = $this->untouchable();
 
@@ -113,7 +113,7 @@ final class FollowupInvariantsTest extends TestCase
     public function test_follow_up_and_brief_work_in_an_agency_and_in_a_direct_business_each_in_its_own_words(string $accountType, string $portal, string $projectWord, string $clientWord): void
     {
         $tenant = $this->tenant('WS '.$accountType, $accountType);
-        $this->project($tenant, 'P1');
+        $this->spendingProject($tenant, 'P1');
         $owner = $this->member($tenant, 'tenant-owner', null, $portal);
         app(TenantContext::class)->forget();
 
@@ -131,7 +131,7 @@ final class FollowupInvariantsTest extends TestCase
     public function test_a_client_portal_workspace_member_has_the_centre_without_sensitive_events_and_no_follow_up_or_brief(): void
     {
         $tenant = $this->tenant('Portal Co', 'agency');
-        $project = $this->project($tenant, 'Theirs');
+        $project = $this->spendingProject($tenant, 'Theirs');
         $portalUser = $this->member($tenant, 'client-viewer', [], 'portal');
         app(TenantContext::class)->forget();
 
@@ -149,10 +149,10 @@ final class FollowupInvariantsTest extends TestCase
     public function test_tasks_briefs_and_notifications_of_one_workspace_never_appear_in_another(): void
     {
         $a = $this->tenant('Alpha', 'agency');
-        $this->project($a, 'Only A');
+        $this->spendingProject($a, 'Only A');
         $userA = $this->member($a, 'tenant-owner');
         $b = $this->tenant('Beta', 'agency');
-        $this->project($b, 'Only B');
+        $this->spendingProject($b, 'Only B');
         $userB = $this->member($b, 'tenant-owner');
         app(TenantContext::class)->forget();
 
@@ -177,7 +177,7 @@ final class FollowupInvariantsTest extends TestCase
     public function test_switching_a_key_off_and_on_again_keeps_every_row(): void
     {
         $tenant = $this->tenant('Alpha', 'agency');
-        $this->project($tenant, 'Launch');
+        $this->spendingProject($tenant, 'Launch');
         $owner = $this->member($tenant, 'tenant-owner');
         app(TenantContext::class)->forget();
         $this->runJobs();

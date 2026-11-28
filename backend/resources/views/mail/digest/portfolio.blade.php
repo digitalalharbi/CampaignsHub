@@ -86,7 +86,10 @@
     </div>
     @endif
 
-    @include('mail.partials.button', ['href' => $m['links']['dashboard'], 'label' => $ar ? 'افتح لوحة المتابعة' : 'Open the dashboard'])
+    {{-- MAIL-LINK-RECIPIENT-001 — the reader's own home in the workspace the mail is about (`/agency/dashboard` for an agency member). --}}
+    @if (! empty($m['links']['dashboard']))
+        @include('mail.partials.button', ['href' => $m['links']['dashboard'], 'label' => $ar ? 'افتح لوحة المتابعة' : 'Open the dashboard'])
+    @endif
     @endunless
     @include('mail.digest._notes', ['ar' => $ar, 'sources' => array_column($m['mix'] ?? [], 'name')])
 </div>

@@ -6,6 +6,7 @@ namespace App\Domains\Notifications\Support;
 
 use App\Domains\Integrations\Status\LinkHealth;
 use App\Domains\Notifications\Services\DigestPresenter;
+use App\Domains\Projects\Access\ProjectCapability;
 use App\Support\AdPlatforms;
 use Illuminate\Support\Carbon;
 
@@ -261,12 +262,14 @@ final class OperationalDigestModel
             'decisions' => $decisions,
             'follow_up' => $block['follow_up'] ?? null,
             'freshness' => (array) ($block['freshness'] ?? []),
+            // MAIL-LINK-RECIPIENT-001 — each link is the reader's own (portal, workspace) and only where they may open the page;
+            // a link they may not open is null and the template draws nothing in its place.
             'links' => [
-                'report' => MailDeepLinks::report($id),
-                'platforms' => MailDeepLinks::platforms($id, $days),
-                'attention' => MailDeepLinks::campaignsNeedingAttention($id),
-                'content' => MailDeepLinks::analytics($id, 'creative', $days),
-                'budget' => MailDeepLinks::analytics($id, 'budget', $days),
+                'report' => MailLinkContext::allows($id, ProjectCapability::REPORTS_VIEW) ? MailDeepLinks::report($id) : null,
+                'platforms' => MailLinkContext::allows($id, ProjectCapability::ANALYTICS_VIEW) ? MailDeepLinks::platforms($id, $days) : null,
+                'attention' => MailLinkContext::allows($id, ProjectCapability::CAMPAIGNS_VIEW) ? MailDeepLinks::campaignsNeedingAttention($id) : null,
+                'content' => MailLinkContext::allows($id, ProjectCapability::ANALYTICS_VIEW) ? MailDeepLinks::analytics($id, 'creative', $days) : null,
+                'budget' => MailLinkContext::allows($id, ProjectCapability::BUDGET_VIEW) ? MailDeepLinks::budgets($id) : null,
             ],
             // The unformatted figures, so a test (and the reconciliation proof) compares numbers, not strings.
             'raw' => ['totals' => $totals, 'previous' => $previous, 'platforms' => array_column($rows, null, 'provider')],
@@ -338,11 +341,14 @@ final class OperationalDigestModel
             }
         }
         usort($issues, [DigestStatus::class, 'compare']);
+        $budgeted = isset($digest['budget_projects']) && is_array($digest['budget_projects']) ? self::budgetRows($digest['budget_projects'], $lang) : $projects;
 
         return [
             'kind' => $kind,
             // DIGESTS-CADENCE-BUDGETS-001 — «ملخص المشاريع» LEADS with the money: every project's budget, spend, remaining and pace.
-            'budgets' => self::budgets($projects, $lang),
+            // BUDGETS-ONE-SOURCE-001 — every budgeted project of the reader's scope (quiet ones with money left included), from the
+            // budgets board in SAR; an older payload without the list keeps the projects reported above.
+            'budgets' => self::budgets($budgeted, $lang),
             'weeks' => $kind === 'monthly' ? self::weeks((array) ($t['series'] ?? []), $ar) : [],
             'projects_total' => count($projects),
             'need_attention' => $health['bad'] + $health['watch'],
@@ -361,7 +367,7 @@ final class OperationalDigestModel
             // DIGEST-FIGURES-ONLY-001 — «ملخص كل مشروع»: every project once, by spend, figures only (no verdict, no note).
             'cards' => self::cards($projects),
             // DIGEST-PM-ACTIONS-001 — «يحتاج قرارك الآن», back in the project-management voice: only what the budgets prove.
-            'actions' => self::budgetActions(array_map(static fn (array $pr): array => ['name' => (string) $pr['name']] + (array) ($pr['budget'] ?? []), $projects), $ar),
+            'actions' => self::budgetActions(array_map(static fn (array $pr): array => ['name' => (string) $pr['name']] + (array) ($pr['budget'] ?? []), $budgeted), $ar),
             'projects' => $projects,
             'issues' => $issues,
             'issues_shown' => array_slice($issues, 0, self::TOP_ISSUES),
@@ -618,6 +624,28 @@ final class OperationalDigestModel
     }
 
     /**
+     * The `budgets()` input from `DailyDigest::budgetsFor()`: each budgeted project's id, name, budgets link and its month.
+     *
+     * @param  list<array<string,mixed>>  $list
+     * @return list<array<string,mixed>>
+     */
+    private static function budgetRows(array $list, string $lang): array
+    {
+        $out = [];
+        foreach ($list as $b) {
+            $id = (string) ($b['project_id'] ?? '');
+            $out[] = [
+                'id' => $id,
+                'name' => (string) ($b['project_name'] ?? ''),
+                'budget' => self::budget(is_array($b['budget_month'] ?? null) ? $b['budget_month'] : null, $lang),
+                'links' => ['budget' => MailLinkContext::allows($id, ProjectCapability::BUDGET_VIEW) ? MailDeepLinks::budgets($id) : null],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * Every project's budget row, closest to running out first, and ONE total row.
      *
      * The total adds budget and spend only across projects whose budgets share one currency and whose spend is measured; a
@@ -845,7 +873,7 @@ final class OperationalDigestModel
                 'id' => $pr['id'],
                 'name' => $pr['name'],
                 'state' => $pr['state'],
-                'url' => $pr['links']['report'],
+                'url' => (string) ($pr['links']['report'] ?? ''),
                 'cells' => array_map(static fn (string $k): ?array => isset($cells[$k]) ? ['state' => $cells[$k]['state'], 'reason' => $cells[$k]['reason']] : null, array_keys($providers)),
             ];
         }
@@ -1064,7 +1092,25 @@ final class OperationalDigestModel
             $weak[] = $c + ['why' => $ar ? 'تكرار مرتفع: الجمهور مَلّه' : 'Seen too often: the audience is tired of it'];
         }
 
-        return ['top' => array_slice((array) ($creatives['top'] ?? array_filter([$creatives['best'] ?? null])), 0, 3), 'weak' => array_slice($weak, 0, 3)];
+        /*
+         * DIGEST-CONTENT-RESTORED-001 — Owner 2026-11-28 brought «المحتوى» back. The two defects that removed it (DIGEST-FIGURES-ONLY-001)
+         * are closed here instead: a «best» whose figure is zero (0.00×, 0.00%) is not a best and is dropped, and an ad listed as
+         * best is never listed again as needing a refresh. Nothing is invented: names, reasons and covers are the ranking's own.
+         */
+        $top = array_values(array_filter(
+            (array) ($creatives['top'] ?? array_filter([$creatives['best'] ?? null])),
+            static fn ($c): bool => is_array($c) && ! preg_match('/\(\s*0(?:[.,]0+)?\s*[×%]?\s*\)/u', (string) ($c['reason'] ?? '')),
+        ));
+        $topNames = array_map(static fn (array $c): string => mb_strtolower(trim((string) ($c['name'] ?? ''))), $top);
+        $weak = array_values(array_filter($weak, static fn (array $c): bool => ! in_array(mb_strtolower(trim((string) ($c['name'] ?? ''))), $topNames, true)));
+        $seen = [];
+        $weak = array_values(array_filter($weak, static function (array $c) use (&$seen): bool {
+            $k = mb_strtolower(trim((string) ($c['name'] ?? '')));
+
+            return $k !== '' && ! isset($seen[$k]) && ($seen[$k] = true);
+        }));
+
+        return $top === [] && $weak === [] ? null : ['top' => array_slice($top, 0, 3), 'weak' => array_slice($weak, 0, 3)];
     }
 
     /**
