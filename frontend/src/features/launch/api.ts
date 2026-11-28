@@ -16,7 +16,7 @@ export interface LaunchProvider {
   placement_families: string[]
   ad_set_refusal: string | null
   ad_refusal: string | null
-  ad_fields: 'search_ad' | 'tiktok_ad' | 'creative'
+  ad_fields: 'search_ad' | 'tiktok_ad' | 'meta_ad' | 'creative'
   countries_in_ad_set: boolean
   bid_required: boolean
 }
@@ -83,6 +83,9 @@ export interface LaunchSpec {
     creative_id?: Record<string, string>
     google?: { headlines: string[]; descriptions: string[] }
     tiktok?: { ad_text: string; call_to_action: string }
+    /** META-PAGES-001 — the Facebook Page a Meta ad is published under, by provider. */
+    page_id?: Record<string, string>
+    meta?: { message: string; call_to_action: string }
   } | null
   tracking: { url?: string; utm_source?: string; utm_medium?: string; utm_campaign?: string } | null
   launch: boolean
@@ -184,6 +187,17 @@ export const useLaunchStrategy = (projectId: string | null, goal: BusinessGoal |
   queryFn: () => getData<{ goal: BusinessGoal; accounts: StrategyAccount[] }>(`${base(projectId!)}/strategy?goal=${goal}`),
   enabled: Boolean(projectId) && goal !== null,
   retry: false,
+})
+
+/** META-PAGES-001 — a Facebook Page the connected Meta user manages, read live from Meta. */
+export interface MetaPage { id: string; name: string; category: string | null; picture_url: string | null; followers: number | null; link: string | null }
+
+export const useMetaPages = (projectId: string | null, accountId: string | null) => useQuery({
+  queryKey: ['launch', 'meta-pages', projectId, accountId],
+  queryFn: () => getData<{ pages: MetaPage[]; message?: string | null }>(`${base(projectId!)}/meta-pages?account=${encodeURIComponent(accountId!)}`),
+  enabled: Boolean(projectId) && Boolean(accountId),
+  retry: false,
+  staleTime: 60_000,
 })
 
 export const useLaunchPlans = (projectId: string | null) => useQuery({

@@ -111,7 +111,7 @@ return [
             'authorize_url' => 'https://www.facebook.com/v25.0/dialog/oauth',
             'token_url' => 'https://graph.facebook.com/v25.0/oauth/access_token',
             'api_base' => 'https://graph.facebook.com/v25.0',
-            'scopes' => ['ads_read', 'ads_management', 'business_management'],
+            'scopes' => ['ads_read', 'ads_management', 'business_management', 'pages_show_list', 'pages_read_engagement'],
             'client_id' => env('META_ADS_APP_ID'),
             'client_secret' => env('META_ADS_APP_SECRET'),
             /*

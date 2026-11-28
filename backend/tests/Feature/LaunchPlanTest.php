@@ -97,6 +97,53 @@ final class LaunchPlanTest extends TestCase
         $this->actingAs($this->owner, 'sanctum')->putJson($this->url("plans/{$plan['id']}"), $this->spec($account, $creative))->assertStatus(409);
     }
 
+    /**
+     * META-PAGES-001 — the pages a Meta ad can run under are read live from Meta for an account of this project, and a new Meta
+     * ad is a link ad created under the chosen page: creative first, then the ad, all PAUSED.
+     */
+    public function test_the_facebook_pages_are_read_live_and_a_new_meta_ad_is_created_under_the_chosen_page(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta', 'act_9');
+        Http::fake([
+            'graph.facebook.com/*/me/accounts*' => Http::response(['data' => [
+                ['id' => '1081', 'name' => 'Karam Alnakhil', 'category' => 'Food', 'followers_count' => 12500, 'picture' => ['data' => ['url' => 'https://scontent.example/p.jpg']]],
+            ]]),
+            'graph.facebook.com/*' => Http::sequence()->push(['id' => '5001'])->push(['id' => '6001'])->push(['id' => '8001'])->push(['id' => '7001']),
+        ]);
+
+        $pages = $this->actingAs($this->owner, 'sanctum')->getJson($this->url('meta-pages?account='.$account->id))->assertOk()->json('data.pages');
+        $this->assertSame([['id' => '1081', 'name' => 'Karam Alnakhil', 'category' => 'Food', 'picture_url' => 'https://scontent.example/p.jpg', 'followers' => 12500, 'link' => null]], $pages);
+
+        $spec = $this->spec($account, null);
+        $spec['ad'] = ['name' => 'Hero', 'creative_id' => [], 'page_id' => ['meta' => '1081'], 'meta' => ['message' => 'Fresh dates, delivered.', 'call_to_action' => 'SHOP_NOW']];
+        $plan = $this->actingAs($this->owner, 'sanctum')->postJson($this->url('plans'), $spec)->assertCreated()->assertJsonPath('data.review.0.problems', [])->json('data');
+
+        $out = $this->actingAs($this->owner, 'sanctum')->postJson($this->url("plans/{$plan['id']}/publish"), ['confirm' => true])->assertOk()->json('data');
+        $this->assertSame('published', $out['status']);
+        $this->assertSame(['done', '7001'], [$out['steps'][0]['ad']['status'], $out['steps'][0]['ad']['external_id']]);
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/act_9/adcreatives')
+            && $r['object_story_spec']['page_id'] === '1081'
+            && $r['object_story_spec']['link_data']['message'] === 'Fresh dates, delivered.'
+            && $r['object_story_spec']['link_data']['call_to_action']['type'] === 'SHOP_NOW'
+            && str_starts_with($r['object_story_spec']['link_data']['link'], 'https://store.example/sale'));
+        Http::assertSent(fn (Request $r) => str_ends_with($r->url(), '/act_9/ads') && $r['creative']['creative_id'] === '8001' && $r['status'] === 'PAUSED');
+    }
+
+    public function test_a_new_meta_ad_without_a_page_is_named_in_the_review_and_nothing_is_sent(): void
+    {
+        $this->configure('meta');
+        $account = $this->account('meta', 'act_9');
+        Http::fake();
+        $spec = $this->spec($account, null);
+        $spec['ad'] = ['name' => 'Hero', 'creative_id' => [], 'meta' => ['message' => 'Hi']];
+
+        $problems = $this->actingAs($this->owner, 'sanctum')->postJson($this->url('plans'), $spec)->assertCreated()->json('data.review.0.problems');
+
+        $this->assertStringContainsString('Facebook Page', implode(' ', $problems));
+        Http::assertNothingSent();
+    }
+
     public function test_a_refused_ad_set_leaves_a_partial_launch_and_a_retry_resumes_without_a_second_campaign(): void
     {
         $this->configure('meta');
@@ -175,7 +222,7 @@ final class LaunchPlanTest extends TestCase
         $this->assertSame('meta', $out['accounts'][0]['provider']);
         $this->assertSame('available', $out['accounts'][0]['state']);
         $this->assertContains('OUTCOME_SALES', $out['providers'][0]['objectives']);
-        $this->assertSame('creative', $out['providers'][0]['ad_fields']);
+        $this->assertSame('meta_ad', $out['providers'][0]['ad_fields']);
         $this->assertTrue($out['launch_permitted']);
     }
 

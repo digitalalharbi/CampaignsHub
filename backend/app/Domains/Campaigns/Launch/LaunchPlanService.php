@@ -64,7 +64,7 @@ final class LaunchPlanService
                 'ad_set_refusal' => $adapter->refusal(WriteLevel::Campaign, WriteAction::CreateAdSet),
                 'ad_refusal' => $adapter->refusal(WriteLevel::AdSet, WriteAction::CreateAd),
                 'ad_fields' => match ($provider) {
-                    'google' => 'search_ad', 'tiktok' => 'tiktok_ad', default => 'creative'
+                    'google' => 'search_ad', 'tiktok' => 'tiktok_ad', 'meta' => 'meta_ad', default => 'creative'
                 },
                 'countries_in_ad_set' => $provider !== 'google',
                 'bid_required' => $provider === 'google',
@@ -127,6 +127,12 @@ final class LaunchPlanService
         }
 
         return $this->split->allocate($total, $currency, $slots);
+    }
+
+    /** @return array{ok: bool, pages: list<array<string, mixed>>, message: ?string} */
+    public function metaPages(string $projectId, string $accountId): array
+    {
+        return $this->writes->metaPages($projectId, $accountId);
     }
 
     /** Save (or re-save) a draft and say, per account, what publishing would do and what would refuse it. */

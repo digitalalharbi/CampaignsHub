@@ -96,9 +96,10 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
         }
 
         if ($action === WriteAction::CreateAdSet) {
-            // META-WRITE-PARAMS-001 — Meta's reference requires `promoted_object.page_id` here, and this form holds no page.
-            if (($input['optimization_goal'] ?? null) === 'LEAD_GENERATION') {
-                return WriteOutcome::refused('Meta needs a page (promoted_object.page_id) for a LEAD_GENERATION ad set, and this form does not collect one. Create it in Ads Manager or choose another goal.');
+            // META-WRITE-PARAMS-001 / META-PAGES-001 — Meta requires `promoted_object.page_id` for a LEAD_GENERATION ad set.
+            $leads = ($input['optimization_goal'] ?? null) === 'LEAD_GENERATION';
+            if ($leads && empty($input['page_id'])) {
+                return WriteOutcome::refused('Meta needs a Facebook Page for a LEAD_GENERATION ad set. Choose the page in the Ad step.');
             }
 
             $response = $this->send($connector, 'POST', $this->account($target->accountExternalId).'/adsets', array_filter([
@@ -110,6 +111,7 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
                 'daily_budget' => isset($input['daily_budget']) ? $this->minorUnits((float) $input['daily_budget'], $target->currency) : null,
                 'targeting' => ['geo_locations' => ['countries' => array_values((array) $input['countries'])]],
                 'start_time' => isset($input['starts_at']) ? Carbon::parse((string) $input['starts_at'])->toIso8601String() : null,
+                'promoted_object' => $leads ? ['page_id' => (string) $input['page_id']] : null,
             ], static fn ($v) => $v !== null), idempotent: false);
             $id = ($response->json() ?? [])['id'] ?? null;
 
@@ -117,10 +119,31 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
         }
 
         if ($action === WriteAction::CreateAd) {
+            $creativeId = isset($input['creative_external_id']) ? (string) $input['creative_external_id'] : null;
+            if ($creativeId === null) {
+                // META-PAGES-001 — a new link ad: its creative is created first, published under the chosen Facebook Page.
+                $made = $this->send($connector, 'POST', $this->account($target->accountExternalId).'/adcreatives', [
+                    'name' => (string) $input['name'],
+                    'object_story_spec' => [
+                        'page_id' => (string) $input['page_id'],
+                        'link_data' => [
+                            'link' => (string) $input['url'],
+                            'message' => (string) $input['message'],
+                            'call_to_action' => ['type' => (string) ($input['call_to_action'] ?? 'LEARN_MORE'), 'value' => ['link' => (string) $input['url']]],
+                        ],
+                    ],
+                ], idempotent: false);
+                $creativeId = ($made->json() ?? [])['id'] ?? null;
+                if (! PlatformHttp::succeeded($made) || ! is_scalar($creativeId)) {
+                    return $this->verdict($made);
+                }
+                $creativeId = (string) $creativeId;
+            }
+
             $response = $this->send($connector, 'POST', $this->account($target->accountExternalId).'/ads', [
                 'name' => (string) $input['name'],
                 'adset_id' => $node,
-                'creative' => ['creative_id' => (string) $input['creative_external_id']],
+                'creative' => ['creative_id' => $creativeId],
                 'status' => 'PAUSED',
             ], idempotent: false);
             $id = ($response->json() ?? [])['id'] ?? null;

@@ -19,7 +19,7 @@ import { usePortalPath } from '@/app/portalPath'
 import { useProject } from '@/stores/project'
 import { useUi } from '@/stores/ui'
 import { accounts as countedAccounts } from '@/lib/counted'
-import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, useLaunchStrategy, type AccountReadiness, type BudgetAllocation, type BudgetMode, type BusinessGoal, type EventStatus, type StrategyAccount, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
+import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, useLaunchStrategy, useMetaPages, type MetaPage, type AccountReadiness, type BudgetAllocation, type BudgetMode, type BusinessGoal, type EventStatus, type StrategyAccount, type LaunchPlan, type LaunchReviewRow, type LaunchSpec, type LaunchStep, type StepState } from './api'
 import { localStill } from '@/features/content/providerMedia'
 import { withMark } from '@/lib/money/mark'
 
@@ -59,6 +59,7 @@ const problemText = (p: string, ar: boolean): string => {
   return scope + (known ? (ar ? known.ar : known.en) : rest.join(':') || p)
 }
 
+const META_CALLS = ['LEARN_MORE', 'SHOP_NOW', 'SIGN_UP', 'CONTACT_US', 'ORDER_NOW', 'BOOK_NOW', 'GET_OFFER', 'SUBSCRIBE', 'DOWNLOAD']
 const TIKTOK_CALLS = ['LEARN_MORE', 'SHOP_NOW', 'ORDER_NOW', 'SIGN_UP', 'CONTACT_US', 'BOOK_NOW', 'APPLY_NOW', 'VISIT_STORE']
 
 /*
@@ -312,6 +313,8 @@ export function LaunchPage() {
                               <Field label={ar ? 'الأوصاف (2–4، سطر لكل وصف)' : 'Descriptions (2–4, one per line)'}><textarea className="w-full rounded-lg border border-border bg-surface p-2 text-sm" rows={4} value={(spec.ad!.google?.descriptions ?? []).join('\n')} onChange={(e) => setSpec((s) => ({ ...s, ad: { ...s.ad!, google: { headlines: s.ad!.google?.headlines ?? [], descriptions: e.target.value.split('\n') } } }))} /></Field>
                             </div>
                           ) : (
+                            <>
+                            {p.ad_fields === 'meta_ad' && (options.data?.creatives.meta ?? []).length > 0 && <p className="text-xs font-semibold text-text-secondary">{ar ? 'اختياري: استخدم محتوى سبق نشره' : 'Optional: reuse an existing creative'}</p>}
                             <ul className="grid grid-cols-2 gap-2 md:grid-cols-4 [&>*]:min-w-0">
                               {(options.data?.creatives[p.provider] ?? []).map((c) => (
                                 <li key={c.id}>
@@ -323,8 +326,17 @@ export function LaunchPage() {
                                   </button>
                                 </li>
                               ))}
-                              {(options.data?.creatives[p.provider] ?? []).length === 0 && <li className="col-span-full text-xs text-text-muted">{ar ? 'لا محتويات محدّثة لهذه المنصة — الإعلان يُنشأ من محتوى سبق تحديثه.' : 'No synced creatives on this platform — ads are made from an already-synced creative.'}</li>}
+                              {(options.data?.creatives[p.provider] ?? []).length === 0 && p.ad_fields !== 'meta_ad' && <li className="col-span-full text-xs text-text-muted">{ar ? 'لا محتويات محدّثة لهذه المنصة — الإعلان يُنشأ من محتوى سبق تحديثه.' : 'No synced creatives on this platform — ads are made from an already-synced creative.'}</li>}
                             </ul>
+                            </>
+                          )}
+                          {p.ad_fields === 'meta_ad' && (
+                            <MetaAdFields ar={ar} projectId={currentProjectId} accountId={spec.accounts.map((a) => accounts.find((x) => x.id === a.external_account_id)).find((a) => a?.provider === 'meta')?.id ?? null}
+                              pageId={spec.ad!.page_id?.meta ?? null} message={spec.ad!.meta?.message ?? ''} callToAction={spec.ad!.meta?.call_to_action ?? 'LEARN_MORE'} usingCreative={Boolean(spec.ad!.creative_id?.meta)}
+                              onPage={(id) => setSpec((s) => ({ ...s, ad: { ...s.ad!, page_id: { ...(s.ad!.page_id ?? {}), meta: id } } }))}
+                              onMessage={(m) => setSpec((s) => ({ ...s, ad: { ...s.ad!, meta: { message: m, call_to_action: s.ad!.meta?.call_to_action ?? 'LEARN_MORE' } } }))}
+                              onCallToAction={(c) => setSpec((s) => ({ ...s, ad: { ...s.ad!, meta: { message: s.ad!.meta?.message ?? '', call_to_action: c } } }))}
+                              onClearCreative={() => setSpec((s) => { const rest = { ...(s.ad!.creative_id ?? {}) }; delete rest.meta; return { ...s, ad: { ...s.ad!, creative_id: rest } } })} />
                           )}
                           {p.ad_fields === 'tiktok_ad' && (
                             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -804,6 +816,60 @@ const GOAL_INFO: Record<BusinessGoal, { Icon: typeof Megaphone; ar: string; en: 
   traffic: { Icon: MousePointerClick, ar: 'وجّه الناس لموقعك أو صفحتك.', en: 'Send people to your website or page.', outcomesAr: ['زيارات الموقع', 'النقرات', 'زيارات الصفحة'], outcomesEn: ['Website visits', 'Clicks', 'Landing page views'] },
   leads: { Icon: Filter, ar: 'اجمع بيانات المهتمين بنموذج أو صفحة هبوط.', en: 'Collect interested people through a form or a landing page.', outcomesAr: ['نماذج العملاء', 'التسجيلات', 'التواصل'], outcomesEn: ['Lead forms', 'Sign-ups', 'Contacts'] },
   sales: { Icon: ShoppingCart, ar: 'حقّق طلبات ومبيعات من متجرك.', en: 'Drive orders and sales from your store.', outcomesAr: ['الشراء', 'الإضافة للسلة', 'إتمام الطلب'], outcomesEn: ['Purchases', 'Add to cart', 'Checkout'] },
+}
+
+/**
+ * META-PAGES-001 — a Meta ad is published under a Facebook Page. The pages are read live from Meta (`pages_show_list`) with the
+ * public figures that tell them apart (`pages_read_engagement`), and the person chooses one; the ad text and its button go with it.
+ */
+function MetaAdFields({ ar, projectId, accountId, pageId, message, callToAction, usingCreative, onPage, onMessage, onCallToAction, onClearCreative }: {
+  ar: boolean; projectId: string | null; accountId: string | null; pageId: string | null; message: string; callToAction: string; usingCreative: boolean
+  onPage: (id: string) => void; onMessage: (m: string) => void; onCallToAction: (c: string) => void; onClearCreative: () => void
+}) {
+  const pages = useMetaPages(projectId, accountId)
+  const list: MetaPage[] = pages.data?.pages ?? []
+  return (
+    <div className="space-y-3 border-t border-border pt-3" data-testid="launch-meta-ad">
+      <div>
+        <p className="text-sm font-semibold text-text-primary">{ar ? 'صفحة فيسبوك' : 'Facebook Page'}</p>
+        <p className="text-xs text-text-muted" title={ar ? 'تُقرأ من ميتا مباشرة: الصفحات التي يديرها الحساب المربوط.' : 'Read live from Meta: the Pages the connected account manages.'}>
+          {ar ? 'يُنشر الإعلان باسم الصفحة التي تختارها. القائمة تُقرأ من ميتا مباشرة.' : 'The ad is published under the Page you choose. This list is read live from Meta.'}
+        </p>
+      </div>
+      {pages.isPending ? <Skeleton className="h-16" /> : list.length === 0 ? (
+        <p className="text-xs text-warning" data-testid="launch-meta-pages-empty">{pages.data?.message ?? (ar ? 'لم تُرجع ميتا أي صفحة لهذا الحساب. أعد ربط ميتا وامنح صلاحية الصفحات.' : 'Meta returned no Pages for this account. Reconnect Meta and grant access to your Pages.')}</p>
+      ) : (
+        <ul role="radiogroup" aria-label={ar ? 'صفحة فيسبوك' : 'Facebook Page'} className="grid grid-cols-1 gap-2 md:grid-cols-2 [&>*]:min-w-0" data-testid="launch-meta-pages">
+          {list.map((pg) => {
+            const on = pageId === pg.id
+            return (
+              <li key={pg.id}>
+                <button type="button" role="radio" aria-checked={on} onClick={() => onPage(pg.id)} data-testid={`launch-meta-page-${pg.id}`}
+                  className={`flex w-full items-center gap-3 rounded-xl border p-2 text-start ${on ? 'border-brand-500 bg-brand-500/10' : 'border-border hover:border-brand-400'}`}>
+                  {pg.picture_url ? <img src={pg.picture_url} alt="" className="size-10 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" /> : <span className="size-10 shrink-0 rounded-full bg-surface-secondary" />}
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-text-primary">{pg.name}</span>
+                    <span className="block truncate text-xs text-text-muted">
+                      {[pg.category, pg.followers !== null ? (ar ? `${pg.followers.toLocaleString('en-US')} متابع` : `${pg.followers.toLocaleString('en-US')} followers`) : null].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {usingCreative ? (
+        <p className="text-xs text-text-muted">{ar ? 'اخترت محتوى سبق نشره، فيُستخدم كما هو.' : 'You chose an existing creative; it is used as it is.'} <button type="button" className="font-bold text-brand-600 hover:underline" onClick={onClearCreative}>{ar ? 'اكتب إعلانًا جديدًا بدلًا منه' : 'Write a new ad instead'}</button></p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_200px]">
+          <Field label={ar ? 'نص الإعلان' : 'Ad text'}><textarea className="w-full rounded-lg border border-border bg-surface p-2 text-sm" rows={3} maxLength={2000} value={message} onChange={(e) => onMessage(e.target.value)} data-testid="launch-meta-message" /></Field>
+          <SelectField label={ar ? 'زر الإجراء' : 'Call to action'} value={callToAction} options={META_CALLS.map((c) => ({ value: c, label: c }))} onChange={(v) => onCallToAction(v ?? 'LEARN_MORE')} />
+        </div>
+      )}
+      {!usingCreative && <p className="text-xs text-text-muted">{ar ? 'الرابط يُؤخذ من خطوة «الرابط والتتبع».' : 'The link comes from the «Link & tracking» step.'}</p>}
+    </div>
+  )
 }
 
 function ObjectivePicker({ ar, picked, onPick, onCancel, onNext, unfinished = [], onOpenPlan }: { ar: boolean; picked: BusinessGoal; onPick: (g: BusinessGoal) => void; onCancel: () => void; onNext: () => void; unfinished?: LaunchPlan[]; onOpenPlan?: (p: LaunchPlan) => void }) {
