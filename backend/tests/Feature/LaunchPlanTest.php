@@ -193,6 +193,9 @@ final class LaunchPlanTest extends TestCase
         $this->assertSame('awaiting_credentials', $out['steps'][0]['campaign']['refusal']);
         Http::assertNothingSent();
         $this->assertSame(0, ExternalCampaign::query()->count());
+        // LAUNCH-NO-ORPHAN-001 — nothing was created anywhere, so no empty «Draft» campaign is left in the list.
+        $this->assertSame(0, UnifiedCampaign::query()->count());
+        $this->assertNull($out['unified_campaign_id']);
     }
 
     public function test_running_after_creation_needs_the_launch_permission_before_any_call_is_made(): void
