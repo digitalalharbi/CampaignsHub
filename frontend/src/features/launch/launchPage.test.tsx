@@ -175,6 +175,17 @@ describe('the launch page', () => {
 
     await waitFor(() => expect(savePlan).toHaveBeenCalledWith('p1', expect.objectContaining({ ad: expect.objectContaining({ page_id: { meta: '1081' }, meta: { message: 'Fresh dates, delivered.', call_to_action: 'LEARN_MORE' } }) }), null))
   })
+  /** LAUNCH-STEP-ERROR-001 — Meta's refusal reaches the screen in Meta's words, never as the code «provider_refused». */
+  it("shows the platform's own refusal text instead of its code", async () => {
+    const failed = plan({ status: 'failed', steps: [{ account_id: 'acc1', provider: 'meta', campaign: { status: 'failed', refusal: 'provider_refused', error: "Unsupported post request. Object with ID 'act_9' does not exist" }, ad_set: null, ad: null, launched: null }] })
+    vi.mocked(useLaunchPlans).mockReturnValue(ok([failed]) as never)
+    renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+
+    fireEvent.click(await screen.findByTestId('launch-resume-pl1'))
+    const error = await screen.findByTestId('launch-step-error')
+    expect(error).toHaveTextContent("The platform refused: Unsupported post request. Object with ID 'act_9' does not exist")
+    expect(error).not.toHaveTextContent('provider_refused')
+  })
   it('shows a partial launch as partial with the provider error and a retry', async () => {
     const partial = plan({ status: 'partial', unified_campaign_id: 'uc1', steps: [{ account_id: 'acc1', provider: 'meta', campaign: { status: 'done', external_id: '5001' }, ad_set: { status: 'failed', error: '(#100) Bad targeting' }, ad: { status: 'pending' }, launched: null }] })
     vi.mocked(useLaunchPlans).mockReturnValue(ok([partial]) as never)
