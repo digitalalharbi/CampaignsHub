@@ -121,6 +121,15 @@ describe('the launch page', () => {
     expect(error).toHaveTextContent('محاولة نشر سابقة')
     expect(error).not.toHaveTextContent('launch_in_progress')
   })
+  /** LAUNCH-RESUME-001 — the objective dialog opens over the page; a saved draft is reachable from inside it. */
+  it('lets a saved draft be continued from the objective dialog without closing it first', async () => {
+    vi.mocked(useLaunchPlans).mockReturnValue(ok([plan()]) as never)
+    renderWithProviders(<LaunchPage />, { locale: 'ar', route: '/agency/launch' })
+
+    fireEvent.click(await screen.findByTestId('launch-resume-pl1'))
+    expect(screen.queryByTestId('launch-objective')).not.toBeInTheDocument()
+    expect(await screen.findByTestId('launch-review')).toBeInTheDocument()
+  })
   it('shows a partial launch as partial with the provider error and a retry', async () => {
     const partial = plan({ status: 'partial', unified_campaign_id: 'uc1', steps: [{ account_id: 'acc1', provider: 'meta', campaign: { status: 'done', external_id: '5001' }, ad_set: { status: 'failed', error: '(#100) Bad targeting' }, ad: { status: 'pending' }, launched: null }] })
     vi.mocked(useLaunchPlans).mockReturnValue(ok([partial]) as never)
