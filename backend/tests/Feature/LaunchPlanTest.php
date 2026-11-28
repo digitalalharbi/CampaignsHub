@@ -105,12 +105,21 @@ final class LaunchPlanTest extends TestCase
     {
         $this->configure('meta');
         $account = $this->account('meta', 'act_9');
-        Http::fake([
-            'graph.facebook.com/*/me/accounts*' => Http::response(['data' => [
-                ['id' => '1081', 'name' => 'Karam Alnakhil', 'category' => 'Food', 'followers_count' => 12500, 'picture' => ['data' => ['url' => 'https://scontent.example/p.jpg']]],
-            ]]),
-            'graph.facebook.com/*' => Http::sequence()->push(['id' => '5001'])->push(['id' => '6001'])->push(['id' => '8001'])->push(['id' => '7001']),
-        ]);
+        // Answered by what is asked, not by order: whatever else a publish reads, each node gets its own id.
+        Http::fake(function (Request $r) {
+            $path = (string) parse_url($r->url(), PHP_URL_PATH);
+
+            return match (true) {
+                str_ends_with($path, '/me/accounts') => Http::response(['data' => [
+                    ['id' => '1081', 'name' => 'Karam Alnakhil', 'category' => 'Food', 'followers_count' => 12500, 'picture' => ['data' => ['url' => 'https://scontent.example/p.jpg']]],
+                ]]),
+                str_ends_with($path, '/act_9/campaigns') => Http::response(['id' => '5001']),
+                str_ends_with($path, '/act_9/adsets') => Http::response(['id' => '6001']),
+                str_ends_with($path, '/act_9/adcreatives') => Http::response(['id' => '8001']),
+                str_ends_with($path, '/act_9/ads') => Http::response(['id' => '7001']),
+                default => Http::response(['success' => true]),
+            };
+        });
 
         $pages = $this->actingAs($this->owner, 'sanctum')->getJson($this->url('meta-pages?account='.$account->id))->assertOk()->json('data.pages');
         $this->assertSame([['id' => '1081', 'name' => 'Karam Alnakhil', 'category' => 'Food', 'picture_url' => 'https://scontent.example/p.jpg', 'followers' => 12500, 'link' => null]], $pages);

@@ -99,7 +99,7 @@ final class MetaWriteAdapter extends AbstractWriteAdapter
             // META-WRITE-PARAMS-001 / META-PAGES-001 — Meta requires `promoted_object.page_id` for a LEAD_GENERATION ad set.
             $leads = ($input['optimization_goal'] ?? null) === 'LEAD_GENERATION';
             if ($leads && empty($input['page_id'])) {
-                return WriteOutcome::refused('Meta needs a Facebook Page for a LEAD_GENERATION ad set. Choose the page in the Ad step.');
+                return WriteOutcome::refused('Meta needs a Facebook Page (promoted_object.page_id) for a LEAD_GENERATION ad set. Choose the page in the Ad step.');
             }
 
             $response = $this->send($connector, 'POST', $this->account($target->accountExternalId).'/adsets', array_filter([
