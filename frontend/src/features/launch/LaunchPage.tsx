@@ -527,7 +527,14 @@ function StepPill({ label, state, ar }: { label: string; state: StepState | null
   return (
     <span className="inline-flex flex-wrap items-center gap-1 text-xs">
       <Badge tone={tone}>{label}{state.external_id ? ` · ${state.external_id}` : ''}</Badge>
-      {state.status === 'failed' && <span className="text-danger">{state.refusal ? problemText(state.refusal, ar) : state.error}</span>}
+      {/* LAUNCH-STEP-ERROR-001 — a platform's refusal is shown in its own words; a code is only shown when there are none. */}
+      {state.status === 'failed' && (
+        <span className="text-danger" data-testid="launch-step-error">
+          {state.refusal === 'provider_refused' && state.error
+            ? `${ar ? 'رفضت المنصة: ' : 'The platform refused: '}${state.error}`
+            : state.refusal ? problemText(state.refusal, ar) : state.error}
+        </span>
+      )}
     </span>
   )
 }
