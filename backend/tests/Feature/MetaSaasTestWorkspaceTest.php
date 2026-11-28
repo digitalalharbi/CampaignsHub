@@ -13,6 +13,7 @@ use App\Domains\Integrations\Models\ProviderConnection;
 use App\Domains\Integrations\OAuth\MetaCredentialProfile;
 use App\Domains\Integrations\OAuth\OAuthTokens;
 use App\Domains\Integrations\OAuth\TokenVault;
+use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -200,5 +201,37 @@ final class MetaSaasTestWorkspaceTest extends TestCase
     {
         $this->actingAs($this->admin, 'sanctum')->putJson(self::BASE.'/test-workspace')->assertNotFound();
         $this->assertSame(0, Tenant::query()->where('slug', MetaSaasTestWorkspace::SLUG)->count());
+    }
+
+    /**
+     * META-SAAS-LOGIN-HANDOVER-001 — the Owner takes the workspace over from the address that created it: a new owner login, the old
+     * one suspended here (not deleted), the workspace and its tenant unchanged.
+     */
+    public function test_the_login_is_handed_over_to_a_new_address_and_the_old_one_loses_this_workspace_only(): void
+    {
+        $this->create();
+        $tenantId = (string) Tenant::query()->where('slug', MetaSaasTestWorkspace::SLUG)->value('id');
+        $old = User::query()->where('email', self::EMAIL)->sole();
+
+        $res = $this->actingAs($this->admin, 'sanctum')->postJson(self::BASE.'/test-workspace/login', ['email' => 'owner-new@example.test'])->assertOk()
+            ->assertJsonPath('data.test_workspace.login_email', 'owner-new@example.test')
+            ->assertJsonPath('data.test_workspace.tenant_id', $tenantId);
+        $this->assertNotNull($res->json('data.set_password_link'));
+
+        $new = User::query()->where('email', 'owner-new@example.test')->sole();
+        $this->assertSame('active', Membership::query()->where('tenant_id', $tenantId)->where('user_id', $new->id)->value('status'));
+        $this->assertSame('suspended', Membership::query()->where('tenant_id', $tenantId)->where('user_id', $old->id)->value('status'));
+        $this->assertTrue(User::query()->whereKey($old->id)->exists(), 'the old login is suspended here, never deleted');
+        $this->assertSame(1, Tenant::query()->where('slug', MetaSaasTestWorkspace::SLUG)->count());
+
+        // A known address is refused, as at creation; no workspace means nothing to hand over.
+        $this->actingAs($this->admin, 'sanctum')->postJson(self::BASE.'/test-workspace/login', ['email' => $this->admin->email])->assertStatus(409);
+    }
+
+    public function test_only_a_platform_admin_hands_the_login_over(): void
+    {
+        $this->create();
+        $user = User::create(['name' => 'U', 'email' => 'u'.uniqid().'@example.test', 'password' => 'secret123']);
+        $this->actingAs($user, 'sanctum')->postJson(self::BASE.'/test-workspace/login', ['email' => 'x@example.test'])->assertForbidden();
     }
 }

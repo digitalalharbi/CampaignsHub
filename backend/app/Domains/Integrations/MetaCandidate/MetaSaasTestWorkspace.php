@@ -10,6 +10,7 @@ use App\Domains\Accounts\Enums\AccountState;
 use App\Domains\Accounts\Services\TransitionAccountState;
 use App\Domains\ClientWorkspaces\Models\ClientWorkspace;
 use App\Domains\Identity\Services\PasswordResetService;
+use App\Domains\Identity\Support\UserSessions;
 use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Models\ProjectIntegrationBinding;
 use App\Domains\Integrations\Models\ProviderConnection;
@@ -21,6 +22,7 @@ use App\Domains\Tenancy\Actions\GrantMembership;
 use App\Domains\Tenancy\Context\TenantContext;
 use App\Domains\Tenancy\DTOs\MembershipGrant;
 use App\Domains\Tenancy\Enums\Portal;
+use App\Domains\Tenancy\Models\Membership;
 use App\Domains\Tenancy\Models\Tenant;
 use App\Domains\Tenancy\Models\Workspace;
 use App\Models\User;
@@ -53,6 +55,7 @@ final class MetaSaasTestWorkspace
         private readonly TransitionAccountState $transitions,
         private readonly GrantMembership $grants,
         private readonly PasswordResetService $resets,
+        private readonly UserSessions $sessions,
     ) {}
 
     public static function isTestTenant(?string $tenantId): bool
@@ -127,6 +130,65 @@ final class MetaSaasTestWorkspace
         return ['tenant' => $tenant->refresh(), 'user' => $user, 'set_password_link' => $issued['link'] ?? null, 'delivery' => $issued['delivery'] ?? null];
     }
 
+    /**
+     * META-SAAS-LOGIN-HANDOVER-001 — give the test workspace a new login the Owner holds, and take it from whoever held it (an
+     * outside developer). A NEW identity only, as at provisioning; the previous logins' memberships here are suspended (never
+     * deleted), their roles here removed, and their sessions end if this was their only workspace. The workspace, its data and its
+     * connections are untouched. The password is set from a single-use link, as at provisioning.
+     *
+     * @return array{user: User, set_password_link: ?string, delivery: ?string, suspended: int}
+     */
+    public function handOver(string $email, ?int $actorId): array
+    {
+        $email = Str::lower(trim($email));
+        $tenant = $this->tenant();
+        if ($tenant === null) {
+            throw new InvalidArgumentException('no_test_workspace');
+        }
+        if (User::query()->where('email', $email)->exists()) {
+            throw new InvalidArgumentException('email_already_registered');
+        }
+
+        $previous = $this->context->tenantId();
+        $suspended = 0;
+        try {
+            $this->context->setTenantId((string) $tenant->id);
+
+            $user = new User(['email' => $email, 'name' => 'Meta SaaS Tester']);
+            $user->password = Hash::make(Str::random(64));
+            $user->save();
+            $user->forceFill(['email_verified_at' => now()])->save();
+
+            $role = Role::firstOrCreate(['tenant_id' => $tenant->id, 'slug' => 'tenant-owner'], ['name' => 'Tenant Owner', 'is_system' => true]);
+            $user->assignRole($role);
+            $this->grants->execute(new MembershipGrant(user: $user, tenant: $tenant, portal: Portal::forAccountType('self_serve_company'), role: 'owner', enrolNotifications: false));
+
+            $roleIds = Role::query()->where('tenant_id', $tenant->id)->pluck('id')->all();
+            $others = Membership::query()->where('tenant_id', $tenant->id)->where('user_id', '!=', $user->getKey())->where('status', 'active')->get();
+            foreach ($others as $membership) {
+                $membership->forceFill(['status' => 'suspended'])->save();
+                $old = User::query()->find($membership->user_id);
+                if ($old !== null) {
+                    $old->roles()->detach($roleIds);
+                    if (! Membership::query()->where('user_id', $old->getKey())->where('status', 'active')->exists()) {
+                        $this->sessions->revokeAll($old);
+                    }
+                }
+                $suspended++;
+            }
+
+            $settings = (array) ($tenant->settings ?? []);
+            $settings[self::SETTINGS_KEY] = [...(array) ($settings[self::SETTINGS_KEY] ?? []), 'handed_over_at' => now()->toIso8601String(), 'handed_over_by' => $actorId];
+            $tenant->forceFill(['settings' => $settings])->save();
+        } finally {
+            $this->context->setTenantId($previous);
+        }
+
+        $issued = $this->resets->issueForOperator($email);
+
+        return ['user' => $user, 'set_password_link' => $issued['link'] ?? null, 'delivery' => $issued['delivery'] ?? null, 'suspended' => $suspended];
+    }
+
     /** Close the workspace to the SaaS app (it keeps its data); the next test needs it re-opened by an admin. */
     public function deactivate(): void
     {
@@ -173,7 +235,7 @@ final class MetaSaasTestWorkspace
         $connectionIds = (clone $connections)->pluck('id');
         $accounts = ExternalAccount::withoutGlobalScopes()->whereIn('provider_connection_id', $connectionIds);
         $accountIds = (clone $accounts)->pluck('id');
-        $owner = User::query()->whereHas('memberships', fn ($q) => $q->where('tenant_id', $tid))->value('email');
+        $owner = User::query()->whereHas('memberships', fn ($q) => $q->where('tenant_id', $tid)->where('status', 'active'))->value('email');
 
         return [
             'exists' => true,

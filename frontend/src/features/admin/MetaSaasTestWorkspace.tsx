@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Circle } from 'lucide-react'
-import { closeMetaSaasTestWorkspace, createMetaSaasTestWorkspace, reopenMetaSaasTestWorkspace, type MetaCandidateState, type MetaSaasJourneyStep, type MetaSaasTestWorkspaceState } from './api'
+import { closeMetaSaasTestWorkspace, createMetaSaasTestWorkspace, handOverMetaSaasTestWorkspace, reopenMetaSaasTestWorkspace, type MetaCandidateState, type MetaSaasJourneyStep, type MetaSaasTestWorkspaceState } from './api'
 import { Button } from '@/components/ui/Button'
 import { toApiError } from '@/lib/api/client'
 
@@ -26,7 +26,8 @@ const COPY = {
     } as Record<MetaSaasJourneyStep, string>,
     manual: 'إعادة الربط تُنفَّذ يدويًا: اربط مرة أخرى من صفحة التكاملات قبل الفصل، ويبقى الاتصال نفسه.',
     link: 'رابط تعيين كلمة المرور (يُعرض مرة واحدة، صالح لساعة ولاستخدام واحد). افتحه في نافذة خاصة وعيّن كلمة المرور، ثم سجّل الدخول ببريد مساحة الاختبار:',
-    errors: { test_workspace_exists: 'مساحة الاختبار موجودة بالفعل.', email_already_registered: 'هذا البريد مسجّل لحساب قائم؛ استخدم بريدًا جديدًا.' } as Record<string, string>,
+    handOver: 'تغيير بريد الدخول لمساحة الاختبار', handOverNote: 'يُنشأ دخول جديد بهذا البريد ويُوقف دخول البريد الحالي على هذه المساحة فقط، وتبقى بياناتها وروابطها كما هي.', handOverDo: 'تغيير الدخول',
+    errors: { test_workspace_exists: 'مساحة الاختبار موجودة بالفعل.', email_already_registered: 'هذا البريد مسجّل لحساب قائم؛ استخدم بريدًا جديدًا.', no_test_workspace: 'لا توجد مساحة اختبار.' } as Record<string, string>,
   },
   en: {
     title: 'New app test workspace',
@@ -41,7 +42,8 @@ const COPY = {
     } as Record<MetaSaasJourneyStep, string>,
     manual: 'Reconnect is done by hand: connect again from Integrations before disconnecting; it stays the same connection.',
     link: 'Set-password link (shown once, valid for one hour and one use). Open it in a private window, set the password, then sign in with the test workspace address:',
-    errors: { test_workspace_exists: 'The test workspace already exists.', email_already_registered: 'That address already has an account; use a new one.' } as Record<string, string>,
+    handOver: 'Change the test workspace login', handOverNote: 'A new login is created with this address and the current one loses access to this workspace only; its data and connections stay as they are.', handOverDo: 'Change the login',
+    errors: { test_workspace_exists: 'The test workspace already exists.', email_already_registered: 'That address already has an account; use a new one.', no_test_workspace: 'There is no test workspace.' } as Record<string, string>,
   },
 }
 
@@ -61,7 +63,13 @@ export function MetaSaasTestWorkspace({ state, ar }: { state: MetaSaasTestWorksp
   const close = useMutation({ meta: { feedback: 'none' }, mutationFn: closeMetaSaasTestWorkspace, onSuccess })
   // META-SAAS-REOPEN-001 — a closed workspace can be opened again; closing never deleted its data.
   const reopen = useMutation({ meta: { feedback: 'none' }, mutationFn: reopenMetaSaasTestWorkspace, onSuccess })
-  const error = create.error ?? close.error ?? reopen.error
+  // META-SAAS-LOGIN-HANDOVER-001 — the Owner takes the login over from whoever created it; the new link is shown once, as at creation.
+  const [newLogin, setNewLogin] = useState('')
+  const handOver = useMutation({ meta: { feedback: 'none' },
+    mutationFn: () => handOverMetaSaasTestWorkspace(newLogin.trim()),
+    onSuccess: (data) => { setLink(data.set_password_link ?? null); setNewLogin(''); onSuccess(data) },
+  })
+  const error = create.error ?? close.error ?? reopen.error ?? handOver.error
   const code = error ? (toApiError(error).errors?.email?.[0] ?? null) : null
 
   return (
@@ -110,6 +118,14 @@ export function MetaSaasTestWorkspace({ state, ar }: { state: MetaSaasTestWorksp
             })}
           </ol>
           <p className="text-xs text-text-muted">{c.manual}</p>
+          <form className="flex flex-col gap-2 rounded-xl border border-border p-3 sm:flex-row sm:items-end" data-testid="meta-saas-test-workspace-handover" onSubmit={(e) => { e.preventDefault(); handOver.mutate() }}>
+            <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+              <span className="font-semibold text-text-primary">{c.handOver}</span>
+              <span className="text-xs text-text-secondary">{c.handOverNote}</span>
+              <input data-testid="meta-saas-test-workspace-handover-email" type="email" required dir="ltr" autoComplete="off" className="rounded-lg border border-border bg-surface px-3 py-2 text-sm" value={newLogin} onChange={(e) => setNewLogin(e.target.value)} />
+            </label>
+            <Button data-testid="meta-saas-test-workspace-handover-submit" type="submit" variant="secondary" loading={handOver.isPending} disabled={newLogin.trim() === ''}>{c.handOverDo}</Button>
+          </form>
           <div className="flex flex-wrap gap-2">
             <a href="/login" target="_blank" rel="noreferrer" className="inline-flex items-center rounded-lg border border-border px-3 py-2 text-sm font-semibold text-brand-700">{c.signIn}</a>
             {state.active && <Button data-testid="meta-saas-test-workspace-close" variant="secondary" loading={close.isPending} onClick={() => close.mutate()}>{c.close}</Button>}
