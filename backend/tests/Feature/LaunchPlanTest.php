@@ -229,8 +229,11 @@ final class LaunchPlanTest extends TestCase
     public function test_options_name_each_platforms_vocabulary_and_the_projects_accounts(): void
     {
         $this->configure('meta');
-        $this->account('meta', 'act_5');
+        $account = $this->account('meta', 'act_5');
+        $this->creative('meta', '2384001');
         $out = $this->actingAs($this->owner, 'sanctum')->getJson($this->url('options'))->assertOk()->json('data');
+        // LAUNCH-CREATIVES-PER-ACCOUNT-001 — each creative names the account that ran it.
+        $this->assertSame((string) $account->id, $out['creatives']['meta'][0]['account_id']);
         $this->assertSame('meta', $out['accounts'][0]['provider']);
         $this->assertSame('available', $out['accounts'][0]['state']);
         $this->assertContains('OUTCOME_SALES', $out['providers'][0]['objectives']);
