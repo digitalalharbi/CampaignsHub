@@ -6,9 +6,9 @@ import { useProject } from '@/stores/project'
 
 vi.mock('./api', async (orig) => {
   const actual = await (orig() as Promise<Record<string, unknown>>)
-  return { ...actual, useLaunchOptions: vi.fn(), useLaunchPlans: vi.fn(), useLaunchStrategy: vi.fn(), splitBudget: vi.fn(), savePlan: vi.fn(), publishPlan: vi.fn() }
+  return { ...actual, useLaunchOptions: vi.fn(), useLaunchPlans: vi.fn(), useLaunchStrategy: vi.fn(), splitBudget: vi.fn(), savePlan: vi.fn(), publishPlan: vi.fn(), useMetaPages: vi.fn() }
 })
-import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, useLaunchStrategy } from './api'
+import { publishPlan, savePlan, splitBudget, useLaunchOptions, useLaunchPlans, useLaunchStrategy, useMetaPages } from './api'
 
 const ok = (data: unknown) => ({ data, isPending: false, isLoading: false, isError: false, error: null, refetch: vi.fn() })
 const options = (state: 'available' | 'awaiting_credentials' = 'available') => ({
@@ -41,6 +41,7 @@ describe('the launch page', () => {
     vi.mocked(useLaunchOptions).mockReturnValue(ok(options()) as never)
     vi.mocked(useLaunchPlans).mockReturnValue(ok([]) as never)
     vi.mocked(useLaunchStrategy).mockReturnValue({ data: undefined, isPending: false } as never)
+    vi.mocked(useMetaPages).mockReturnValue(ok({ pages: [] }) as never)
     vi.mocked(savePlan).mockResolvedValue(plan() as never)
   })
   afterEach(() => { signOut(); useProject.setState({ currentProjectId: null } as never) })
@@ -143,6 +144,36 @@ describe('the launch page', () => {
     expect(screen.queryByTestId('launch-review')).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('launch-objective-next'))
     expect(await screen.findByTestId('launch-account-acc1')).toBeInTheDocument()
+  })
+  /** META-PAGES-001 — a Meta ad offers the Facebook Pages read from Meta, and the chosen page and text go into the plan. */
+  it('lists the Facebook Pages from Meta in the ad step and saves the chosen page with the ad text', async () => {
+    const meta = options()
+    meta.providers[0].ad_fields = 'meta_ad'
+    meta.creatives = { meta: [] }
+    vi.mocked(useLaunchOptions).mockReturnValue(ok(meta) as never)
+    vi.mocked(useMetaPages).mockReturnValue(ok({ pages: [{ id: '1081', name: 'Karam Alnakhil', category: 'Food', picture_url: null, followers: 12500, link: null }] }) as never)
+    renderWithProviders(<LaunchPage />, { locale: 'en', route: '/agency/launch' })
+    await chooseObjective()
+
+    fireEvent.click(await screen.findByTestId('launch-account-acc1'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.change(screen.getByTestId('launch-name'), { target: { value: 'Ramadan' } })
+    fireEvent.click(screen.getByRole('combobox', { name: /Objective/ }))
+    fireEvent.mouseDown(await screen.findByRole('option', { name: /OUTCOME_SALES|Sales/ }))
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.click(screen.getByTestId('launch-next'))
+
+    const page = await screen.findByTestId('launch-meta-page-1081')
+    expect(page).toHaveTextContent('Karam Alnakhil')
+    expect(page).toHaveTextContent('12,500 followers')
+    expect(useMetaPages).toHaveBeenLastCalledWith('p1', 'acc1')
+    fireEvent.click(page)
+    expect(page).toHaveAttribute('aria-checked', 'true')
+    fireEvent.change(screen.getByTestId('launch-meta-message'), { target: { value: 'Fresh dates, delivered.' } })
+    fireEvent.click(screen.getByTestId('launch-next'))
+    fireEvent.click(screen.getByTestId('launch-save'))
+
+    await waitFor(() => expect(savePlan).toHaveBeenCalledWith('p1', expect.objectContaining({ ad: expect.objectContaining({ page_id: { meta: '1081' }, meta: { message: 'Fresh dates, delivered.', call_to_action: 'LEARN_MORE' } }) }), null))
   })
   it('shows a partial launch as partial with the provider error and a retry', async () => {
     const partial = plan({ status: 'partial', unified_campaign_id: 'uc1', steps: [{ account_id: 'acc1', provider: 'meta', campaign: { status: 'done', external_id: '5001' }, ad_set: { status: 'failed', error: '(#100) Bad targeting' }, ad: { status: 'pending' }, launched: null }] })

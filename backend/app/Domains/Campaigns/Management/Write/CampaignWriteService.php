@@ -17,6 +17,8 @@ use App\Domains\Integrations\Models\ExternalAccount;
 use App\Domains\Integrations\Providers\ApiAdvertisingConnector;
 use App\Domains\Integrations\Registry\AdvertisingConnectorRegistry;
 use App\Domains\Integrations\Services\BoundAccountVisibility;
+use App\Domains\Integrations\Support\PlatformHttp;
+use App\Domains\Integrations\Support\ProviderErrorText;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 
@@ -436,6 +438,49 @@ final class CampaignWriteService
     public function accountOptions(User $user, string $projectId): array
     {
         return $this->createOptions($user, $projectId);
+    }
+
+    /**
+     * META-PAGES-001 — the Facebook Pages the connected Meta user manages (`pages_show_list`), with the public figures a person
+     * needs to tell them apart (`pages_read_engagement`): picture, category, followers. Read live from Meta on every call, for
+     * an account selected for this project only. The chosen page is the identity a Meta ad is published under.
+     *
+     * @return array{ok: bool, pages: list<array<string, mixed>>, message: ?string}
+     */
+    public function metaPages(string $projectId, string $accountId): array
+    {
+        $account = ExternalAccount::query()->with('connection')->find($accountId);
+        $refusal = $this->accountRefusal($account, BoundAccountVisibility::activeAccountIds($projectId));
+        if ($refusal !== null || $account === null || $account->provider !== 'meta') {
+            return ['ok' => false, 'pages' => [], 'message' => $refusal !== null ? $this->refusalText($refusal) : 'That is not a Meta ad account of this project.'];
+        }
+
+        $connector = $this->connector($account);
+        $response = $connector->providerRequest()->get($connector->providerUrl('me/accounts'), [
+            'fields' => 'id,name,category,picture.type(small){url},followers_count,fan_count,link',
+            'limit' => 100,
+        ]);
+        if (! PlatformHttp::succeeded($response)) {
+            return ['ok' => false, 'pages' => [], 'message' => ProviderErrorText::forStorage(PlatformHttp::reason($response)) ?? 'Meta did not return your pages.'];
+        }
+
+        $pages = [];
+        foreach ((array) (($response->json() ?? [])['data'] ?? []) as $page) {
+            if (! is_array($page) || ! isset($page['id'])) {
+                continue;
+            }
+            $followers = $page['followers_count'] ?? $page['fan_count'] ?? null;
+            $pages[] = [
+                'id' => (string) $page['id'],
+                'name' => (string) ($page['name'] ?? $page['id']),
+                'category' => isset($page['category']) ? (string) $page['category'] : null,
+                'picture_url' => isset($page['picture']['data']['url']) ? (string) $page['picture']['data']['url'] : null,
+                'followers' => is_numeric($followers) ? (int) $followers : null,
+                'link' => isset($page['link']) ? (string) $page['link'] : null,
+            ];
+        }
+
+        return ['ok' => true, 'pages' => $pages, 'message' => null];
     }
 
     /**

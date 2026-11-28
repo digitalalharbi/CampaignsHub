@@ -21,6 +21,9 @@ use Illuminate\Validation\ValidationException;
  */
 final class LaunchInput
 {
+    /** META-PAGES-001 — the call-to-action types a Meta link ad accepts (Marketing API `call_to_action.type`). */
+    public const META_CALLS = ['LEARN_MORE', 'SHOP_NOW', 'SIGN_UP', 'CONTACT_US', 'ORDER_NOW', 'BOOK_NOW', 'GET_OFFER', 'SUBSCRIBE', 'DOWNLOAD'];
+
     private const TIKTOK_CALLS = ['LEARN_MORE', 'SHOP_NOW', 'ORDER_NOW', 'SIGN_UP', 'CONTACT_US', 'BOOK_NOW', 'APPLY_NOW', 'VISIT_STORE'];
 
     /** The whole plan as the builder sends it. */
@@ -52,6 +55,11 @@ final class LaunchInput
             'ad.google.headlines.*' => ['string', 'max:30'],
             'ad.google.descriptions' => ['nullable', 'array', 'max:4'],
             'ad.google.descriptions.*' => ['string', 'max:90'],
+            'ad.page_id' => ['nullable', 'array'],
+            'ad.page_id.*' => ['nullable', 'string', 'regex:/^[0-9]{1,32}$/'],
+            'ad.meta' => ['nullable', 'array'],
+            'ad.meta.message' => ['nullable', 'string', 'max:2000'],
+            'ad.meta.call_to_action' => ['nullable', Rule::in(self::META_CALLS)],
             'ad.tiktok.ad_text' => ['nullable', 'string', 'max:100'],
             'ad.tiktok.call_to_action' => ['nullable', Rule::in(self::TIKTOK_CALLS)],
             'tracking' => ['nullable', 'array'],
@@ -107,6 +115,7 @@ final class LaunchInput
             'countries' => $provider === 'google' ? null : ($set['countries'] ?? null),
             'bid_amount' => ((array) ($set['bid_amount'] ?? []))[$provider] ?? null,
             'starts_at' => $set['starts_at'] ?? null,
+            'page_id' => $provider === 'meta' ? (((array) (((array) ($spec['ad'] ?? []))['page_id'] ?? []))['meta'] ?? null) : null,
         ];
         $valid = Validator::make($data, [
             'name' => ['required', 'string', 'min:1', 'max:250'],
@@ -116,6 +125,7 @@ final class LaunchInput
             'countries.*' => ['string', 'regex:/^[A-Z]{2}$/'],
             'bid_amount' => $provider === 'google' ? ['required', 'numeric', 'gt:0', 'max:10000000'] : ['nullable', 'numeric', 'gt:0'],
             'starts_at' => ['nullable', 'date'],
+            'page_id' => ['nullable', 'string', 'regex:/^[0-9]{1,32}$/'],
         ])->validate();
 
         return array_filter($valid, static fn ($v) => $v !== null);
@@ -146,6 +156,29 @@ final class LaunchInput
         }
 
         $creativeId = ((array) ($ad['creative_id'] ?? []))[$provider] ?? null;
+
+        // META-PAGES-001 — with no synced creative chosen, a Meta ad is a new link ad published under the chosen Facebook Page.
+        if ($provider === 'meta' && ($creativeId === null || $creativeId === '')) {
+            $meta = (array) ($ad['meta'] ?? []);
+            $data = Validator::make([
+                'page_id' => ((array) ($ad['page_id'] ?? []))['meta'] ?? null,
+                'message' => $meta['message'] ?? null,
+                'call_to_action' => $meta['call_to_action'] ?? 'LEARN_MORE',
+                'url' => $url,
+            ], [
+                'page_id' => ['required', 'string', 'regex:/^[0-9]{1,32}$/'],
+                'message' => ['required', 'string', 'min:1', 'max:2000'],
+                'call_to_action' => ['required', Rule::in(self::META_CALLS)],
+                'url' => ['required', 'url:https', 'max:2048'],
+            ], [
+                'page_id.required' => 'Choose the Facebook Page this ad is published under.',
+                'message.required' => 'Write the ad text.',
+                'url.required' => 'A Meta link ad needs the landing page link (Link & tracking).',
+            ])->validate();
+
+            return $name + ['page_id' => (string) $data['page_id'], 'message' => (string) $data['message'], 'call_to_action' => (string) $data['call_to_action'], 'url' => (string) $data['url']];
+        }
+
         $creative = Validator::make(['creative_id' => $creativeId], ['creative_id' => ['required', 'string', 'max:64']])->validate();
         $external = BoundAccountVisibility::apply(ExternalCreative::query(), 'external_creatives')
             ->where('provider', $provider)->whereKey($creative['creative_id'])->value('external_creative_id');

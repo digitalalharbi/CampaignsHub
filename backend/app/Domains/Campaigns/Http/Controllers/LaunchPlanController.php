@@ -40,6 +40,19 @@ final class LaunchPlanController extends Controller
         return ApiResponse::success($this->plans->strategy($request->user(), $this->projectId($project), $goal), 'Launch strategy.');
     }
 
+    /** GET …/launch/meta-pages?account= — META-PAGES-001: the Facebook Pages a Meta ad can be published under, read live. */
+    public function metaPages(Request $request, string $project): JsonResponse
+    {
+        abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
+        $account = (string) $request->query('account', '');
+        abort_if($account === '', 422, 'Choose a Meta ad account first.');
+        $out = $this->plans->metaPages($this->projectId($project), $account);
+
+        return $out['ok']
+            ? ApiResponse::success(['pages' => $out['pages']], 'Facebook Pages.')
+            : ApiResponse::success(['pages' => [], 'message' => $out['message']], 'Meta did not return pages.');
+    }
+
     public function budgetSplit(Request $request, string $project): JsonResponse
     {
         abort_unless($request->user()?->hasPermission('campaigns.view'), 403);
